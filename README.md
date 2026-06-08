@@ -6,7 +6,7 @@ An ambitious open-ended evolutionary simulation exploring multi-scale agency, pe
 
 **https://modularlifesim.netlify.app** (or your deployed URL)
 
-## What This Project Is
+## What This Project Is.
 
 This project investigates what happens when evolutionary complexity is allowed to stack across multiple layers of organization. Rather than focusing only on improving individual agents, it explores the emergence of higher-order entities (MacroOrganisms) that contain other complex structures, complete with their own identity, goals, and internal dynamics.
 
