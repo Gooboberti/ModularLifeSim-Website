@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Echoes • Memory &amp; Emotion</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600&amp;display=swap');
+    body { font-family: 'Inter', system_ui, sans-serif; }
+    .font-display { font-family: 'Space Grotesk', 'Inter', system_ui, sans-serif; font-weight: 600; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-200">
+  <nav class="border-b border-slate-800 bg-slate-950/80 backdrop-blur-md sticky top-0 z-50">
+    <div class="max-w-screen-xl mx-auto px-6 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-x-3">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-rose-400 to-orange-400 flex items-center justify-center">
+          <i class="fa-solid fa-heart-pulse text-slate-950 text-xl"></i>
+        </div>
+        <div>
+          <div class="font-display text-2xl tracking-tighter">Echoes</div>
+          <div class="text-[10px] text-slate-500 -mt-1">Memory &amp; Emotion • v0.1</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-x-4 text-sm">
+        <a href="index.html" class="hover:text-white transition-colors">Main Site</a>
+        <a href="neural_forager.html" class="hover:text-white transition-colors">Neural Forager</a>
+        <a href="sandbox.html" class="hover:text-white transition-colors">Thronglet Lab</a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="max-w-screen-xl mx-auto px-6 pt-8">
+    <div class="max-w-2xl">
+      <div class="inline-flex items-center gap-x-2 px-3 py-1 rounded-full bg-rose-500/10 border border-rose-500/20 text-xs mb-3">
+        <span class="text-rose-400">RECURRENT MEMORY + EMOTION</span>
+      </div>
+      <h1 class="font-display text-5xl tracking-tighter">Echoes</h1>
+      <p class="text-slate-400 mt-2">A creature whose past experiences and emotional state visibly shape its behavior.</p>
+    </div>
+
+    <div class="mt-8 grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <!-- World -->
+      <div class="lg:col-span-7">
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl p-4">
+          <div id="world-container"></div>
+        </div>
+      </div>
+
+      <!-- Emotional State & Memory -->
+      <div class="lg:col-span-5 space-y-6">
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl p-5">
+          <div class="font-semibold mb-4">Emotional State</div>
+          <div class="grid grid-cols-3 gap-4 text-sm">
+            <div>
+              <div class="text-xs text-slate-400">Fear</div>
+              <div id="fear-val" class="text-2xl font-semibold text-red-400">0.00</div>
+            </div>
+            <div>
+              <div class="text-xs text-slate-400">Curiosity</div>
+              <div id="curiosity-val" class="text-2xl font-semibold text-cyan-400">0.00</div>
+            </div>
+            <div>
+              <div class="text-xs text-slate-400">Contentment</div>
+              <div id="content-val" class="text-2xl font-semibold text-emerald-400">0.00</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl p-5">
+          <div class="font-semibold mb-3">Recent Memory</div>
+          <div id="memory-log" class="text-xs text-slate-400 space-y-1 h-24 overflow-auto"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let creature;
+    let foods = [];
+    let dangers = [];
+    let memoryLog = [];
+
+    function setup() {
+      let canvas = createCanvas(680, 480);
+      canvas.parent('world-container');
+      
+      creature = new EmotionalCreature(width/2, height/2);
+      
+      for (let i = 0; i < 8; i++) {
+        foods.push(new Food(random(40, width-40), random(40, height-40)));
+      }
+      for (let i = 0; i < 3; i++) {
+        dangers.push(new Danger(random(60, width-60), random(60, height-60)));
+      }
+    }
+
+    function draw() {
+      background(15, 23, 42);
+      
+      stroke(30, 41, 59);
+      for (let x = 0; x < width; x += 40) line(x, 0, x, height);
+      for (let y = 0; y < height; y += 40) line(0, y, width, y);
+
+      for (let d of dangers) d.show();
+      for (let f of foods) f.show();
+
+      if (creature) {
+        creature.update();
+        creature.show();
+        updateUI(creature);
+      }
+    }
+
+    class EmotionalCreature {
+      constructor(x, y) {
+        this.x = x; this.y = y;
+        this.angle = random(TWO_PI);
+        this.energy = 70;
+        this.size = 13;
+
+        // Emotional state
+        this.fear = 0.2;
+        this.curiosity = 0.5;
+        this.contentment = 0.4;
+
+        // Simple recurrent memory (last 3 experiences)
+        this.memory = [];
+      }
+
+      update() {
+        // Find nearest food and danger
+        let nearestFood = null, foodDist = Infinity;
+        let nearestDanger = null, dangerDist = Infinity;
+
+        for (let f of foods) {
+          let d = dist(this.x, this.y, f.x, f.y);
+          if (d < foodDist) { foodDist = d; nearestFood = f; }
+        }
+        for (let d of dangers) {
+          let distD = dist(this.x, this.y, d.x, d.y);
+          if (distD < dangerDist) { dangerDist = distD; nearestDanger = d; }
+        }
+
+        // Emotional influence
+        let fearInfluence = this.fear * 0.8;
+        let curiosityInfluence = this.curiosity * 0.6;
+
+        let targetX = this.x;
+        let targetY = this.y;
+
+        if (nearestDanger && dangerDist < 120) {
+          // Run away from danger
+          let dx = this.x - nearestDanger.x;
+          let dy = this.y - nearestDanger.y;
+          targetX = this.x + dx * 0.8;
+          targetY = this.y + dy * 0.8;
+          this.fear = min(1, this.fear + 0.04);
+          this.contentment = max(0, this.contentment - 0.02);
+        } else if (nearestFood && foodDist < 180) {
+          // Move toward food, influenced by curiosity
+          targetX = nearestFood.x;
+          targetY = nearestFood.y;
+          this.curiosity = min(1, this.curiosity + 0.015);
+          this.fear = max(0, this.fear - 0.01);
+        } else {
+          // Wander with some contentment bias
+          targetX = this.x + cos(this.angle) * 40;
+          targetY = this.y + sin(this.angle) * 40;
+          this.contentment = min(1, this.contentment + 0.008);
+        }
+
+        // Move toward target
+        let dx = targetX - this.x;
+        let dy = targetY - this.y;
+        let targetAngle = atan2(dy, dx);
+        let angleDiff = targetAngle - this.angle;
+        while (angleDiff > PI) angleDiff -= TWO_PI;
+        while (angleDiff < -PI) angleDiff += TWO_PI;
+
+        this.angle += angleDiff * 0.12;
+
+        let moveSpeed = 1.6 + (this.contentment * 0.6) - (this.fear * 0.8);
+        this.x += cos(this.angle) * moveSpeed;
+        this.y += sin(this.angle) * moveSpeed;
+
+        // Boundary
+        this.x = constrain(this.x, 25, width-25);
+        this.y = constrain(this.y, 25, height-25);
+
+        // Energy & emotion decay
+        this.energy -= 0.025;
+        this.fear = max(0, this.fear * 0.985);
+        this.curiosity = max(0.1, this.curiosity * 0.99);
+        this.contentment = max(0.1, this.contentment * 0.995);
+
+        // Eat food
+        if (nearestFood && foodDist < 16) {
+          this.energy = min(100, this.energy + 25);
+          this.contentment = min(1, this.contentment + 0.3);
+          nearestFood.respawn();
+          this.addMemory("Found food");
+        }
+
+        // Hit danger
+        if (nearestDanger && dangerDist < 14) {
+          this.energy = max(0, this.energy - 18);
+          this.fear = min(1, this.fear + 0.4);
+          this.addMemory("Hit danger!");
+        }
+      }
+
+      addMemory(text) {
+        memoryLog.unshift(text);
+        if (memoryLog.length > 6) memoryLog.pop();
+      }
+
+      show() {
+        push();
+        translate(this.x, this.y);
+        rotate(this.angle);
+        
+        // Body color based on dominant emotion
+        let r = 200 + this.fear * 55;
+        let g = 140 + this.contentment * 80;
+        let b = 220 + this.curiosity * 35;
+        fill(r, g, b);
+        noStroke();
+        ellipse(0, 0, this.size * 1.6, this.size);
+
+        // Direction indicator
+        fill(255);
+        triangle(this.size * 0.5, 0, -this.size * 0.3, -this.size * 0.4, -this.size * 0.3, this.size * 0.4);
+        pop();
+      }
+    }
+
+    class Food {
+      constructor(x, y) { this.x = x; this.y = y; }
+      show() {
+        noStroke();
+        fill(52, 211, 153, 200);
+        circle(this.x, this.y, 8);
+      }
+      respawn() {
+        this.x = random(40, width-40);
+        this.y = random(40, height-40);
+      }
+    }
+
+    class Danger {
+      constructor(x, y) { this.x = x; this.y = y; }
+      show() {
+        noStroke();
+        fill(248, 113, 113, 180);
+        circle(this.x, this.y, 11);
+        fill(185, 28, 28);
+        circle(this.x, this.y, 5);
+      }
+    }
+
+    function updateUI(c) {
+      document.getElementById('fear-val').innerText = c.fear.toFixed(2);
+      document.getElementById('curiosity-val').innerText = c.curiosity.toFixed(2);
+      document.getElementById('content-val').innerText = c.contentment.toFixed(2);
+
+      const logEl = document.getElementById('memory-log');
+      logEl.innerHTML = memoryLog.map(m => `<div>• ${m}</div>`).join('');
+    }
+
+    // Keyboard
+    document.addEventListener('keydown', e => {
+      if (e.key.toLowerCase() === 'r' && window.creature) {
+        creature = new EmotionalCreature(width/2, height/2);
+        memoryLog = [];
+      }
+    });
+  </script>
+</body>
+</html>
+```
