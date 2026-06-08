@@ -3,331 +3,573 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Neural Forager • v0.7</title>
+  <title>Neural Forager • Modular Life Sim</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600&amp;display=swap');
+    
     body { font-family: 'Inter', system_ui, sans-serif; }
     .font-display { font-family: 'Space Grotesk', 'Inter', system_ui, sans-serif; font-weight: 600; }
+
+    .modal {
+      animation: fadeInScale 0.2s ease forwards;
+    }
+    @keyframes fadeInScale {
+      from { opacity: 0; transform: scale(0.95); }
+      to { opacity: 1; transform: scale(1); }
+    }
   </style>
 </head>
 <body class="bg-slate-950 text-slate-200">
-  <nav class="border-b border-slate-800 bg-slate-950/80 backdrop-blur sticky top-0 z-50">
-    <div class="max-w-screen-xl mx-auto px-6 py-4 flex justify-between items-center">
+  <!-- Navbar -->
+  <nav class="border-b border-slate-800 bg-slate-950/80 backdrop-blur-md sticky top-0 z-50">
+    <div class="max-w-screen-xl mx-auto px-6 py-4 flex items-center justify-between">
       <div class="flex items-center gap-x-3">
-        <div class="w-9 h-9 bg-violet-500 rounded-xl flex items-center justify-center">
-          <i class="fa-solid fa-brain text-white"></i>
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-400 to-purple-400 flex items-center justify-center">
+          <i class="fa-solid fa-brain text-slate-950 text-xl"></i>
         </div>
         <div>
-          <span class="font-display text-2xl">Neural Forager</span>
-          <span class="text-xs ml-2 text-slate-500">v0.7 • 6 Inputs • Educational</span>
+          <div class="font-display text-2xl tracking-tighter">Neural Forager</div>
+          <div class="text-[10px] text-slate-500 -mt-1">v0.2 • Brain Visualization</div>
         </div>
       </div>
-      <div class="flex items-center gap-x-4 text-sm">
-        <a href="index.html" class="hover:text-white">Back</a>
-        <a href="sandbox.html" class="hover:text-white">Life Lab</a>
+      
+      <div class="flex items-center gap-x-4">
+        <a href="index.html" class="px-4 py-2 text-sm hover:text-white transition-colors flex items-center gap-x-2">
+          <i class="fa-solid fa-arrow-left text-xs"></i>
+          <span>Back to Vision</span>
+        </a>
+        <a href="sandbox.html" class="px-4 py-2 text-sm hover:text-white transition-colors">
+          Life Lab
+        </a>
+        <button onclick="showArchitectureModal()" 
+                class="px-4 py-2 text-sm bg-violet-600 hover:bg-violet-500 rounded-xl flex items-center gap-x-2">
+          <i class="fa-solid fa-info-circle"></i>
+          <span>How the Brain Works</span>
+        </button>
       </div>
     </div>
   </nav>
 
-  <div class="max-w-screen-2xl mx-auto px-6 pt-8">
-    <div class="flex justify-between items-end mb-6">
+  <div class="max-w-screen-2xl mx-auto px-6 pt-8 pb-12">
+    <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-y-4 mb-8">
       <div>
+        <div class="inline-flex items-center gap-x-2 px-3 py-1 rounded-full bg-violet-500/10 border border-violet-500/20 text-xs mb-3">
+          <span class="text-violet-400">NEURAL NETWORKS</span>
+        </div>
         <h1 class="font-display text-5xl tracking-tighter">Neural Forager</h1>
-        <p class="text-slate-400">1 Prey vs 1 Predator • Both brains visible • Matching main simulation</p>
+        <p class="text-slate-400 mt-2 max-w-md">Watch a creature’s brain make decisions in real time.</p>
       </div>
-      <div class="flex gap-x-3">
-        <button onclick="resetSim()" class="px-5 py-2 bg-slate-800 hover:bg-slate-700 rounded-2xl text-sm flex items-center gap-x-2">
-          <i class="fa-solid fa-undo"></i> <span>Reset</span>
+      
+      <div class="flex items-center gap-x-3">
+        <button onclick="resetSimulation()" 
+                class="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-sm flex items-center gap-x-2">
+          <i class="fa-solid fa-undo text-xs"></i>
+          <span>Reset</span>
         </button>
-        <button onclick="addFood()" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-2xl text-sm flex items-center gap-x-2">
-          <i class="fa-solid fa-plus"></i> <span>Add Food</span>
+        <button onclick="addFood()" 
+                class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-sm flex items-center gap-x-2">
+          <i class="fa-solid fa-plus text-xs"></i>
+          <span>Add Food</span>
         </button>
       </div>
     </div>
 
     <div class="grid grid-cols-1 xl:grid-cols-12 gap-6">
+      
       <!-- World -->
-      <div class="xl:col-span-5">
+      <div class="xl:col-span-7">
         <div class="bg-slate-900 border border-slate-800 rounded-3xl p-4">
-          <div id="world"></div>
+          <div id="world-container"></div>
         </div>
-        <div class="mt-3 text-xs text-slate-500 px-1">
-          <strong>Legend:</strong> Purple = Prey (Forager) &nbsp;&nbsp; Red = Predator
-        </div>
+        <p class="mt-3 text-xs text-slate-500 px-1">
+          The creature uses its neural network to decide how to move toward food.
+        </p>
       </div>
 
-      <!-- Two Neural Networks -->
-      <div class="xl:col-span-7">
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <!-- Forager Brain -->
-          <div class="bg-slate-900 border border-emerald-800 rounded-3xl p-4">
-            <div class="font-semibold text-emerald-400 mb-3 flex justify-between items-center">
-              <span>FORAGER BRAIN (Prey)</span>
-              <button onclick="showInfo('forager')" class="text-xs px-2 py-0.5 bg-emerald-900 hover:bg-emerald-800 rounded">Info</button>
+      <!-- Neural Network Visualization -->
+      <div class="xl:col-span-5">
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl p-5 h-full">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <div class="font-semibold tracking-wide">LIVE NEURAL NETWORK</div>
+              <div class="text-xs text-slate-400">Inputs → Hidden (Parallel + Memory) → Outputs</div>
             </div>
-            <div id="net-forager"></div>
+            <div class="text-xs px-3 py-1 rounded-full bg-slate-800 text-slate-400">v0.2</div>
           </div>
 
-          <!-- Predator Brain -->
-          <div class="bg-slate-900 border border-red-800 rounded-3xl p-4">
-            <div class="font-semibold text-red-400 mb-3 flex justify-between items-center">
-              <span>PREDATOR BRAIN (Enemy)</span>
-              <button onclick="showInfo('predator')" class="text-xs px-2 py-0.5 bg-red-900 hover:bg-red-800 rounded">Info</button>
+          <div id="neural-container" class="flex justify-center"></div>
+
+          <div class="mt-6 grid grid-cols-3 gap-4 text-xs">
+            <div>
+              <div class="text-slate-400 mb-1">Inputs</div>
+              <div class="space-y-1 text-[10px]">
+                <div class="flex justify-between"><span>Food Angle</span> <span id="input-0" class="font-mono text-cyan-400">0.00</span></div>
+                <div class="flex justify-between"><span>Food Dist</span> <span id="input-1" class="font-mono text-cyan-400">0.00</span></div>
+                <div class="flex justify-between"><span>Energy</span> <span id="input-2" class="font-mono text-cyan-400">0.00</span></div>
+              </div>
             </div>
-            <div id="net-predator"></div>
+            <div>
+              <div class="text-slate-400 mb-1">Hidden Layer</div>
+              <div class="text-[10px] text-slate-400">6 neurons + recurrent memory</div>
+            </div>
+            <div>
+              <div class="text-slate-400 mb-1">Outputs</div>
+              <div class="space-y-1 text-[10px]">
+                <div class="flex justify-between"><span>Turn</span> <span id="output-0" class="font-mono text-amber-400">0.00</span></div>
+                <div class="flex justify-between"><span>Speed</span> <span id="output-1" class="font-mono text-emerald-400">0.00</span></div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
     </div>
+  </div>
 
-    <!-- Educational Legend -->
-    <div class="mt-8 bg-slate-900 border border-slate-800 rounded-3xl p-6">
-      <h3 class="font-semibold mb-4">6 Inputs (Matching Main Modular Life Sim)</h3>
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-3 text-sm">
-        <div><span class="font-medium text-emerald-400">1. Food Angle</span> — Direction to nearest food</div>
-        <div><span class="font-medium text-emerald-400">2. Food Distance</span> — How close the food is</div>
-        <div><span class="font-medium text-red-400">3. Danger Distance</span> — Proximity to the enemy</div>
-        <div><span class="font-medium text-amber-400">4. Energy</span> — Current stamina level</div>
-        <div><span class="font-medium text-violet-400">5. Memory (Recurrent)</span> — Internal state carried over time</div>
-        <div><span class="font-medium text-sky-400">6. Bias / Drive</span> — Heritable behavioral tendency</div>
+  <!-- Architecture Modal -->
+  <div id="architecture-modal" onclick="hideArchitectureModal()" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+    <div onclick="event.stopImmediatePropagation()" class="bg-slate-900 border border-slate-700 rounded-3xl max-w-2xl w-full mx-4 p-8 modal">
+      <div class="flex justify-between items-start mb-6">
+        <div>
+          <h3 class="font-display text-3xl tracking-tight">How the Brain Works in the Main Simulation</h3>
+          <p class="text-sm text-slate-400 mt-1">Architecture used in the full Modular Life Sim</p>
+        </div>
+        <button onclick="hideArchitectureModal()" class="text-slate-400 hover:text-white text-2xl leading-none">×</button>
       </div>
-      <div class="mt-4 pt-4 border-t border-slate-800 text-xs text-slate-400">
-        This demo uses <strong>Parallel Pathways + Recurrent Memory</strong>, matching the core architecture of the main Python simulation.
+
+      <div class="space-y-6 text-sm text-white/80">
+        <div>
+          <h4 class="font-semibold text-white mb-2">Core Features</h4>
+          <ul class="list-disc pl-5 space-y-1">
+            <li><strong>Structural Evolution</strong> — Networks can grow new neurons and prune weak ones across generations.</li>
+            <li><strong>Parallel Pathways</strong> — Two computation paths (Module_A and Module_B) that can be dynamically weighted.</li>
+            <li><strong>Recurrent Memory</strong> — GRU-style hidden state that integrates information over time.</li>
+            <li><strong>Module Influence</strong> — Physical modules directly affect how the neural network develops.</li>
+            <li><strong>Heritable Emotional Sensitivities</strong> — Traits like fear, curiosity, and aggression are inherited and mutated.</li>
+          </ul>
+        </div>
+
+        <div>
+          <h4 class="font-semibold text-white mb-2">In This Mini-Game (v0.2)</h4>
+          <p class="text-white/70">
+            This simplified version visualizes a reactive neural network with:
+          </p>
+          <ul class="list-disc pl-5 mt-2 space-y-1 text-white/70">
+            <li>3 inputs (Food angle, distance, energy)</li>
+            <li>6 hidden neurons with recurrent memory feedback</li>
+            <li>Parallel pathway influence (visualized as two groups of connections)</li>
+            <li>2 outputs (Turn + Forward speed)</li>
+          </ul>
+          <p class="mt-3 text-xs text-slate-400">The full simulation uses a much more complex evolving architecture with structural changes over generations.</p>
+        </div>
+      </div>
+
+      <div class="mt-8 flex justify-end">
+        <button onclick="hideArchitectureModal()" 
+                class="px-6 py-2 rounded-2xl bg-slate-800 hover:bg-slate-700 text-sm">
+          Close
+        </button>
       </div>
     </div>
   </div>
 
   <script>
+    // ==================== Sound Effects ====================
     let audioCtx;
-    function initAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+    function initAudio() {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
 
-    let forager, predator;
+    function playEatSound() {
+      if (!audioCtx) return;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      const filter = audioCtx.createBiquadFilter();
+      
+      osc.type = 'sawtooth';
+      osc.frequency.value = 420;
+      filter.type = 'lowpass';
+      filter.frequency.value = 800;
+      gain.gain.value = 0.15;
+
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      osc.start();
+      gain.gain.linearRampToValueAtTime(0.0001, audioCtx.currentTime + 0.35);
+      setTimeout(() => osc.stop(), 400);
+    }
+
+    function playClick() {
+      if (!audioCtx) return;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = 880;
+      gain.gain.value = 0.06;
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      gain.gain.linearRampToValueAtTime(0.0001, audioCtx.currentTime + 0.15);
+      setTimeout(() => osc.stop(), 180);
+    }
+
+    function playHover() {
+      if (!audioCtx) return;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = 1240;
+      gain.gain.value = 0.02;
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      gain.gain.linearRampToValueAtTime(0.0001, audioCtx.currentTime + 0.1);
+      setTimeout(() => osc.stop(), 120);
+    }
+
+    // ==================== p5.js World ====================
+    let creature;
     let foods = [];
+    let worldWidth = 720;
+    let worldHeight = 520;
+
+    let inputValues = [0, 0, 0];
+    let hiddenActivations = new Array(6).fill(0);
+    let outputValues = [0, 0];
+    let memoryActivation = 0; // For recurrent memory visualization
 
     function setup() {
       initAudio();
-      let c = createCanvas(680, 480);
-      c.parent('world');
-
-      forager = new Creature(width * 0.3, height * 0.5, 'forager');
-      predator = new Creature(width * 0.7, height * 0.5, 'predator');
-
+      let canvas = createCanvas(worldWidth, worldHeight);
+      canvas.parent('world-container');
+      
+      creature = new Creature(width/2, height/2);
+      
       for (let i = 0; i < 12; i++) {
-        foods.push(new Food(random(40, width-40), random(40, height-40)));
+        foods.push(new Food(random(50, width-50), random(50, height-50)));
       }
+
+      // Add sound to buttons
+      document.querySelectorAll('button').forEach(btn => {
+        btn.addEventListener('click', playClick);
+        btn.addEventListener('mouseenter', playHover);
+      });
     }
 
     function draw() {
       background(15, 23, 42);
+      
       stroke(30, 41, 59);
+      strokeWeight(1);
       for (let x = 0; x < width; x += 40) line(x, 0, x, height);
       for (let y = 0; y < height; y += 40) line(0, y, width, y);
 
       for (let f of foods) f.show();
 
-      forager.update(predator);
-      forager.show();
-
-      predator.update(forager);
-      predator.show();
-
-      drawNet('net-forager', forager, predator);
-      drawNet('net-predator', predator, forager);
+      if (creature) {
+        creature.update();
+        creature.show();
+        updateNeuralNetwork(creature);
+      }
     }
 
     class Creature {
-      constructor(x, y, type) {
-        this.x = x; this.y = y;
+      constructor(x, y) {
+        this.x = x;
+        this.y = y;
         this.angle = random(TWO_PI);
-        this.energy = 70;
-        this.type = type;
-        this.memory = 0;
-        this.size = type === 'predator' ? 15 : 12;
+        this.energy = 80;
+        this.size = 14;
       }
 
-      update(other) {
-        let nf = null, fd = Infinity;
+      update() {
+        let nearest = null;
+        let nearestDist = Infinity;
+        
         for (let f of foods) {
           let d = dist(this.x, this.y, f.x, f.y);
-          if (d < fd) { fd = d; nf = f; }
+          if (d < nearestDist) {
+            nearestDist = d;
+            nearest = f;
+          }
         }
 
-        let dx = other.x - this.x;
-        let dy = other.y - this.y;
-        let distOther = dist(this.x, this.y, other.x, other.y);
-        let angleToOther = atan2(dy, dx);
-        let ad = angleToOther - this.angle;
-        while (ad > PI) ad -= TWO_PI;
-        while (ad < -PI) ad += TWO_PI;
+        if (nearest) {
+          let dx = nearest.x - this.x;
+          let dy = nearest.y - this.y;
+          let targetAngle = atan2(dy, dx);
+          
+          let angleDiff = targetAngle - this.angle;
+          while (angleDiff > PI) angleDiff -= TWO_PI;
+          while (angleDiff < -PI) angleDiff += TWO_PI;
+          
+          let normAngle = angleDiff / PI;
+          let normDist = constrain(nearestDist / 400, 0, 1);
+          let normEnergy = this.energy / 100;
 
-        // 6 Inputs
-        let fa = 0, fdist = 1;
-        if (nf) {
-          let fax = atan2(nf.y - this.y, nf.x - this.x);
-          let fad = fax - this.angle;
-          while (fad > PI) fad -= TWO_PI;
-          while (fad < -PI) fad += TWO_PI;
-          fa = fad / PI;
-          fdist = constrain(fd / 380, 0, 1);
+          inputValues = [normAngle, normDist, normEnergy];
+
+          // Simulate network influence on movement (more realistic than v0.1)
+          let turn = outputValues[0] * 0.15 + normAngle * 0.08;
+          this.angle += turn;
+          
+          let speed = map(outputValues[1], 0, 1, 0.9, 2.4);
+          this.x += cos(this.angle) * speed;
+          this.y += sin(this.angle) * speed;
+
+          // Eat
+          if (nearestDist < 18) {
+            this.energy = min(100, this.energy + 22);
+            nearest.x = random(50, width-50);
+            nearest.y = random(50, height-50);
+            playEatSound();
+          }
         }
 
-        let inputs = [
-          fa,
-          fdist,
-          constrain(distOther / 280, 0, 1),
-          this.energy / 100,
-          this.memory,
-          (this.type === 'predator') ? 0.55 : -0.3
-        ];
+        this.energy -= 0.035;
+        if (this.energy < 0) this.energy = 0;
 
-        this.memory = this.memory * 0.78 + (fa * 0.25) + (inputs[2] * (this.type === 'predator' ? 0.5 : -0.55));
-
-        let hidden = new Array(8).fill(0);
-        for (let i = 0; i < 8; i++) {
-          let a = 0;
-          if (i % 2 === 0) a += inputs[0] * 0.85 + inputs[3] * 0.38;
-          else a += inputs[2] * 0.9 + inputs[5] * 0.52;
-          a += inputs[4] * 0.5;
-          hidden[i] = constrain(a + random(-0.06, 0.06), 0, 1);
-        }
-
-        let avgH = hidden.reduce((s, v) => s + v, 0) / 8;
-
-        if (this.type === 'forager') {
-          this.turn = inputs[0] * 0.65 + avgH * 0.32 + this.memory * 0.35;
-          this.speed = 0.68 + inputs[3] * 0.3 - inputs[2] * 1.0;
-        } else {
-          this.turn = (ad / PI) * 0.8 + avgH * 0.28;
-          this.speed = 1.05 + avgH * 0.35;
-        }
-
-        this.angle += this.turn * 0.12;
-        this.x += cos(this.angle) * this.speed;
-        this.y += sin(this.angle) * this.speed;
-
-        this.x = constrain(this.x, 22, width - 22);
-        this.y = constrain(this.y, 22, height - 22);
-        this.energy -= (this.type === 'predator' ? 0.034 : 0.026);
-
-        if (this.type === 'forager' && nf && fd < 15) {
-          this.energy = min(100, this.energy + 22);
-          nf.respawn();
-          playSound(480, 0.18);
-        }
-
-        if (this.type === 'predator' && distOther < 17) {
-          other.energy = max(8, other.energy - 16);
-          this.energy = min(100, this.energy + 13);
-          playSound(200, 0.3);
-        }
+        this.x = constrain(this.x, 20, width-20);
+        this.y = constrain(this.y, 20, height-20);
       }
 
       show() {
         push();
         translate(this.x, this.y);
         rotate(this.angle);
-        if (this.type === 'predator') fill(248, 113, 113);
-        else fill(167, 139, 250);
-        triangle(-this.size, -this.size*0.55, -this.size, this.size*0.55, this.size*0.9, 0);
-        fill(255); circle(4, 0, 4.5);
+        
+        fill(167, 139, 250);
+        noStroke();
+        triangle(-this.size, -this.size*0.6, -this.size, this.size*0.6, this.size, 0);
+        
+        fill(255);
+        circle(this.size * 0.3, 0, 5);
+        fill(15, 23, 42);
+        circle(this.size * 0.3, 0, 2.5);
         pop();
+
+        // Energy bar
+        noStroke();
+        fill(15, 23, 42);
+        rect(this.x - 12, this.y - 22, 24, 4);
+        fill(167, 139, 250);
+        rect(this.x - 12, this.y - 22, 24 * (this.energy / 100), 4);
       }
     }
 
     class Food {
       constructor(x, y) { this.x = x; this.y = y; }
-      show() { fill(52, 211, 153, 210); noStroke(); circle(this.x, this.y, 8); }
-      respawn() { this.x = random(40, width-40); this.y = random(40, height-40); }
+      show() {
+        noStroke();
+        fill(52, 211, 153, 220);
+        circle(this.x, this.y, 9);
+        fill(16, 185, 129);
+        circle(this.x, this.y, 5);
+      }
     }
 
-    function addFood() { foods.push(new Food(random(40, width-40), random(40, height-40))); }
-    function resetSim() {
-      forager = new Creature(width * 0.3, height * 0.5, 'forager');
-      predator = new Creature(width * 0.7, height * 0.5, 'predator');
+    function addFood() {
+      foods.push(new Food(random(50, width-50), random(50, height-50)));
+    }
+
+    function resetSimulation() {
+      creature = new Creature(width/2, height/2);
       foods = [];
-      for (let i = 0; i < 14; i++) foods.push(new Food(random(40, width-40), random(40, height-40)));
+      for (let i = 0; i < 12; i++) {
+        foods.push(new Food(random(50, width-50), random(50, height-50)));
+      }
+      inputValues = [0,0,0];
+      hiddenActivations.fill(0);
+      outputValues = [0,0];
+      memoryActivation = 0;
     }
 
-    function drawSimpleNet(containerId, self, other) {
-      let container = document.getElementById(containerId);
+    // ==================== Enhanced Neural Network ====================
+    function updateNeuralNetwork(creature) {
+      // Simulate more advanced activation (parallel pathways + memory)
+      memoryActivation = memoryActivation * 0.85 + (inputValues[0] * 0.3);
+
+      for (let i = 0; i < hiddenActivations.length; i++) {
+        let act = 0;
+        // Parallel pathway A (even neurons)
+        if (i % 2 === 0) act += inputValues[0] * 0.9 + inputValues[2] * 0.4;
+        // Parallel pathway B (odd neurons)
+        else act += inputValues[1] * 1.1 + inputValues[2] * 0.3;
+        
+        // Recurrent memory influence
+        act += memoryActivation * 0.6;
+        act = constrain(act + random(-0.12, 0.12), 0, 1);
+        hiddenActivations[i] = act;
+      }
+
+      // Outputs influenced by hidden layer + memory
+      let avgHidden = hiddenActivations.reduce((a,b) => a+b, 0) / hiddenActivations.length;
+      outputValues[0] = constrain(inputValues[0] * 0.85 + avgHidden * 0.3 + memoryActivation * 0.4, -1, 1);
+      outputValues[1] = constrain(0.55 + inputValues[2] * 0.45 + avgHidden * 0.2, 0, 1);
+
+      // Update UI
+      document.getElementById('input-0').innerText = inputValues[0].toFixed(2);
+      document.getElementById('input-1').innerText = inputValues[1].toFixed(2);
+      document.getElementById('input-2').innerText = inputValues[2].toFixed(2);
+      document.getElementById('output-0').innerText = outputValues[0].toFixed(2);
+      document.getElementById('output-1').innerText = outputValues[1].toFixed(2);
+
+      drawNeuralNetwork();
+    }
+
+    function drawNeuralNetwork() {
+      let container = document.getElementById('neural-container');
       container.innerHTML = '';
 
       let svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-      svg.setAttribute("width", "100%");
-      svg.setAttribute("height", "230");
-      svg.setAttribute("viewBox", "0 0 360 230");
+      svg.setAttribute("width", "360");
+      svg.setAttribute("height", "270");
+      svg.setAttribute("viewBox", "0 0 360 270");
 
-      const ix = 50, hx = 155, ox = 280;
-      const iy = [50, 95, 140, 185];
-      const hy = [40, 75, 110, 145, 180];
-      const oy = [70, 160];
+      const inputX = 45, hiddenX = 155, outputX = 275;
+      const inputY = [70, 125, 180];
+      const hiddenY = [45, 85, 125, 165, 205, 245];
+      const outputY = [95, 185];
 
-      // Labels
-      let t1 = document.createElementNS("http://www.w3.org/2000/svg", "text");
-      t1.setAttribute("x", 50); t1.setAttribute("y", 18);
-      t1.setAttribute("fill", "#64748b"); t1.setAttribute("font-size", "10");
-      t1.textContent = "6 Inputs";
-      svg.appendChild(t1);
-
-      let t2 = document.createElementNS("http://www.w3.org/2000/svg", "text");
-      t2.setAttribute("x", 155); t2.setAttribute("y", 18);
-      t2.setAttribute("fill", "#64748b"); t2.setAttribute("font-size", "10");
-      t2.textContent = "Hidden Layer";
-      svg.appendChild(t2);
-
-      let t3 = document.createElementNS("http://www.w3.org/2000/svg", "text");
-      t3.setAttribute("x", 280); t3.setAttribute("y", 18);
-      t3.setAttribute("fill", "#64748b"); t3.setAttribute("font-size", "10");
-      t3.textContent = "Outputs";
-      svg.appendChild(t3);
-
-      // Neurons
-      for (let i = 0; i < 4; i++) {
-        let c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-        c.setAttribute("cx", ix); c.setAttribute("cy", iy[i]); c.setAttribute("r", 8);
-        c.setAttribute("fill", "#475569"); c.setAttribute("stroke", "#94a3b8"); c.setAttribute("stroke-width", "1.5");
-        svg.appendChild(c);
+      // Recurrent memory connections (dashed)
+      for (let j = 0; j < 6; j++) {
+        let line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        line.setAttribute("x1", hiddenX);
+        line.setAttribute("y1", hiddenY[j]);
+        line.setAttribute("x2", hiddenX + 25);
+        line.setAttribute("y2", hiddenY[j]);
+        line.setAttribute("stroke", `rgba(167, 139, 250, ${memoryActivation * 0.7})`);
+        line.setAttribute("stroke-width", memoryActivation * 3 + 1);
+        line.setAttribute("stroke-dasharray", "4,3");
+        svg.appendChild(line);
       }
 
-      for (let j = 0; j < 5; j++) {
-        let c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-        c.setAttribute("cx", hx); c.setAttribute("cy", hy[j]); c.setAttribute("r", 7);
-        c.setAttribute("fill", "#475569"); c.setAttribute("stroke", "#94a3b8"); c.setAttribute("stroke-width", "1.5");
-        svg.appendChild(c);
+      // Input → Hidden connections (Parallel pathways)
+      for (let i = 0; i < 3; i++) {
+        for (let j = 0; j < 6; j++) {
+          let line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+          line.setAttribute("x1", inputX);
+          line.setAttribute("y1", inputY[i]);
+          line.setAttribute("x2", hiddenX);
+          line.setAttribute("y2", hiddenY[j]);
+          
+          let weight = hiddenActivations[j] * 0.65 + 0.25;
+          let alpha = Math.floor(weight * 200);
+          // Color based on parallel pathway
+          let color = (j % 2 === 0) ? "167, 139, 250" : "129, 140, 248";
+          line.setAttribute("stroke", `rgba(${color}, ${alpha / 255})`);
+          line.setAttribute("stroke-width", weight * 2.3);
+          svg.appendChild(line);
+        }
       }
 
+      // Hidden → Output
+      for (let j = 0; j < 6; j++) {
+        for (let k = 0; k < 2; k++) {
+          let line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+          line.setAttribute("x1", hiddenX);
+          line.setAttribute("y1", hiddenY[j]);
+          line.setAttribute("x2", outputX);
+          line.setAttribute("y2", outputY[k]);
+          
+          let weight = hiddenActivations[j] * 0.55 + 0.3;
+          let alpha = Math.floor(weight * 210);
+          line.setAttribute("stroke", `rgba(167, 139, 250, ${alpha / 255})`);
+          line.setAttribute("stroke-width", weight * 2.4);
+          svg.appendChild(line);
+        }
+      }
+
+      // Input neurons
+      for (let i = 0; i < 3; i++) {
+        let circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        circle.setAttribute("cx", inputX);
+        circle.setAttribute("cy", inputY[i]);
+        circle.setAttribute("r", 12);
+        circle.setAttribute("fill", "#475569");
+        circle.setAttribute("stroke", "#94a3b8");
+        circle.setAttribute("stroke-width", "2.5");
+        svg.appendChild(circle);
+
+        let glow = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        glow.setAttribute("cx", inputX);
+        glow.setAttribute("cy", inputY[i]);
+        glow.setAttribute("r", 7);
+        let intensity = Math.floor(inputValues[i] * 220) + 25;
+        glow.setAttribute("fill", `rgba(103, 232, 249, ${intensity / 255})`);
+        svg.appendChild(glow);
+      }
+
+      // Hidden neurons (with memory glow)
+      for (let j = 0; j < 6; j++) {
+        let circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        circle.setAttribute("cx", hiddenX);
+        circle.setAttribute("cy", hiddenY[j]);
+        circle.setAttribute("r", 11);
+        circle.setAttribute("fill", "#475569");
+        circle.setAttribute("stroke", "#94a3b8");
+        circle.setAttribute("stroke-width", "2.5");
+        svg.appendChild(circle);
+
+        let glow = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        glow.setAttribute("cx", hiddenX);
+        glow.setAttribute("cy", hiddenY[j]);
+        glow.setAttribute("r", 6.5);
+        let intensity = Math.floor(hiddenActivations[j] * 230) + 20;
+        glow.setAttribute("fill", `rgba(167, 139, 250, ${intensity / 255})`);
+        svg.appendChild(glow);
+      }
+
+      // Output neurons
       for (let k = 0; k < 2; k++) {
-        let c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-        c.setAttribute("cx", ox); c.setAttribute("cy", oy[k]); c.setAttribute("r", 9);
-        c.setAttribute("fill", "#475569"); c.setAttribute("stroke", "#94a3b8"); c.setAttribute("stroke-width", "1.5");
-        svg.appendChild(c);
+        let circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        circle.setAttribute("cx", outputX);
+        circle.setAttribute("cy", outputY[k]);
+        circle.setAttribute("r", 13);
+        circle.setAttribute("fill", "#475569");
+        circle.setAttribute("stroke", "#94a3b8");
+        circle.setAttribute("stroke-width", "2.5");
+        svg.appendChild(circle);
+
+        let glow = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        glow.setAttribute("cx", outputX);
+        glow.setAttribute("cy", outputY[k]);
+        glow.setAttribute("r", 7.5);
+        let val = Math.abs(outputValues[k]);
+        let intensity = Math.floor(val * 210) + 30;
+        let color = k === 0 ? "251, 191, 36" : "52, 211, 153";
+        glow.setAttribute("fill", `rgba(${color}, ${intensity / 255})`);
+        svg.appendChild(glow);
       }
 
       container.appendChild(svg);
     }
 
-    function showInfo(type) {
-      if (type === 'forager') {
-        alert("Forager: Seeks food while avoiding the Predator. Uses memory and energy management to survive.");
-      } else {
-        alert("Predator: Actively hunts the Forager. Has higher aggression bias and prioritizes catching prey.");
-      }
+    // Modal functions
+    function showArchitectureModal() {
+      document.getElementById('architecture-modal').classList.remove('hidden');
+      document.getElementById('architecture-modal').classList.add('flex');
     }
 
-    function playSound(freq, duration) {
-      if (!audioCtx) return;
-      const o = audioCtx.createOscillator();
-      const g = audioCtx.createGain();
-      o.type = 'sawtooth';
-      o.frequency.value = freq;
-      g.gain.value = 0.1;
-      o.connect(g); g.connect(audioCtx.destination);
-      o.start();
-      g.gain.linearRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
-      setTimeout(() => o.stop(), duration * 1000);
+    function hideArchitectureModal() {
+      const modal = document.getElementById('architecture-modal');
+      modal.classList.remove('flex');
+      modal.classList.add('hidden');
     }
+
+    // Keyboard
+    document.addEventListener('keydown', function(e) {
+      if (e.key.toLowerCase() === 'r') resetSimulation();
+      if (e.key === '?') {
+        e.preventDefault();
+        showArchitectureModal();
+      }
+    });
   </script>
 </body>
 </html>
+```
