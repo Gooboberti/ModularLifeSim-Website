@@ -30,7 +30,7 @@
                 </div>
                 <div>
                     <span class="font-display text-2xl tracking-tighter">MiniSimmy2</span>
-                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.61 • Smart Avoidance + Tier Abilities (no immunity)</span>
+                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.62 • Smarter Pruning + Crash Fix</span>
                 </div>
             </div>
             <div class="flex items-center gap-x-4 text-sm">
@@ -46,7 +46,7 @@
                 <div class="flex items-center gap-x-4">
                     <div>
                         <h1 class="font-display text-3xl tracking-tighter">MiniSimmy2</h1>
-                        <p class="text-white/60 text-sm">High-Sensor creatures now show beautiful, learned spiral avoidance. Tier 3+ modules unlock new abilities. No blanket immunity — only better dodging over time.</p>
+                        <p class="text-white/60 text-sm">Fixed crash. Smarter module pruning that keeps visual diversity while preventing bloat. High-Sensor creatures still show elegant learned avoidance.</p>
                     </div>
                     
                     <!-- Elapsed Time -->
@@ -339,34 +339,29 @@
 
             <div class="space-y-5 text-sm">
                 <div>
+                    <div class="font-semibold text-emerald-400 mb-1">Smarter Module Pruning (v0.62)</div>
+                    <div class="text-white/70 text-xs">Pruning now keeps visual diversity. It preserves at least one of each module type the creature has acquired, then adds extras only on the dominant specialization. No more identical-module spam.</div>
+                </div>
+
+                <div>
                     <div class="font-semibold text-emerald-400 mb-1">Smart Avoidance (v0.61)</div>
-                    <div class="text-white/70 text-xs">High-Sensor + high-adaptation creatures now perform elegant, learned spiral dodging around the vortex. No immunity — only better prediction and movement over generations and within a lifetime.</div>
+                    <div class="text-white/70 text-xs">High-Sensor (Tier 3+) creatures perform elegant, predictive spiral dodging around the vortex. No immunity — only better movement and learning.</div>
                 </div>
 
                 <div>
                     <div class="font-semibold text-emerald-400 mb-1">Tier Threshold Abilities</div>
-                    <div class="text-white/70 text-xs">Tier 3+ modules unlock new behaviors: better bloom creation, stronger warnings, predictive dodging, and exploratory bursts.</div>
-                </div>
-
-                <div>
-                    <div class="font-semibold text-emerald-400 mb-1">Role-Specific Polish</div>
-                    <div class="text-white/70 text-xs">High-tier roles now have visual feedback (glowing modules, subtle pulses, trails) so you can see specialization in action.</div>
-                </div>
-
-                <div>
-                    <div class="font-semibold text-emerald-400 mb-1">Module Cleanup</div>
-                    <div class="text-white/70 text-xs">Excess low-tier modules are automatically pruned to keep performance healthy while preserving powerful high-tier modules.</div>
+                    <div class="text-white/70 text-xs">Tier 3+ modules unlock new behaviors for Harvester, Sensor, Communicator, and Explorer/Mover roles.</div>
                 </div>
 
                 <div>
                     <div class="font-semibold text-emerald-400 mb-1">Core Colors & Specialization</div>
                     <div class="text-white/70 text-xs space-y-0.5">
-                        <div><span class="text-[#34d399]">● Green</span> — Harvester dominant (better gathering + bloom deposition)</div>
-                        <div><span class="text-[#38bdf8]">● Blue</span> — Sensor dominant (hazard detection + adaptation gain)</div>
-                        <div><span class="text-[#a78bfa]">● Purple</span> — Mover dominant (faster movement + vortex resistance)</div>
-                        <div><span class="text-[#f472b6]">● Pink</span> — Resistant dominant (lower energy drain)</div>
-                        <div><span class="text-[#fbbf24]">● Yellow</span> — Explorer dominant (exploration + random movement)</div>
-                        <div><span class="text-[#c084fc]">● Violet</span> — Communicator dominant (group bonuses + hazard warnings + coordination)</div>
+                        <div><span class="text-[#34d399]">● Green</span> — Harvester dominant</div>
+                        <div><span class="text-[#38bdf8]">● Blue</span> — Sensor dominant (best avoidance)</div>
+                        <div><span class="text-[#a78bfa]">● Purple</span> — Mover dominant</div>
+                        <div><span class="text-[#f472b6]">● Pink</span> — Resistant dominant</div>
+                        <div><span class="text-[#fbbf24]">● Yellow</span> — Explorer dominant</div>
+                        <div><span class="text-[#c084fc]">● Violet</span> — Communicator dominant</div>
                     </div>
                 </div>
             </div>
@@ -1829,18 +1824,49 @@
             }
 
             pruneExcessModules() {
-                // Phase F+: Clean up old low-tier modules to prevent performance issues
-                const maxModules = 14;
+                // v0.62: Smarter pruning — keep visual diversity
+                const maxModules = 12;
                 if (this.modules.length <= maxModules) return;
 
-                // Sort by tier ascending (lowest first)
-                this.modules.sort((a, b) => (a.tier || 1) - (b.tier || 1));
-
-                // Remove lowest-tier modules until we're under the limit
-                while (this.modules.length > maxModules) {
-                    this.modules.shift();
+                // Group modules by type
+                let byType = {};
+                for (let m of this.modules) {
+                    if (!byType[m.type]) byType[m.type] = [];
+                    byType[m.type].push(m);
                 }
 
+                let newModules = [];
+
+                // Keep at least one of each type the creature has
+                for (let type in byType) {
+                    // Keep the highest tier one of this type
+                    byType[type].sort((a, b) => (b.tier || 1) - (a.tier || 1));
+                    newModules.push(byType[type][0]);
+                }
+
+                // Fill remaining slots with the dominant specialization (if any)
+                const dominant = this.specialization;
+                if (dominant && byType[dominant]) {
+                    let extras = byType[dominant].slice(1); // already added the best one
+                    while (newModules.length < maxModules && extras.length > 0) {
+                        newModules.push(extras.shift());
+                    }
+                }
+
+                // If still under limit, add more from other types (highest tier first)
+                if (newModules.length < maxModules) {
+                    let remaining = [];
+                    for (let type in byType) {
+                        if (type === dominant) continue;
+                        remaining = remaining.concat(byType[type].slice(1));
+                    }
+                    remaining.sort((a, b) => (b.tier || 1) - (a.tier || 1));
+                    while (newModules.length < maxModules && remaining.length > 0) {
+                        newModules.push(remaining.shift());
+                    }
+                }
+
+                this.modules = newModules;
                 this.updateSpecialization();
             }
 
@@ -1867,7 +1893,6 @@
 
                 this.specialization = maxType || 'balanced';
 
-                // Phase F: Emergent Role based on dominant high-tier module
                 const tieredCount = this.getTieredModuleCount(this.specialization);
                 if (tieredCount >= 4) {
                     if (this.specialization === 'harvester') this.role = 'Master Harvester';
@@ -1919,7 +1944,6 @@
                 let drain = settings.energyDrain - this.getEfficiencyBonus();
                 this.energy -= Math.max(0.005, drain * timeScale);
 
-                // Hazard sensing + active avoidance + Lifetime Adaptation (Phase E)
                 let hazardInfo = this.getNearestHazardInfo();
                 let sensorLevel = this.getTieredModuleCount('sensor');
 
@@ -1937,7 +1961,6 @@
                         this.currentThought = "Dodging hazard!";
                     }
 
-                    // Phase E: Lifetime adaptation boost
                     let adaptationBoost = this.adaptationLevel * 0.018;
                     avoidStrength += adaptationBoost;
 
@@ -1960,7 +1983,6 @@
                     this.adaptationLevel = min(12, (this.adaptationLevel || 0) + 0.008 * timeScale);
                 }
 
-                // Phase F+: Tier threshold abilities + smart avoidance (no immunity)
                 const tieredSensor = this.getTieredModuleCount('sensor');
                 const tieredMover = this.getTieredModuleCount('mover');
                 const tieredHarv = this.getTieredModuleCount('harvester');
@@ -1968,12 +1990,10 @@
                 const tieredExpl = this.getTieredModuleCount('explorer');
                 const tieredRes = this.getTieredModuleCount('resistant');
 
-                // Tier 3+ Sensor: Predictive + elegant spiral avoidance
                 if (tieredSensor >= 3 && effectiveHazardDist > 0.12) {
                     let avoidAngle = hazardInfo.angle + PI;
                     let avoidStrength = effectiveHazardDist * 3.4;
 
-                    // Predictive dodge (anticipate vortex movement of hazards)
                     let predictive = sin(frameCount * 0.08) * 0.6;
                     avoidAngle += predictive * 0.4;
 
@@ -1984,13 +2004,11 @@
                         this.currentThought = "Elegant dodge";
                     }
 
-                    // Small visual pulse when high-tier Sensor dodges well
                     if (frameCount % 8 === 0 && effectiveHazardDist > 0.4) {
                         this.adaptationLevel = min(12, this.adaptationLevel + 0.015);
                     }
                 }
 
-                // Tier 3+ Harvester: Better bloom creation
                 if (tieredHarv >= 3 && this.honey > 5 && random() < 0.009 * timeScale) {
                     this.honey -= 4;
                     let targetIsGreen = isDay;
@@ -1999,7 +2017,6 @@
                     playDepositSound();
                 }
 
-                // Tier 3+ Communicator: Stronger warning aura
                 if (tieredComm >= 3 && effectiveHazardDist > 0.5) {
                     if (random() < 0.32 * timeScale) {
                         pheromones.push({
@@ -2013,7 +2030,6 @@
                     }
                 }
 
-                // Tier 3+ Explorer/Mover: Better vortex escape + burst movement
                 if ((tieredMover >= 3 || tieredExpl >= 3) && dist(this.x, this.y, centerX, centerY) < 160) {
                     let dx = this.x - centerX;
                     let dy = this.y - centerY;
@@ -2029,7 +2045,6 @@
                     }
                 }
 
-                // Mover / Explorer role: baseline escape + random movement
                 if (tieredMover >= 2 || tieredExpl >= 2) {
                     if (dist(this.x, this.y, centerX, centerY) < 180) {
                         let escapeForce = (tieredMover * 0.025 + tieredExpl * 0.018) * timeScale;
@@ -2045,7 +2060,6 @@
                     }
                 }
 
-                // Harvester role: baseline bloom deposition
                 if (tieredHarv >= 2 && this.honey > 4 && random() < 0.006 * timeScale) {
                     this.honey -= 3.5;
                     let targetIsGreen = isDay;
@@ -2054,7 +2068,6 @@
                     playDepositSound();
                 }
 
-                // Phase D: Emit hazard warning if Communicator + strong threat
                 if (effectiveHazardDist > 0.55 && this.getModuleCount('communicator') > 0) {
                     if (random() < 0.25 * timeScale) {
                         pheromones.push({
@@ -2269,7 +2282,7 @@
                     }
                 }
 
-                if (frameCount % 120 === 0) {
+                if (frameCount % 180 === 0) {
                     this.checkForTierUpgrades();
                     this.pruneExcessModules();
                 }
@@ -2339,21 +2352,11 @@
                     circle(0, 0, s * 1.15);
                 }
 
-                // Visual polish for high-tier roles
                 if (this.role.includes('Master') || this.role.includes('Warden') || this.role.includes('Leader')) {
-                    // Subtle glow for elite roles
                     noFill();
                     stroke(255, 255, 255, 35);
                     strokeWeight(1.5);
                     circle(0, 0, s + 9 + sin(frameCount * 0.15) * 2);
-                }
-
-                if (this.role === 'Hazard Warden' && effectiveHazardDist > 0.3) {
-                    // Subtle scanning pulse for Hazard Wardens near danger
-                    noFill();
-                    stroke(56, 189, 248, 60);
-                    strokeWeight(1);
-                    circle(0, 0, s + 14 + sin(frameCount * 0.4) * 4);
                 }
 
                 fill(255, 255, 255, 130);
