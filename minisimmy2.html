@@ -42,7 +42,7 @@
                 </div>
                 <div>
                     <span class="font-display text-xl sm:text-2xl tracking-tighter">MiniSimmy2</span>
-                    <span class="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.78 • Environmental Cycles + Improved Legend</span>
+                    <span class="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.79 • Group Social Pressure → Predators</span>
                 </div>
             </div>
             
@@ -61,7 +61,7 @@
                 <div class="flex items-center gap-x-3">
                     <div>
                         <h1 class="font-display text-2xl sm:text-3xl tracking-tighter">MiniSimmy2</h1>
-                        <p class="text-white/60 text-xs sm:text-sm">Environmental cycles active • Harvesters boost particle range</p>
+                        <p class="text-white/60 text-xs sm:text-sm">Groups can now socially pressure outliers into becoming predators</p>
                     </div>
                 </div>
                 
@@ -2290,6 +2290,17 @@
                 return count;
             }
 
+            // NEW: Get nearby creatures for social pressure logic
+            getLocalGroup(radius) {
+                let group = [];
+                for (let o of creatures) {
+                    if (o !== this && dist(this.x, this.y, o.x, o.y) < radius) {
+                        group.push(o);
+                    }
+                }
+                return group;
+            }
+
             getNearestHazardInfo() {
                 let nearestDist = Infinity;
                 let nearestAngle = 0;
@@ -2412,7 +2423,7 @@
                         for (let m of newModules) {
                             if (m.type === type && (m.tier || 1) === currentTier) {
                                 m.tier = nextTier;
-                                break;
+                                break();
                             }
                         }
                     }
@@ -2737,6 +2748,37 @@
                         });
                         this.currentThought = "Depositing bloom";
                         playDepositSound();
+                    }
+
+                    // === NEW: Social Pressure / Outcast Logic ===
+                    // If in a decent-sized local group, minority specializations can be pressured into becoming predators
+                    let localGroup = this.getLocalGroup(58);
+                    if (localGroup.length >= 5) {
+                        let mySpec = this.specialization;
+                        let specCounts = {};
+                        for (let o of localGroup) {
+                            specCounts[o.specialization] = (specCounts[o.specialization] || 0) + 1;
+                        }
+
+                        let myCount = specCounts[mySpec] || 1;
+                        let groupSize = localGroup.length;
+                        let myRatio = myCount / groupSize;
+
+                        // If you're clearly in the minority (outcast)
+                        if (myRatio < 0.18) {
+                            let pressureChance = 0.0065 * timeScale;
+
+                            // Stronger pressure if group is very large or very homogeneous
+                            if (groupSize > 9) pressureChance *= 1.6;
+                            if (myRatio < 0.10) pressureChance *= 1.7;
+
+                            if (random() < pressureChance) {
+                                if (!this.isPredator && this.energy > 22) {
+                                    this.isPredator = true;
+                                    this.currentThought = "Outcast...";
+                                }
+                            }
+                        }
                     }
                 }
 
