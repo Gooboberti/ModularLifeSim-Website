@@ -30,7 +30,7 @@
                 </div>
                 <div>
                     <span class="font-display text-2xl tracking-tighter">MiniSimmy2</span>
-                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.62 • Smarter Pruning + Crash Fix</span>
+                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.63 • Vortex Honey + Day/Night Label</span>
                 </div>
             </div>
             <div class="flex items-center gap-x-4 text-sm">
@@ -46,7 +46,7 @@
                 <div class="flex items-center gap-x-4">
                     <div>
                         <h1 class="font-display text-3xl tracking-tighter">MiniSimmy2</h1>
-                        <p class="text-white/60 text-sm">Fixed crash. Smarter module pruning that keeps visual diversity while preventing bloat. High-Sensor creatures still show elegant learned avoidance.</p>
+                        <p class="text-white/60 text-sm">Honey now obeys the vortex. Some deposits get caught and freeze into secondary food patches. Day/Night indicator added.</p>
                     </div>
                     
                     <!-- Elapsed Time -->
@@ -339,30 +339,18 @@
 
             <div class="space-y-5 text-sm">
                 <div>
-                    <div class="font-semibold text-emerald-400 mb-1">Smarter Module Pruning (v0.62)</div>
-                    <div class="text-white/70 text-xs">Pruning now keeps visual diversity. It preserves at least one of each module type the creature has acquired, then adds extras only on the dominant specialization. No more identical-module spam.</div>
+                    <div class="font-semibold text-emerald-400 mb-1">Vortex-Affected Honey (v0.63)</div>
+                    <div class="text-white/70 text-xs">Yellow honey deposits now feel the vortex. Most still reach the main food node, but some get caught by the spin and eventually freeze into secondary food patches that emit attraction signals.</div>
                 </div>
 
                 <div>
-                    <div class="font-semibold text-emerald-400 mb-1">Smart Avoidance (v0.61)</div>
-                    <div class="text-white/70 text-xs">High-Sensor (Tier 3+) creatures perform elegant, predictive spiral dodging around the vortex. No immunity — only better movement and learning.</div>
+                    <div class="font-semibold text-emerald-400 mb-1">Smart Avoidance + Tier Abilities</div>
+                    <div class="text-white/70 text-xs">High-Sensor creatures perform elegant predictive dodging. Tier 3+ modules unlock stronger role-specific behaviors.</div>
                 </div>
 
                 <div>
-                    <div class="font-semibold text-emerald-400 mb-1">Tier Threshold Abilities</div>
-                    <div class="text-white/70 text-xs">Tier 3+ modules unlock new behaviors for Harvester, Sensor, Communicator, and Explorer/Mover roles.</div>
-                </div>
-
-                <div>
-                    <div class="font-semibold text-emerald-400 mb-1">Core Colors & Specialization</div>
-                    <div class="text-white/70 text-xs space-y-0.5">
-                        <div><span class="text-[#34d399]">● Green</span> — Harvester dominant</div>
-                        <div><span class="text-[#38bdf8]">● Blue</span> — Sensor dominant (best avoidance)</div>
-                        <div><span class="text-[#a78bfa]">● Purple</span> — Mover dominant</div>
-                        <div><span class="text-[#f472b6]">● Pink</span> — Resistant dominant</div>
-                        <div><span class="text-[#fbbf24]">● Yellow</span> — Explorer dominant</div>
-                        <div><span class="text-[#c084fc]">● Violet</span> — Communicator dominant</div>
-                    </div>
+                    <div class="font-semibold text-emerald-400 mb-1">Module System</div>
+                    <div class="text-white/70 text-xs">Creatures accumulate colored modules. High tiers grant specialized abilities. Excess low-tier modules are pruned intelligently to maintain performance and visual clarity.</div>
                 </div>
             </div>
 
@@ -377,6 +365,7 @@
         let vortexParticles = [];
         let pheromones = [];
         let foodBlooms = [];
+        let staticFoodPatches = [];
         let energyOrbs = [];
         let redHazards = [];
         let redBeams = [];
@@ -1492,10 +1481,9 @@
                             let force = correctZone ? 0.038 : 0.012;
                             if (c.getModuleCount('communicator') > 0) force *= 1.4;
 
-                            // Phase D: React to hazard warnings
                             if (ph.isHazardWarning) {
                                 force *= 2.2;
-                                let warnAngle = atan2(ph.y - c.y, ph.x - c.x) + PI; // away from warning
+                                let warnAngle = atan2(ph.y - c.y, ph.x - c.x) + PI;
                                 c.vx += cos(warnAngle) * force * 0.9 * timeScale;
                                 c.vy += sin(warnAngle) * force * 0.9 * timeScale;
                                 if (c.getModuleCount('communicator') > 0) {
@@ -1512,35 +1500,107 @@
                 }
             }
 
-            // Food blooms
+            // === FOOD BLOOMS (Yellow Honey) - now affected by vortex ===
             for (let i = foodBlooms.length - 1; i >= 0; i--) {
                 let b = foodBlooms[i];
                 b.life -= timeScale;
+
+                // Vortex influence on honey
+                let dx = b.x - centerX;
+                let dy = b.y - centerY;
+                let distToCenter = sqrt(dx * dx + dy * dy) || 1;
+
+                if (distToCenter > 8) {
+                    let tangentX = -dy;
+                    let tangentY = dx;
+                    let len = sqrt(tangentX * tangentX + tangentY * tangentY) || 1;
+
+                    let rotForce = 0.55 * vortexStrength * vortexDir;
+                    b.x += (tangentX / len) * rotForce * timeScale;
+                    b.y += (tangentY / len) * rotForce * timeScale;
+
+                    let pull = 0.35 * vortexStrength;
+                    b.x += (centerX - b.x) * pull / (distToCenter + 12) * timeScale;
+                    b.y += (centerY - b.y) * pull / (distToCenter + 12) * timeScale;
+                }
+
+                // Normal movement toward target
                 let target = b.targetIsGreen ? greenZone : blueZone;
-                let dx = target.x - b.x;
-                let dy = target.y - b.y;
-                let distToTarget = sqrt(dx*dx + dy*dy) || 1;
+                let tdx = target.x - b.x;
+                let tdy = target.y - b.y;
+                let tdist = sqrt(tdx*tdx + tdy*tdy) || 1;
 
-                b.x += (dx / distToTarget) * 1.8 * timeScale;
-                b.y += (dy / distToTarget) * 1.8 * timeScale;
-                b.radius = max(3, b.radius * 0.985);
+                let moveSpeed = 1.65;
+                b.x += (tdx / tdist) * moveSpeed * timeScale;
+                b.y += (tdy / tdist) * moveSpeed * timeScale;
 
-                let alpha = map(b.life, 0, 280, 0, 180);
+                // Draw
+                let alpha = map(b.life, 0, 280, 0, 200);
                 fill(255, 220, 100, alpha);
                 noStroke();
                 circle(b.x, b.y, b.radius);
                 fill(255, 240, 180, alpha * 0.5);
                 circle(b.x, b.y, b.radius * 0.6);
 
-                if (distToTarget < 12 || b.life <= 0) {
-                    if (b.targetIsGreen) greenZone.food = min(greenZone.maxFood, greenZone.food + 20);
-                    else blueZone.food = min(blueZone.maxFood, blueZone.food + 20);
-                    playDepositSound();
+                if (tdist < 14 || b.life <= 0) {
+                    if (b.life > 0) {
+                        // Successfully reached main node
+                        if (b.targetIsGreen) greenZone.food = min(greenZone.maxFood, greenZone.food + 20);
+                        else blueZone.food = min(blueZone.maxFood, blueZone.food + 20);
+                        playDepositSound();
+                    } else {
+                        // Froze due to vortex/time - create secondary food patch
+                        staticFoodPatches.push({
+                            x: b.x,
+                            y: b.y,
+                            life: 380,
+                            foodValue: 14,
+                            radius: 11
+                        });
+                    }
                     foodBlooms.splice(i, 1);
                 }
             }
 
-            // Energy orbs
+            // Static Food Patches (frozen honey that didn't make it)
+            for (let i = staticFoodPatches.length - 1; i >= 0; i--) {
+                let p = staticFoodPatches[i];
+                p.life -= timeScale;
+                p.radius = max(3, p.radius * 0.985);
+
+                // Emit attraction pheromones occasionally
+                if (frameCount % 18 === 0 && random() < 0.6) {
+                    pheromones.push({
+                        x: p.x,
+                        y: p.y,
+                        life: 160,
+                        isGreen: isDay,
+                        isHazardWarning: false
+                    });
+                }
+
+                let alpha = map(p.life, 0, 380, 0, 210);
+                fill(255, 215, 80, alpha);
+                noStroke();
+                circle(p.x, p.y, p.radius);
+                fill(255, 235, 150, alpha * 0.45);
+                circle(p.x, p.y, p.radius * 0.65);
+
+                // Creatures can eat from static patches
+                for (let c of creatures) {
+                    if (!c.isPredator && dist(c.x, c.y, p.x, p.y) < 13) {
+                        c.energy = min(100, c.energy + 0.9 * timeScale);
+                        if (Math.random() < 0.15 * soundDensity) playEatSound(isDay);
+                        p.life -= 8;
+                    }
+                }
+
+                if (p.life <= 0) {
+                    staticFoodPatches.splice(i, 1);
+                }
+            }
+
+            // Energy orbs (smaller, faster)
             for (let i = energyOrbs.length - 1; i >= 0; i--) {
                 let o = energyOrbs[i];
                 o.life -= timeScale;
@@ -1586,7 +1646,6 @@
                 if (isReady) {
                     let chance = settings.reproductionChance;
 
-                    // Phase C: Good avoiders get slight reproductive advantage
                     let avoidanceBonus = 1 + (c.hazardsAvoided || 0) * 0.004;
                     if ((c.hazardDamageTaken || 0) > 50) avoidanceBonus *= 0.7;
                     chance *= avoidanceBonus;
@@ -1638,6 +1697,17 @@
             }
 
             pop();
+
+            // === Day / Night Label ===
+            fill(255, 255, 255, 200);
+            textAlign(LEFT);
+            textSize(13);
+            textFont('Inter, system-ui');
+            if (isDay) {
+                text('DAY', 18, 28);
+            } else {
+                text('NIGHT', 18, 28);
+            }
 
             updateMainStats();
         }
@@ -1824,11 +1894,9 @@
             }
 
             pruneExcessModules() {
-                // v0.62: Smarter pruning — keep visual diversity
                 const maxModules = 12;
                 if (this.modules.length <= maxModules) return;
 
-                // Group modules by type
                 let byType = {};
                 for (let m of this.modules) {
                     if (!byType[m.type]) byType[m.type] = [];
@@ -1837,23 +1905,19 @@
 
                 let newModules = [];
 
-                // Keep at least one of each type the creature has
                 for (let type in byType) {
-                    // Keep the highest tier one of this type
                     byType[type].sort((a, b) => (b.tier || 1) - (a.tier || 1));
                     newModules.push(byType[type][0]);
                 }
 
-                // Fill remaining slots with the dominant specialization (if any)
                 const dominant = this.specialization;
                 if (dominant && byType[dominant]) {
-                    let extras = byType[dominant].slice(1); // already added the best one
+                    let extras = byType[dominant].slice(1);
                     while (newModules.length < maxModules && extras.length > 0) {
                         newModules.push(extras.shift());
                     }
                 }
 
-                // If still under limit, add more from other types (highest tier first)
                 if (newModules.length < maxModules) {
                     let remaining = [];
                     for (let type in byType) {
@@ -2399,6 +2463,7 @@
             vortexParticles = [];
             pheromones = [];
             foodBlooms = [];
+            staticFoodPatches = [];
             energyOrbs = [];
             redHazards = [];
             redBeams = [];
