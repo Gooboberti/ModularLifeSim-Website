@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MiniSimmy2 • Swarm v0.14</title>
+    <title>MiniSimmy2 • Neural + Pheromones</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
         body { font-family: 'Inter', system_ui, sans-serif; }
         .font-display { font-family: 'Space Grotesk', 'Inter', sans-serif; font-weight: 600; }
-        .neural-canvas { border: 1px solid #334155; border-radius: 12px; background: #0f111a; }
+        .neural-canvas { border: 1px solid #334155; border-radius: 12px; background: #0f111a; cursor: pointer; }
         .slider-label { font-size: 10px; color: #64748b; }
     </style>
 </head>
@@ -23,7 +23,7 @@
                 </div>
                 <div>
                     <span class="font-display text-2xl tracking-tighter">MiniSimmy2</span>
-                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.14 • Swarm + Sliders</span>
+                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.15 • Neural Accuracy</span>
                 </div>
             </div>
             <div class="flex items-center gap-x-4 text-sm">
@@ -38,7 +38,7 @@
             <div class="flex justify-between items-center mb-4">
                 <div>
                     <h1 class="font-display text-3xl tracking-tighter">MiniSimmy2</h1>
-                    <p class="text-white/60 text-sm">Pheromones + Firefly attraction • Full parameter control</p>
+                    <p class="text-white/60 text-sm">Accurate 6-4-6 Neural Net • Clickable nodes • Stronger pheromones</p>
                 </div>
                 <div class="flex items-center gap-x-3 text-sm">
                     <div id="stats" class="font-mono px-4 py-1.5 bg-white/5 rounded-2xl text-xs flex gap-x-4"></div>
@@ -98,10 +98,7 @@
                     <div><span class="text-emerald-400">● Green</span> = Day zone (Harvesters)</div>
                     <div><span class="text-sky-400">● Blue</span> = Night zone (Sensors)</div>
                     <div class="pt-1">White particles = Vortex food</div>
-                    <div>Colored dots = Pheromone trails (stronger = more success)</div>
-                    <div class="pt-2 text-white/50">Modules:</div>
-                    <div><span class="text-emerald-400">Harvester</span> — Stronger on Green + better pheromone deposit</div>
-                    <div><span class="text-sky-400">Sensor</span> — Stronger on Blue + pheromone following</div>
+                    <div>Colored dots = Pheromone trails (brighter = stronger success signal)</div>
                 </div>
             </div>
         </div>
@@ -110,7 +107,7 @@
     <!-- Inspector Popup -->
     <div id="inspector" class="hidden fixed inset-0 z-[100] flex items-center justify-center">
         <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeInspector()"></div>
-        <div class="relative w-[380px] bg-[#0a0a0f]/90 border border-white/20 rounded-3xl p-6 shadow-2xl backdrop-blur-xl">
+        <div class="relative w-[400px] bg-[#0a0a0f]/90 border border-white/20 rounded-3xl p-6 shadow-2xl backdrop-blur-xl">
             <div class="flex justify-between items-center mb-4">
                 <div class="font-semibold text-xl" id="inspect-name"></div>
                 <button onclick="closeInspector()" class="text-white/60 hover:text-white text-2xl leading-none">&times;</button>
@@ -139,14 +136,18 @@
                 </div>
             </div>
 
-            <div class="mb-5">
+            <div class="mb-4">
                 <div class="text-xs text-white/50 mb-1.5">Current Thought</div>
                 <div id="inspect-thought" class="text-sm bg-white/5 rounded-2xl px-4 py-2 text-white/80"></div>
             </div>
 
-            <div class="mb-5">
-                <div class="text-xs text-white/50 mb-1.5">Neural Net</div>
-                <canvas id="neural-canvas" width="320" height="170" class="neural-canvas w-full rounded-2xl"></canvas>
+            <!-- Accurate Neural Net -->
+            <div class="mb-4">
+                <div class="text-xs text-white/50 mb-1.5 flex justify-between">
+                    <span>Neural Net (6-4-6) — Click nodes for info</span>
+                </div>
+                <canvas id="neural-canvas" width="360" height="190" class="neural-canvas w-full rounded-2xl"></canvas>
+                <div id="node-info" class="mt-2 text-xs bg-white/5 rounded-xl px-3 py-2 hidden"></div>
             </div>
 
             <div>
@@ -169,6 +170,7 @@
         let selectedCreature = null;
         let neuralCtx;
         let masterVolume = 0.12;
+        let lastClickedNode = null;
 
         let settings = {
             energyDrain: 0.038,
@@ -238,7 +240,10 @@
             setupSliders();
 
             const neuralCanvas = document.getElementById('neural-canvas');
-            if (neuralCanvas) neuralCtx = neuralCanvas.getContext('2d');
+            if (neuralCanvas) {
+                neuralCtx = neuralCanvas.getContext('2d');
+                neuralCanvas.addEventListener('click', handleNeuralClick);
+            }
         }
 
         function playSound(freq, type = 'sine', duration = 0.2, vol = 0.06, detune = 0) {
@@ -316,19 +321,24 @@
                 vortexParticles.push(new VortexParticle(true));
             }
 
-            // Pheromone system
+            // Pheromones - more obvious
             for (let i = pheromones.length - 1; i >= 0; i--) {
                 let ph = pheromones[i];
-                ph.life -= 1;
+                ph.life -= 1.2;
                 if (ph.life <= 0) {
                     pheromones.splice(i, 1);
                     continue;
                 }
 
-                let alpha = map(ph.life, 0, 180, 0, 110);
+                let alpha = map(ph.life, 0, 220, 0, 160);
+                let size = 5 + (ph.life / 55);
                 fill(ph.isGreen ? [52, 211, 153, alpha] : [56, 189, 248, alpha]);
                 noStroke();
-                circle(ph.x, ph.y, 3.5 + (ph.life / 70));
+                circle(ph.x, ph.y, size);
+
+                // Glow
+                fill(ph.isGreen ? [52, 211, 153, alpha * 0.3] : [56, 189, 248, alpha * 0.3]);
+                circle(ph.x, ph.y, size * 1.6);
 
                 for (let c of creatures) {
                     if (!c.isPredator) {
@@ -403,10 +413,62 @@
                     const inspector = document.getElementById('inspector');
                     inspector.classList.remove('hidden');
                     inspector.classList.add('flex');
+                    lastClickedNode = null;
+                    document.getElementById('node-info').classList.add('hidden');
                     updateInspector();
                     return;
                 }
             }
+        }
+
+        function handleNeuralClick(e) {
+            if (!selectedCreature || !neuralCtx) return;
+
+            const rect = e.target.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            const layers = [6, 4, 6];
+            const positions = [];
+
+            for (let l = 0; l < layers.length; l++) {
+                const x = 50 + l * 105;
+                positions[l] = [];
+                for (let n = 0; n < layers[l]; n++) {
+                    const y = 35 + n * (125 / (layers[l] - 1));
+                    positions[l].push({x, y});
+                }
+            }
+
+            for (let l = 0; l < positions.length; l++) {
+                for (let i = 0; i < positions[l].length; i++) {
+                    const p = positions[l][i];
+                    const distToNode = Math.hypot(mouseX - p.x, mouseY - p.y);
+                    if (distToNode < 14) {
+                        showNodeInfo(l, i);
+                        return;
+                    }
+                }
+            }
+        }
+
+        function showNodeInfo(layer, index) {
+            const infoBox = document.getElementById('node-info');
+            let text = '';
+
+            if (layer === 0) {
+                const inputNames = ['Energy Level', 'Distance to Target Zone', 'Local Pheromone', 'Nearby Creature Count', 'Vortex Pull', 'Fitness of Neighbors'];
+                text = `<strong>Input ${index + 1}:</strong> ${inputNames[index] || 'Sensor Input'}<br><span class="text-white/60 text-xs">This input influences how the creature decides to move or signal.</span>`;
+            } else if (layer === 1) {
+                text = `<strong>Hidden Node ${index + 1}</strong><br><span class="text-white/60 text-xs">Internal processing unit. Combines multiple signals to produce decisions.</span>`;
+            } else {
+                const outputNames = ['Move X', 'Move Y', 'Deposit Pheromone', 'Signal Strength', 'Energy Priority', 'Social Tendency'];
+                text = `<strong>Output ${index + 1}:</strong> ${outputNames[index] || 'Action Output'}<br><span class="text-white/60 text-xs">Controls movement, signaling, or internal state.</span>`;
+            }
+
+            infoBox.innerHTML = text;
+            infoBox.classList.remove('hidden');
+            lastClickedNode = { layer, index };
         }
 
         function closeInspector() {
@@ -414,6 +476,7 @@
             inspector.classList.remove('flex');
             inspector.classList.add('hidden');
             selectedCreature = null;
+            document.getElementById('node-info').classList.add('hidden');
         }
 
         function updateInspector() {
@@ -443,26 +506,31 @@
         function drawAnimatedNeuralNet(creature) {
             if (!neuralCtx) return;
             const ctx = neuralCtx;
-            ctx.clearRect(0, 0, 320, 170);
+            ctx.clearRect(0, 0, 360, 190);
 
-            const t = frameCount * 0.08;
+            const t = frameCount * 0.085;
+
+            // Exact 6-4-6 structure
             const layers = [6, 4, 6];
             const positions = [];
 
             for (let l = 0; l < layers.length; l++) {
-                const x = 40 + l * 95;
+                const x = 50 + l * 105;
                 positions[l] = [];
                 for (let n = 0; n < layers[l]; n++) {
-                    const y = 28 + n * (115 / (layers[l] - 1));
+                    const y = 32 + n * (128 / (layers[l] - 1));
                     positions[l].push({x, y});
                 }
             }
 
+            // Connections with simulated strength
             ctx.strokeStyle = '#475569';
             ctx.lineWidth = 1;
             for (let l = 0; l < positions.length - 1; l++) {
                 for (let a of positions[l]) {
                     for (let b of positions[l + 1]) {
+                        const weight = 0.6 + Math.sin(t * 0.7 + (a.x + b.y)) * 0.4;
+                        ctx.globalAlpha = 0.35 + weight * 0.35;
                         ctx.beginPath();
                         ctx.moveTo(a.x, a.y);
                         ctx.lineTo(b.x, b.y);
@@ -470,22 +538,28 @@
                     }
                 }
             }
+            ctx.globalAlpha = 1;
 
+            // Nodes
             for (let l = 0; l < positions.length; l++) {
                 for (let i = 0; i < positions[l].length; i++) {
                     const p = positions[l][i];
-                    const activation = Math.sin(t + i * 1.0 + l * 0.6) * 0.5 + 0.5;
-                    const size = 6 + activation * 4;
+                    const activation = Math.sin(t + i * 1.1 + l * 0.7) * 0.5 + 0.5;
+                    const size = 7.5 + activation * 5;
 
-                    ctx.fillStyle = l === 0 ? '#38bdf8' : (l === 2 ? '#f472b6' : '#a78bfa');
+                    if (l === 0) ctx.fillStyle = '#38bdf8';
+                    else if (l === 2) ctx.fillStyle = '#f472b6';
+                    else ctx.fillStyle = '#a78bfa';
+
                     ctx.beginPath();
                     ctx.arc(p.x, p.y, size, 0, Math.PI * 2);
                     ctx.fill();
 
-                    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-                    ctx.lineWidth = 1;
+                    // Pulse ring
+                    ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+                    ctx.lineWidth = 1.5;
                     ctx.beginPath();
-                    ctx.arc(p.x, p.y, size + Math.sin(t * 2 + i) * 2, 0, Math.PI * 2);
+                    ctx.arc(p.x, p.y, size + Math.sin(t * 3 + i) * 3.5, 0, Math.PI * 2);
                     ctx.stroke();
                 }
             }
@@ -634,7 +708,6 @@
                         this.vy += (dy / d) * pull;
                     }
 
-                    // Firefly attraction to high-fitness neighbors
                     let bestNeighbor = null;
                     let bestFitness = 0;
                     for (let o of creatures) {
@@ -709,7 +782,7 @@
                     greenZone.food = max(0, greenZone.food - 0.32);
 
                     if (random() < 0.09) {
-                        pheromones.push({ x: this.x, y: this.y, life: 180, isGreen: true });
+                        pheromones.push({ x: this.x, y: this.y, life: 220, isGreen: true });
                     }
                     if (this.energy > 76) this.honey = min(11, this.honey + 0.2);
                 }
@@ -720,7 +793,7 @@
                     blueZone.food = max(0, blueZone.food - 0.32);
 
                     if (random() < 0.09) {
-                        pheromones.push({ x: this.x, y: this.y, life: 180, isGreen: false });
+                        pheromones.push({ x: this.x, y: this.y, life: 220, isGreen: false });
                     }
                     if (this.energy > 76) this.honey = min(11, this.honey + 0.2);
                 }
