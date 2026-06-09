@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mini Simmy • v0.26</title>
+  <title>Mini Simmy • v0.27</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
@@ -21,7 +21,7 @@
         </div>
         <div>
           <span class="font-display text-2xl">Mini Simmy</span>
-          <span class="text-xs ml-2 text-slate-500">v0.26 • Fixed</span>
+          <span class="text-xs ml-2 text-slate-500">v0.27 • Separate Audio + More Animation</span>
         </div>
       </div>
 
@@ -111,11 +111,23 @@
 
           <!-- Legend -->
           <div class="bg-slate-900 border border-slate-700 rounded-3xl p-4 text-sm">
-            <div class="font-semibold mb-3">Legend &amp; Lineage</div>
-            <div class="text-xs text-slate-400 space-y-1.5">
-              <div><span class="text-emerald-400">●</span> Forager — Evolves survival traits</div>
-              <div><span class="text-red-400">●</span> Predator — Targets weakest target</div>
-              <div class="pt-1">Use the <strong>Audio Panel</strong> to shape the sounds.</div>
+            <div class="font-semibold mb-3">Legend &amp; Node Meanings</div>
+            <div class="text-xs text-slate-400 space-y-1">
+              <div><strong>Inputs:</strong></div>
+              <div><span class="font-mono text-emerald-300">F.∠</span> — Direction to nearest food</div>
+              <div><span class="font-mono text-emerald-300">F.Dist</span> — How close the food is</div>
+              <div><span class="font-mono text-emerald-300">Danger</span> — How close the predator is</div>
+              <div><span class="font-mono text-emerald-300">Energy</span> — Current energy level</div>
+              <div><span class="font-mono text-emerald-300">Mem</span> — Short-term memory / momentum</div>
+              <div><span class="font-mono text-emerald-300">Bias</span> — Inherent personality/role bias</div>
+
+              <div class="pt-2"><strong>Outputs:</strong></div>
+              <div><span class="font-mono text-red-300">Turn</span> — How sharply to turn</div>
+              <div><span class="font-mono text-red-300">Speed</span> — Movement speed</div>
+              <div><span class="font-mono text-red-300">Attack</span> — Tendency to attack</div>
+              <div><span class="font-mono text-red-300">Flee</span> — Tendency to run away</div>
+              <div><span class="font-mono text-red-300">Expl</span> — Exploration drive</div>
+              <div><span class="font-mono text-red-300">Cons</span> — Energy conservation</div>
             </div>
           </div>
 
@@ -126,25 +138,29 @@
   </div>
 
   <script>
-    // ==================== NAME GENERATOR (moved to top) ====================
-    function generateSciFiName() {
-      const prefixes = ['Kael','Vex','Thorne','Zyl','Ryn','Syl','Drak','Nyx','Korr','Vael'];
-      const suffixes = ['-9','-12','ara','ith','on','yx','ar','en','os'];
-      return prefixes[Math.floor(Math.random()*prefixes.length)] + suffixes[Math.floor(Math.random()*suffixes.length)];
-    }
-
-    // ==================== AUDIO ====================
+    // ==================== AUDIO SETTINGS (Separate for Forager vs Predator) ====================
     let audioCtx;
     let neuralSoundEnabled = true;
     let masterVolume = 0.03;
 
-    let audioSettings = {
+    // Forager sound settings (shared by all foragers)
+    let foragerAudio = {
       sensitivity: 0.45,
       inputWave: 'sine',
       hiddenWave: 'triangle',
       outputWave: 'sine',
       filterCutoff: 1400,
       harmonicRichness: 0.08
+    };
+
+    // Predator sound settings
+    let predatorAudio = {
+      sensitivity: 0.42,
+      inputWave: 'sawtooth',
+      hiddenWave: 'triangle',
+      outputWave: 'sawtooth',
+      filterCutoff: 900,
+      harmonicRichness: 0.15
     };
 
     function initAudio() {
@@ -169,6 +185,7 @@
       }
     }
 
+    // ==================== SOUND EFFECTS ====================
     function playEatSound() {
       if (!audioCtx || !neuralSoundEnabled || masterVolume < 0.005) return;
       const o = audioCtx.createOscillator();
@@ -220,26 +237,28 @@
       });
     }
 
-    function playNeuralTone(baseFreq, intensity, layer = 'input') {
+    function playNeuralTone(baseFreq, intensity, layer = 'input', isForager = true) {
       if (!audioCtx || !neuralSoundEnabled || masterVolume < 0.005) return;
-      const vol = Math.max(0.01, Math.min(0.18, intensity * masterVolume * 0.7));
+
+      const settings = isForager ? foragerAudio : predatorAudio;
+      const vol = Math.max(0.01, Math.min(0.2, intensity * masterVolume * 0.7));
       const duration = 0.26 + intensity * 0.09;
 
       const o = audioCtx.createOscillator();
       const g = audioCtx.createGain();
       const filter = audioCtx.createBiquadFilter();
 
-      let wave = audioSettings.inputWave;
-      if (layer === 'hidden') wave = audioSettings.hiddenWave;
-      if (layer === 'output') wave = audioSettings.outputWave;
+      let wave = settings.inputWave;
+      if (layer === 'hidden') wave = settings.hiddenWave;
+      if (layer === 'output') wave = settings.outputWave;
 
       o.type = wave;
       filter.type = 'lowpass';
-      filter.frequency.value = audioSettings.filterCutoff;
+      filter.frequency.value = settings.filterCutoff;
       o.frequency.value = baseFreq;
 
-      if (audioSettings.harmonicRichness > 0) {
-        o.detune.value = (Math.random() - 0.5) * audioSettings.harmonicRichness * 35;
+      if (settings.harmonicRichness > 0) {
+        o.detune.value = (Math.random() - 0.5) * settings.harmonicRichness * 35;
       }
 
       g.gain.value = vol;
@@ -251,108 +270,198 @@
       setTimeout(() => { try { o.stop(); } catch(e){} }, duration * 1000 + 20);
     }
 
-    // ==================== MASTER AUDIO PANEL ====================
+    // ==================== MASTER AUDIO PANEL (Forager + Predator) ====================
     function showAudioPanel() {
       const modal = document.createElement('div');
       modal.className = 'fixed inset-0 bg-black/70 flex items-center justify-center z-[100]';
       modal.innerHTML = `
-        <div class="bg-slate-900 border border-slate-700 rounded-3xl p-8 w-full max-w-md mx-4">
+        <div class="bg-slate-900 border border-slate-700 rounded-3xl p-8 w-full max-w-lg mx-4 max-h-[90vh] overflow-auto">
           <div class="flex justify-between items-center mb-6">
-            <h3 class="text-xl font-semibold">Master Audio Panel</h3>
+            <h3 class="text-xl font-semibold">Audio Settings</h3>
             <button onclick="this.closest('.fixed').remove()" class="text-2xl">×</button>
           </div>
 
-          <div class="space-y-6 text-sm">
-            <div>
-              <label class="block text-slate-400 mb-1">Trigger Sensitivity</label>
-              <input type="range" id="sens" min="0.2" max="0.8" step="0.05" value="${audioSettings.sensitivity}" class="w-full accent-violet-500">
-            </div>
-
-            <div class="grid grid-cols-3 gap-4">
+          <!-- FORAGER SECTION -->
+          <div class="mb-8">
+            <div class="font-semibold text-emerald-400 mb-3">Forager Nodes (shared by all foragers)</div>
+            
+            <div class="space-y-4">
               <div>
-                <label class="text-xs text-slate-400">Inputs</label>
-                <select id="wave-input" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2">
-                  <option value="sine">Sine</option>
-                  <option value="triangle">Triangle</option>
-                  <option value="sawtooth">Sawtooth</option>
-                </select>
+                <label class="text-xs text-slate-400">Sensitivity</label>
+                <input type="range" id="f-sens" min="0.2" max="0.8" step="0.05" value="${foragerAudio.sensitivity}" class="w-full accent-emerald-500">
               </div>
+
+              <div class="grid grid-cols-3 gap-3">
+                <div>
+                  <label class="text-xs text-slate-400">Inputs</label>
+                  <select id="f-wave-input" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-sm">
+                    <option value="sine">Sine</option>
+                    <option value="triangle">Triangle</option>
+                    <option value="sawtooth">Sawtooth</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="text-xs text-slate-400">Hidden</label>
+                  <select id="f-wave-hidden" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-sm">
+                    <option value="sine">Sine</option>
+                    <option value="triangle">Triangle</option>
+                    <option value="sawtooth">Sawtooth</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="text-xs text-slate-400">Outputs</label>
+                  <select id="f-wave-output" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-sm">
+                    <option value="sine">Sine</option>
+                    <option value="triangle">Triangle</option>
+                    <option value="sawtooth">Sawtooth</option>
+                  </select>
+                </div>
+              </div>
+
               <div>
-                <label class="text-xs text-slate-400">Hidden</label>
-                <select id="wave-hidden" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2">
-                  <option value="sine">Sine</option>
-                  <option value="triangle">Triangle</option>
-                  <option value="sawtooth">Sawtooth</option>
-                </select>
+                <label class="text-xs text-slate-400">Filter Cutoff</label>
+                <input type="range" id="f-filter" min="400" max="2800" step="50" value="${foragerAudio.filterCutoff}" class="w-full accent-emerald-500">
               </div>
+
               <div>
-                <label class="text-xs text-slate-400">Outputs</label>
-                <select id="wave-output" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2">
-                  <option value="sine">Sine</option>
-                  <option value="triangle">Triangle</option>
-                  <option value="sawtooth">Sawtooth</option>
-                </select>
+                <label class="text-xs text-slate-400">Harmonic Richness</label>
+                <input type="range" id="f-richness" min="0" max="0.25" step="0.01" value="${foragerAudio.harmonicRichness}" class="w-full accent-emerald-500">
               </div>
             </div>
+          </div>
 
-            <div>
-              <label class="block text-slate-400 mb-1">Filter Cutoff</label>
-              <input type="range" id="filter" min="400" max="2800" step="50" value="${audioSettings.filterCutoff}" class="w-full accent-violet-500">
-            </div>
+          <!-- PREDATOR SECTION -->
+          <div>
+            <div class="font-semibold text-red-400 mb-3">Predator Nodes</div>
+            
+            <div class="space-y-4">
+              <div>
+                <label class="text-xs text-slate-400">Sensitivity</label>
+                <input type="range" id="p-sens" min="0.2" max="0.8" step="0.05" value="${predatorAudio.sensitivity}" class="w-full accent-red-500">
+              </div>
 
-            <div>
-              <label class="block text-slate-400 mb-1">Harmonic Richness</label>
-              <input type="range" id="richness" min="0" max="0.25" step="0.01" value="${audioSettings.harmonicRichness}" class="w-full accent-violet-500">
-            </div>
+              <div class="grid grid-cols-3 gap-3">
+                <div>
+                  <label class="text-xs text-slate-400">Inputs</label>
+                  <select id="p-wave-input" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-sm">
+                    <option value="sine">Sine</option>
+                    <option value="triangle">Triangle</option>
+                    <option value="sawtooth">Sawtooth</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="text-xs text-slate-400">Hidden</label>
+                  <select id="p-wave-hidden" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-sm">
+                    <option value="sine">Sine</option>
+                    <option value="triangle">Triangle</option>
+                    <option value="sawtooth">Sawtooth</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="text-xs text-slate-400">Outputs</label>
+                  <select id="p-wave-output" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-sm">
+                    <option value="sine">Sine</option>
+                    <option value="triangle">Triangle</option>
+                    <option value="sawtooth">Sawtooth</option>
+                  </select>
+                </div>
+              </div>
 
-            <div class="flex gap-3 pt-2">
-              <button onclick="applyAudioSettings(this)" class="flex-1 py-3 bg-violet-600 hover:bg-violet-500 rounded-2xl font-medium">Apply</button>
-              <button onclick="applyAudioPreset('soothing', this)" class="flex-1 py-3 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 rounded-2xl font-medium">Soothing</button>
-              <button onclick="applyAudioPreset('bright', this)" class="flex-1 py-3 bg-sky-600/20 hover:bg-sky-600/30 text-sky-400 rounded-2xl font-medium">Bright</button>
+              <div>
+                <label class="text-xs text-slate-400">Filter Cutoff</label>
+                <input type="range" id="p-filter" min="400" max="2800" step="50" value="${predatorAudio.filterCutoff}" class="w-full accent-red-500">
+              </div>
+
+              <div>
+                <label class="text-xs text-slate-400">Harmonic Richness</label>
+                <input type="range" id="p-richness" min="0" max="0.25" step="0.01" value="${predatorAudio.harmonicRichness}" class="w-full accent-red-500">
+              </div>
             </div>
+          </div>
+
+          <div class="flex gap-3 pt-6">
+            <button onclick="applyAudioSettings(this)" class="flex-1 py-3 bg-violet-600 hover:bg-violet-500 rounded-2xl font-medium">Apply Changes</button>
+            <button onclick="applyAudioPreset('soothing', this)" class="px-5 py-3 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 rounded-2xl font-medium">Soothing</button>
+            <button onclick="applyAudioPreset('aggressive', this)" class="px-5 py-3 bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded-2xl font-medium">Aggressive</button>
           </div>
         </div>
       `;
       document.body.appendChild(modal);
 
       setTimeout(() => {
-        document.getElementById('sens').value = audioSettings.sensitivity;
-        document.getElementById('wave-input').value = audioSettings.inputWave;
-        document.getElementById('wave-hidden').value = audioSettings.hiddenWave;
-        document.getElementById('wave-output').value = audioSettings.outputWave;
-        document.getElementById('filter').value = audioSettings.filterCutoff;
-        document.getElementById('richness').value = audioSettings.harmonicRichness;
+        // Forager values
+        document.getElementById('f-sens').value = foragerAudio.sensitivity;
+        document.getElementById('f-wave-input').value = foragerAudio.inputWave;
+        document.getElementById('f-wave-hidden').value = foragerAudio.hiddenWave;
+        document.getElementById('f-wave-output').value = foragerAudio.outputWave;
+        document.getElementById('f-filter').value = foragerAudio.filterCutoff;
+        document.getElementById('f-richness').value = foragerAudio.harmonicRichness;
+
+        // Predator values
+        document.getElementById('p-sens').value = predatorAudio.sensitivity;
+        document.getElementById('p-wave-input').value = predatorAudio.inputWave;
+        document.getElementById('p-wave-hidden').value = predatorAudio.hiddenWave;
+        document.getElementById('p-wave-output').value = predatorAudio.outputWave;
+        document.getElementById('p-filter').value = predatorAudio.filterCutoff;
+        document.getElementById('p-richness').value = predatorAudio.harmonicRichness;
       }, 30);
     }
 
     function applyAudioSettings(btn) {
       const modal = btn.closest('.fixed');
-      audioSettings.sensitivity = parseFloat(document.getElementById('sens').value);
-      audioSettings.inputWave = document.getElementById('wave-input').value;
-      audioSettings.hiddenWave = document.getElementById('wave-hidden').value;
-      audioSettings.outputWave = document.getElementById('wave-output').value;
-      audioSettings.filterCutoff = parseFloat(document.getElementById('filter').value);
-      audioSettings.harmonicRichness = parseFloat(document.getElementById('richness').value);
+
+      // Forager
+      foragerAudio.sensitivity = parseFloat(document.getElementById('f-sens').value);
+      foragerAudio.inputWave = document.getElementById('f-wave-input').value;
+      foragerAudio.hiddenWave = document.getElementById('f-wave-hidden').value;
+      foragerAudio.outputWave = document.getElementById('f-wave-output').value;
+      foragerAudio.filterCutoff = parseFloat(document.getElementById('f-filter').value);
+      foragerAudio.harmonicRichness = parseFloat(document.getElementById('f-richness').value);
+
+      // Predator
+      predatorAudio.sensitivity = parseFloat(document.getElementById('p-sens').value);
+      predatorAudio.inputWave = document.getElementById('p-wave-input').value;
+      predatorAudio.hiddenWave = document.getElementById('p-wave-hidden').value;
+      predatorAudio.outputWave = document.getElementById('p-wave-output').value;
+      predatorAudio.filterCutoff = parseFloat(document.getElementById('p-filter').value);
+      predatorAudio.harmonicRichness = parseFloat(document.getElementById('p-richness').value);
+
       modal.remove();
     }
 
     function applyAudioPreset(preset, btn) {
       const modal = btn.closest('.fixed');
+
       if (preset === 'soothing') {
-        audioSettings.sensitivity = 0.5;
-        audioSettings.inputWave = 'sine';
-        audioSettings.hiddenWave = 'triangle';
-        audioSettings.outputWave = 'sine';
-        audioSettings.filterCutoff = 1100;
-        audioSettings.harmonicRichness = 0.03;
-      } else if (preset === 'bright') {
-        audioSettings.sensitivity = 0.38;
-        audioSettings.inputWave = 'triangle';
-        audioSettings.hiddenWave = 'sine';
-        audioSettings.outputWave = 'triangle';
-        audioSettings.filterCutoff = 1800;
-        audioSettings.harmonicRichness = 0.12;
+        foragerAudio.sensitivity = 0.5;
+        foragerAudio.inputWave = 'sine';
+        foragerAudio.hiddenWave = 'triangle';
+        foragerAudio.outputWave = 'sine';
+        foragerAudio.filterCutoff = 1100;
+        foragerAudio.harmonicRichness = 0.03;
+
+        predatorAudio.sensitivity = 0.45;
+        predatorAudio.inputWave = 'sine';
+        predatorAudio.hiddenWave = 'triangle';
+        predatorAudio.outputWave = 'sine';
+        predatorAudio.filterCutoff = 900;
+        predatorAudio.harmonicRichness = 0.05;
+      } else if (preset === 'aggressive') {
+        foragerAudio.sensitivity = 0.38;
+        foragerAudio.inputWave = 'triangle';
+        foragerAudio.hiddenWave = 'sawtooth';
+        foragerAudio.outputWave = 'triangle';
+        foragerAudio.filterCutoff = 1600;
+        foragerAudio.harmonicRichness = 0.12;
+
+        predatorAudio.sensitivity = 0.35;
+        predatorAudio.inputWave = 'sawtooth';
+        predatorAudio.hiddenWave = 'sawtooth';
+        predatorAudio.outputWave = 'sawtooth';
+        predatorAudio.filterCutoff = 1100;
+        predatorAudio.harmonicRichness = 0.18;
       }
+
       modal.remove();
     }
 
@@ -378,11 +487,9 @@
       startTime = Date.now();
 
       setTimeout(() => {
-        try {
-          if (foragers.length > 0) drawDetailedNet('net-forager1', foragers[0], true);
-          if (foragers.length > 1) drawDetailedNet('net-forager2', foragers[1], true);
-          drawDetailedNet('net-predator', predator, false);
-        } catch(e) {}
+        if (foragers.length > 0) drawDetailedNet('net-forager1', foragers[0], true);
+        if (foragers.length > 1) drawDetailedNet('net-forager2', foragers[1], true);
+        drawDetailedNet('net-predator', predator, false);
       }, 80);
     }
 
@@ -579,112 +686,145 @@
       if (!container || !creature) return;
       container.innerHTML = '';
 
-      try {
-        const accent = isForager ? '#34d399' : '#f87171';
-        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        svg.setAttribute('width', '100%');
-        svg.setAttribute('height', '210');
-        svg.setAttribute('viewBox', '0 0 420 210');
+      const settings = isForager ? foragerAudio : predatorAudio;
+      const accent = isForager ? '#34d399' : '#f87171';
 
-        const ix = 78, hx = 210, ox = 342;
-        const iy = [38, 72, 106, 140, 174, 208];
-        const hy = [38, 72, 106, 140, 174, 208];
-        const oy = [38, 72, 106, 140, 174, 208];
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('width', '100%');
+      svg.setAttribute('height', '210');
+      svg.setAttribute('viewBox', '0 0 420 210');
 
-        const inputs = creature.lastInputs || [0,0,0,0,0,0];
-        const hiddens = creature.lastHidden || new Array(6).fill(0.5);
-        const outputs = creature.lastOutputs || [0,0,0,0,0,0];
+      const ix = 78, hx = 210, ox = 342;
+      const iy = [38, 72, 106, 140, 174, 208];
+      const hy = [38, 72, 106, 140, 174, 208];
+      const oy = [38, 72, 106, 140, 174, 208];
 
-        function activationFill(act) {
-          const t = Math.max(0.15, Math.min(1, act || 0));
-          if (isForager) return `rgb(${Math.floor(16 + t*120)}, ${Math.floor(185 + t*50)}, ${Math.floor(129 + t*40)})`;
-          else return `rgb(${Math.floor(239 + t*20)}, ${Math.floor(68 + t*80)}, ${Math.floor(68 + t*30)})`;
-        }
+      const inputs = creature.lastInputs || [0,0,0,0,0,0];
+      const hiddens = creature.lastHidden || new Array(6).fill(0.5);
+      const outputs = creature.lastOutputs || [0,0,0,0,0,0];
 
-        const headers = [{x:ix,label:'Inputs'},{x:hx,label:'Hidden'},{x:ox,label:'Outputs'}];
-        headers.forEach(h => {
-          const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-          t.setAttribute('x', h.x); t.setAttribute('y', 16);
-          t.setAttribute('fill', '#64748b'); t.setAttribute('font-size', '9'); t.setAttribute('text-anchor', 'middle');
-          t.textContent = h.label;
-          svg.appendChild(t);
-        });
-
+      // Trigger neural sounds
+      if (neuralSoundEnabled) {
+        const thresh = settings.sensitivity;
         for (let i = 0; i < 6; i++) {
-          for (let j = 0; j < 6; j++) {
-            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            line.setAttribute('x1', ix); line.setAttribute('y1', iy[i]);
-            line.setAttribute('x2', hx); line.setAttribute('y2', hy[j]);
-            const intensity = Math.max(0.1, (inputs[i]||0)*0.55 + (hiddens[j]||0)*0.45);
-            line.setAttribute('stroke', '#475569');
-            line.setAttribute('stroke-width', (0.55 + intensity * 2.3).toFixed(1));
-            line.setAttribute('stroke-opacity', (0.28 + intensity * 0.55).toFixed(1));
-            svg.appendChild(line);
+          if (inputs[i] > thresh && inputs[i] > (window.lastInputAct?.[i] || 0) + 0.1) {
+            playNeuralTone(inputFreqs[i], inputs[i], 'input', isForager);
           }
         }
-
         for (let j = 0; j < 6; j++) {
-          for (let k = 0; k < 6; k++) {
-            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            line.setAttribute('x1', hx); line.setAttribute('y1', hy[j]);
-            line.setAttribute('x2', ox); line.setAttribute('y2', oy[k]);
-            const intensity = Math.max(0.1, (hiddens[j]||0)*0.5 + (outputs[k]||0)*0.5);
-            line.setAttribute('stroke', '#475569');
-            line.setAttribute('stroke-width', (0.55 + intensity * 2.3).toFixed(1));
-            line.setAttribute('stroke-opacity', (0.28 + intensity * 0.55).toFixed(1));
-            svg.appendChild(line);
+          if (hiddens[j] > thresh + 0.05 && hiddens[j] > (window.lastHiddenAct?.[j] || 0) + 0.08) {
+            playNeuralTone(hiddenFreqs[j], hiddens[j] * 0.75, 'hidden', isForager);
           }
         }
-
-        const inputLabels = ['F.∠','F.Dist','Danger','Energy','Mem','Bias'];
-        for (let i = 0; i < 6; i++) {
-          const act = inputs[i] || 0;
-          const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-          c.setAttribute('cx', ix); c.setAttribute('cy', iy[i]);
-          c.setAttribute('r', (6.5 + act * 3).toFixed(1));
-          c.setAttribute('fill', activationFill(act));
-          c.setAttribute('stroke', accent); c.setAttribute('stroke-width', '2');
-          svg.appendChild(c);
-
-          const lbl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-          lbl.setAttribute('x', ix - 42); lbl.setAttribute('y', iy[i] + 3);
-          lbl.setAttribute('fill', '#94a3b8'); lbl.setAttribute('font-size', '7');
-          lbl.setAttribute('text-anchor', 'end');
-          lbl.textContent = inputLabels[i];
-          svg.appendChild(lbl);
-        }
-
-        for (let j = 0; j < 6; j++) {
-          const act = hiddens[j] || 0;
-          const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-          c.setAttribute('cx', hx); c.setAttribute('cy', hy[j]);
-          c.setAttribute('r', (5 + act * 2.2).toFixed(1));
-          c.setAttribute('fill', activationFill(act));
-          c.setAttribute('stroke', '#64748b'); c.setAttribute('stroke-width', '1.5');
-          svg.appendChild(c);
-        }
-
-        const outputLabels = ['Turn','Speed','Attack','Flee','Expl','Cons'];
         for (let k = 0; k < 6; k++) {
-          const act = outputs[k] || 0;
-          const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-          c.setAttribute('cx', ox); c.setAttribute('cy', oy[k]);
-          c.setAttribute('r', (6.5 + act * 3).toFixed(1));
-          c.setAttribute('fill', activationFill(act));
-          c.setAttribute('stroke', accent); c.setAttribute('stroke-width', '2');
-          svg.appendChild(c);
-
-          const lbl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-          lbl.setAttribute('x', ox + 13); lbl.setAttribute('y', oy[k] + 3);
-          lbl.setAttribute('fill', '#94a3b8'); lbl.setAttribute('font-size', '7');
-          lbl.textContent = outputLabels[k];
-          svg.appendChild(lbl);
+          if (outputs[k] > thresh && outputs[k] > (window.lastOutputAct?.[k] || 0) + 0.08) {
+            playNeuralTone(outputFreqs[k], outputs[k] * 0.7, 'output', isForager);
+          }
         }
-
-        container.appendChild(svg);
-      } catch(e) {
-        console.error('drawDetailedNet error:', e);
+        window.lastInputAct = [...inputs];
+        window.lastHiddenAct = [...hiddens];
+        window.lastOutputAct = [...outputs];
       }
+
+      function activationFill(act) {
+        const t = Math.max(0.15, Math.min(1, act || 0));
+        if (isForager) return `rgb(${Math.floor(16 + t*120)}, ${Math.floor(185 + t*50)}, ${Math.floor(129 + t*40)})`;
+        else return `rgb(${Math.floor(239 + t*20)}, ${Math.floor(68 + t*80)}, ${Math.floor(68 + t*30)})`;
+      }
+
+      const headers = [{x:ix,label:'Inputs'},{x:hx,label:'Hidden'},{x:ox,label:'Outputs'}];
+      headers.forEach(h => {
+        const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        t.setAttribute('x', h.x); t.setAttribute('y', 16);
+        t.setAttribute('fill', '#64748b'); t.setAttribute('font-size', '9'); t.setAttribute('text-anchor', 'middle');
+        t.textContent = h.label;
+        svg.appendChild(t);
+      });
+
+      // Connections (more animated)
+      for (let i = 0; i < 6; i++) {
+        for (let j = 0; j < 6; j++) {
+          const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          line.setAttribute('x1', ix); line.setAttribute('y1', iy[i]);
+          line.setAttribute('x2', hx); line.setAttribute('y2', hy[j]);
+          const intensity = Math.max(0.1, (inputs[i]||0)*0.55 + (hiddens[j]||0)*0.45);
+          line.setAttribute('stroke', '#475569');
+          line.setAttribute('stroke-width', (0.6 + intensity * 2.8).toFixed(1));
+          line.setAttribute('stroke-opacity', (0.25 + intensity * 0.6).toFixed(1));
+          svg.appendChild(line);
+        }
+      }
+
+      for (let j = 0; j < 6; j++) {
+        for (let k = 0; k < 6; k++) {
+          const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          line.setAttribute('x1', hx); line.setAttribute('y1', hy[j]);
+          line.setAttribute('x2', ox); line.setAttribute('y2', oy[k]);
+          const intensity = Math.max(0.1, (hiddens[j]||0)*0.5 + (outputs[k]||0)*0.5);
+          line.setAttribute('stroke', '#475569');
+          line.setAttribute('stroke-width', (0.6 + intensity * 2.8).toFixed(1));
+          line.setAttribute('stroke-opacity', (0.25 + intensity * 0.6).toFixed(1));
+          svg.appendChild(line);
+        }
+      }
+
+      // Input neurons (more animated)
+      const inputLabels = ['F.∠','F.Dist','Danger','Energy','Mem','Bias'];
+      for (let i = 0; i < 6; i++) {
+        const act = inputs[i] || 0;
+        const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        c.setAttribute('cx', ix);
+        c.setAttribute('cy', iy[i]);
+        c.setAttribute('r', (7 + act * 4).toFixed(1)); // more animated
+        c.setAttribute('fill', activationFill(act));
+        c.setAttribute('stroke', accent);
+        c.setAttribute('stroke-width', '2.5');
+        svg.appendChild(c);
+
+        const lbl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        lbl.setAttribute('x', ix - 45);
+        lbl.setAttribute('y', iy[i] + 3);
+        lbl.setAttribute('fill', '#94a3b8');
+        lbl.setAttribute('font-size', '7.5');
+        lbl.setAttribute('text-anchor', 'end');
+        lbl.textContent = inputLabels[i];
+        svg.appendChild(lbl);
+      }
+
+      for (let j = 0; j < 6; j++) {
+        const act = hiddens[j] || 0;
+        const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        c.setAttribute('cx', hx);
+        c.setAttribute('cy', hy[j]);
+        c.setAttribute('r', (5.5 + act * 3).toFixed(1));
+        c.setAttribute('fill', activationFill(act));
+        c.setAttribute('stroke', '#64748b');
+        c.setAttribute('stroke-width', '1.8');
+        svg.appendChild(c);
+      }
+
+      const outputLabels = ['Turn','Speed','Attack','Flee','Expl','Cons'];
+      for (let k = 0; k < 6; k++) {
+        const act = outputs[k] || 0;
+        const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        c.setAttribute('cx', ox);
+        c.setAttribute('cy', oy[k]);
+        c.setAttribute('r', (7 + act * 4).toFixed(1)); // more animated
+        c.setAttribute('fill', activationFill(act));
+        c.setAttribute('stroke', accent);
+        c.setAttribute('stroke-width', '2.5');
+        svg.appendChild(c);
+
+        const lbl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        lbl.setAttribute('x', ox + 14);
+        lbl.setAttribute('y', oy[k] + 3);
+        lbl.setAttribute('fill', '#94a3b8');
+        lbl.setAttribute('font-size', '7.5');
+        lbl.textContent = outputLabels[k];
+        svg.appendChild(lbl);
+      }
+
+      container.appendChild(svg);
     }
 
     window.onload = function() {
