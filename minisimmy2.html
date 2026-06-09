@@ -2112,6 +2112,39 @@
                     continue;
                 }
 
+                // Vortex influence on walls (they slowly drift and get pulled in)
+                let mx = (w.x1 + w.x2) / 2;
+                let my = (w.y1 + w.y2) / 2;
+                let dx = mx - centerX;
+                let dy = my - centerY;
+                let distToCenter = sqrt(dx * dx + dy * dy) || 1;
+
+                // Tangential (rotational) force
+                let tangentX = -dy;
+                let tangentY = dx;
+                let tlen = sqrt(tangentX * tangentX + tangentY * tangentY) || 1;
+
+                let vortexDir = cos((timeOfDay + 0.25) * TWO_PI);
+                let rotForce = 0.45 * settings.vortexMultiplier * vortexDir;
+
+                w.vx += (tangentX / tlen) * rotForce;
+                w.vy += (tangentY / tlen) * rotForce;
+
+                // Inward pull
+                let pull = 0.28 * settings.vortexMultiplier;
+                w.vx += (centerX - mx) * pull / (distToCenter + 20);
+                w.vy += (centerY - my) * pull / (distToCenter + 20);
+
+                // Apply velocity to both endpoints (keeps wall rigid-ish)
+                w.x1 += w.vx;
+                w.y1 += w.vy;
+                w.x2 += w.vx;
+                w.y2 += w.vy;
+
+                // Drag so they don't fly forever
+                w.vx *= 0.92;
+                w.vy *= 0.92;
+
                 let lifeRatio = w.life / w.maxLife;
                 let alpha = map(lifeRatio, 0, 1, 30, 235);
                 let glowAlpha = map(lifeRatio, 0, 1, 8, 95);
@@ -2683,6 +2716,26 @@
                     return; // consumed the click
                 }
             }
+
+            // Click to place a persistent Red Hazard on the map (when Cursor Hazard mode is active)
+            if (cursorHazardActive) {
+                // Don't place if clicking near a creature (to avoid conflict with inspector)
+                let nearCreature = false;
+                for (let c of creatures) {
+                    if (dist(mouseX, mouseY, c.x, c.y) < 18) {
+                        nearCreature = true;
+                        break;
+                    }
+                }
+                if (!nearCreature) {
+                    let placed = new RedHazard();
+                    placed.x = mouseX;
+                    placed.y = mouseY;
+                    placed.vx = random(-0.3, 0.3); // slight movement so it doesn't feel completely static
+                    placed.vy = random(-0.3, 0.3);
+                    redHazards.push(placed);
+                }
+            }
         }
 
         // === Energy Wall Drawing (click + drag) ===
@@ -2730,7 +2783,9 @@
                         y2: mouseY,
                         life: 2400,
                         maxLife: 2400,
-                        hitFlash: 0
+                        hitFlash: 0,
+                        vx: 0,
+                        vy: 0
                     });
                 } else {
                     // Not enough points - flash warning
