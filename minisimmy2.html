@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MiniSimmy2 • Phase 4</title>
+    <title>MiniSimmy2 • v0.5</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -21,7 +21,7 @@
                 </div>
                 <div>
                     <span class="font-display text-2xl tracking-tighter">MiniSimmy2</span>
-                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">Phase 4 • Stable</span>
+                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.5 • Evolution</span>
                 </div>
             </div>
             <div class="flex items-center gap-x-4 text-sm">
@@ -33,8 +33,8 @@
     <div class="max-w-screen-2xl mx-auto px-6 pt-6">
         <div class="flex justify-between items-center mb-4">
             <div>
-                <h1 class="font-display text-3xl tracking-tighter">MiniSimmy2 — Phase 4</h1>
-                <p class="text-white/60 text-sm">Polished • Sound design • Stable evolution toy</p>
+                <h1 class="font-display text-3xl tracking-tighter">MiniSimmy2</h1>
+                <p class="text-white/60 text-sm">Modular evolution with predators, honey, and finite resources</p>
             </div>
             <div class="flex items-center gap-x-4 text-sm">
                 <div id="stats" class="font-mono px-4 py-1.5 bg-white/5 rounded-2xl text-xs flex gap-x-4"></div>
@@ -46,11 +46,8 @@
 
         <div id="canvas-container" class="rounded-3xl overflow-hidden border border-white/10 shadow-2xl"></div>
 
-        <div class="mt-4 text-xs text-white/60 flex flex-wrap gap-x-6 gap-y-1">
-            <div><span class="text-emerald-400">●</span> Harvester — Strong energy advantage</div>
-            <div><span class="text-sky-400">●</span> Sensor — Precision movement</div>
-            <div><span class="text-violet-400">●</span> Mover — Fast explorer</div>
-            <div><span class="text-rose-400">●</span> Resistant — Zone survivor</div>
+        <div class="mt-3 text-xs text-white/50">
+            Creatures lose energy over time. Below 15% they become predators and hunt the weakest. Deposit honey balls to create new food spots.
         </div>
     </div>
 
@@ -58,66 +55,44 @@
         let creatures = [];
         let greenZone, blueZone;
         let timeOfDay = 0;
-        let dayLength = 1200;
-        let lastReproTime = 0;
+        let dayLength = 1400;
+        let globalReproCooldown = 0;
         let audioCtx;
 
         function initAudio() {
             if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         }
 
-        function playReproSound() {
+        function playSound(freq, type = 'sine', duration = 0.2, vol = 0.06) {
             if (!audioCtx) return;
             const o = audioCtx.createOscillator();
             const g = audioCtx.createGain();
-            o.type = 'sine';
-            o.frequency.value = 880;
-            g.gain.value = 0.06;
+            o.type = type;
+            o.frequency.value = freq;
+            g.gain.value = vol;
             o.connect(g);
             g.connect(audioCtx.destination);
             o.start();
-            g.gain.linearRampToValueAtTime(0.0001, audioCtx.currentTime + 0.35);
-            setTimeout(() => { try { o.stop(); } catch(e){} }, 400);
+            g.gain.linearRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+            setTimeout(() => { try { o.stop(); } catch(e){} }, duration * 1000 + 50);
         }
 
-        function playEnergySound() {
-            if (!audioCtx || random() > 0.3) return;
-            const o = audioCtx.createOscillator();
-            const g = audioCtx.createGain();
-            o.type = 'sine';
-            o.frequency.value = 1240;
-            g.gain.value = 0.025;
-            o.connect(g);
-            g.connect(audioCtx.destination);
-            o.start();
-            g.gain.linearRampToValueAtTime(0.0001, audioCtx.currentTime + 0.12);
-            setTimeout(() => { try { o.stop(); } catch(e){} }, 150);
-        }
-
-        function playDeathSound() {
-            if (!audioCtx) return;
-            const o = audioCtx.createOscillator();
-            const g = audioCtx.createGain();
-            o.type = 'sawtooth';
-            o.frequency.value = 220;
-            g.gain.value = 0.08;
-            o.connect(g);
-            g.connect(audioCtx.destination);
-            o.start();
-            o.frequency.linearRampToValueAtTime(80, audioCtx.currentTime + 0.4);
-            g.gain.linearRampToValueAtTime(0.0001, audioCtx.currentTime + 0.45);
-            setTimeout(() => { try { o.stop(); } catch(e){} }, 500);
+        function generateSciFiName() {
+            const prefixes = ['Kael','Vex','Thorne','Zyl','Ryn','Syl','Drak','Nyx','Korr','Vael','Sylas','Myr','Kael','Zor'];
+            const suffixes = ['-9','-12','ara','ith','on','yx','ar','en','os','ix','ael','or'];
+            return prefixes[Math.floor(Math.random()*prefixes.length)] + suffixes[Math.floor(Math.random()*suffixes.length)];
         }
 
         function setup() {
             initAudio();
-            let canvas = createCanvas(900, 620);
+            let canvas = createCanvas(920, 640);
             canvas.parent('canvas-container');
 
-            greenZone = { x: 280, y: 310, r: 160 };
-            blueZone = { x: 620, y: 310, r: 160 };
+            // Spread zones apart
+            greenZone = { x: 220, y: 320, r: 130, food: 180 };
+            blueZone  = { x: 700, y: 320, r: 130, food: 180 };
 
-            for (let i = 0; i < 11; i++) {
+            for (let i = 0; i < 10; i++) {
                 creatures.push(new Creature(random(width), random(height)));
             }
         }
@@ -128,72 +103,75 @@
             timeOfDay = (frameCount % dayLength) / dayLength;
             let isDay = timeOfDay < 0.5;
 
-            if (isDay) fill(20, 38, 28, 35);
-            else fill(15, 28, 48, 45);
+            if (isDay) fill(20, 38, 28, 30);
+            else fill(15, 28, 48, 40);
             rect(0, 0, width, height);
 
-            // Zones
-            let greenAlpha = isDay ? 160 : 48;
-            fill(16, 185, 129, greenAlpha); noStroke();
+            // Draw zones with food amount
+            fill(16, 185, 129, isDay ? 150 : 45);
             circle(greenZone.x, greenZone.y, greenZone.r * 2);
+            fill(255);
+            textAlign(CENTER);
+            textSize(10);
+            text(`GREEN ${Math.floor(greenZone.food)}`, greenZone.x, greenZone.y - greenZone.r - 10);
 
-            let blueAlpha = isDay ? 48 : 160;
-            fill(56, 189, 248, blueAlpha);
+            fill(56, 189, 248, isDay ? 45 : 150);
             circle(blueZone.x, blueZone.y, blueZone.r * 2);
+            fill(255);
+            text(`BLUE ${Math.floor(blueZone.food)}`, blueZone.x, blueZone.y - blueZone.r - 10);
 
-            fill(255, 255, 255, 165);
-            textAlign(CENTER); textSize(11);
-            text("GREEN", greenZone.x, greenZone.y - greenZone.r - 14);
-            text("BLUE", blueZone.x, blueZone.y - blueZone.r - 14);
+            // Global reproduction cooldown (slowly decreases)
+            if (globalReproCooldown > 0) globalReproCooldown -= 0.6;
 
+            // Update creatures
             for (let i = creatures.length - 1; i >= 0; i--) {
                 let c = creatures[i];
                 c.update(isDay);
 
-                if (c.energy > 86 && frameCount - lastReproTime > 5 && random() < 0.013) {
+                // Reproduction with cooldown
+                if (c.energy > 82 && globalReproCooldown <= 0 && random() < 0.008) {
                     let offspring = c.reproduce();
-                    if (offspring && creatures.length < 28) {
+                    if (offspring) {
                         creatures.push(offspring);
-                        lastReproTime = frameCount;
-                        c.energy -= 23;
-                        playReproSound();
+                        globalReproCooldown = 18; // base cooldown
+                        c.energy -= 18;
+                        playSound(920, 'sine', 0.25, 0.05);
                     }
                 }
 
                 if (c.energy <= 0) {
-                    playDeathSound();
+                    playSound(180, 'sawtooth', 0.35, 0.07);
                     creatures.splice(i, 1);
                 } else {
                     c.show();
                 }
             }
 
-            while (creatures.length > 25) {
-                creatures.splice(floor(random(creatures.length)), 1);
+            // High population starvation pressure
+            let popPressure = Math.max(0, (creatures.length - 18) * 0.008);
+            for (let c of creatures) {
+                c.energy -= popPressure;
             }
 
             updateStats();
         }
 
         function updateStats() {
-            if (creatures.length === 0) return;
-
+            if (creatures.length === 0) {
+                document.getElementById('stats').innerHTML = 'No creatures';
+                return;
+            }
             let totalModules = 0;
-            let typeCounts = { harvester: 0, sensor: 0, mover: 0, resistant: 0 };
-
+            let predators = 0;
             for (let c of creatures) {
                 totalModules += c.modules.length;
-                for (let m of c.modules) typeCounts[m.type]++;
+                if (c.isPredator) predators++;
             }
-
-            let avgModules = (totalModules / creatures.length).toFixed(1);
-            let dominant = Object.keys(typeCounts).reduce((a, b) => typeCounts[a] > typeCounts[b] ? a : b);
-            let dominantName = dominant.charAt(0).toUpperCase() + dominant.slice(1);
-
+            let avg = (totalModules / creatures.length).toFixed(1);
             document.getElementById('stats').innerHTML = `
-                <span>Creatures: <span class="text-emerald-400">${creatures.length}</span></span>
-                <span>Avg Modules: <span class="text-violet-400">${avgModules}</span></span>
-                <span>Dominant: <span class="text-rose-400">${dominantName}</span></span>
+                <span>Pop: <span class="text-emerald-400">${creatures.length}</span></span>
+                <span>Predators: <span class="text-red-400">${predators}</span></span>
+                <span>Avg Modules: <span class="text-violet-400">${avg}</span></span>
             `;
         }
 
@@ -201,143 +179,168 @@
             constructor(x, y, parentModules = null) {
                 this.x = x;
                 this.y = y;
-                this.vx = random(-1, 1);
-                this.vy = random(-1, 1);
-                this.energy = parentModules ? 60 : 70 + random(20);
-                this.baseSize = 12;
+                this.vx = random(-0.8, 0.8);
+                this.vy = random(-0.8, 0.8);
+                this.energy = parentModules ? 55 : 68 + random(12);
+                this.name = generateSciFiName();
+                this.isPredator = false;
+                this.honey = 0; // carried extra energy
 
                 let types = ['harvester', 'sensor', 'mover', 'resistant'];
-                let colors = {
-                    'harvester': '#34d399',
-                    'sensor': '#38bdf8',
-                    'mover': '#a78bfa',
-                    'resistant': '#f472b6'
-                };
+                let colors = { 'harvester': '#34d399', 'sensor': '#38bdf8', 'mover': '#a78bfa', 'resistant': '#f472b6' };
 
                 if (parentModules) {
                     this.modules = parentModules.map(m => ({...m}));
-                    if (random() < 0.48 && this.modules.length < 8) {
+                    // Chance for extra module based on activity (energy)
+                    if (random() < 0.55 && this.modules.length < 7) {
                         let newType = random(types);
                         let angle = random(TWO_PI);
-                        let dist = random(9, 13);
-                        this.modules.push({
-                            type: newType,
-                            color: colors[newType],
-                            offsetX: cos(angle) * dist,
-                            offsetY: sin(angle) * dist
-                        });
+                        let dist = random(8, 12);
+                        this.modules.push({ type: newType, color: colors[newType], offsetX: cos(angle)*dist, offsetY: sin(angle)*dist });
                     }
                 } else {
                     this.modules = [];
-                    let count = floor(random(3, 6));
-                    for (let i = 0; i < count; i++) {
+                    if (random() < 0.6) { // 60% chance to start with 1 module
                         let type = random(types);
-                        let angle = (TWO_PI / count) * i + random(-0.2, 0.2);
-                        let dist = random(9, 13);
-                        this.modules.push({
-                            type: type,
-                            color: colors[type],
-                            offsetX: cos(angle) * dist,
-                            offsetY: sin(angle) * dist
-                        });
+                        let angle = random(TWO_PI);
+                        let dist = random(8, 12);
+                        this.modules.push({ type: type, color: colors[type], offsetX: cos(angle)*dist, offsetY: sin(angle)*dist });
                     }
                 }
             }
 
-            getModuleCount(type) {
-                return this.modules.filter(m => m.type === type).length;
-            }
+            getModuleCount(type) { return this.modules.filter(m => m.type === type).length; }
 
             reproduce() {
-                return new Creature(this.x + random(-18, 18), this.y + random(-18, 18), this.modules);
+                return new Creature(this.x + random(-15,15), this.y + random(-15,15), this.modules);
             }
 
             update(isDay) {
-                let targetX, targetY, avoidX, avoidY;
+                // Become predator below 15% energy
+                if (!this.isPredator && this.energy < 15) {
+                    this.isPredator = true;
+                }
 
-                if (isDay) {
-                    targetX = greenZone.x; targetY = greenZone.y;
-                    avoidX = blueZone.x; avoidY = blueZone.y;
+                let target, avoid;
+                if (this.isPredator) {
+                    // Target weakest creature
+                    let weakest = null;
+                    let lowestEnergy = Infinity;
+                    for (let other of creatures) {
+                        if (other === this) continue;
+                        if (other.energy < lowestEnergy) {
+                            lowestEnergy = other.energy;
+                            weakest = other;
+                        }
+                    }
+                    if (weakest) {
+                        let dx = weakest.x - this.x;
+                        let dy = weakest.y - this.y;
+                        let d = dist(this.x, this.y, weakest.x, weakest.y);
+                        if (d > 8 && d < 220) {
+                            this.vx += (dx / d) * 0.18;
+                            this.vy += (dy / d) * 0.18;
+                        }
+                        // Attack
+                        if (d < 14) {
+                            // Steal 1-2 modules
+                            let stolen = Math.min(2, weakest.modules.length);
+                            for (let i = 0; i < stolen; i++) {
+                                if (weakest.modules.length > 0) {
+                                    this.modules.push(weakest.modules.pop());
+                                }
+                            }
+                            this.energy = 95;
+                            weakest.energy = 0; // will be removed
+                            playSound(140, 'sawtooth', 0.3, 0.08);
+                        }
+                    }
                 } else {
-                    targetX = blueZone.x; targetY = blueZone.y;
-                    avoidX = greenZone.x; avoidY = greenZone.y;
+                    // Normal behavior
+                    if (isDay) { target = greenZone; avoid = blueZone; }
+                    else { target = blueZone; avoid = greenZone; }
+
+                    let dx = target.x - this.x;
+                    let dy = target.y - this.y;
+                    let d = dist(this.x, this.y, target.x, target.y);
+                    if (d > 10 && target.food > 5) {
+                        this.vx += (dx / d) * 0.07;
+                        this.vy += (dy / d) * 0.07;
+                    }
+
+                    // Honey deposit
+                    if (this.honey > 8 && random() < 0.008) {
+                        // Create small new food spot
+                        // For simplicity, we just reduce honey and slightly boost nearby zone
+                        this.honey -= 8;
+                        if (dist(this.x, this.y, greenZone.x, greenZone.y) < 180) greenZone.food = min(220, greenZone.food + 12);
+                        else if (dist(this.x, this.y, blueZone.x, blueZone.y) < 180) blueZone.food = min(220, blueZone.food + 12);
+                        playSound(650, 'sine', 0.2, 0.04);
+                    }
                 }
 
-                let moverBonus = 1 + this.getModuleCount('mover') * 0.14;
-                let sensorBonus = 1 + this.getModuleCount('sensor') * 0.09;
+                // Movement
+                this.x += this.vx;
+                this.y += this.vy;
+                this.vx *= 0.91;
+                this.vy *= 0.91;
+                this.x = constrain(this.x, 18, width-18);
+                this.y = constrain(this.y, 18, height-18);
 
-                let dx = targetX - this.x;
-                let dy = targetY - this.y;
-                let d = dist(this.x, this.y, targetX, targetY);
+                // Energy drain
+                this.energy -= 0.032;
 
-                if (d > 5) {
-                    this.vx += (dx / d) * 0.085 * sensorBonus;
-                    this.vy += (dy / d) * 0.085 * sensorBonus;
-                }
-
-                let db = dist(this.x, this.y, avoidX, avoidY);
-                if (db < 150) {
-                    let ax = this.x - avoidX;
-                    let ay = this.y - avoidY;
-                    this.vx += (ax / db) * 0.105;
-                    this.vy += (ay / db) * 0.105;
-                }
-
-                this.x += this.vx * moverBonus;
-                this.y += this.vy * moverBonus;
-                this.vx *= 0.915;
-                this.vy *= 0.915;
-
-                this.x = constrain(this.x, 20, width - 20);
-                this.y = constrain(this.y, 20, height - 20);
-
-                this.energy -= 0.024;
-
+                // Zone interaction (finite)
                 let inGreen = dist(this.x, this.y, greenZone.x, greenZone.y) < greenZone.r;
                 let inBlue = dist(this.x, this.y, blueZone.x, blueZone.y) < blueZone.r;
 
-                let harvester = this.getModuleCount('harvester');
-                let resistant = this.getModuleCount('resistant');
-
-                if (inGreen && isDay) {
-                    this.energy = min(100, this.energy + 0.48 + harvester * 0.2);
-                    if (harvester > 0) playEnergySound();
+                if (inGreen && isDay && greenZone.food > 0) {
+                    let gain = 0.45 + this.getModuleCount('harvester') * 0.18;
+                    this.energy = min(100, this.energy + gain);
+                    greenZone.food = max(0, greenZone.food - 0.8);
+                    if (this.energy > 92) this.honey = min(25, this.honey + 0.6);
                 }
-                if (inBlue && !isDay) {
-                    this.energy = min(100, this.energy + 0.48 + harvester * 0.2);
-                    if (harvester > 0) playEnergySound();
+                if (inBlue && !isDay && blueZone.food > 0) {
+                    let gain = 0.45 + this.getModuleCount('harvester') * 0.18;
+                    this.energy = min(100, this.energy + gain);
+                    blueZone.food = max(0, blueZone.food - 0.8);
+                    if (this.energy > 92) this.honey = min(25, this.honey + 0.6);
                 }
-
-                let harmReduction = resistant * 0.09;
-                if (inGreen && !isDay) this.energy -= (0.16 - harmReduction);
-                if (inBlue && isDay) this.energy -= (0.16 - harmReduction);
             }
 
             show() {
                 push();
                 translate(this.x, this.y);
 
-                let coreSize = this.baseSize + this.modules.length * 0.48;
-                let pulse = 1 + (this.energy / 140);
+                let coreSize = this.baseSize + this.modules.length * 0.45;
+                if (this.isPredator) {
+                    fill(248, 113, 113);
+                    stroke(255, 180, 180);
+                } else {
+                    fill(250, 204, 21);
+                    stroke(255, 255, 220);
+                }
+                strokeWeight(2);
+                circle(0, 0, coreSize);
 
-                fill(250, 204, 21);
-                stroke(255, 255, 220);
-                strokeWeight(2.5);
-                circle(0, 0, coreSize * pulse);
+                // Honey ball
+                if (this.honey > 5) {
+                    fill(245, 158, 11, 200);
+                    circle(8, -8, 6 + this.honey * 0.15);
+                }
 
-                noStroke();
-                fill(255, 255, 255, 90);
-                circle(-coreSize * 0.16, -coreSize * 0.16, coreSize * 0.35);
+                // Name
+                fill(255);
+                textAlign(CENTER);
+                textSize(8);
+                text(this.name, 0, -coreSize - 6);
 
+                // Modules
                 for (let m of this.modules) {
                     fill(m.color);
-                    stroke(255, 255, 255, 28);
-                    strokeWeight(1);
-                    circle(m.offsetX, m.offsetY, 6.8);
-
-                    noStroke();
-                    fill(255, 255, 255, 70);
-                    circle(m.offsetX - 1.4, m.offsetY - 1.4, 2.4);
+                    stroke(255,255,255,25);
+                    strokeWeight(0.8);
+                    circle(m.offsetX, m.offsetY, 6.5);
                 }
 
                 pop();
@@ -346,14 +349,11 @@
 
         function resetSim() {
             creatures = [];
-            for (let i = 0; i < 11; i++) {
+            greenZone.food = 180;
+            blueZone.food = 180;
+            globalReproCooldown = 0;
+            for (let i = 0; i < 10; i++) {
                 creatures.push(new Creature(random(width), random(height)));
-            }
-        }
-
-        function mousePressed() {
-            if (mouseX > 0 && mouseX < width && mouseY > 0 && mouseY < height) {
-                creatures.push(new Creature(mouseX, mouseY));
             }
         }
     </script>
