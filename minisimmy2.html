@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MiniSimmy2 • v0.5</title>
+    <title>MiniSimmy2 • v0.51</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -21,7 +21,7 @@
                 </div>
                 <div>
                     <span class="font-display text-2xl tracking-tighter">MiniSimmy2</span>
-                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.5 • Evolution</span>
+                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.51 • Visual Fix</span>
                 </div>
             </div>
             <div class="flex items-center gap-x-4 text-sm">
@@ -34,7 +34,7 @@
         <div class="flex justify-between items-center mb-4">
             <div>
                 <h1 class="font-display text-3xl tracking-tighter">MiniSimmy2</h1>
-                <p class="text-white/60 text-sm">Modular evolution with predators, honey, and finite resources</p>
+                <p class="text-white/60 text-sm">Modular evolution • Yellow cores with growing raspberry-style clusters</p>
             </div>
             <div class="flex items-center gap-x-4 text-sm">
                 <div id="stats" class="font-mono px-4 py-1.5 bg-white/5 rounded-2xl text-xs flex gap-x-4"></div>
@@ -47,7 +47,7 @@
         <div id="canvas-container" class="rounded-3xl overflow-hidden border border-white/10 shadow-2xl"></div>
 
         <div class="mt-3 text-xs text-white/50">
-            Creatures lose energy over time. Below 15% they become predators and hunt the weakest. Deposit honey balls to create new food spots.
+            Yellow core = main creature. Colored dots = modules. Clusters grow larger through reproduction. Predators (red) hunt the weakest.
         </div>
     </div>
 
@@ -57,40 +57,19 @@
         let timeOfDay = 0;
         let dayLength = 1400;
         let globalReproCooldown = 0;
-        let audioCtx;
-
-        function initAudio() {
-            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        }
-
-        function playSound(freq, type = 'sine', duration = 0.2, vol = 0.06) {
-            if (!audioCtx) return;
-            const o = audioCtx.createOscillator();
-            const g = audioCtx.createGain();
-            o.type = type;
-            o.frequency.value = freq;
-            g.gain.value = vol;
-            o.connect(g);
-            g.connect(audioCtx.destination);
-            o.start();
-            g.gain.linearRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
-            setTimeout(() => { try { o.stop(); } catch(e){} }, duration * 1000 + 50);
-        }
 
         function generateSciFiName() {
-            const prefixes = ['Kael','Vex','Thorne','Zyl','Ryn','Syl','Drak','Nyx','Korr','Vael','Sylas','Myr','Kael','Zor'];
+            const prefixes = ['Kael','Vex','Thorne','Zyl','Ryn','Syl','Drak','Nyx','Korr','Vael','Sylas','Myr','Zor','Kael'];
             const suffixes = ['-9','-12','ara','ith','on','yx','ar','en','os','ix','ael','or'];
             return prefixes[Math.floor(Math.random()*prefixes.length)] + suffixes[Math.floor(Math.random()*suffixes.length)];
         }
 
         function setup() {
-            initAudio();
             let canvas = createCanvas(920, 640);
             canvas.parent('canvas-container');
 
-            // Spread zones apart
-            greenZone = { x: 220, y: 320, r: 130, food: 180 };
-            blueZone  = { x: 700, y: 320, r: 130, food: 180 };
+            greenZone = { x: 220, y: 320, r: 125, food: 160 };
+            blueZone  = { x: 700, y: 320, r: 125, food: 160 };
 
             for (let i = 0; i < 10; i++) {
                 creatures.push(new Creature(random(width), random(height)));
@@ -103,64 +82,52 @@
             timeOfDay = (frameCount % dayLength) / dayLength;
             let isDay = timeOfDay < 0.5;
 
-            if (isDay) fill(20, 38, 28, 30);
-            else fill(15, 28, 48, 40);
+            if (isDay) fill(20, 38, 28, 28);
+            else fill(15, 28, 48, 38);
             rect(0, 0, width, height);
 
-            // Draw zones with food amount
-            fill(16, 185, 129, isDay ? 150 : 45);
+            // Zones
+            fill(16, 185, 129, isDay ? 145 : 42);
             circle(greenZone.x, greenZone.y, greenZone.r * 2);
-            fill(255);
-            textAlign(CENTER);
-            textSize(10);
+            fill(255); textAlign(CENTER); textSize(10);
             text(`GREEN ${Math.floor(greenZone.food)}`, greenZone.x, greenZone.y - greenZone.r - 10);
 
-            fill(56, 189, 248, isDay ? 45 : 150);
+            fill(56, 189, 248, isDay ? 42 : 145);
             circle(blueZone.x, blueZone.y, blueZone.r * 2);
             fill(255);
             text(`BLUE ${Math.floor(blueZone.food)}`, blueZone.x, blueZone.y - blueZone.r - 10);
 
-            // Global reproduction cooldown (slowly decreases)
-            if (globalReproCooldown > 0) globalReproCooldown -= 0.6;
+            if (globalReproCooldown > 0) globalReproCooldown -= 0.55;
 
-            // Update creatures
             for (let i = creatures.length - 1; i >= 0; i--) {
                 let c = creatures[i];
                 c.update(isDay);
 
-                // Reproduction with cooldown
-                if (c.energy > 82 && globalReproCooldown <= 0 && random() < 0.008) {
+                if (c.energy > 82 && globalReproCooldown <= 0 && random() < 0.0075) {
                     let offspring = c.reproduce();
                     if (offspring) {
                         creatures.push(offspring);
-                        globalReproCooldown = 18; // base cooldown
-                        c.energy -= 18;
-                        playSound(920, 'sine', 0.25, 0.05);
+                        globalReproCooldown = 16;
+                        c.energy -= 17;
                     }
                 }
 
                 if (c.energy <= 0) {
-                    playSound(180, 'sawtooth', 0.35, 0.07);
                     creatures.splice(i, 1);
                 } else {
                     c.show();
                 }
             }
 
-            // High population starvation pressure
-            let popPressure = Math.max(0, (creatures.length - 18) * 0.008);
-            for (let c of creatures) {
-                c.energy -= popPressure;
-            }
+            // Population pressure
+            let pressure = Math.max(0, (creatures.length - 17) * 0.007);
+            for (let c of creatures) c.energy -= pressure;
 
             updateStats();
         }
 
         function updateStats() {
-            if (creatures.length === 0) {
-                document.getElementById('stats').innerHTML = 'No creatures';
-                return;
-            }
+            if (creatures.length === 0) return;
             let totalModules = 0;
             let predators = 0;
             for (let c of creatures) {
@@ -179,31 +146,30 @@
             constructor(x, y, parentModules = null) {
                 this.x = x;
                 this.y = y;
-                this.vx = random(-0.8, 0.8);
-                this.vy = random(-0.8, 0.8);
-                this.energy = parentModules ? 55 : 68 + random(12);
+                this.vx = random(-0.7, 0.7);
+                this.vy = random(-0.7, 0.7);
+                this.energy = parentModules ? 52 : 65 + random(15);
                 this.name = generateSciFiName();
                 this.isPredator = false;
-                this.honey = 0; // carried extra energy
+                this.honey = 0;
 
                 let types = ['harvester', 'sensor', 'mover', 'resistant'];
                 let colors = { 'harvester': '#34d399', 'sensor': '#38bdf8', 'mover': '#a78bfa', 'resistant': '#f472b6' };
 
                 if (parentModules) {
                     this.modules = parentModules.map(m => ({...m}));
-                    // Chance for extra module based on activity (energy)
-                    if (random() < 0.55 && this.modules.length < 7) {
+                    if (random() < 0.52 && this.modules.length < 8) {
                         let newType = random(types);
                         let angle = random(TWO_PI);
-                        let dist = random(8, 12);
+                        let dist = random(7, 11);
                         this.modules.push({ type: newType, color: colors[newType], offsetX: cos(angle)*dist, offsetY: sin(angle)*dist });
                     }
                 } else {
                     this.modules = [];
-                    if (random() < 0.6) { // 60% chance to start with 1 module
+                    if (random() < 0.55) {
                         let type = random(types);
                         let angle = random(TWO_PI);
-                        let dist = random(8, 12);
+                        let dist = random(7, 11);
                         this.modules.push({ type: type, color: colors[type], offsetX: cos(angle)*dist, offsetY: sin(angle)*dist });
                     }
                 }
@@ -212,99 +178,74 @@
             getModuleCount(type) { return this.modules.filter(m => m.type === type).length; }
 
             reproduce() {
-                return new Creature(this.x + random(-15,15), this.y + random(-15,15), this.modules);
+                return new Creature(this.x + random(-14,14), this.y + random(-14,14), this.modules);
             }
 
             update(isDay) {
-                // Become predator below 15% energy
-                if (!this.isPredator && this.energy < 15) {
-                    this.isPredator = true;
-                }
+                if (!this.isPredator && this.energy < 15) this.isPredator = true;
 
-                let target, avoid;
                 if (this.isPredator) {
-                    // Target weakest creature
                     let weakest = null;
-                    let lowestEnergy = Infinity;
+                    let lowest = Infinity;
                     for (let other of creatures) {
                         if (other === this) continue;
-                        if (other.energy < lowestEnergy) {
-                            lowestEnergy = other.energy;
-                            weakest = other;
-                        }
+                        if (other.energy < lowest) { lowest = other.energy; weakest = other; }
                     }
                     if (weakest) {
-                        let dx = weakest.x - this.x;
-                        let dy = weakest.y - this.y;
                         let d = dist(this.x, this.y, weakest.x, weakest.y);
-                        if (d > 8 && d < 220) {
-                            this.vx += (dx / d) * 0.18;
-                            this.vy += (dy / d) * 0.18;
+                        if (d > 6 && d < 200) {
+                            let dx = weakest.x - this.x;
+                            let dy = weakest.y - this.y;
+                            this.vx += (dx / d) * 0.16;
+                            this.vy += (dy / d) * 0.16;
                         }
-                        // Attack
-                        if (d < 14) {
-                            // Steal 1-2 modules
+                        if (d < 13) {
                             let stolen = Math.min(2, weakest.modules.length);
-                            for (let i = 0; i < stolen; i++) {
-                                if (weakest.modules.length > 0) {
-                                    this.modules.push(weakest.modules.pop());
-                                }
-                            }
-                            this.energy = 95;
-                            weakest.energy = 0; // will be removed
-                            playSound(140, 'sawtooth', 0.3, 0.08);
+                            for (let i = 0; i < stolen; i++) if (weakest.modules.length > 0) this.modules.push(weakest.modules.pop());
+                            this.energy = 92;
+                            weakest.energy = 0;
                         }
                     }
                 } else {
-                    // Normal behavior
-                    if (isDay) { target = greenZone; avoid = blueZone; }
-                    else { target = blueZone; avoid = greenZone; }
-
+                    let target = isDay ? greenZone : blueZone;
                     let dx = target.x - this.x;
                     let dy = target.y - this.y;
                     let d = dist(this.x, this.y, target.x, target.y);
-                    if (d > 10 && target.food > 5) {
-                        this.vx += (dx / d) * 0.07;
-                        this.vy += (dy / d) * 0.07;
+                    if (d > 8 && target.food > 3) {
+                        this.vx += (dx / d) * 0.065;
+                        this.vy += (dy / d) * 0.065;
                     }
 
-                    // Honey deposit
-                    if (this.honey > 8 && random() < 0.008) {
-                        // Create small new food spot
-                        // For simplicity, we just reduce honey and slightly boost nearby zone
-                        this.honey -= 8;
-                        if (dist(this.x, this.y, greenZone.x, greenZone.y) < 180) greenZone.food = min(220, greenZone.food + 12);
-                        else if (dist(this.x, this.y, blueZone.x, blueZone.y) < 180) blueZone.food = min(220, blueZone.food + 12);
-                        playSound(650, 'sine', 0.2, 0.04);
+                    if (this.honey > 7 && random() < 0.007) {
+                        this.honey -= 7;
+                        if (dist(this.x, this.y, greenZone.x, greenZone.y) < 160) greenZone.food = min(200, greenZone.food + 10);
+                        else if (dist(this.x, this.y, blueZone.x, blueZone.y) < 160) blueZone.food = min(200, blueZone.food + 10);
                     }
                 }
 
-                // Movement
                 this.x += this.vx;
                 this.y += this.vy;
-                this.vx *= 0.91;
-                this.vy *= 0.91;
-                this.x = constrain(this.x, 18, width-18);
-                this.y = constrain(this.y, 18, height-18);
+                this.vx *= 0.90;
+                this.vy *= 0.90;
+                this.x = constrain(this.x, 16, width-16);
+                this.y = constrain(this.y, 16, height-16);
 
-                // Energy drain
-                this.energy -= 0.032;
+                this.energy -= 0.03;
 
-                // Zone interaction (finite)
                 let inGreen = dist(this.x, this.y, greenZone.x, greenZone.y) < greenZone.r;
                 let inBlue = dist(this.x, this.y, blueZone.x, blueZone.y) < blueZone.r;
 
                 if (inGreen && isDay && greenZone.food > 0) {
-                    let gain = 0.45 + this.getModuleCount('harvester') * 0.18;
+                    let gain = 0.42 + this.getModuleCount('harvester') * 0.17;
                     this.energy = min(100, this.energy + gain);
-                    greenZone.food = max(0, greenZone.food - 0.8);
-                    if (this.energy > 92) this.honey = min(25, this.honey + 0.6);
+                    greenZone.food = max(0, greenZone.food - 0.7);
+                    if (this.energy > 90) this.honey = min(22, this.honey + 0.5);
                 }
                 if (inBlue && !isDay && blueZone.food > 0) {
-                    let gain = 0.45 + this.getModuleCount('harvester') * 0.18;
+                    let gain = 0.42 + this.getModuleCount('harvester') * 0.17;
                     this.energy = min(100, this.energy + gain);
-                    blueZone.food = max(0, blueZone.food - 0.8);
-                    if (this.energy > 92) this.honey = min(25, this.honey + 0.6);
+                    blueZone.food = max(0, blueZone.food - 0.7);
+                    if (this.energy > 90) this.honey = min(22, this.honey + 0.5);
                 }
             }
 
@@ -312,7 +253,8 @@
                 push();
                 translate(this.x, this.y);
 
-                let coreSize = this.baseSize + this.modules.length * 0.45;
+                // Prominent yellow core (raspberry style)
+                let coreSize = 11 + this.modules.length * 0.35;
                 if (this.isPredator) {
                     fill(248, 113, 113);
                     stroke(255, 180, 180);
@@ -320,27 +262,36 @@
                     fill(250, 204, 21);
                     stroke(255, 255, 220);
                 }
-                strokeWeight(2);
+                strokeWeight(2.2);
                 circle(0, 0, coreSize);
 
+                // Inner highlight on core
+                noStroke();
+                fill(255, 255, 255, 85);
+                circle(-coreSize * 0.18, -coreSize * 0.18, coreSize * 0.32);
+
                 // Honey ball
-                if (this.honey > 5) {
-                    fill(245, 158, 11, 200);
-                    circle(8, -8, 6 + this.honey * 0.15);
+                if (this.honey > 4) {
+                    fill(245, 158, 11, 210);
+                    circle(7, -7, 5 + this.honey * 0.12);
                 }
 
                 // Name
-                fill(255);
+                fill(255, 255, 255, 200);
                 textAlign(CENTER);
-                textSize(8);
-                text(this.name, 0, -coreSize - 6);
+                textSize(7.5);
+                text(this.name, 0, -coreSize - 5);
 
-                // Modules
+                // Modules attached to core (smaller, raspberry style)
                 for (let m of this.modules) {
                     fill(m.color);
-                    stroke(255,255,255,25);
-                    strokeWeight(0.8);
-                    circle(m.offsetX, m.offsetY, 6.5);
+                    stroke(255, 255, 255, 20);
+                    strokeWeight(0.7);
+                    circle(m.offsetX, m.offsetY, 5.8);
+
+                    noStroke();
+                    fill(255, 255, 255, 60);
+                    circle(m.offsetX - 1.3, m.offsetY - 1.3, 2.2);
                 }
 
                 pop();
@@ -349,8 +300,8 @@
 
         function resetSim() {
             creatures = [];
-            greenZone.food = 180;
-            blueZone.food = 180;
+            greenZone.food = 160;
+            blueZone.food = 160;
             globalReproCooldown = 0;
             for (let i = 0; i < 10; i++) {
                 creatures.push(new Creature(random(width), random(height)));
