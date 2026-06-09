@@ -29,7 +29,7 @@
                 </div>
                 <div>
                     <span class="font-display text-2xl tracking-tighter">MiniSimmy2</span>
-                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.55 • Evolutionary Selection for Hazard Avoidance (Phase C)</span>
+                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.56 • Social Hazard Warnings + Group Dodging (Phase D)</span>
                 </div>
             </div>
             <div class="flex items-center gap-x-4 text-sm">
@@ -45,7 +45,7 @@
                 <div class="flex items-center gap-x-4">
                     <div>
                         <h1 class="font-display text-3xl tracking-tighter">MiniSimmy2</h1>
-                        <p class="text-white/60 text-sm">Good avoiders now live longer and reproduce more successfully. Generational improvement in hazard avoidance.</p>
+                        <p class="text-white/60 text-sm">Communicators emit hazard warnings. Nearby creatures react and dodge together as groups.</p>
                     </div>
                     
                     <!-- Elapsed Time -->
@@ -345,7 +345,7 @@
                         <div><span class="text-[#a78bfa]">● Purple</span> — Mover dominant (faster movement)</div>
                         <div><span class="text-[#f472b6]">● Pink</span> — Resistant dominant (lower drain)</div>
                         <div><span class="text-[#fbbf24]">● Yellow</span> — Explorer dominant (exploration)</div>
-                        <div><span class="text-[#c084fc]">● Violet</span> — Communicator dominant (group bonuses)</div>
+                        <div><span class="text-[#c084fc]">● Violet</span> — Communicator dominant (group bonuses + hazard warnings)</div>
                     </div>
                 </div>
 
@@ -361,8 +361,13 @@
                 </div>
 
                 <div>
+                    <div class="font-semibold text-emerald-400 mb-1">Social Hazard Warnings (Phase D)</div>
+                    <div class="text-white/70 text-xs">Creatures with Communicator modules emit hazard warning signals when they detect strong threats. Nearby creatures react to these warnings and dodge together as groups. Violet specialization excels at this.</div>
+                </div>
+
+                <div>
                     <div class="font-semibold text-emerald-400 mb-1">Hazard Avoidance Evolution (v0.54–v0.55)</div>
-                    <div class="text-white/70 text-xs">Brains sense hazards (Distance + Direction). Sensor modules + hazardAvoidance trait improve reaction. Good avoiders survive longer and reproduce more successfully, driving generational improvement.</div>
+                    <div class="text-white/70 text-xs">Brains sense hazards (Distance + Direction). Sensor modules + hazardAvoidance trait improve reaction. Good avoiders survive longer and reproduce more successfully.</div>
                 </div>
 
                 <div>
@@ -885,6 +890,7 @@
             document.getElementById('inspect-name').innerText = c.name;
             document.getElementById('inspect-gen').innerText = c.generation;
             document.getElementById('inspect-kids').innerText = c.childrenCount;
+            document.getElementById('inspect-kids').innerText = c.childrenCount;
             document.getElementById('inspect-kills').innerText = c.killCount;
             document.getElementById('inspect-thought').innerText = c.currentThought || '—';
 
@@ -918,11 +924,11 @@
                     let html = '';
                     const bonusMap = {
                         'harvester': 'Better food collection + honey storage',
-                        'sensor': 'Improved hazard detection + wider pheromones',
+                        'sensor': 'Improved hazard detection + wider pheromones + hazard warnings',
                         'mover': 'Faster movement + better vortex resistance',
                         'resistant': 'Significantly lower energy drain',
                         'explorer': 'More exploration + long-distance travel',
-                        'communicator': 'Stronger group bonuses when clustered'
+                        'communicator': 'Stronger group bonuses + hazard warning signals'
                     };
 
                     c.modules.forEach((m, i) => {
@@ -1231,6 +1237,7 @@
 
                             c.energy = max(0, c.energy - damage);
                             c.damageFlash = 45;
+                            c.hazardDamageTaken = (c.hazardDamageTaken || 0) + baseDamage;
 
                             let dx = c.x - this.x;
                             let dy = c.y - this.y;
@@ -1470,7 +1477,7 @@
                 }
             }
 
-            // Pheromones
+            // Pheromones + Hazard Warnings (Phase D)
             for (let i = pheromones.length - 1; i >= 0; i--) {
                 let ph = pheromones[i];
                 ph.life -= 1.2 * timeScale;
@@ -1478,11 +1485,20 @@
 
                 let alpha = map(ph.life, 0, 220, 0, 160);
                 let size = 5 + (ph.life / 55);
-                fill(ph.isGreen ? [52, 211, 153, alpha] : [56, 189, 248, alpha]);
-                noStroke();
-                circle(ph.x, ph.y, size);
-                fill(ph.isGreen ? [52, 211, 153, alpha * 0.3] : [56, 189, 248, alpha * 0.3]);
-                circle(ph.x, ph.y, size * 1.6);
+
+                if (ph.isHazardWarning) {
+                    fill(239, 68, 68, alpha * 1.3);
+                    noStroke();
+                    circle(ph.x, ph.y, size * 1.3);
+                    fill(251, 146, 60, alpha * 0.6);
+                    circle(ph.x, ph.y, size * 2.1);
+                } else {
+                    fill(ph.isGreen ? [52, 211, 153, alpha] : [56, 189, 248, alpha]);
+                    noStroke();
+                    circle(ph.x, ph.y, size);
+                    fill(ph.isGreen ? [52, 211, 153, alpha * 0.3] : [56, 189, 248, alpha * 0.3]);
+                    circle(ph.x, ph.y, size * 1.6);
+                }
 
                 for (let c of creatures) {
                     if (!c.isPredator) {
@@ -1491,6 +1507,18 @@
                             let correctZone = (ph.isGreen === isDay);
                             let force = correctZone ? 0.038 : 0.012;
                             if (c.getModuleCount('communicator') > 0) force *= 1.4;
+
+                            // Phase D: React to hazard warnings
+                            if (ph.isHazardWarning) {
+                                force *= 2.2;
+                                let warnAngle = atan2(ph.y - c.y, ph.x - c.x) + PI; // away from warning
+                                c.vx += cos(warnAngle) * force * 0.9 * timeScale;
+                                c.vy += sin(warnAngle) * force * 0.9 * timeScale;
+                                if (c.getModuleCount('communicator') > 0) {
+                                    c.currentThought = "Heeding warning";
+                                }
+                            }
+
                             let dx = ph.x - c.x;
                             let dy = ph.y - c.y;
                             c.vx += (dx / d) * force * timeScale;
@@ -1576,7 +1604,7 @@
 
                     // Phase C: Good avoiders get slight reproductive advantage
                     let avoidanceBonus = 1 + (c.hazardsAvoided || 0) * 0.004;
-                    if ((c.hazardDamageTaken || 0) > 50) avoidanceBonus *= 0.7; // penalty for taking lots of damage
+                    if ((c.hazardDamageTaken || 0) > 50) avoidanceBonus *= 0.7;
                     chance *= avoidanceBonus;
 
                     if (c.energy > 80) {
@@ -1785,7 +1813,6 @@
                 return count;
             }
 
-            // NEW: Get nearest red hazard info for neural sensing
             getNearestHazardInfo() {
                 let nearestDist = Infinity;
                 let nearestAngle = 0;
@@ -1801,12 +1828,11 @@
                     }
                 }
 
-                // Normalize distance (closer = higher value for the brain)
                 let normDist = (nearestDist < Infinity) ? constrain(1 - (nearestDist / dangerRadius), 0, 1) : 0;
 
                 return {
-                    dist: normDist,           // 0 = far, 1 = very close
-                    angle: nearestAngle,      // direction to nearest hazard
+                    dist: normDist,
+                    angle: nearestAngle,
                     count: nearbyCount
                 };
             }
@@ -1869,32 +1895,27 @@
                 let drain = settings.energyDrain - this.getEfficiencyBonus();
                 this.energy -= Math.max(0.005, drain * timeScale);
 
-                // Hazard sensing + active avoidance (Phases A+B)
+                // Hazard sensing + active avoidance
                 let hazardInfo = this.getNearestHazardInfo();
                 let sensorLevel = this.getTieredModuleCount('sensor');
 
-                // Sensor modules improve hazard detection quality
                 let detectionQuality = 0.6 + (sensorLevel * 0.12);
                 let effectiveHazardDist = hazardInfo.dist * detectionQuality;
 
                 let dodgedThisFrame = false;
 
-                if (effectiveHazardDist > 0.15) {  // Only react when reasonably close
-                    // Calculate avoidance direction (opposite of hazard)
-                    let avoidAngle = hazardInfo.angle + PI;  // opposite direction
+                if (effectiveHazardDist > 0.15) {
+                    let avoidAngle = hazardInfo.angle + PI;
                     let avoidStrength = effectiveHazardDist * 2.8;
 
-                    // Stronger reaction if very close (emergency dodge)
                     if (effectiveHazardDist > 0.65) {
                         avoidStrength *= 1.8;
                         this.currentThought = "Dodging hazard!";
                     }
 
-                    // Apply avoidance force to velocity
                     this.vx += cos(avoidAngle) * avoidStrength * 0.035 * timeScale;
                     this.vy += sin(avoidAngle) * avoidStrength * 0.035 * timeScale;
 
-                    // Bonus from hazardAvoidance trait (evolutionary)
                     let traitBonus = (this.traits.hazardAvoidance - 1) * 0.6;
                     this.vx += cos(avoidAngle) * traitBonus * 0.02 * timeScale;
                     this.vy += sin(avoidAngle) * traitBonus * 0.02 * timeScale;
@@ -1902,9 +1923,24 @@
                     dodgedThisFrame = true;
                 }
 
-                // Phase C: Track successful avoidance
                 if (dodgedThisFrame && effectiveHazardDist > 0.25) {
                     this.hazardsAvoided = (this.hazardsAvoided || 0) + 1;
+                }
+
+                // Phase D: Emit hazard warning if Communicator + strong threat
+                if (effectiveHazardDist > 0.55 && this.getModuleCount('communicator') > 0) {
+                    if (random() < 0.25 * timeScale) {
+                        pheromones.push({
+                            x: this.x,
+                            y: this.y,
+                            life: 90,
+                            isGreen: isDay,
+                            isHazardWarning: true
+                        });
+                        if (this.currentThought !== "Dodging hazard!") {
+                            this.currentThought = "Warning others!";
+                        }
+                    }
                 }
 
                 if (this.isPredator) {
