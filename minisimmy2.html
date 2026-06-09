@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MiniSimmy2 • Module Expansion</title>
+    <title>MiniSimmy2 • Genetic Memory</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -23,7 +23,7 @@
                 </div>
                 <div>
                     <span class="font-display text-2xl tracking-tighter">MiniSimmy2</span>
-                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.22 • New Modules</span>
+                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.23 • Genetic Memory (Phase 2)</span>
                 </div>
             </div>
             <div class="flex items-center gap-x-4 text-sm">
@@ -38,7 +38,7 @@
             <div class="flex justify-between items-center mb-4">
                 <div>
                     <h1 class="font-display text-3xl tracking-tighter">MiniSimmy2</h1>
-                    <p class="text-white/60 text-sm">Phase 1: Explorer + Communicator modules + stronger neural influence</p>
+                    <p class="text-white/60 text-sm">Phase 2: Heritable behavioral traits + evolution statistics</p>
                 </div>
                 <div class="flex items-center gap-x-3 text-sm">
                     <div id="stats" class="font-mono px-4 py-1.5 bg-white/5 rounded-2xl text-xs flex gap-x-4"></div>
@@ -167,6 +167,7 @@
         let pheromones = [];
         let foodBlooms = [];
         let energyOrbs = [];
+        let evolutionHistory = []; // For Phase 2 stats
         let greenZone, blueZone;
         let timeOfDay = 0;
         let dayLength = 1600;
@@ -252,6 +253,9 @@
                 neuralCtx = neuralCanvas.getContext('2d');
                 neuralCanvas.addEventListener('click', handleNeuralClick);
             }
+
+            // Initialize evolution history
+            evolutionHistory = [];
         }
 
         function playSound(freq, type = 'sine', duration = 0.2, vol = 0.06, detune = 0) {
@@ -329,7 +333,7 @@
                 vortexParticles.push(new VortexParticle(true));
             }
 
-            // Pheromones (Communicator modules make them stronger)
+            // Pheromones
             for (let i = pheromones.length - 1; i >= 0; i--) {
                 let ph = pheromones[i];
                 ph.life -= 1.2;
@@ -353,7 +357,6 @@
                         if (d < 52 && d > 3) {
                             let correctZone = (ph.isGreen === isDay);
                             let force = correctZone ? 0.038 : 0.012;
-                            // Communicator bonus
                             if (c.getModuleCount('communicator') > 0) force *= 1.4;
                             let dx = ph.x - c.x;
                             let dy = ph.y - c.y;
@@ -480,10 +483,45 @@
             let pressure = Math.max(0, (creatures.length - 12) * 0.0055);
             for (let c of creatures) c.energy -= pressure;
 
+            // Record evolution stats every ~60 frames
+            if (frameCount % 60 === 0 && creatures.length > 0) {
+                recordEvolutionStats();
+            }
+
             updateStats();
 
             if (selectedCreature && !creatures.includes(selectedCreature)) closeInspector();
             if (selectedCreature) updateInspector();
+        }
+
+        function recordEvolutionStats() {
+            let totalModules = 0;
+            let totalEnergy = 0;
+            let explorerCount = 0;
+            let communicatorCount = 0;
+
+            for (let c of creatures) {
+                totalModules += c.modules.length;
+                totalEnergy += c.energy;
+                if (c.getModuleCount('explorer') > 0) explorerCount++;
+                if (c.getModuleCount('communicator') > 0) communicatorCount++;
+            }
+
+            const avgModules = totalModules / creatures.length;
+            const avgEnergy = totalEnergy / creatures.length;
+            const explorerPercent = (explorerCount / creatures.length) * 100;
+
+            evolutionHistory.push({
+                frame: frameCount,
+                avgModules: avgModules,
+                avgEnergy: avgEnergy,
+                explorerPercent: explorerPercent
+            });
+
+            // Keep only last 120 entries (~2 minutes of history)
+            if (evolutionHistory.length > 120) {
+                evolutionHistory.shift();
+            }
         }
 
         function handleMousePress() {
@@ -695,7 +733,7 @@
         }
 
         class Creature {
-            constructor(x, y, parentModules = null, generation = 1) {
+            constructor(x, y, parentModules = null, generation = 1, parentTraits = null) {
                 this.x = x;
                 this.y = y;
                 this.vx = random(-0.45, 0.45);
@@ -710,6 +748,21 @@
                 this.killCount = 0;
                 this.reproCooldown = 0;
                 this.currentThought = "Exploring...";
+
+                // Phase 2: Heritable behavioral traits (genetic memory)
+                if (parentTraits) {
+                    this.traits = {
+                        pheromoneSensitivity: constrain(parentTraits.pheromoneSensitivity + random(-0.08, 0.08), 0.6, 1.6),
+                        explorationBias: constrain(parentTraits.explorationBias + random(-0.08, 0.08), 0.6, 1.6),
+                        vortexResistance: constrain(parentTraits.vortexResistance + random(-0.08, 0.08), 0.6, 1.6)
+                    };
+                } else {
+                    this.traits = {
+                        pheromoneSensitivity: 1.0 + random(-0.15, 0.15),
+                        explorationBias: 1.0 + random(-0.15, 0.15),
+                        vortexResistance: 1.0 + random(-0.15, 0.15)
+                    };
+                }
 
                 let types = ['harvester', 'sensor', 'mover', 'resistant', 'explorer', 'communicator'];
                 let colors = { 
@@ -747,7 +800,7 @@
             }
 
             reproduce() {
-                return new Creature(this.x + random(-7, 7), this.y + random(-7, 7), this.modules, this.generation + 1);
+                return new Creature(this.x + random(-7, 7), this.y + random(-7, 7), this.modules, this.generation + 1, this.traits);
             }
 
             update(isDay, vortexDir, vortexStrength) {
@@ -802,8 +855,7 @@
                         this.currentThought = isDay ? "Going to Green" : "Going to Blue";
                     }
 
-                    // Explorer module bonus: better vortex escape + more directed exploration
-                    let explorerBonus = this.getModuleCount('explorer') * 0.18;
+                    let explorerBonus = (this.getModuleCount('explorer') * 0.18) + (this.traits.explorationBias - 1) * 0.25;
 
                     let bestNeighbor = null;
                     let bestFitness = 0;
@@ -837,8 +889,7 @@
                         let tx = -(this.y - centerY), ty = (this.x - centerX);
                         let tlen = sqrt(tx * tx + ty * ty) || 1;
                         let vForce = 0.72 * vortexStrength * vortexDir * (1 - socialResist);
-                        // Explorer bonus: resist vortex more effectively
-                        vForce *= (1 - explorerBonus * 0.6);
+                        vForce *= (1 - (this.traits.vortexResistance - 1) * 0.35);
                         this.vx += (tx / tlen) * vForce;
                         this.vy += (ty / tlen) * vForce;
 
@@ -887,7 +938,6 @@
 
                     if (this.energy > 76) this.honey = min(28, this.honey + 0.35);
 
-                    // Communicator deposits stronger pheromones
                     let pheroChance = this.getModuleCount('communicator') > 0 ? 0.13 : 0.09;
                     if (random() < pheroChance) {
                         pheromones.push({ x: this.x, y: this.y, life: 220, isGreen: true });
@@ -935,7 +985,7 @@
         }
 
         function resetSim() {
-            creatures = []; vortexParticles = []; pheromones = []; foodBlooms = []; energyOrbs = [];
+            creatures = []; vortexParticles = []; pheromones = []; foodBlooms = []; energyOrbs = []; evolutionHistory = [];
             greenZone.food = 150; blueZone.food = 150;
             globalReproCooldown = 0; selectedCreature = null;
             closeInspector();
