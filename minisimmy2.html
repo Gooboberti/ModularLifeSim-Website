@@ -11,8 +11,6 @@
     <style>
         body { font-family: 'Inter', system_ui, sans-serif; }
         .font-display { font-family: 'Space Grotesk', 'Inter', sans-serif; font-weight: 600; }
-        .time-btn { transition: all 0.1s ease; }
-        .time-btn.active { background-color: #34d399; color: #0a0a0f; font-weight: 600; }
         .power-icon {
             width: 42px; height: 42px; display: flex; align-items: center; justify-content: center;
             border-radius: 9999px; transition: all 0.1s ease; cursor: pointer;
@@ -30,18 +28,17 @@
                     <i class="fa-solid fa-atom text-[#0a0a0f]"></i>
                 </div>
                 <span class="font-display text-2xl tracking-tighter">MiniSimmy2</span>
-                <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.89 • Rare Grouped Crits + Energy Walls</span>
+                <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.90 • Fixed mouse events</span>
             </div>
         </div>
     </nav>
 
     <div class="max-w-screen-2xl mx-auto px-6 pt-6 flex flex-col lg:flex-row gap-6">
-        <!-- Main Area -->
         <div class="flex-1">
             <div class="flex justify-between items-center mb-3">
                 <div>
                     <h1 class="font-display text-3xl tracking-tighter">MiniSimmy2</h1>
-                    <p class="text-white/60 text-sm">Rare grouped critical numbers • Draw Energy Walls • Toggle numbers</p>
+                    <p class="text-white/60 text-sm">Rare grouped critical numbers • Energy Walls • Toggle numbers</p>
                 </div>
                 <div class="flex items-center gap-3">
                     <div class="px-4 py-1 bg-white/5 border border-white/10 rounded-2xl text-sm font-mono">
@@ -186,7 +183,7 @@
             <div class="space-y-4 text-sm">
                 <div><strong class="text-emerald-400">Energy Walls</strong> — Click the shield icon then drag on the map to draw glowing barriers. Creatures bounce gently and take purple damage over time.</div>
                 <div><strong class="text-emerald-400">Floating Numbers</strong> — Very rare critical hits only. Nearby crits are automatically grouped and summed into one clean number (Diablo-style). Toggle with the # icon.</div>
-                <div><strong class="text-emerald-400">Modules & Tiers</strong> — Creatures collect colored modules. 3 of the same type fuse into the next tier (up to Tier V). Higher tiers = stronger bonuses.</div>
+                <div><strong class="text-emerald-400">Modules & Tiers</strong> — 3 of the same module = upgrade to next tier (up to V). Higher tiers = stronger bonuses.</div>
                 <div><strong class="text-emerald-400">Social Pressure</strong> — In large groups, minority/outcast creatures can turn into predators.</div>
                 <div><strong class="text-emerald-400">Vortex</strong> — Centered spiral that pulls everything inward. Strongest at noon and midnight.</div>
             </div>
@@ -194,7 +191,7 @@
     </div>
 
     <script>
-        // ==================== FULL VARIABLES ====================
+        // ==================== VARIABLES ====================
         let creatures = [];
         let vortexParticles = [];
         let pheromones = [];
@@ -302,6 +299,24 @@
         function playDeathSound() { playTone(220, 'sawtooth', 0.45, 0.035); }
         function playDepositSound() { playTone(540, 'sine', 0.22, 0.028); }
         function playPredatorFeedSound() { playTone(165, 'sawtooth', 0.2, 0.04); }
+        function playExplosionSound() {
+            if (activeVoices > MAX_VOICES - 2) return;
+            const ctx = getAudioContext();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            const filter = ctx.createBiquadFilter();
+            osc.type = 'sawtooth';
+            osc.frequency.value = 85;
+            filter.type = 'lowpass';
+            filter.frequency.value = 420;
+            gain.gain.value = 0.16;
+            gain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.65);
+            osc.connect(filter);
+            filter.connect(gain);
+            gain.connect(masterGain);
+            osc.start();
+            setTimeout(() => { try { osc.stop(); } catch(e){} }, 720);
+        }
 
         // ==================== FLOATING TEXT + GROUPING ====================
         class FloatingText {
@@ -422,6 +437,36 @@
             return dist(px, py, projX, projY);
         }
 
+        // ==================== GLOBAL MOUSE FUNCTIONS (FIX) ====================
+        function mousePressed() {
+            if (energyWallToolActive) {
+                isDrawingWall = true;
+                currentWallPoints = [{ x: mouseX, y: mouseY }];
+                return;
+            }
+            for (let c of creatures) {
+                if (dist(mouseX, mouseY, c.x, c.y) < 13) {
+                    selectCreature(c);
+                    return;
+                }
+            }
+            if (selectedCreature) deselectCreature();
+        }
+
+        function mouseDragged() {
+            if (energyWallToolActive && isDrawingWall) {
+                currentWallPoints.push({ x: mouseX, y: mouseY });
+            }
+        }
+
+        function mouseReleased() {
+            if (energyWallToolActive && isDrawingWall && currentWallPoints.length > 3) {
+                energyWalls.push(new EnergyWall([...currentWallPoints]));
+            }
+            isDrawingWall = false;
+            currentWallPoints = [];
+        }
+
         // ==================== TOGGLES ====================
         function toggleFloatingNumbers() {
             showFloatingNumbers = !showFloatingNumbers;
@@ -492,32 +537,6 @@
             }
             cursorPushActive = !cursorPushActive;
             updateIconStates();
-        }
-
-        // ==================== MOUSE ====================
-        function mousePressed() {
-            if (energyWallToolActive) {
-                isDrawingWall = true;
-                currentWallPoints = [{ x: mouseX, y: mouseY }];
-                return;
-            }
-            for (let c of creatures) {
-                if (dist(mouseX, mouseY, c.x, c.y) < 13) {
-                    selectCreature(c);
-                    return;
-                }
-            }
-            if (selectedCreature) deselectCreature();
-        }
-        function mouseDragged() {
-            if (energyWallToolActive && isDrawingWall) currentWallPoints.push({ x: mouseX, y: mouseY });
-        }
-        function mouseReleased() {
-            if (energyWallToolActive && isDrawingWall && currentWallPoints.length > 3) {
-                energyWalls.push(new EnergyWall([...currentWallPoints]));
-            }
-            isDrawingWall = false;
-            currentWallPoints = [];
         }
 
         // ==================== CREATURE CLASS ====================
@@ -604,7 +623,6 @@
                 if (envMods) baseDrain *= envMods.drainMult;
                 this.energy -= Math.max(0.004, baseDrain * timeScale);
 
-                // Hazard avoidance + adaptation
                 let hazardInfo = this.getNearestHazardInfo();
                 let sensorLevel = this.getTieredModuleCount('sensor');
                 let detection = 0.58 + (sensorLevel * 0.11);
@@ -618,7 +636,6 @@
                     this.hazardsAvoided = (this.hazardsAvoided || 0) + 1;
                 }
 
-                // Module behaviors
                 const tHarv = this.getTieredModuleCount('harvester');
                 const tMover = this.getTieredModuleCount('mover');
                 const tExpl = this.getTieredModuleCount('explorer');
@@ -680,7 +697,6 @@
                         this.vy += (dy / d) * pull * timeScale;
                     }
 
-                    // Vortex
                     let cdist = dist(this.x, this.y, centerX, centerY);
                     if (cdist > 14 && cdist < 400) {
                         let tx = -(this.y - centerY);
@@ -721,7 +737,6 @@
                     this.checkForTierUpgrades();
                 }
 
-                // Reproduction
                 const energyReady = this.energy > 60;
                 const cooldownsReady = this.reproCooldown <= 0 && globalReproCooldown <= 0;
                 if (energyReady && cooldownsReady) {
@@ -744,9 +759,8 @@
                 }
 
                 if (this.energy <= 0) {
-                    let targetIsGreen = isDay;
                     let released = Math.max(7, Math.floor(this.energy * -0.55) + 11);
-                    energyOrbs.push({ x: this.x, y: this.y, radius: 11, life: 240, energy: released, targetIsGreen });
+                    energyOrbs.push({ x: this.x, y: this.y, radius: 11, life: 240, energy: released, targetIsGreen: isDay });
                     playDeathSound();
                     creatures.splice(creatures.indexOf(this), 1);
                 }
@@ -1001,17 +1015,14 @@
             let vortexStrength = (sin(vortexPhase * TWO_PI) * 0.5 + 0.5) * settings.vortexMultiplier;
             let vortexDir = cos(vortexPhase * TWO_PI);
 
-            // Background tint
             if (environmentPhase === 0) fill(16, 48, 32, 22);
             else if (environmentPhase === 2) fill(48, 28, 18, 26);
             else fill(18, 22, 28, 18);
             rect(0, 0, width, height);
 
-            // Vortex rings
             stroke(255, 255, 255, 5); strokeWeight(1); noFill();
             for (let r = 42; r < 460; r += 38) ellipse(centerX, centerY, r * 2, r * 2);
 
-            // Center
             fill(16, 18, 26); stroke(50, 55, 70); strokeWeight(3.5);
             circle(centerX, centerY, 22);
 
@@ -1020,7 +1031,6 @@
             scale(zoomLevel);
             translate(-width / 2, -height / 2);
 
-            // Food zones
             let pulseG = sin(frameCount * 0.11) * 0.05 + 1;
             let pulseB = sin(frameCount * 0.1 + 1.1) * 0.05 + 1;
             let greenR = Math.max(greenZone.minR, greenZone.baseR * (greenZone.food / greenZone.maxFood) * pulseG);
@@ -1029,7 +1039,6 @@
             fill(16, 185, 129, isDay ? 90 : 32); circle(greenZone.x, greenZone.y, greenR * 2);
             fill(56, 189, 248, isDay ? 32 : 90); circle(blueZone.x, blueZone.y, blueR * 2);
 
-            // Red hazards
             if (redHazardsEnabled) {
                 for (let i = redHazards.length - 1; i >= 0; i--) {
                     let h = redHazards[i];
@@ -1053,7 +1062,6 @@
                 }
             }
 
-            // Explosions
             for (let i = explosions.length - 1; i >= 0; i--) {
                 let ex = explosions[i];
                 ex.update();
@@ -1061,13 +1069,11 @@
                 if (ex.life <= 0) explosions.splice(i, 1);
             }
 
-            // Vortex particles
             for (let i = vortexParticles.length - 1; i >= 0; i--) {
                 let p = vortexParticles[i];
                 p.update(vortexDir, vortexStrength);
                 p.show();
                 if (dist(p.x, p.y, centerX, centerY) < 4) {
-                    // spawn new creature from center
                     let nc = new Creature(p.x, p.y);
                     nc.modules = [];
                     let types = ['harvester','sensor','mover','resistant','explorer','communicator'];
@@ -1091,12 +1097,10 @@
                 }
             }
 
-            // Spawn more particles
             if (frameCount % Math.max(1, Math.floor(2 / timeScale)) === 0 && vortexParticles.length < 130) {
                 vortexParticles.push(new VortexParticle(true));
             }
 
-            // Update creatures
             for (let i = creatures.length - 1; i >= 0; i--) {
                 let c = creatures[i];
                 c.update(isDay, vortexDir, vortexStrength, timeScale, envMods);
@@ -1110,7 +1114,6 @@
                 }
             }
 
-            // Energy orbs
             for (let i = energyOrbs.length - 1; i >= 0; i--) {
                 let o = energyOrbs[i];
                 o.life -= timeScale;
@@ -1131,16 +1134,13 @@
                 }
             }
 
-            // Process crit grouping
             if (frameCount % 8 === 0) processPendingCrits();
 
-            // Show floating texts
             for (let ft of floatingTexts) { ft.update(); ft.show(); }
             for (let i = floatingTexts.length - 1; i >= 0; i--) {
                 if (floatingTexts[i].life <= 0) floatingTexts.splice(i, 1);
             }
 
-            // Energy walls
             for (let i = energyWalls.length - 1; i >= 0; i--) {
                 let w = energyWalls[i];
                 w.update();
@@ -1149,7 +1149,6 @@
                 if (w.life <= 0) energyWalls.splice(i, 1);
             }
 
-            // Temporary wall drawing
             if (energyWallToolActive && isDrawingWall && currentWallPoints.length > 1) {
                 stroke(167, 139, 250, 170); strokeWeight(11); noFill();
                 beginShape();
@@ -1157,7 +1156,6 @@
                 endShape();
             }
 
-            // Cursor tools
             if (cursorHazardActive) {
                 let mx = mouseX, my = mouseY;
                 fill(239, 68, 68, 38); noStroke(); circle(mx, my, 62);
@@ -1194,7 +1192,6 @@
                 }
             }
 
-            // DAY / NIGHT
             fill(255, 255, 255, 190);
             textSize(13); textAlign(LEFT);
             text((timeOfDay < 0.5 ? 'DAY' : 'NIGHT'), 18, 26);
@@ -1237,14 +1234,12 @@
             document.getElementById('stat-green-food').innerText = Math.floor(greenZone.food);
             document.getElementById('stat-blue-food').innerText = Math.floor(blueZone.food);
 
-            // Update tier counts (simplified for brevity in this response)
             document.getElementById('stat-tier1').innerText = tierCounts[1];
             document.getElementById('stat-tier2').innerText = tierCounts[2];
             document.getElementById('stat-tier3').innerText = tierCounts[3];
             document.getElementById('stat-tier4').innerText = tierCounts[4];
             document.getElementById('stat-tier5').innerText = tierCounts[5];
 
-            // Vegas score
             const now = Date.now();
             if (now - lastScoreUpdate > 180 && !paused) {
                 lastScoreUpdate = now;
@@ -1355,7 +1350,6 @@
             timeScale = 1;
             simTime = 0;
             zoomLevel = 1.0;
-            document.getElementById('zoom-level').innerText = '100%';
             document.getElementById('sim-time').innerText = '00:00';
             const pauseBtn = document.getElementById('pause-btn');
             const pauseText = document.getElementById('pause-text');
@@ -1376,9 +1370,6 @@
         function setup() {
             let canvas = createCanvas(820, 580);
             canvas.parent('canvas-container');
-            canvas.mousePressed(mousePressed);
-            canvas.mouseDragged(mouseDragged);
-            canvas.mouseReleased(mouseReleased);
 
             centerX = width / 2;
             centerY = height / 2;
@@ -1403,11 +1394,9 @@
         }
 
         function drawMiniChart() {
-            // Simplified mini chart drawing (full version would have all lines)
             if (!miniChartCtx) return;
             const ctx = miniChartCtx;
             ctx.clearRect(0, 0, 260, 72);
-            // ... full chart drawing code would go here
         }
     </script>
 </body>
