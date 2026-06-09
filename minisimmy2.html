@@ -29,7 +29,7 @@
                 </div>
                 <div>
                     <span class="font-display text-2xl tracking-tighter">MiniSimmy2</span>
-                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.50 • Constant Red Hazards</span>
+                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.51 • Explosion Effects + Sound</span>
                 </div>
             </div>
             <div class="flex items-center gap-x-4 text-sm">
@@ -45,7 +45,7 @@
                 <div class="flex items-center gap-x-4">
                     <div>
                         <h1 class="font-display text-3xl tracking-tighter">MiniSimmy2</h1>
-                        <p class="text-white/60 text-sm">Red hazards now constantly appear</p>
+                        <p class="text-white/60 text-sm">Visible explosions + special sound on red particle impact</p>
                     </div>
                     
                     <!-- Elapsed Time -->
@@ -356,7 +356,7 @@
 
                 <div>
                     <div class="font-semibold text-emerald-400 mb-1">Red Hazard Particles</div>
-                    <div class="text-white/70 text-xs">Constantly spawning passive red entities that drift with the vortex. On impact they deal AOE damage + push and apply purple damage flash (DoT). If energy drops to predator threshold, predator behavior takes priority. When they reach the drain they explode into 4 damaging red beams.</div>
+                    <div class="text-white/70 text-xs">Constantly spawning passive red entities. On impact they create a visible explosion with AOE damage + push, purple damage flash (DoT), and a special explosion sound. Predator behavior takes priority if energy drops low.</div>
                 </div>
 
                 <div>
@@ -379,6 +379,7 @@
         let energyOrbs = [];
         let redHazards = [];
         let redBeams = [];
+        let explosions = [];
         let evolutionHistory = [];
         let greenZone, blueZone;
         let timeOfDay = 0;
@@ -490,6 +491,66 @@
             playTone(freq, 'sine', 1.8, vol, 0, 0.3, 1.4);
         }
 
+        function playExplosionSound() {
+            const ctx = getAudioContext();
+
+            // Deep boom
+            const osc1 = ctx.createOscillator();
+            const gain1 = ctx.createGain();
+            const filter1 = ctx.createBiquadFilter();
+
+            osc1.type = 'sawtooth';
+            osc1.frequency.value = 85;
+            filter1.type = 'lowpass';
+            filter1.frequency.value = 420;
+
+            gain1.gain.value = 0.18 * effectsVolume * masterVolume;
+            gain1.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.65);
+
+            osc1.connect(filter1);
+            filter1.connect(gain1);
+            gain1.connect(ctx.destination);
+            osc1.start();
+            setTimeout(() => { try { osc1.stop(); } catch(e){} }, 700);
+
+            // Crackle / impact layer
+            setTimeout(() => {
+                const osc2 = ctx.createOscillator();
+                const gain2 = ctx.createGain();
+                const noise = ctx.createBufferSource();
+                const noiseFilter = ctx.createBiquadFilter();
+                const noiseGain = ctx.createGain();
+
+                osc2.type = 'square';
+                osc2.frequency.value = 180;
+
+                const buffer = ctx.createBuffer(1, ctx.sampleRate * 0.4, ctx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < data.length; i++) {
+                    data[i] = Math.random() * 2 - 1;
+                }
+                noise.buffer = buffer;
+
+                noiseFilter.type = 'bandpass';
+                noiseFilter.frequency.value = 1200;
+                noiseFilter.Q.value = 1.8;
+
+                noiseGain.gain.value = 0.09 * effectsVolume * masterVolume;
+                noiseGain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.45);
+
+                osc2.connect(noiseFilter);
+                noise.connect(noiseFilter);
+                noiseFilter.connect(noiseGain);
+                noiseGain.connect(ctx.destination);
+
+                osc2.start();
+                noise.start();
+                setTimeout(() => {
+                    try { osc2.stop(); noise.stop(); } catch(e){}
+                }, 480);
+            }, 35);
+        }
+
         function setupSoundSliders() {
             const masterSlider = document.getElementById('slider-master-vol');
             const masterVal = document.getElementById('val-master-vol');
@@ -573,7 +634,6 @@
                 vortexParticles.push(new VortexParticle());
             }
 
-            // Start with a good number of red hazards
             for (let i = 0; i < 16; i++) {
                 redHazards.push(new RedHazard());
             }
@@ -1004,6 +1064,66 @@
             modal.classList.add('hidden');
         }
 
+        class Explosion {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.life = 22;
+                this.maxLife = 22;
+                this.radius = 8;
+                this.particles = [];
+
+                for (let i = 0; i < 12; i++) {
+                    this.particles.push({
+                        x: 0,
+                        y: 0,
+                        vx: random(-3.2, 3.2),
+                        vy: random(-3.2, 3.2),
+                        life: random(12, 20)
+                    });
+                }
+            }
+
+            update() {
+                this.life--;
+                this.radius += 2.8;
+
+                for (let p of this.particles) {
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.vx *= 0.92;
+                    p.vy *= 0.92;
+                    p.life--;
+                }
+            }
+
+            show() {
+                let progress = 1 - (this.life / this.maxLife);
+                let alpha = map(this.life, 0, this.maxLife, 0, 220);
+
+                // Expanding glow
+                noStroke();
+                fill(251, 146, 60, alpha * 0.6);
+                circle(this.x, this.y, this.radius * 1.6);
+
+                fill(239, 68, 68, alpha);
+                circle(this.x, this.y, this.radius);
+
+                // Bright core
+                fill(255, 240, 200, alpha * 1.1);
+                circle(this.x, this.y, this.radius * 0.45);
+
+                // Flying particles
+                for (let p of this.particles) {
+                    if (p.life > 0) {
+                        let pAlpha = map(p.life, 0, 18, 0, 200);
+                        fill(251, 146, 60, pAlpha);
+                        circle(this.x + p.x, this.y + p.y, 3.5);
+                    }
+                }
+            }
+        }
+
         class RedHazard {
             constructor() {
                 let angle = random(TWO_PI);
@@ -1211,7 +1331,7 @@
                 }
             }
 
-            // Red Hazards - CONSTANT SPAWNING
+            // Red Hazards
             for (let i = redHazards.length - 1; i >= 0; i--) {
                 let h = redHazards[i];
                 h.update(vortexDir, vortexStrength);
@@ -1261,6 +1381,10 @@
                             }
                         }
 
+                        // Create visible explosion
+                        explosions.push(new Explosion(h.x, h.y));
+                        playExplosionSound();
+
                         redHazards.splice(i, 1);
                         break;
                     }
@@ -1268,13 +1392,22 @@
             }
 
             // CONSTANT RED HAZARD SPAWNING
-            // Keep a steady population of 14-22 red hazards at all times
             const targetRedCount = 18;
             if (redHazards.length < targetRedCount) {
-                // Spawn more aggressively when below target
                 let spawnChance = (targetRedCount - redHazards.length) * 0.08;
                 if (random() < spawnChance) {
                     redHazards.push(new RedHazard());
+                }
+            }
+
+            // Update & draw explosions
+            for (let i = explosions.length - 1; i >= 0; i--) {
+                let ex = explosions[i];
+                ex.update();
+                ex.show();
+
+                if (ex.life <= 0) {
+                    explosions.splice(i, 1);
                 }
             }
 
@@ -1693,7 +1826,6 @@
                         for (let o of creatures) {
                             if (o === this || !o.isPredator) continue;
                             if (o.energy < lowest) { lowest = o.energy; target = o; }
-                        }
                     }
                     if (target) {
                         let d = dist(this.x, this.y, target.x, target.y);
@@ -1949,7 +2081,7 @@
         }
 
         function resetSim() {
-            creatures = []; vortexParticles = []; pheromones = []; foodBlooms = []; energyOrbs = []; redHazards = []; redBeams = []; evolutionHistory = [];
+            creatures = []; vortexParticles = []; pheromones = []; foodBlooms = []; energyOrbs = []; redHazards = []; redBeams = []; explosions = []; evolutionHistory = [];
             graphData = { pop: [], modules: [], predators: [], greenFood: [], blueFood: [] };
             greenZone.food = 320; blueZone.food = 320;
             globalReproCooldown = 0; selectedCreature = null; paused = false; timeScale = 1; simTime = 0;
