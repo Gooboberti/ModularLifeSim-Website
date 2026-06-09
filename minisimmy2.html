@@ -71,7 +71,7 @@
                 </div>
                 <div>
                     <span class="font-display text-xl sm:text-2xl tracking-tighter">MiniSimmy2</span>
-                    <span class="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.84 • Critical Hits + Cursor Push</span>
+                    <span class="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.85 • Clean Vortex + Crits Only</span>
                 </div>
             </div>
             
@@ -90,7 +90,7 @@
                 <div class="flex items-center gap-x-3">
                     <div>
                         <h1 class="font-display text-2xl sm:text-3xl tracking-tighter">MiniSimmy2</h1>
-                        <p class="text-white/60 text-xs sm:text-sm">Only critical hits show floating numbers • Cleaner visuals</p>
+                        <p class="text-white/60 text-xs sm:text-sm">Only critical hits show numbers • Improved centered vortex</p>
                     </div>
                 </div>
                 
@@ -601,7 +601,7 @@
         let totalScore = 0;
         let totalPredatorKills = 0;
         let lastScoreUpdate = 0;
-        let unlockedSpeeds = {2: true, 4: true, 8: false}; // 2x and 4x unlocked by default
+        let unlockedSpeeds = {2: true, 4: true, 8: false};
         let redHazardsUnlocked = false;
         let cursorHazardUnlocked = false;
         let cursorPushUnlocked = false;
@@ -632,7 +632,7 @@
             vortexMultiplier: 3,
             pheromoneDeposit: 3.4,
             zonePullStrength: 0.5,
-            critChance: 0.09          // base critical hit chance
+            critChance: 0.09
         };
 
         function generateSciFiName() {
@@ -915,11 +915,11 @@
             }, 32);
         }
 
-        // === CRITICAL HIT SYSTEM ===
+        // === CRITICAL HIT SYSTEM (only crits show floating text) ===
         function tryCrit(baseValue, baseChance = null) {
             const chance = baseChance !== null ? baseChance : settings.critChance;
             if (Math.random() < chance) {
-                const multiplier = 1.65 + Math.random() * 1.55; // 1.65x – 3.2x
+                const multiplier = 1.7 + Math.random() * 1.5;
                 return { 
                     value: Math.max(1, Math.floor(baseValue * multiplier)), 
                     isCrit: true 
@@ -929,28 +929,26 @@
         }
 
         function addFloatingText(x, y, text, color = '#34d399', isCrit = false) {
-            if (!isCrit) return; // Only show floating text on critical hits
+            if (!isCrit) return; // Only show on critical hits
             
-            const finalColor = isCrit ? '#fde047' : color;
-            floatingTexts.push(new FloatingText(x, y, text, finalColor, isCrit));
+            floatingTexts.push(new FloatingText(x, y, text, '#fde047', true));
         }
 
-        // === FLOATING TEXT ===
         class FloatingText {
-            constructor(x, y, text, color = '#34d399', isCrit = false) {
+            constructor(x, y, text, color = '#fde047', isCrit = false) {
                 this.x = x;
                 this.y = y;
                 this.text = text;
                 this.color = color;
-                this.life = isCrit ? 68 : 52;
-                this.vy = isCrit ? -1.6 : -1.35;
+                this.life = isCrit ? 72 : 52;
+                this.vy = isCrit ? -1.7 : -1.4;
                 this.alpha = 255;
                 this.isCrit = isCrit;
             }
             update() {
                 this.y += this.vy;
                 this.life--;
-                this.alpha = map(this.life, 0, this.life > 50 ? 68 : 52, 0, 255);
+                this.alpha = map(this.life, 0, this.life > 55 ? 72 : 52, 0, 255);
             }
             show() {
                 if (this.life <= 0) return;
@@ -1321,7 +1319,6 @@
         // Bottom bar toggles
         function toggleRedHazards() {
             if (!redHazardsUnlocked) {
-                // auto-buy if they have enough points
                 if (totalScore >= 180) {
                     buyRedHazards();
                 }
@@ -1726,23 +1723,25 @@
                     return;
                 }
 
+                // Improved centered vortex math
                 let tangentX = -dy;
                 let tangentY = dx;
                 let len = sqrt(tangentX * tangentX + tangentY * tangentY) || 1;
 
-                let rotForce = 1.4 * vortexStrength * vortexDir;
+                let rotForce = 1.45 * vortexStrength * vortexDir;
                 this.vx += (tangentX / len) * rotForce;
                 this.vy += (tangentY / len) * rotForce;
 
-                let pull = 0.95 * vortexStrength;
-                this.vx += (centerX - this.x) * pull / (distToCenter + 6);
-                this.vy += (centerY - this.y) * pull / (distToCenter + 6);
+                // Stronger, cleaner radial pull toward true center
+                let pull = 0.98 * vortexStrength;
+                this.vx += (centerX - this.x) * pull / (distToCenter + 5);
+                this.vy += (centerY - this.y) * pull / (distToCenter + 5);
 
                 this.x += this.vx;
                 this.y += this.vy;
 
-                this.vx *= 0.86;
-                this.vy *= 0.86;
+                this.vx *= 0.85;
+                this.vy *= 0.85;
 
                 this.pulse += 0.08;
             }
@@ -2065,7 +2064,6 @@
                         const foodGain = settings.particleFoodValue * timeScale;
                         c.energy = min(100, c.energy + foodGain);
                         
-                        // Critical check for particle pickup
                         const crit = tryCrit(1);
                         if (crit.isCrit) {
                             addFloatingText(p.x, p.y - 8, `+${crit.value}`, '#fde047', true);
@@ -2270,7 +2268,7 @@
 
                     let pull = 0.4 * vortexStrength;
                     o.x += (centerX - o.x) * pull / (distToCenter + 9) * timeScale;
-                    o.y += (centerY - o.x) * pull / (distToCenter + 9) * timeScale;
+                    o.y += (centerY - o.y) * pull / (distToCenter + 9) * timeScale;
                 }
 
                 let target = o.targetIsGreen ? greenZone : blueZone;
@@ -2445,7 +2443,7 @@
                 }
             }
 
-            // Cursor Push (new non-damaging herding tool)
+            // Cursor Push (non-damaging)
             if (cursorPushActive) {
                 let mx = mouseX;
                 let my = mouseY;
@@ -2453,7 +2451,6 @@
                 push();
                 translate(mx, my);
 
-                // Blue push visual
                 fill(56, 189, 248, 35);
                 noStroke();
                 circle(0, 0, 72);
@@ -2604,13 +2601,18 @@
                 let dy = this.y - centerY;
                 let distToCenter = sqrt(dx * dx + dy * dy) || 1;
                 if (distToCenter < 3.5) { this.life = 0; return; }
-                let tangentX = -dy, tangentY = dx;
+
+                // Improved centered vortex
+                let tangentX = -dy;
+                let tangentY = dx;
                 let len = sqrt(tangentX * tangentX + tangentY * tangentY) || 1;
-                this.x += (tangentX / len) * 1.25 * vortexStrength * vortexDir;
-                this.y += (tangentY / len) * 1.25 * vortexStrength * vortexDir;
-                let pull = 0.82 * vortexStrength;
-                this.x += (centerX - this.x) * pull / (distToCenter + 0.8);
-                this.y += (centerY - this.x) * pull / (distToCenter + 0.8);
+
+                this.x += (tangentX / len) * 1.28 * vortexStrength * vortexDir;
+                this.y += (tangentY / len) * 1.28 * vortexStrength * vortexDir;
+
+                let pull = 0.85 * vortexStrength;
+                this.x += (centerX - this.x) * pull / (distToCenter + 0.7);
+                this.y += (centerY - this.y) * pull / (distToCenter + 0.7);
             }
             show() {
                 fill(255, 255, 255, 185);
