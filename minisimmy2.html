@@ -20,6 +20,7 @@
         .modal { animation: fadeInScale 0.2s ease forwards; }
         @keyframes fadeInScale { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
         .hazard-cursor { cursor: none !important; }
+        .spawn-flash { animation: spawnPulse 0.6s ease-out forwards; }
     </style>
 </head>
 <body class="bg-[#0a0a0f] text-[#e0e0ea]">
@@ -31,7 +32,7 @@
                 </div>
                 <div>
                     <span class="font-display text-2xl tracking-tighter">MiniSimmy2</span>
-                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.71 • Inspector below buttons • Sound at bottom</span>
+                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.72 • Obvious new spawns + Vegas concept brainstorm</span>
                 </div>
             </div>
             <div class="flex items-center gap-x-4 text-sm">
@@ -47,7 +48,7 @@
                 <div class="flex items-center gap-x-4">
                     <div>
                         <h1 class="font-display text-3xl tracking-tighter">MiniSimmy2</h1>
-                        <p class="text-white/60 text-sm">Cleaner right panel • Inspector now sits right below Interaction Tools • Sound Controls moved to bottom</p>
+                        <p class="text-white/60 text-sm">New arrivals now have obvious spawn flash + trail • Vegas-style scoring concept ready</p>
                     </div>
                     
                     <div class="px-4 py-1.5 bg-white/5 border border-white/10 rounded-2xl text-sm font-mono">
@@ -91,10 +92,9 @@
             </div>
         </div>
 
-        <!-- Right Sidebar - Reorganized layout -->
+        <!-- Right Sidebar -->
         <div class="w-80 bg-[#121218] border border-white/10 rounded-3xl p-5 flex flex-col gap-y-4 self-start max-h-[calc(100vh-120px)] overflow-auto">
             
-            <!-- STATS -->
             <div class="text-xs font-semibold text-white/70 tracking-wider">CURRENT STATS</div>
             
             <div class="space-y-3">
@@ -149,7 +149,6 @@
                 </div>
             </div>
 
-            <!-- TRENDS -->
             <div class="pt-3 border-t border-white/10">
                 <div class="text-xs text-white/50 mb-1.5">Trends (last ~3 min)</div>
                 <canvas id="mini-chart" width="240" height="95" class="w-full rounded-2xl bg-[#0a0a0f] border border-white/10"></canvas>
@@ -162,7 +161,6 @@
                 </div>
             </div>
 
-            <!-- INTERACTION TOOLS -->
             <div class="pt-4 border-t border-white/10">
                 <div class="text-xs font-semibold text-white/70 mb-3 flex items-center gap-x-2">
                     <i class="fa-solid fa-gamepad"></i>
@@ -190,7 +188,6 @@
                 </div>
             </div>
 
-            <!-- CREATURE INSPECTOR (now right below the buttons) -->
             <div id="inspector-panel" class="pt-4 border-t border-white/10 hidden">
                 <div class="flex justify-between items-center mb-2">
                     <div class="text-xs font-semibold text-white/70">CREATURE INSPECTOR</div>
@@ -229,7 +226,6 @@
                 </div>
             </div>
 
-            <!-- SOUND CONTROLS (moved to very bottom) -->
             <div class="pt-4 border-t border-white/10 mt-auto">
                 <div class="text-xs font-semibold text-white/70 mb-2 flex items-center gap-x-2">
                     <i class="fa-solid fa-volume-up"></i> 
@@ -257,7 +253,6 @@
                 </div>
             </div>
 
-            <!-- Legend button at very bottom -->
             <div class="pt-3 border-t border-white/10">
                 <button onclick="showLegendModal()" class="w-full flex items-center justify-center gap-x-2 px-4 py-2 bg-white/10 hover:bg-white/20 rounded-2xl text-sm transition-colors">
                     <i class="fa-solid fa-info-circle"></i>
@@ -419,6 +414,7 @@
         let redHazards = [];
         let redBeams = [];
         let explosions = [];
+        let spawnEffects = []; // NEW: visual effects for new arrivals
         let evolutionHistory = [];
         let greenZone, blueZone;
         let timeOfDay = 0;
@@ -1223,6 +1219,39 @@
             }
         }
 
+        // NEW: Spawn effect class for obvious new creature arrivals
+        class SpawnEffect {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.life = 38;
+                this.maxLife = 38;
+                this.rings = [];
+                for (let i = 0; i < 3; i++) {
+                    this.rings.push({ radius: 8 + i * 6, alpha: 220 });
+                }
+            }
+
+            update() {
+                this.life--;
+                for (let r of this.rings) {
+                    r.radius += 1.8;
+                    r.alpha = map(this.life, 0, this.maxLife, 0, 220);
+                }
+            }
+
+            show() {
+                for (let r of this.rings) {
+                    if (r.alpha > 5) {
+                        stroke(52, 211, 153, r.alpha);
+                        strokeWeight(2);
+                        noFill();
+                        circle(this.x, this.y, r.radius);
+                    }
+                }
+            }
+        }
+
         function draw() {
             background(12, 14, 22);
 
@@ -1384,6 +1413,17 @@
 
                 if (ex.life <= 0) {
                     explosions.splice(i, 1);
+                }
+            }
+
+            // Draw spawn effects (bright rings for new creatures)
+            for (let i = spawnEffects.length - 1; i >= 0; i--) {
+                let se = spawnEffects[i];
+                se.update();
+                se.show();
+
+                if (se.life <= 0) {
+                    spawnEffects.splice(i, 1);
                 }
             }
 
@@ -1812,6 +1852,9 @@
             newCreature.vy += (tangentY / tlen) * 0.6 * vortexStrength * vortexDir;
 
             creatures.push(newCreature);
+
+            // NEW: Create obvious spawn visual effect
+            spawnEffects.push(new SpawnEffect(spawnX, spawnY));
 
             if (Math.random() < 0.6) playBirthSound();
         }
@@ -2573,6 +2616,7 @@
             redHazards = [];
             redBeams = [];
             explosions = [];
+            spawnEffects = [];
             evolutionHistory = [];
             graphData = { pop: [], modules: [], predators: [], greenFood: [], blueFood: [] };
             greenZone.food = 320;
