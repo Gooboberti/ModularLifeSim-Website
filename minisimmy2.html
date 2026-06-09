@@ -2755,6 +2755,14 @@
                             foodBlooms.splice(i, 1);
                         }
                     }
+
+                    // Wipe white vortex particles on contact
+                    for (let i = vortexParticles.length - 1; i >= 0; i--) {
+                        let p = vortexParticles[i];
+                        if (dist(mx, my, p.x, p.y) < 32) {
+                            vortexParticles.splice(i, 1);
+                        }
+                    }
                 }
             }
 
@@ -3549,7 +3557,7 @@
                         playDepositSound();
                     }
 
-                    // Social Pressure / Outcast Logic
+                    // Social Pressure / Outcast Logic - Stronger version
                     let localGroup = this.getLocalGroup(58);
                     if (localGroup.length >= 5) {
                         let mySpec = this.specialization;
@@ -3562,17 +3570,28 @@
                         let groupSize = localGroup.length;
                         let myRatio = myCount / groupSize;
 
-                        if (myRatio < 0.18) {
-                            let pressureChance = 0.0065 * timeScale;
+                        // Base pressure scales with group size (large stacks consume themselves)
+                        let pressureChance = (0.004 + (groupSize * 0.0008)) * timeScale;
 
-                            if (groupSize > 9) pressureChance *= 1.6;
-                            if (myRatio < 0.10) pressureChance *= 1.7;
+                        // Outsiders get much higher pressure
+                        if (myRatio < 0.22) {
+                            pressureChance *= 2.8;
+                            if (myRatio < 0.12) pressureChance *= 1.8;
+                            if (myRatio < 0.08) pressureChance *= 1.6;
+                        }
 
-                            if (random() < pressureChance) {
-                                if (!this.isPredator && this.energy > 22) {
-                                    this.isPredator = true;
-                                    this.currentThought = "Outcast...";
-                                }
+                        // Very large groups have baseline internal competition
+                        if (groupSize > 12) {
+                            pressureChance *= 1.4;
+                        }
+                        if (groupSize > 18) {
+                            pressureChance *= 1.5;
+                        }
+
+                        if (random() < pressureChance) {
+                            if (!this.isPredator && this.energy > 18) {
+                                this.isPredator = true;
+                                this.currentThought = (myRatio < 0.18) ? "Outcast..." : "Internal pressure";
                             }
                         }
                     }
