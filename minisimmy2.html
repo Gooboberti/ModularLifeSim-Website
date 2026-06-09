@@ -18,6 +18,19 @@
         .modal { animation: fadeInScale 0.2s ease forwards; }
         @keyframes fadeInScale { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
         .hazard-cursor { cursor: none !important; }
+        .env-label {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            pointer-events: none;
+            text-shadow: 0 2px 8px rgba(0,0,0,0.6);
+            z-index: 10;
+        }
     </style>
 </head>
 <body class="bg-[#0a0a0f] text-[#e0e0ea]">
@@ -29,7 +42,7 @@
                 </div>
                 <div>
                     <span class="font-display text-xl sm:text-2xl tracking-tighter">MiniSimmy2</span>
-                    <span class="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.77 • Harvesters increase white particle pickup range</span>
+                    <span class="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.78 • Environmental Cycles + Improved Legend</span>
                 </div>
             </div>
             
@@ -48,7 +61,7 @@
                 <div class="flex items-center gap-x-3">
                     <div>
                         <h1 class="font-display text-2xl sm:text-3xl tracking-tighter">MiniSimmy2</h1>
-                        <p class="text-white/60 text-xs sm:text-sm">Harvester modules now increase white particle pickup range • Vegas scoring active</p>
+                        <p class="text-white/60 text-xs sm:text-sm">Environmental cycles active • Harvesters boost particle range</p>
                     </div>
                 </div>
                 
@@ -79,7 +92,32 @@
                 </div>
             </div>
 
-            <div id="canvas-container" class="rounded-3xl overflow-hidden border border-white/10 shadow-2xl w-full"></div>
+            <!-- Environmental Timeline Bar -->
+            <div class="mb-2 px-1">
+                <div class="flex items-center justify-between text-[10px] text-white/50 mb-1 px-1">
+                    <div>ENVIRONMENTAL CYCLE</div>
+                    <div id="env-phase-text" class="font-mono text-emerald-400">FERTILE</div>
+                </div>
+                <div class="relative h-2.5 bg-white/10 rounded-full overflow-hidden border border-white/10">
+                    <div id="env-progress-bar" class="h-full bg-gradient-to-r from-emerald-400 via-amber-400 to-orange-500 transition-all" style="width: 35%"></div>
+                    
+                    <!-- Phase markers -->
+                    <div class="absolute top-0 left-0 w-full h-full flex">
+                        <div class="flex-1 border-r border-white/20"></div>
+                        <div class="flex-1 border-r border-white/20"></div>
+                        <div class="flex-1"></div>
+                    </div>
+                </div>
+                <div class="flex justify-between text-[9px] text-white/40 mt-0.5 px-1">
+                    <div>Fertile</div>
+                    <div>Normal</div>
+                    <div>Drought</div>
+                </div>
+            </div>
+
+            <div id="canvas-container" class="rounded-3xl overflow-hidden border border-white/10 shadow-2xl w-full relative">
+                <!-- Environmental label will be injected here by JS -->
+            </div>
             
             <div class="mt-2 text-[10px] text-white/40 text-center">
                 Space = Pause • +/- = Speed • Click creature to inspect
@@ -305,33 +343,91 @@
         </div>
     </div>
 
-    <!-- Legend Modal -->
+    <!-- Legend Modal (Improved) -->
     <div id="legend-modal" onclick="hideLegendModal()" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-[100]">
-        <div onclick="event.stopImmediatePropagation()" class="modal bg-[#121218] border border-white/10 rounded-3xl max-w-xl w-full mx-4 p-5 max-h-[85vh] overflow-auto">
+        <div onclick="event.stopImmediatePropagation()" class="modal bg-[#121218] border border-white/10 rounded-3xl max-w-2xl w-full mx-4 p-5 max-h-[88vh] overflow-auto">
             <div class="flex justify-between items-center mb-4">
-                <h3 class="text-xl font-semibold">MiniSimmy2 — Legend</h3>
+                <h3 class="text-xl font-semibold flex items-center gap-x-2">
+                    <i class="fa-solid fa-info-circle text-emerald-400"></i>
+                    <span>MiniSimmy2 — Legend & Guide</span>
+                </h3>
                 <button onclick="hideLegendModal()" class="text-white/60 hover:text-white text-2xl leading-none">&times;</button>
             </div>
 
-            <div class="space-y-4 text-sm">
+            <div class="space-y-5 text-sm">
+                
+                <!-- Environmental Cycles -->
+                <div>
+                    <div class="font-semibold text-emerald-400 mb-1 flex items-center gap-x-2">
+                        <i class="fa-solid fa-cloud-sun"></i> <span>Environmental Cycles</span>
+                    </div>
+                    <div class="text-white/80 text-xs leading-relaxed">
+                        The world cycles through <span class="text-emerald-400">Fertile</span> → <span class="text-amber-400">Normal</span> → <span class="text-orange-400">Drought</span> periods.
+                        <br><br>
+                        <span class="text-emerald-400">Fertile:</span> Higher energy gain from food zones, increased reproduction chance.
+                        <br>
+                        <span class="text-orange-400">Drought:</span> Higher energy drain, reduced food efficiency. Creatures must adapt or die.
+                    </div>
+                </div>
+
+                <!-- Modules -->
+                <div>
+                    <div class="font-semibold text-emerald-400 mb-2 flex items-center gap-x-2">
+                        <i class="fa-solid fa-microchip"></i> <span>Modules (Tiers I–V)</span>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 gap-3 text-xs">
+                        <div class="border-l-4 border-emerald-400 pl-3">
+                            <div class="font-semibold text-emerald-400">Harvester</div>
+                            <div class="text-white/70">Increases energy gained from food zones and white vortex particles. <strong>Higher tiers = much larger pickup range</strong> for white particles.</div>
+                        </div>
+                        <div class="border-l-4 border-sky-400 pl-3">
+                            <div class="font-semibold text-sky-400">Sensor</div>
+                            <div class="text-white/70">Improves hazard detection and avoidance. Higher tiers give predictive dodging and better warning systems.</div>
+                        </div>
+                        <div class="border-l-4 border-violet-400 pl-3">
+                            <div class="font-semibold text-violet-400">Mover</div>
+                            <div class="text-white/70">Helps creatures escape the vortex center and move more efficiently. Higher tiers = better spiral escape.</div>
+                        </div>
+                        <div class="border-l-4 border-pink-400 pl-3">
+                            <div class="font-semibold text-pink-400">Resistant</div>
+                            <div class="text-white/70">Reduces energy drain and improves survival in harsh conditions (Drought phases).</div>
+                        </div>
+                        <div class="border-l-4 border-yellow-400 pl-3">
+                            <div class="font-semibold text-yellow-400">Explorer</div>
+                            <div class="text-white/70">Increases exploration behavior and random movement. Helps discover new areas and avoid getting stuck.</div>
+                        </div>
+                        <div class="border-l-4 border-purple-400 pl-3">
+                            <div class="font-semibold text-purple-400">Communicator</div>
+                            <div class="text-white/70">Strengthens pheromone signals. Higher tiers can warn the group about hazards and coordinate better.</div>
+                        </div>
+                    </div>
+                    <div class="text-[10px] text-white/50 mt-2">Tiers: 3 of the same module = upgrade to next tier (visual gold border on T5).</div>
+                </div>
+
                 <div class="border-l-4 border-yellow-400 pl-3">
                     <div class="font-semibold text-yellow-400 text-sm">Yellow → Brown Honey Blooms</div>
-                    <div class="text-white/80 text-xs">Slow vortex deposits that age into signaling food patches.</div>
+                    <div class="text-white/80 text-xs">Creatures with enough Harvesters can deposit honey that slowly moves toward food nodes. When it stops it becomes a new food patch that sends signals.</div>
                 </div>
 
                 <div class="border-l-4 border-emerald-400 pl-3">
                     <div class="font-semibold text-emerald-400 text-sm">Green Energy Orbs</div>
-                    <div class="text-white/80 text-xs">Released on death. Vortex-affected energy recycling.</div>
+                    <div class="text-white/80 text-xs">Released when creatures die. They are pulled by the vortex toward food nodes and restore food when they arrive.</div>
                 </div>
 
                 <div class="border-l-4 border-red-500 pl-3">
                     <div class="font-semibold text-red-400 text-sm">Red Hazard Particles</div>
-                    <div class="text-white/80 text-xs">Toggleable dangerous threats. Explode at center.</div>
+                    <div class="text-white/80 text-xs">Dangerous threats that deal AOE damage + damage over time. They explode at the center and can be toggled on/off.</div>
                 </div>
 
                 <div class="border-l-4 border-orange-400 pl-3">
                     <div class="font-semibold text-orange-400 text-sm">Cursor Hazard Tool</div>
-                    <div class="text-white/80 text-xs">Mouse becomes damaging red particle with nasty pheromone aura. Has satisfying hum + impact sounds.</div>
+                    <div class="text-white/80 text-xs">Turns your mouse into a large damaging red particle with a nasty pheromone aura. Great for pruning or testing reactions. Has satisfying audio.</div>
+                </div>
+
+                <div class="border-l-4 border-white/40 pl-3">
+                    <div class="font-semibold text-white/80 text-sm">Vortex + White Particles</div>
+                    <div class="text-white/70 text-xs">White particles spiral inward. Creatures (especially with Harvesters) can eat them for energy. Particles that reach the exact center now spawn new single-module creatures.</div>
                 </div>
             </div>
 
@@ -385,6 +481,12 @@
 
         let redHazardsEnabled = true;
         let cursorHazardActive = false;
+
+        // === NEW: Environmental Cycle System (Phase 1) ===
+        let environmentPhase = 0; // 0 = Fertile, 1 = Normal, 2 = Drought
+        let envCycleLength = 2200; // ~36 seconds per phase at 60fps
+        let envPhaseProgress = 0;
+        let envLabelElement = null;
 
         let settings = {
             energyDrain: 0.108,
@@ -696,7 +798,110 @@
             document.addEventListener('keydown', handleKeyPress);
             document.getElementById('speed-1').classList.add('active', 'bg-emerald-500', 'text-[#0a0a0f]');
 
+            // Create environmental label element
+            createEnvLabel();
+
             updateMainStats();
+        }
+
+        function createEnvLabel() {
+            const container = document.getElementById('canvas-container');
+            if (!container) return;
+
+            envLabelElement = document.createElement('div');
+            envLabelElement.className = 'env-label hidden';
+            envLabelElement.style.color = '#34d399';
+            container.appendChild(envLabelElement);
+        }
+
+        function updateEnvLabel(phase) {
+            if (!envLabelElement) return;
+
+            let text = '';
+            let color = '#34d399';
+
+            if (phase === 0) {
+                text = 'FERTILE SEASON';
+                color = '#34d399';
+            } else if (phase === 1) {
+                text = 'NORMAL CONDITIONS';
+                color = '#a3a3a3';
+            } else if (phase === 2) {
+                text = 'DROUGHT';
+                color = '#f59e0b';
+            }
+
+            envLabelElement.innerText = text;
+            envLabelElement.style.color = color;
+            envLabelElement.classList.remove('hidden');
+
+            // Fade out after a few seconds
+            setTimeout(() => {
+                if (envLabelElement) envLabelElement.style.transition = 'opacity 1.2s ease';
+                if (envLabelElement) envLabelElement.style.opacity = '0';
+
+                setTimeout(() => {
+                    if (envLabelElement) {
+                        envLabelElement.style.transition = '';
+                        envLabelElement.style.opacity = '1';
+                        envLabelElement.classList.add('hidden');
+                    }
+                }, 1300);
+            }, 2800);
+        }
+
+        function updateEnvironmentalUI() {
+            const phaseText = document.getElementById('env-phase-text');
+            const progressBar = document.getElementById('env-progress-bar');
+
+            let label = 'FERTILE';
+            let progress = 0;
+            let barColor = 'from-emerald-400 via-amber-400 to-orange-500';
+
+            if (environmentPhase === 0) {
+                label = 'FERTILE';
+                progress = (envPhaseProgress / envCycleLength) * 100;
+                barColor = 'from-emerald-400 to-emerald-500';
+            } else if (environmentPhase === 1) {
+                label = 'NORMAL';
+                progress = (envPhaseProgress / envCycleLength) * 100;
+                barColor = 'from-amber-400 to-yellow-500';
+            } else if (environmentPhase === 2) {
+                label = 'DROUGHT';
+                progress = (envPhaseProgress / envCycleLength) * 100;
+                barColor = 'from-orange-500 to-red-500';
+            }
+
+            if (phaseText) phaseText.innerText = label;
+            if (progressBar) {
+                progressBar.style.width = Math.min(100, Math.max(0, progress)) + '%';
+                progressBar.className = `h-full bg-gradient-to-r ${barColor} transition-all`;
+            }
+        }
+
+        function getEnvironmentModifiers() {
+            if (environmentPhase === 0) {
+                // Fertile
+                return {
+                    energyGainMult: 1.35,
+                    drainMult: 0.82,
+                    reproMult: 1.6
+                };
+            } else if (environmentPhase === 1) {
+                // Normal
+                return {
+                    energyGainMult: 1.0,
+                    drainMult: 1.0,
+                    reproMult: 1.0
+                };
+            } else {
+                // Drought
+                return {
+                    energyGainMult: 0.65,
+                    drainMult: 1.45,
+                    reproMult: 0.55
+                };
+            }
         }
 
         function handleKeyPress(e) {
@@ -1044,6 +1249,7 @@
             if (selectedCreature) updateInspector();
 
             updateVegasScore();
+            updateEnvironmentalUI();
         }
 
         function selectCreature(creature) {
@@ -1329,6 +1535,14 @@
 
             if (globalReproCooldown > 0) globalReproCooldown--;
 
+            // === Environmental Cycle Update ===
+            envPhaseProgress += timeScale;
+            if (envPhaseProgress >= envCycleLength) {
+                envPhaseProgress = 0;
+                environmentPhase = (environmentPhase + 1) % 3;
+                updateEnvLabel(environmentPhase);
+            }
+
             timeOfDay = (frameCount * timeScale % dayLength) / dayLength;
             let isDay = timeOfDay < 0.5;
 
@@ -1340,10 +1554,14 @@
                 if (Math.random() < 0.55 * soundDensity) playAmbientPulse(isDay);
             }
 
-            if (isDay) {
-                fill(18, 38, 28, 28);
+            // Background tint based on environment
+            let env = getEnvironmentModifiers();
+            if (environmentPhase === 0) {
+                fill(16, 48, 32, 22); // Fertile green tint
+            } else if (environmentPhase === 1) {
+                fill(18, 22, 28, 18);
             } else {
-                fill(10, 18, 38, 50);
+                fill(48, 28, 18, 26); // Drought brown/orange tint
             }
             rect(0, 0, width, height);
 
@@ -1500,7 +1718,6 @@
                 }
 
                 for (let c of creatures) {
-                    // Harvester modules increase pickup range for white particles
                     let harvesterBonus = c.getTieredModuleCount('harvester') * 3.2;
                     let pickupRange = 8 + harvesterBonus;
 
@@ -1733,9 +1950,11 @@
             }
 
             let readyCount = 0;
+            const envMods = getEnvironmentModifiers();
+
             for (let i = creatures.length - 1; i >= 0; i--) {
                 let c = creatures[i];
-                c.update(isDay, vortexDir, vortexStrength, timeScale);
+                c.update(isDay, vortexDir, vortexStrength, timeScale, envMods);
 
                 const energyReady = c.energy > 60;
                 const cooldownsReady = c.reproCooldown <= 0 && globalReproCooldown <= 0;
@@ -1744,7 +1963,7 @@
                 if (isReady) readyCount++;
 
                 if (isReady) {
-                    let chance = settings.reproductionChance;
+                    let chance = settings.reproductionChance * envMods.reproMult;
 
                     let avoidanceBonus = 1 + (c.hazardsAvoided || 0) * 0.0035;
                     if ((c.hazardDamageTaken || 0) > 48) avoidanceBonus *= 0.68;
@@ -2079,7 +2298,7 @@
 
                 for (let h of redHazards) {
                     let d = dist(this.x, this.y, h.x, h.y);
-                    if (d < dangerRadius) nearbyCount++;
+                    if (dangerRadius) nearbyCount++;
                     if (d < nearestDist) {
                         nearestDist = d;
                         nearestAngle = atan2(h.y - this.y, h.x - this.x);
@@ -2203,12 +2422,15 @@
                 return child;
             }
 
-            update(isDay, vortexDir, vortexStrength, timeScale = 1) {
+            update(isDay, vortexDir, vortexStrength, timeScale = 1, envMods = null) {
                 if (this.reproCooldown > 0) this.reproCooldown--;
                 if (!this.isPredator && this.energy < 14) this.isPredator = true;
 
-                let drain = settings.energyDrain - this.getEfficiencyBonus();
-                this.energy -= Math.max(0.004, drain * timeScale);
+                let baseDrain = settings.energyDrain - this.getEfficiencyBonus();
+                let finalDrain = baseDrain;
+                if (envMods) finalDrain *= envMods.drainMult;
+
+                this.energy -= Math.max(0.004, finalDrain * timeScale);
 
                 let hazardInfo = this.getNearestHazardInfo();
                 let sensorLevel = this.getTieredModuleCount('sensor');
@@ -2528,8 +2750,10 @@
                 let inG = dist(this.x, this.y, greenZone.x, greenZone.y) < greenZone.baseR;
                 let inB = dist(this.x, this.y, blueZone.x, blueZone.y) < blueZone.baseR;
 
+                let gainMult = envMods ? envMods.energyGainMult : 1.0;
+
                 if (inG && isDay && greenZone.food > 0) {
-                    let g = 0.26 + this.getModuleCount('harvester') * 0.09;
+                    let g = (0.26 + this.getModuleCount('harvester') * 0.09) * gainMult;
                     this.energy = min(100, this.energy + g * timeScale);
                     greenZone.food = max(0, greenZone.food - 0.3 * timeScale);
                     if (this.energy > 74) this.honey = min(26, this.honey + 0.32 * timeScale);
@@ -2541,7 +2765,7 @@
                 }
 
                 if (inB && !isDay && blueZone.food > 0) {
-                    let g = 0.26 + this.getModuleCount('sensor') * 0.08;
+                    let g = (0.26 + this.getModuleCount('sensor') * 0.08) * gainMult;
                     this.energy = min(100, this.energy + g * timeScale);
                     blueZone.food = max(0, blueZone.food - 0.3 * timeScale);
                     if (this.energy > 74) this.honey = min(26, this.honey + 0.32 * timeScale);
@@ -2733,6 +2957,10 @@
             if (tier3El) tier3El.innerText = '0';
             if (tier4El) tier4El.innerText = '0';
             if (tier5El) tier5El.innerText = '0';
+
+            environmentPhase = 0;
+            envPhaseProgress = 0;
+            if (envLabelElement) envLabelElement.classList.add('hidden');
 
             for (let i = 0; i < 9; i++) creatures.push(new Creature(random(width), random(height)));
             for (let i = 0; i < 110; i++) vortexParticles.push(new VortexParticle());
