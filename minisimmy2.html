@@ -1131,6 +1131,65 @@
             }, 340);
         }
 
+        function playShipShootSound() {
+            if (activeVoices > MAX_VOICES - 2) return;
+
+            const ctx = getAudioContext();
+
+            // Short laser "pew" sound
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            const filter = ctx.createBiquadFilter();
+
+            osc.type = 'sawtooth';
+            osc.frequency.value = 880;
+
+            filter.type = 'lowpass';
+            filter.frequency.value = 1800;
+
+            gain.gain.value = 0.12 * effectsVolume;
+            gain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.18);
+
+            osc.connect(filter);
+            filter.connect(gain);
+            gain.connect(masterGain);
+            osc.start();
+
+            setTimeout(() => {
+                try { osc.stop(); } catch(e){}
+            }, 220);
+        }
+
+        function playBulletImpactSound() {
+            if (activeVoices > MAX_VOICES - 2) return;
+
+            const ctx = getAudioContext();
+
+            // Small sharp impact / zap
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            const filter = ctx.createBiquadFilter();
+
+            osc.type = 'square';
+            osc.frequency.value = 620;
+
+            filter.type = 'bandpass';
+            filter.frequency.value = 1100;
+            filter.Q.value = 2.5;
+
+            gain.gain.value = 0.18 * effectsVolume;
+            gain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.22);
+
+            osc.connect(filter);
+            filter.connect(gain);
+            gain.connect(masterGain);
+            osc.start();
+
+            setTimeout(() => {
+                try { osc.stop(); } catch(e){}
+            }, 280);
+        }
+
         // === FLOATING TEXT ===
         class FloatingText {
             constructor(x, y, text, color = '#34d399') {
@@ -3338,17 +3397,21 @@
                         let c = creatures[j];
 
                         if (dist(b.x, b.y, c.x, c.y) < 12) {
-                            c.energy -= 34;
-                            c.damageFlash = 55;
-                            c.purpleFlash = max(c.purpleFlash || 0, 75);
+                            c.energy -= 46;
+                            c.damageFlash = 60;
+                            c.purpleFlash = max(c.purpleFlash || 0, 82);
+
+                            // Small explosion effect on impact
+                            explosions.push(new Explosion(b.x, b.y));
+
+                            // Impact sound
+                            playBulletImpactSound();
 
                             bullets.splice(i, 1);
                             break;
                         }
                     }
                 }
-
-            }
             }
 
             // Draw floating texts again on top (screen space for better visibility)
@@ -4570,6 +4633,9 @@
             lastShotTime = now;
             bullets.push({ x: shipX - 7, y: shipY - 12, vx: 0, vy: -12 });
             bullets.push({ x: shipX + 7, y: shipY - 12, vx: 0, vy: -12 });
+
+            // Firing sound
+            playShipShootSound();
         }
     </script>
 </body>
