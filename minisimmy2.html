@@ -31,7 +31,7 @@
                 </div>
                 <div>
                     <span class="font-display text-2xl tracking-tighter">MiniSimmy2</span>
-                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.25 • Time Controls</span>
+                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.26 • Time Controls Fixed</span>
                 </div>
             </div>
             <div class="flex items-center gap-x-4 text-sm">
@@ -46,7 +46,7 @@
             <div class="flex justify-between items-center mb-3">
                 <div>
                     <h1 class="font-display text-3xl tracking-tighter">MiniSimmy2</h1>
-                    <p class="text-white/60 text-sm">Time controls + simulation speed</p>
+                    <p class="text-white/60 text-sm">Time controls (fixed) + simulation speed</p>
                 </div>
                 
                 <!-- Time Controls -->
@@ -212,7 +212,6 @@
         let masterVolume = 0.91;
         let lastClickedNode = null;
 
-        // Time control variables
         let timeScale = 1;
         let paused = false;
 
@@ -292,11 +291,8 @@
             }
 
             evolutionHistory = [];
-            
-            // Keyboard shortcuts
             document.addEventListener('keydown', handleKeyPress);
             
-            // Set initial active speed button
             document.getElementById('speed-1').classList.add('active', 'bg-emerald-500', 'text-[#0a0a0f]');
         }
 
@@ -305,8 +301,8 @@
                 e.preventDefault();
                 togglePause();
             }
-            if (e.key === '+') setTimeScale(Math.min(8, timeScale * 2));
-            if (e.key === '-') setTimeScale(Math.max(0.25, timeScale / 2));
+            if (e.key === '+') setTimeScale(Math.min(4, timeScale * 2));
+            if (e.key === '-') setTimeScale(Math.max(0.5, timeScale / 2));
         }
 
         function togglePause() {
@@ -327,8 +323,6 @@
 
         function setTimeScale(scale) {
             timeScale = scale;
-            
-            // Update active button styling
             document.querySelectorAll('[id^="speed-"]').forEach(el => {
                 el.classList.remove('active', 'bg-emerald-500', 'text-[#0a0a0f]');
                 if (parseFloat(el.id.split('-')[1]) === scale) {
@@ -354,16 +348,34 @@
             setTimeout(() => { try { o.stop(); } catch(e){} }, duration * 1000 + 40);
         }
 
+        function recordEvolutionStats() {
+            if (creatures.length === 0) return;
+            let totalModules = 0;
+            let totalEnergy = 0;
+            let explorerCount = 0;
+
+            for (let c of creatures) {
+                totalModules += c.modules.length;
+                totalEnergy += c.energy;
+                if (c.getModuleCount('explorer') > 0) explorerCount++;
+            }
+
+            const avgModules = totalModules / creatures.length;
+            const avgEnergy = totalEnergy / creatures.length;
+            const explorerPercent = (explorerCount / creatures.length) * 100;
+
+            evolutionHistory.push({ frame: frameCount, avgModules, avgEnergy, explorerPercent });
+            if (evolutionHistory.length > 120) evolutionHistory.shift();
+        }
+
         function draw() {
             background(12, 14, 22);
 
             if (paused) {
-                // Still draw everything but skip updates
                 drawWorld();
                 return;
             }
 
-            // Apply time scale to day/night cycle
             timeOfDay = (frameCount * timeScale % dayLength) / dayLength;
             let isDay = timeOfDay < 0.5;
 
@@ -397,7 +409,6 @@
             fill(70, 75, 85, 45);
             circle(centerX - 5, centerY - 5, 9);
 
-            // Vortex particles (affected by timeScale)
             for (let i = vortexParticles.length - 1; i >= 0; i--) {
                 let p = vortexParticles[i];
                 p.update(vortexDir, vortexStrength);
@@ -419,7 +430,6 @@
                 vortexParticles.push(new VortexParticle(true));
             }
 
-            // Pheromones
             for (let i = pheromones.length - 1; i >= 0; i--) {
                 let ph = pheromones[i];
                 ph.life -= 1.2 * timeScale;
@@ -433,7 +443,6 @@
                 fill(ph.isGreen ? [52, 211, 153, alpha] : [56, 189, 248, alpha]);
                 noStroke();
                 circle(ph.x, ph.y, size);
-
                 fill(ph.isGreen ? [52, 211, 153, alpha * 0.3] : [56, 189, 248, alpha * 0.3]);
                 circle(ph.x, ph.y, size * 1.6);
 
@@ -453,7 +462,6 @@
                 }
             }
 
-            // Food Blooms & Energy Orbs (speed affected)
             for (let i = foodBlooms.length - 1; i >= 0; i--) {
                 let b = foodBlooms[i];
                 b.life -= timeScale;
@@ -510,7 +518,6 @@
                 }
             }
 
-            // Zones
             fill(16, 185, 129, isDay ? 100 : 22);
             circle(greenZone.x, greenZone.y, greenZone.r * 2);
             fill(255); textAlign(CENTER); textSize(10);
@@ -577,21 +584,14 @@
         }
 
         function drawWorld() {
-            // Simplified draw for paused state
             background(12, 14, 22);
-            
-            // Draw zones
             fill(16, 185, 129, 80);
             circle(greenZone.x, greenZone.y, greenZone.r * 2);
             fill(56, 189, 248, 80);
             circle(blueZone.x, blueZone.y, blueZone.r * 2);
             
-            // Draw creatures
-            for (let c of creatures) {
-                c.show();
-            }
+            for (let c of creatures) c.show();
             
-            // Draw particles (static)
             for (let p of vortexParticles) {
                 fill(255, 255, 255, 120);
                 circle(p.x, p.y, p.size);
@@ -1123,14 +1123,12 @@
             paused = false;
             timeScale = 1;
             
-            // Reset pause button
             const pauseBtn = document.getElementById('pause-btn');
             const pauseText = document.getElementById('pause-text');
             pauseBtn.classList.remove('bg-red-500/80', 'text-white');
             pauseBtn.classList.add('bg-white/10');
             pauseText.innerHTML = 'Pause';
             
-            // Reset speed buttons
             document.querySelectorAll('[id^="speed-"]').forEach(el => el.classList.remove('active', 'bg-emerald-500', 'text-[#0a0a0f]'));
             document.getElementById('speed-1').classList.add('active', 'bg-emerald-500', 'text-[#0a0a0f]');
             
