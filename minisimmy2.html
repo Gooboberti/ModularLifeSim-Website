@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MiniSimmy2 • Gradual Vortex</title>
+    <title>MiniSimmy2 • Module Expansion</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -23,7 +23,7 @@
                 </div>
                 <div>
                     <span class="font-display text-2xl tracking-tighter">MiniSimmy2</span>
-                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.21 • Gradual Vortex Transitions</span>
+                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.22 • New Modules</span>
                 </div>
             </div>
             <div class="flex items-center gap-x-4 text-sm">
@@ -38,7 +38,7 @@
             <div class="flex justify-between items-center mb-4">
                 <div>
                     <h1 class="font-display text-3xl tracking-tighter">MiniSimmy2</h1>
-                    <p class="text-white/60 text-sm">Smoother vortex direction transitions at dawn and dusk</p>
+                    <p class="text-white/60 text-sm">Phase 1: Explorer + Communicator modules + stronger neural influence</p>
                 </div>
                 <div class="flex items-center gap-x-3 text-sm">
                     <div id="stats" class="font-mono px-4 py-1.5 bg-white/5 rounded-2xl text-xs flex gap-x-4"></div>
@@ -287,13 +287,9 @@
             else fill(12, 25, 42, 35);
             rect(0, 0, width, height);
 
-            // Vortex phase with smooth direction transition
             let vortexPhase = (timeOfDay + 0.25) % 1;
             let vortexStrength = sin(vortexPhase * TWO_PI) * 0.5 + 0.5;
             vortexStrength *= settings.vortexMultiplier;
-
-            // Smooth direction: gradually transitions from +1 to -1 and back
-            // Creates calm periods around dawn/dusk instead of abrupt flips
             let vortexDir = cos(vortexPhase * TWO_PI);
 
             stroke(255, 255, 255, 6);
@@ -333,7 +329,7 @@
                 vortexParticles.push(new VortexParticle(true));
             }
 
-            // Pheromones
+            // Pheromones (Communicator modules make them stronger)
             for (let i = pheromones.length - 1; i >= 0; i--) {
                 let ph = pheromones[i];
                 ph.life -= 1.2;
@@ -357,6 +353,8 @@
                         if (d < 52 && d > 3) {
                             let correctZone = (ph.isGreen === isDay);
                             let force = correctZone ? 0.038 : 0.012;
+                            // Communicator bonus
+                            if (c.getModuleCount('communicator') > 0) force *= 1.4;
                             let dx = ph.x - c.x;
                             let dy = ph.y - c.y;
                             c.vx += (dx / d) * force;
@@ -713,8 +711,15 @@
                 this.reproCooldown = 0;
                 this.currentThought = "Exploring...";
 
-                let types = ['harvester', 'sensor', 'mover', 'resistant'];
-                let colors = { 'harvester': '#34d399', 'sensor': '#38bdf8', 'mover': '#a78bfa', 'resistant': '#f472b6' };
+                let types = ['harvester', 'sensor', 'mover', 'resistant', 'explorer', 'communicator'];
+                let colors = { 
+                    'harvester': '#34d399', 
+                    'sensor': '#38bdf8', 
+                    'mover': '#a78bfa', 
+                    'resistant': '#f472b6',
+                    'explorer': '#fbbf24',
+                    'communicator': '#c084fc'
+                };
 
                 if (parentModules) {
                     this.modules = parentModules.map(m => ({ ...m }));
@@ -797,6 +802,9 @@
                         this.currentThought = isDay ? "Going to Green" : "Going to Blue";
                     }
 
+                    // Explorer module bonus: better vortex escape + more directed exploration
+                    let explorerBonus = this.getModuleCount('explorer') * 0.18;
+
                     let bestNeighbor = null;
                     let bestFitness = 0;
                     for (let o of creatures) {
@@ -829,6 +837,8 @@
                         let tx = -(this.y - centerY), ty = (this.x - centerX);
                         let tlen = sqrt(tx * tx + ty * ty) || 1;
                         let vForce = 0.72 * vortexStrength * vortexDir * (1 - socialResist);
+                        // Explorer bonus: resist vortex more effectively
+                        vForce *= (1 - explorerBonus * 0.6);
                         this.vx += (tx / tlen) * vForce;
                         this.vy += (ty / tlen) * vForce;
 
@@ -838,12 +848,12 @@
                     }
 
                     if (cdist < 150) {
-                        this.vx += random(-0.85, 0.85) * 0.48;
-                        this.vy += random(-0.85, 0.85) * 0.48;
+                        this.vx += random(-0.85, 0.85) * 0.48 * (1 + explorerBonus);
+                        this.vy += random(-0.85, 0.85) * 0.48 * (1 + explorerBonus);
                         this.currentThought = "Escaping vortex";
                     } else if (d > 90) {
-                        this.vx += random(-0.42, 0.42) * 0.32;
-                        this.vy += random(-0.42, 0.42) * 0.32;
+                        this.vx += random(-0.42, 0.42) * 0.32 * (1 + explorerBonus * 0.5);
+                        this.vy += random(-0.42, 0.42) * 0.32 * (1 + explorerBonus * 0.5);
                         this.currentThought = isDay ? "Seeking Green" : "Seeking Blue";
                     }
 
@@ -877,7 +887,9 @@
 
                     if (this.energy > 76) this.honey = min(28, this.honey + 0.35);
 
-                    if (random() < 0.09) {
+                    // Communicator deposits stronger pheromones
+                    let pheroChance = this.getModuleCount('communicator') > 0 ? 0.13 : 0.09;
+                    if (random() < pheroChance) {
                         pheromones.push({ x: this.x, y: this.y, life: 220, isGreen: true });
                     }
                 }
@@ -889,7 +901,8 @@
 
                     if (this.energy > 76) this.honey = min(28, this.honey + 0.35);
 
-                    if (random() < 0.09) {
+                    let pheroChance = this.getModuleCount('communicator') > 0 ? 0.13 : 0.09;
+                    if (random() < pheroChance) {
                         pheromones.push({ x: this.x, y: this.y, life: 220, isGreen: false });
                     }
                 }
