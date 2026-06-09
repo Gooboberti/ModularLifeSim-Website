@@ -29,7 +29,7 @@
                 </div>
                 <div>
                     <span class="font-display text-xl sm:text-2xl tracking-tighter">MiniSimmy2</span>
-                    <span class="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.76 • Pile bonus + Predator kill bonus</span>
+                    <span class="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.77 • Harvesters increase white particle pickup range</span>
                 </div>
             </div>
             
@@ -48,7 +48,7 @@
                 <div class="flex items-center gap-x-3">
                     <div>
                         <h1 class="font-display text-2xl sm:text-3xl tracking-tighter">MiniSimmy2</h1>
-                        <p class="text-white/60 text-xs sm:text-sm">New Vegas bonuses: Creature piles + Predator kills • Humming cursor sounds</p>
+                        <p class="text-white/60 text-xs sm:text-sm">Harvester modules now increase white particle pickup range • Vegas scoring active</p>
                     </div>
                 </div>
                 
@@ -372,7 +372,6 @@
         let cursorHumGain = null;
         let cursorHumFilter = null;
 
-        // Vegas Scoring
         let totalScore = 0;
         let totalPredatorKills = 0;
         let lastScoreUpdate = 0;
@@ -530,7 +529,7 @@
             if (detune) osc.detune.value = detune;
 
             filter.type = 'lowpass';
-            filter.frequency.value = 2200;
+            filter.frequency.value = 2202;
 
             const finalVol = volume * effectsVolume * masterVolume;
             gain.gain.value = 0;
@@ -840,12 +839,11 @@
                         closeCount++;
                     }
                 }
-                if (closeCount >= 2) { // at least 3 creatures together (including self)
+                if (closeCount >= 2) {
                     totalClosePairs += closeCount;
                 }
             }
 
-            // Average how "piled up" the population is
             const avgClustering = totalClosePairs / creatures.length;
             return Math.floor(avgClustering * 1.8);
         }
@@ -854,14 +852,12 @@
             if (paused) return;
 
             const now = Date.now();
-            if (now - lastScoreUpdate < 180) return; // update ~5-6 times per second
+            if (now - lastScoreUpdate < 180) return;
             lastScoreUpdate = now;
 
-            // Base time score
             const minutes = simTime / 60;
             let score = Math.floor(minutes * 12);
 
-            // Population multiplier (from previous thresholds)
             let multiplier = 1.0;
             const pop = creatures.length;
 
@@ -872,17 +868,14 @@
             else if (pop < 100) multiplier = 1.6;
             else if (pop < 150) multiplier = 1.3;
 
-            // Pile bonus (creatures stacked together)
             const pileBonus = calculatePileBonus();
             score += pileBonus;
 
-            // Predator kill bonus (big reward for causing predator success)
             const predKillBonus = totalPredatorKills * 28;
             score += predKillBonus;
 
             totalScore = Math.floor(score * multiplier);
 
-            // Update UI
             const scoreEl = document.getElementById('vegas-score');
             if (scoreEl) scoreEl.innerText = totalScore.toLocaleString();
 
@@ -1507,7 +1500,11 @@
                 }
 
                 for (let c of creatures) {
-                    if (dist(p.x, p.y, c.x, c.y) < 8) {
+                    // Harvester modules increase pickup range for white particles
+                    let harvesterBonus = c.getTieredModuleCount('harvester') * 3.2;
+                    let pickupRange = 8 + harvesterBonus;
+
+                    if (dist(p.x, p.y, c.x, c.y) < pickupRange) {
                         c.energy = min(100, c.energy + settings.particleFoodValue * timeScale);
                         if (Math.random() < 0.11 * soundDensity) playEatSound(isDay);
                         p.life = 0;
@@ -2349,8 +2346,8 @@
                         if (this.currentThought !== "Dodging hazard!") {
                             this.currentThought = "Warning others!";
                         }
-                    }
                 }
+            }
 
                 if (this.isPredator) {
                     let target = null;
@@ -2389,7 +2386,6 @@
                             this.currentThought = "Just fed";
                             playPredatorFeedSound();
 
-                            // BIG Vegas bonus for predator kill
                             totalPredatorKills++;
 
                             this.updateSpecialization();
