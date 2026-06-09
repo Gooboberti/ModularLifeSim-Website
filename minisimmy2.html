@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MiniSimmy2 • Sound + Balance</title>
+    <title>MiniSimmy2 • Sound v0.10</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -22,7 +22,7 @@
                 </div>
                 <div>
                     <span class="font-display text-2xl tracking-tighter">MiniSimmy2</span>
-                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.9 • Sound & Balance</span>
+                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.10 • Rich Soundscape</span>
                 </div>
             </div>
             <div class="flex items-center gap-x-4 text-sm">
@@ -37,13 +37,13 @@
             <div class="flex justify-between items-center mb-4">
                 <div>
                     <h1 class="font-display text-3xl tracking-tighter">MiniSimmy2</h1>
-                    <p class="text-white/60 text-sm">Stronger food attraction • Procedural signaling sounds • Volume control</p>
+                    <p class="text-white/60 text-sm">Procedural signaling • Hunger & social sounds • Volume control</p>
                 </div>
                 <div class="flex items-center gap-x-4 text-sm">
-                    <div class="flex items-center gap-x-2 bg-white/5 px-3 py-1 rounded-2xl">
+                    <div class="flex items-center gap-x-2 bg-white/5 px-3 py-1.5 rounded-2xl">
                         <i class="fa-solid fa-volume-low text-white/60"></i>
-                        <input type="range" id="volume-slider" min="0" max="1" step="0.01" value="0.15" class="w-24 accent-emerald-400">
-                        <span id="volume-value" class="text-xs w-8 text-right font-mono">15%</span>
+                        <input type="range" id="volume-slider" min="0" max="1" step="0.01" value="0.12" class="w-24 accent-emerald-400">
+                        <span id="volume-value" class="text-xs w-8 text-right font-mono">12%</span>
                     </div>
                     <div id="stats" class="font-mono px-4 py-1.5 bg-white/5 rounded-2xl text-xs flex gap-x-4"></div>
                     <button onclick="resetSim()" class="px-4 py-1.5 bg-white/10 hover:bg-white/20 rounded-2xl text-sm flex items-center gap-x-2">
@@ -119,7 +119,7 @@
         let centerX, centerY;
         let selectedCreature = null;
         let neuralCtx;
-        let masterVolume = 0.15;
+        let masterVolume = 0.12;
 
         function generateSciFiName() {
             const prefixes = ['Kael','Vex','Thorne','Zyl','Ryn','Syl','Drak','Nyx','Korr','Vael','Sylas','Myr','Zor'];
@@ -142,7 +142,7 @@
                 creatures.push(new Creature(random(width), random(height)));
             }
 
-            for (let i = 0; i < 100; i++) {
+            for (let i = 0; i < 105; i++) {
                 vortexParticles.push(new VortexParticle());
             }
 
@@ -161,21 +161,39 @@
             neuralCtx = neuralCanvas.getContext('2d');
         }
 
-        function playSound(freq, type = 'sine', duration = 0.18, vol = 0.06, detune = 0) {
+        // Enhanced sound function with filter support
+        function playSound(freq, type = 'sine', duration = 0.2, vol = 0.06, detune = 0, filterFreq = null, filterQ = 1) {
             if (!window.AudioContext) return;
             if (!window.audioCtx) window.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             const ctx = window.audioCtx;
+
             const o = ctx.createOscillator();
             const g = ctx.createGain();
+            const filter = ctx.createBiquadFilter();
+
             o.type = type;
             o.frequency.value = freq;
             if (detune) o.detune.value = detune;
+
+            filter.type = 'lowpass';
+            filter.frequency.value = filterFreq || 2200;
+            filter.Q.value = filterQ;
+
             g.gain.value = vol * masterVolume;
-            o.connect(g);
+
+            o.connect(filter);
+            filter.connect(g);
             g.connect(ctx.destination);
+
             o.start();
             g.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + duration);
-            setTimeout(() => { try { o.stop(); } catch(e){} }, duration * 1000 + 30);
+
+            setTimeout(() => { try { o.stop(); } catch(e){} }, duration * 1000 + 40);
+        }
+
+        function playLayeredTone(baseFreq, duration = 0.25, vol = 0.05) {
+            playSound(baseFreq, 'sine', duration, vol * 0.7, 0);
+            playSound(baseFreq * 1.5, 'sine', duration * 0.8, vol * 0.4, 12);
         }
 
         function draw() {
@@ -193,10 +211,10 @@
             let vortexStrength = sin(vortexPhase * TWO_PI) * 0.5 + 0.5;
             let vortexDir = isDay ? 1 : -1;
 
-            stroke(255, 255, 255, 7);
+            stroke(255, 255, 255, 6);
             strokeWeight(1);
             noFill();
-            for (let r = 50; r < 480; r += 44) {
+            for (let r = 48; r < 490; r += 42) {
                 ellipse(centerX, centerY, r * 2, r * 2);
             }
 
@@ -205,7 +223,7 @@
             strokeWeight(4);
             circle(centerX, centerY, 26);
             noStroke();
-            fill(70, 75, 85, 50);
+            fill(70, 75, 85, 48);
             circle(centerX - 6, centerY - 6, 10);
 
             // Vortex particles
@@ -215,61 +233,80 @@
                 p.show();
 
                 for (let c of creatures) {
-                    if (dist(p.x, p.y, c.x, c.y) < 11) {
-                        c.energy = min(100, c.energy + 2.6);
+                    if (dist(p.x, p.y, c.x, c.y) < 10) {
+                        c.energy = min(100, c.energy + 2.5);
                         p.life = 0;
                     }
                 }
 
-                if (dist(p.x, p.y, centerX, centerY) < 6) {
+                if (dist(p.x, p.y, centerX, centerY) < 5) {
                     vortexParticles.splice(i, 1);
                 }
             }
 
-            if (frameCount % 2 === 0 && vortexParticles.length < 130) {
+            if (frameCount % 2 === 0 && vortexParticles.length < 135) {
                 vortexParticles.push(new VortexParticle(true));
             }
 
-            // Zones with stronger attraction pull
-            fill(16, 185, 129, isDay ? 115 : 28);
+            // Zones
+            fill(16, 185, 129, isDay ? 110 : 26);
             circle(greenZone.x, greenZone.y, greenZone.r * 2);
             fill(255); textAlign(CENTER); textSize(10);
-            text(`GREEN ${Math.floor(greenZone.food)}`, greenZone.x, greenZone.y - greenZone.r - 8);
+            text(`GREEN ${Math.floor(greenZone.food)}`, greenZone.x, greenZone.y - greenZone.r - 7);
 
-            fill(56, 189, 248, isDay ? 28 : 115);
+            fill(56, 189, 248, isDay ? 26 : 110);
             circle(blueZone.x, blueZone.y, blueZone.r * 2);
             fill(255);
-            text(`BLUE ${Math.floor(blueZone.food)}`, blueZone.x, blueZone.y - blueZone.r - 8);
+            text(`BLUE ${Math.floor(blueZone.food)}`, blueZone.x, blueZone.y - blueZone.r - 7);
 
-            if (globalReproCooldown > 0) globalReproCooldown -= 0.32;
+            if (globalReproCooldown > 0) globalReproCooldown -= 0.3;
 
-            // Creatures
+            // Creatures + sounds
             for (let i = creatures.length - 1; i >= 0; i--) {
                 let c = creatures[i];
                 c.update(isDay, vortexDir, vortexStrength);
 
-                if (c.energy > 77 && c.reproCooldown <= 0 && globalReproCooldown <= 0 && random() < 0.0048) {
+                // Reproduction sound
+                if (c.energy > 76 && c.reproCooldown <= 0 && globalReproCooldown <= 0 && random() < 0.0045) {
                     let offspring = c.reproduce();
                     if (offspring) {
                         creatures.push(offspring);
-                        globalReproCooldown = 11;
-                        c.reproCooldown = 42;
-                        c.energy -= 12;
+                        globalReproCooldown = 10;
+                        c.reproCooldown = 40;
+                        c.energy -= 11;
                         c.children.push(offspring.name);
                         c.childrenCount++;
-                        playSound(880 + random(-30,30), 'sine', 0.22, 0.045);
+                        playLayeredTone(920 + random(-20,20), 0.28, 0.04);
+                    }
+                }
+
+                // Low energy / hunger sound (occasional)
+                if (c.energy < 28 && random() < 0.012) {
+                    playSound(220 + random(-15,15), 'sawtooth', 0.16, 0.025, 0, 800);
+                    c.currentThought = "Hungry";
+                }
+
+                // Social proximity soft signal (gentle communication)
+                if (random() < 0.003) {
+                    let neighbors = 0;
+                    for (let o of creatures) {
+                        if (o !== c && dist(c.x, c.y, o.x, o.y) < 48) neighbors++;
+                    }
+                    if (neighbors >= 2) {
+                        playSound(1240 + random(-40,40), 'sine', 0.12, 0.018);
+                        c.currentThought = "Near others";
                     }
                 }
 
                 if (c.energy <= 0) {
-                    playSound(160, 'sawtooth', 0.28, 0.05);
+                    playSound(130, 'sawtooth', 0.32, 0.055);
                     creatures.splice(i, 1);
                 } else {
                     c.show();
                 }
             }
 
-            let pressure = Math.max(0, (creatures.length - 13) * 0.007);
+            let pressure = Math.max(0, (creatures.length - 13) * 0.0065);
             for (let c of creatures) c.energy -= pressure;
 
             updateStats();
@@ -280,7 +317,7 @@
 
         function handleMousePress() {
             for (let c of creatures) {
-                if (dist(mouseX, mouseY, c.x, c.y) < 16) {
+                if (dist(mouseX, mouseY, c.x, c.y) < 15) {
                     selectedCreature = c;
                     document.getElementById('inspector').classList.remove('hidden');
                     document.getElementById('inspector').classList.add('flex');
@@ -324,16 +361,16 @@
             let ctx = neuralCtx;
             ctx.clearRect(0, 0, 280, 170);
 
-            let t = frameCount * 0.085;
+            let t = frameCount * 0.08;
 
             let layers = [6, 4, 6];
             let positions = [];
 
             for (let l = 0; l < layers.length; l++) {
-                let x = 38 + l * 98;
+                let x = 36 + l * 100;
                 positions[l] = [];
                 for (let n = 0; n < layers[l]; n++) {
-                    let y = 26 + n * (118 / (layers[l] - 1));
+                    let y = 24 + n * (122 / (layers[l] - 1));
                     positions[l].push({x, y});
                 }
             }
@@ -352,18 +389,18 @@
             for (let l = 0; l < positions.length; l++) {
                 for (let i = 0; i < positions[l].length; i++) {
                     let p = positions[l][i];
-                    let activation = Math.sin(t + i * 1.05 + l * 0.65) * 0.5 + 0.5;
+                    let activation = Math.sin(t + i * 1.0 + l * 0.6) * 0.5 + 0.5;
 
-                    let size = 6.2 + activation * 4.2;
+                    let size = 6 + activation * 4;
                     ctx.fillStyle = l === 0 ? '#38bdf8' : (l === 2 ? '#f472b6' : '#a78bfa');
                     ctx.beginPath();
                     ctx.arc(p.x, p.y, size, 0, Math.PI * 2);
                     ctx.fill();
 
-                    ctx.strokeStyle = 'rgba(255,255,255,0.22)';
-                    ctx.lineWidth = 1.1;
+                    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+                    ctx.lineWidth = 1;
                     ctx.beginPath();
-                    ctx.arc(p.x, p.y, size + Math.sin(t * 2.2 + i) * 2.2, 0, Math.PI * 2);
+                    ctx.arc(p.x, p.y, size + Math.sin(t * 2 + i) * 2, 0, Math.PI * 2);
                     ctx.stroke();
                 }
             }
@@ -387,7 +424,7 @@
             constructor(fromEdge = false) {
                 if (fromEdge) {
                     let angle = random(TWO_PI);
-                    let d = random(440, 560);
+                    let d = random(450, 570);
                     this.x = centerX + cos(angle) * d;
                     this.y = centerY + sin(angle) * d;
                 } else {
@@ -395,7 +432,7 @@
                     this.y = random(height);
                 }
                 this.life = 9999;
-                this.size = random(2.1, 3.3);
+                this.size = random(2, 3.2);
             }
 
             update(vortexDir, vortexStrength) {
@@ -407,16 +444,16 @@
 
                 let tangentX = -dy, tangentY = dx;
                 let len = sqrt(tangentX*tangentX + tangentY*tangentY) || 1;
-                this.x += (tangentX / len) * 1.55 * vortexStrength * vortexDir;
-                this.y += (tangentY / len) * 1.55 * vortexStrength * vortexDir;
+                this.x += (tangentX / len) * 1.5 * vortexStrength * vortexDir;
+                this.y += (tangentY / len) * 1.5 * vortexStrength * vortexDir;
 
-                let pull = 1.05 * vortexStrength;
-                this.x += (centerX - this.x) * pull / (distToCenter + 4);
-                this.y += (centerY - this.y) * pull / (distToCenter + 4);
+                let pull = 1.0 * vortexStrength;
+                this.x += (centerX - this.x) * pull / (distToCenter + 3);
+                this.y += (centerY - this.y) * pull / (distToCenter + 3);
             }
 
             show() {
-                fill(255, 255, 255, 210);
+                fill(255, 255, 255, 205);
                 noStroke();
                 circle(this.x, this.y, this.size);
             }
@@ -427,7 +464,7 @@
                 this.x = x; this.y = y;
                 this.vx = random(-0.5, 0.5);
                 this.vy = random(-0.5, 0.5);
-                this.energy = parentModules ? 44 : 55 + random(18);
+                this.energy = parentModules ? 43 : 54 + random(19);
                 this.name = generateSciFiName();
                 this.isPredator = false;
                 this.honey = 0;
@@ -443,14 +480,14 @@
 
                 if (parentModules) {
                     this.modules = parentModules.map(m => ({...m}));
-                    if (random() < 0.47 && this.modules.length < 7) {
+                    if (random() < 0.46 && this.modules.length < 7) {
                         let nt = random(types);
                         let ang = random(TWO_PI), di = random(5.5, 9.5);
                         this.modules.push({type:nt, color:colors[nt], offsetX:cos(ang)*di, offsetY:sin(ang)*di});
                     }
                 } else {
                     this.modules = [];
-                    if (random() < 0.47) {
+                    if (random() < 0.46) {
                         let t = random(types), ang = random(TWO_PI), di = random(5.5, 9.5);
                         this.modules.push({type:t, color:colors[t], offsetX:cos(ang)*di, offsetY:sin(ang)*di});
                     }
@@ -468,7 +505,7 @@
 
                 if (!this.isPredator && this.energy < 15) this.isPredator = true;
 
-                this.energy -= 0.032;
+                this.energy -= 0.031;
 
                 if (this.isPredator) {
                     let target = null, lowest = Infinity, hasPrey = false;
@@ -485,76 +522,75 @@
 
                     if (target) {
                         let d = dist(this.x, this.y, target.x, target.y);
-                        if (d > 4 && d < 150) {
+                        if (d > 4 && d < 145) {
                             let dx = target.x - this.x, dy = target.y - this.y;
-                            this.vx += (dx/d) * 0.11; this.vy += (dy/d) * 0.11;
+                            this.vx += (dx/d) * 0.1; this.vy += (dy/d) * 0.1;
                         }
                         if (d < 8) {
                             let stolen = Math.min(2, target.modules.length);
                             for (let i=0; i<stolen; i++) if (target.modules.length>0) this.modules.push(target.modules.pop());
-                            this.energy = 80;
+                            this.energy = 78;
                             target.energy = 0;
                             this.killCount++;
                             this.isPredator = false;
                             this.currentThought = "Just fed";
-                            playSound(140, 'sawtooth', 0.25, 0.06);
+                            playSound(135, 'sawtooth', 0.22, 0.05);
                         }
                     }
                 } else {
-                    // Stronger attraction to main food zones
                     let tgt = isDay ? greenZone : blueZone;
                     let dx = tgt.x - this.x, dy = tgt.y - this.y;
                     let d = dist(this.x, this.y, tgt.x, tgt.y);
 
                     if (d > 4 && tgt.food > 0) {
-                        let pull = 0.065 + this.getModuleCount('harvester') * 0.012;
+                        let pull = 0.06 + this.getModuleCount('harvester') * 0.01;
                         this.vx += (dx/d) * pull;
                         this.vy += (dy/d) * pull;
                     }
 
-                    // Social resistance + escape from vortex
+                    // Social resistance
                     let neighbors = 0;
                     for (let o of creatures) {
-                        if (o !== this && dist(this.x, this.y, o.x, o.y) < 52) neighbors++;
+                        if (o !== this && dist(this.x, this.y, o.x, o.y) < 50) neighbors++;
                     }
-                    let socialResist = Math.min(0.6, neighbors * 0.16);
+                    let socialResist = Math.min(0.55, neighbors * 0.15);
 
                     let cdist = dist(this.x, this.y, centerX, centerY);
-                    if (cdist > 22 && cdist < 370) {
+                    if (cdist > 20 && cdist < 380) {
                         let tx = - (this.y - centerY), ty = (this.x - centerX);
                         let tlen = sqrt(tx*tx + ty*ty) || 1;
-                        let vForce = 0.85 * vortexStrength * vortexDir * (1 - socialResist);
+                        let vForce = 0.8 * vortexStrength * vortexDir * (1 - socialResist);
                         this.vx += (tx / tlen) * vForce;
                         this.vy += (ty / tlen) * vForce;
 
-                        let pull = 0.5 * vortexStrength * (1 - socialResist);
-                        this.vx += (centerX - this.x) * pull / (cdist + 12);
-                        this.vy += (centerY - this.y) * pull / (cdist + 12);
+                        let pull = 0.45 * vortexStrength * (1 - socialResist);
+                        this.vx += (centerX - this.x) * pull / (cdist + 10);
+                        this.vy += (centerY - this.y) * pull / (cdist + 10);
                     }
 
-                    if (cdist < 180) {
-                        this.vx += random(-1.0,1.0)*0.6;
-                        this.vy += random(-1.0,1.0)*0.6;
+                    if (cdist < 170) {
+                        this.vx += random(-0.95,0.95)*0.55;
+                        this.vy += random(-0.95,0.95)*0.55;
                         this.currentThought = "Escaping vortex";
-                    } else if (d > 90) {
-                        this.vx += random(-0.5,0.5)*0.4;
-                        this.vy += random(-0.5,0.5)*0.4;
+                    } else if (d > 85) {
+                        this.vx += random(-0.5,0.5)*0.38;
+                        this.vy += random(-0.5,0.5)*0.38;
                         this.currentThought = "Wandering";
                     } else {
                         this.currentThought = "Seeking resources";
                     }
 
-                    if (this.honey > 6 && random() < 0.004) {
+                    if (this.honey > 5.5 && random() < 0.0038) {
                         this.honey -= 5;
-                        if (random()<0.5) greenZone.food = min(190, greenZone.food+8);
-                        else blueZone.food = min(190, blueZone.food+8);
+                        if (random()<0.5) greenZone.food = min(185, greenZone.food+7);
+                        else blueZone.food = min(185, blueZone.food+7);
                         this.currentThought = "Depositing food";
-                        playSound(620, 'sine', 0.15, 0.035);
+                        playSound(580, 'sine', 0.14, 0.03);
                     }
                 }
 
                 this.x += this.vx; this.y += this.vy;
-                this.vx *= 0.85; this.vy *= 0.85;
+                this.vx *= 0.84; this.vy *= 0.84;
                 this.x = constrain(this.x, 10, width-10);
                 this.y = constrain(this.y, 10, height-10);
 
@@ -562,39 +598,39 @@
                 let inB = dist(this.x,this.y,blueZone.x,blueZone.y) < blueZone.r;
 
                 if (inG && isDay && greenZone.food > 0) {
-                    let g = 0.32 + this.getModuleCount('harvester')*0.12;
+                    let g = 0.3 + this.getModuleCount('harvester')*0.11;
                     this.energy = min(100, this.energy + g);
-                    greenZone.food = max(0, greenZone.food - 0.45);
-                    if (this.energy > 82) this.honey = min(14, this.honey + 0.28);
+                    greenZone.food = max(0, greenZone.food - 0.4);
+                    if (this.energy > 80) this.honey = min(13, this.honey + 0.25);
                 }
                 if (inB && !isDay && blueZone.food > 0) {
-                    let g = 0.32 + this.getModuleCount('harvester')*0.12;
+                    let g = 0.3 + this.getModuleCount('harvester')*0.11;
                     this.energy = min(100, this.energy + g);
-                    blueZone.food = max(0, blueZone.food - 0.45);
-                    if (this.energy > 82) this.honey = min(14, this.honey + 0.28);
+                    blueZone.food = max(0, blueZone.food - 0.4);
+                    if (this.energy > 80) this.honey = min(13, this.honey + 0.25);
                 }
             }
 
             show() {
                 push(); translate(this.x, this.y);
-                let s = 8.5 + this.modules.length * 0.24;
+                let s = 8 + this.modules.length * 0.22;
                 fill(this.isPredator ? '#f87171' : '#facc15');
                 stroke(this.isPredator ? '#fecaca' : '#fef08c');
-                strokeWeight(1.4);
+                strokeWeight(1.3);
                 circle(0,0,s);
-                noStroke(); fill(255,255,255,60);
-                circle(-s*0.13, -s*0.13, s*0.22);
+                noStroke(); fill(255,255,255,55);
+                circle(-s*0.12, -s*0.12, s*0.2);
 
-                if (this.honey > 1) {
-                    fill('#f59e0b'); circle(4, -4, 3.2 + this.honey*0.06);
+                if (this.honey > 0.8) {
+                    fill('#f59e0b'); circle(3.5, -3.5, 3 + this.honey*0.05);
                 }
 
-                fill(255,255,255,155); textAlign(CENTER); textSize(5.2);
-                text(this.name, 0, -s-2);
+                fill(255,255,255,150); textAlign(CENTER); textSize(5);
+                text(this.name, 0, -s-1.8);
 
                 for (let m of this.modules) {
-                    fill(m.color); stroke(255,255,255,8); strokeWeight(0.3);
-                    circle(m.offsetX, m.offsetY, 4.3);
+                    fill(m.color); stroke(255,255,255,6); strokeWeight(0.25);
+                    circle(m.offsetX, m.offsetY, 4);
                 }
                 pop();
             }
@@ -608,7 +644,7 @@
             document.getElementById('inspector').classList.add('hidden');
 
             for (let i=0; i<9; i++) creatures.push(new Creature(random(width), random(height)));
-            for (let i=0; i<95; i++) vortexParticles.push(new VortexParticle());
+            for (let i=0; i<100; i++) vortexParticles.push(new VortexParticle());
         }
     </script>
 </body>
