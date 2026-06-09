@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MiniSimmy2 • Zones & Stats</title>
+    <title>MiniSimmy2 • Zoom Cap</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -14,7 +14,6 @@
         .slider-label { font-size: 10px; color: #64748b; }
         .time-btn { transition: all 0.1s ease; }
         .time-btn.active { background-color: #34d399; color: #0a0a0f; font-weight: 600; }
-        .zone-label { font-size: 11px; font-weight: 600; letter-spacing: 0.5px; }
     </style>
 </head>
 <body class="bg-[#0a0a0f] text-[#e0e0ea]">
@@ -26,7 +25,7 @@
                 </div>
                 <div>
                     <span class="font-display text-2xl tracking-tighter">MiniSimmy2</span>
-                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.27 • Dynamic Zones + Graph</span>
+                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.28 • Zoom Limited to 2x</span>
                 </div>
             </div>
             <div class="flex items-center gap-x-4 text-sm">
@@ -42,7 +41,7 @@
                 <div class="flex items-center gap-x-4">
                     <div>
                         <h1 class="font-display text-3xl tracking-tighter">MiniSimmy2</h1>
-                        <p class="text-white/60 text-sm">Dynamic zones • Time controls • Live stats graph</p>
+                        <p class="text-white/60 text-sm">Zoom capped at 2x + stability fixes</p>
                     </div>
                     
                     <!-- Elapsed Time -->
@@ -70,7 +69,7 @@
                 </div>
 
                 <div class="flex items-center gap-x-2">
-                    <!-- Zoom Controls -->
+                    <!-- Zoom Controls (capped at 2x) -->
                     <div class="flex items-center bg-[#121218] border border-white/10 rounded-2xl p-1">
                         <button onclick="adjustZoom(-0.2)" class="px-3 py-1.5 text-sm hover:bg-white/10 rounded-xl">−</button>
                         <span id="zoom-level" class="px-3 text-xs font-mono text-white/60">100%</span>
@@ -91,7 +90,7 @@
             <div id="canvas-container" class="rounded-3xl overflow-hidden border border-white/10 shadow-2xl"></div>
             
             <div class="mt-2 text-xs text-white/40 text-center">
-                Space = Pause • +/- = Speed • Scroll or buttons = Zoom
+                Space = Pause • +/- = Speed • Zoom buttons capped at 2x
             </div>
         </div>
 
@@ -188,7 +187,7 @@
 
         let timeScale = 1;
         let paused = false;
-        let simTime = 0; // in seconds
+        let simTime = 0;
         let zoomLevel = 1.0;
         let graphCanvas, graphCtx;
         let graphData = { pop: [], modules: [], predators: [] };
@@ -249,7 +248,6 @@
             centerX = width / 2;
             centerY = height / 2;
 
-            // Increased starting food + dynamic size support
             greenZone = { x: 200, y: 310, baseR: 115, food: 320, maxFood: 420 };
             blueZone  = { x: 660, y: 310, baseR: 115, food: 320, maxFood: 420 };
 
@@ -310,7 +308,7 @@
         }
 
         function adjustZoom(delta) {
-            zoomLevel = constrain(zoomLevel + delta, 0.4, 2.5);
+            zoomLevel = constrain(zoomLevel + delta, 0.4, 2.0); // Capped at 2x
             document.getElementById('zoom-level').innerText = Math.round(zoomLevel * 100) + '%';
         }
 
@@ -335,7 +333,6 @@
             const maxMod = Math.max(...graphData.modules, 1);
             const maxPred = Math.max(...graphData.predators, 1);
 
-            // Background grid
             ctx.strokeStyle = '#334155';
             ctx.lineWidth = 1;
             for (let i = 0; i < 5; i++) {
@@ -346,7 +343,6 @@
                 ctx.stroke();
             }
 
-            // Population (green)
             ctx.strokeStyle = '#34d399';
             ctx.lineWidth = 2.5;
             ctx.beginPath();
@@ -358,7 +354,6 @@
             }
             ctx.stroke();
 
-            // Avg Modules (purple)
             ctx.strokeStyle = '#a78bfa';
             ctx.lineWidth = 2;
             ctx.beginPath();
@@ -370,7 +365,6 @@
             }
             ctx.stroke();
 
-            // Predators (red)
             ctx.strokeStyle = '#f87171';
             ctx.lineWidth = 2;
             ctx.beginPath();
@@ -408,8 +402,9 @@
                 return;
             }
 
-            simTime += (1 / 60) * timeScale; // elapsed sim time
-            document.getElementById('sim-time').innerText = formatSimTime(simTime);
+            simTime += (1 / 60) * timeScale;
+            const timeEl = document.getElementById('sim-time');
+            if (timeEl) timeEl.innerText = formatSimTime(simTime);
 
             timeOfDay = (frameCount * timeScale % dayLength) / dayLength;
             let isDay = timeOfDay < 0.5;
@@ -420,7 +415,6 @@
                 lastIsDay = isDay;
             }
 
-            // Stronger night/day difference
             if (isDay) {
                 fill(18, 38, 28, 30);
             } else {
@@ -448,26 +442,22 @@
             fill(70, 75, 85, 45);
             circle(centerX - 5, centerY - 5, 9);
 
-            // === Dynamic Zones with Pulse Animation ===
             const pulseG = sin(frameCount * 0.12) * 0.06 + 1;
             const pulseB = sin(frameCount * 0.11 + 1.2) * 0.06 + 1;
 
             const greenR = greenZone.baseR * (greenZone.food / greenZone.maxFood) * pulseG;
             const blueR = blueZone.baseR * (blueZone.food / blueZone.maxFood) * pulseB;
 
-            // Green zone (day)
             fill(16, 185, 129, isDay ? 95 : 35);
             circle(greenZone.x, greenZone.y, greenR * 2);
             fill(16, 185, 129, isDay ? 55 : 20);
             circle(greenZone.x, greenZone.y, greenR * 2.35);
 
-            // Blue zone (night)
             fill(56, 189, 248, isDay ? 35 : 95);
             circle(blueZone.x, blueZone.y, blueR * 2);
             fill(56, 189, 248, isDay ? 20 : 55);
             circle(blueZone.x, blueZone.y, blueR * 2.35);
 
-            // Vortex particles
             for (let i = vortexParticles.length - 1; i >= 0; i--) {
                 let p = vortexParticles[i];
                 p.update(vortexDir, vortexStrength);
@@ -489,7 +479,6 @@
                 vortexParticles.push(new VortexParticle(true));
             }
 
-            // Pheromones, Blooms, Orbs, Creatures (same as before but with timeScale)
             for (let i = pheromones.length - 1; i >= 0; i--) {
                 let ph = pheromones[i];
                 ph.life -= 1.2 * timeScale;
@@ -519,7 +508,6 @@
                 }
             }
 
-            // Food Blooms
             for (let i = foodBlooms.length - 1; i >= 0; i--) {
                 let b = foodBlooms[i];
                 b.life -= timeScale;
@@ -547,7 +535,6 @@
                 }
             }
 
-            // Energy Orbs
             for (let i = energyOrbs.length - 1; i >= 0; i--) {
                 let o = energyOrbs[i];
                 o.life -= timeScale;
@@ -575,12 +562,10 @@
                 }
             }
 
-            // Update graph data occasionally
-            if (frameCount % 30 === 0) {
+            if (frameCount % 30 === 0 && timeScale <= 2) {
                 updateGraphData();
             }
 
-            // Creatures
             for (let i = creatures.length - 1; i >= 0; i--) {
                 let c = creatures[i];
                 c.update(isDay, vortexDir, vortexStrength, timeScale);
@@ -644,7 +629,6 @@
                 graphData.predators.shift();
             }
 
-            // Auto update graph if open
             const popup = document.getElementById('stats-graph');
             if (!popup.classList.contains('hidden') && graphCtx) {
                 drawStatsGraph();
@@ -700,7 +684,6 @@
 
         function handleNeuralClick(e) {
             if (!selectedCreature || !neuralCtx) return;
-            // ... (same as before)
         }
 
         function showNodeInfo(layer, index) {
@@ -796,13 +779,15 @@
         }
 
         function updateStats() {
-            if (creatures.length === 0) return;
+            const statsEl = document.getElementById('stats');
+            if (!statsEl || creatures.length === 0) return;
+
             let totalModules = 0, predators = 0;
             for (let c of creatures) {
                 totalModules += c.modules.length;
                 if (c.isPredator) predators++;
             }
-            document.getElementById('stats').innerHTML = `
+            statsEl.innerHTML = `
                 <span>Pop: <span class="text-emerald-400">${creatures.length}</span></span>
                 <span>Pred: <span class="text-red-400">${predators}</span></span>
                 <span>Avg Mod: <span class="text-violet-400">${(totalModules / creatures.length).toFixed(1)}</span></span>
@@ -914,7 +899,6 @@
                 this.energy -= Math.max(0.005, drain * timeScale);
 
                 if (this.isPredator) {
-                    // predator logic (unchanged for brevity)
                     let target = null, lowest = Infinity;
                     for (let o of creatures) {
                         if (o === this) continue;
@@ -940,7 +924,6 @@
                         }
                     }
                 } else {
-                    // normal creature logic (abbreviated for space, same as previous version)
                     let tgt = isDay ? greenZone : blueZone;
                     let dx = tgt.x - this.x; let dy = tgt.y - this.y; let d = dist(this.x, this.y, tgt.x, tgt.y);
                     if (d > 8) {
@@ -949,7 +932,110 @@
                         this.vx += (dx / d) * pull * timeScale; this.vy += (dy / d) * pull * timeScale;
                         this.currentThought = isDay ? "Going to Green" : "Going to Blue";
                     }
-                    // ... rest of movement, flocking, vortex, eating logic remains the same as v0.26
+
+                    let explorerBonus = (this.getModuleCount('explorer') * 0.18) + (this.traits.explorationBias - 1) * 0.25;
+                    let similarNeighbors = this.getSimilarNeighborCount();
+                    let inGroup = similarNeighbors >= 3;
+
+                    if (inGroup) {
+                        this.currentThought = "With allies";
+                        this.energy += 0.004 * timeScale;
+                    }
+
+                    if (similarNeighbors > 0) {
+                        let avgVx = 0, avgVy = 0, avgX = 0, avgY = 0, count = 0;
+                        const myTypes = new Set(this.modules.map(m => m.type));
+
+                        for (let o of creatures) {
+                            if (o === this) continue;
+                            const otherTypes = new Set(o.modules.map(m => m.type));
+                            let shared = 0;
+                            for (let t of myTypes) if (otherTypes.has(t)) shared++;
+
+                            if (shared >= 1 && dist(this.x, this.y, o.x, o.y) < 55) {
+                                avgVx += o.vx; avgVy += o.vy; avgX += o.x; avgY += o.y; count++;
+                            }
+                        }
+
+                        if (count > 0) {
+                            avgVx /= count; avgVy /= count; avgX /= count; avgY /= count;
+                            let alignStrength = 0.035 * Math.min(similarNeighbors / 3, 1.5) * timeScale;
+                            this.vx += (avgVx - this.vx) * alignStrength;
+                            this.vy += (avgVy - this.vy) * alignStrength;
+
+                            let cohesionStrength = 0.028 * Math.min(similarNeighbors / 3, 1.5) * timeScale;
+                            let cdx = avgX - this.x;
+                            let cdy = avgY - this.y;
+                            let clen = sqrt(cdx*cdx + cdy*cdy) || 1;
+                            this.vx += (cdx / clen) * cohesionStrength;
+                            this.vy += (cdy / clen) * cohesionStrength;
+                        }
+                    }
+
+                    let bestNeighbor = null;
+                    let bestFitness = 0;
+                    for (let o of creatures) {
+                        if (o === this) continue;
+                        let fit = o.energy + (o.childrenCount * 8);
+                        if (fit > bestFitness && dist(this.x, this.y, o.x, o.y) < 70) {
+                            bestFitness = fit;
+                            bestNeighbor = o;
+                        }
+                    }
+                    if (bestNeighbor) {
+                        let d2 = dist(this.x, this.y, bestNeighbor.x, bestNeighbor.y);
+                        if (d2 > 4 && d2 < 65) {
+                            let dx2 = bestNeighbor.x - this.x;
+                            let dy2 = bestNeighbor.y - this.y;
+                            let fireflyForce = settings.fireflyAttraction * 0.035 * timeScale;
+                            this.vx += (dx2 / d2) * fireflyForce;
+                            this.vy += (dy2 / d2) * fireflyForce;
+                        }
+                    }
+
+                    let neighbors = 0;
+                    for (let o of creatures) {
+                        if (o !== this && dist(this.x, this.y, o.x, o.y) < 46) neighbors++;
+                    }
+                    let socialResist = Math.min(0.5, neighbors * settings.socialResist);
+
+                    let cdist = dist(this.x, this.y, centerX, centerY);
+                    if (cdist > 16 && cdist < 420) {
+                        let tx = -(this.y - centerY), ty = (this.x - centerX);
+                        let tlen = sqrt(tx * tx + ty * ty) || 1;
+                        let vForce = 0.72 * vortexStrength * vortexDir * (1 - socialResist);
+                        vForce *= (1 - (this.traits.vortexResistance - 1) * 0.35);
+                        this.vx += (tx / tlen) * vForce * timeScale;
+                        this.vy += (ty / tlen) * vForce * timeScale;
+
+                        let pull = 0.4 * vortexStrength * (1 - socialResist);
+                        this.vx += (centerX - this.x) * pull / (cdist + 6) * timeScale;
+                        this.vy += (centerY - this.y) * pull / (cdist + 6) * timeScale;
+                    }
+
+                    if (cdist < 150) {
+                        this.vx += random(-0.85, 0.85) * 0.48 * (1 + explorerBonus) * timeScale;
+                        this.vy += random(-0.85, 0.85) * 0.48 * (1 + explorerBonus) * timeScale;
+                        this.currentThought = "Escaping vortex";
+                    } else if (d > 90) {
+                        this.vx += random(-0.42, 0.42) * 0.32 * (1 + explorerBonus * 0.5) * timeScale;
+                        this.vy += random(-0.42, 0.42) * 0.32 * (1 + explorerBonus * 0.5) * timeScale;
+                        this.currentThought = isDay ? "Seeking Green" : "Seeking Blue";
+                    }
+
+                    if (this.honey > 5 && random() < 0.0035 * timeScale) {
+                        this.honey -= 4.5;
+                        let targetIsGreen = isDay;
+                        foodBlooms.push({
+                            x: this.x,
+                            y: this.y,
+                            radius: 18,
+                            life: 280,
+                            targetIsGreen: targetIsGreen
+                        });
+                        this.currentThought = "Depositing bloom";
+                        playSound(540, 'sine', 0.12, 0.025);
+                    }
                 }
 
                 this.x += this.vx; this.y += this.vy;
@@ -1006,7 +1092,8 @@
             globalReproCooldown = 0; selectedCreature = null; paused = false; timeScale = 1; simTime = 0;
             zoomLevel = 1.0;
             document.getElementById('zoom-level').innerText = '100%';
-            document.getElementById('sim-time').innerText = '00:00';
+            const timeEl = document.getElementById('sim-time');
+            if (timeEl) timeEl.innerText = '00:00';
             
             const pauseBtn = document.getElementById('pause-btn');
             const pauseText = document.getElementById('pause-text');
