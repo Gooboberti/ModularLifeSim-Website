@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mini Simmy • v0.25</title>
+  <title>Mini Simmy • v0.26</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
@@ -21,7 +21,7 @@
         </div>
         <div>
           <span class="font-display text-2xl">Mini Simmy</span>
-          <span class="text-xs ml-2 text-slate-500">v0.25 • Final Fix</span>
+          <span class="text-xs ml-2 text-slate-500">v0.26 • Fixed</span>
         </div>
       </div>
 
@@ -126,6 +126,13 @@
   </div>
 
   <script>
+    // ==================== NAME GENERATOR (moved to top) ====================
+    function generateSciFiName() {
+      const prefixes = ['Kael','Vex','Thorne','Zyl','Ryn','Syl','Drak','Nyx','Korr','Vael'];
+      const suffixes = ['-9','-12','ara','ith','on','yx','ar','en','os'];
+      return prefixes[Math.floor(Math.random()*prefixes.length)] + suffixes[Math.floor(Math.random()*suffixes.length)];
+    }
+
     // ==================== AUDIO ====================
     let audioCtx;
     let neuralSoundEnabled = true;
@@ -371,74 +378,65 @@
       startTime = Date.now();
 
       setTimeout(() => {
-        console.log('Initial neural net draw attempt');
         try {
           if (foragers.length > 0) drawDetailedNet('net-forager1', foragers[0], true);
           if (foragers.length > 1) drawDetailedNet('net-forager2', foragers[1], true);
           drawDetailedNet('net-predator', predator, false);
-        } catch(e) {
-          console.error('Initial drawDetailedNet error:', e);
-        }
-      }, 100);
+        } catch(e) {}
+      }, 80);
     }
 
     function draw() {
-      try {
-        background(15, 23, 42);
-        stroke(30, 41, 59);
-        for (let x = 0; x < width; x += 40) line(x, 0, x, height);
-        for (let y = 0; y < height; y += 40) line(0, y, width, height);
-        for (let f of foods) f.show();
+      background(15, 23, 42);
+      stroke(30, 41, 59);
+      for (let x = 0; x < width; x += 40) line(x, 0, x, height);
+      for (let y = 0; y < height; y += 40) line(0, y, width, height);
+      for (let f of foods) f.show();
 
-        for (let i = foragers.length - 1; i >= 0; i--) {
-          const f = foragers[i];
-          f.update(predator);
-          f.show();
+      for (let i = foragers.length - 1; i >= 0; i--) {
+        const f = foragers[i];
+        f.update(predator);
+        f.show();
 
-          if (dist(f.x, f.y, predator.x, predator.y) < 17 && Date.now() - lastKillTime > KILL_COOLDOWN) {
-            lastKillTime = Date.now();
-            playDeathSound();
-            const deathX = f.x, deathY = f.y;
-            foragers.splice(i, 1);
-            if (foragers.length < 5) {
-              foragers.push(new Creature(deathX + random(-18,18), deathY + random(-18,18), 'forager', f));
-              foragers.push(new Creature(deathX + random(-18,18), deathY + random(-18,18), 'forager', f));
-              playBirthSound();
-            }
-            break;
+        if (dist(f.x, f.y, predator.x, predator.y) < 17 && Date.now() - lastKillTime > KILL_COOLDOWN) {
+          lastKillTime = Date.now();
+          playDeathSound();
+          const deathX = f.x, deathY = f.y;
+          foragers.splice(i, 1);
+          if (foragers.length < 5) {
+            foragers.push(new Creature(deathX + random(-18,18), deathY + random(-18,18), 'forager', f));
+            foragers.push(new Creature(deathX + random(-18,18), deathY + random(-18,18), 'forager', f));
+            playBirthSound();
           }
+          break;
         }
-
-        if (foragers.length > 0 && Date.now() - lastKillTime > KILL_COOLDOWN) {
-          let best = null, bestScore = -Infinity;
-          for (let f of foragers) {
-            const d = dist(f.x, f.y, predator.x, predator.y);
-            const score = (100 - f.energy) * 0.5 + (450 - d) * 0.5;
-            if (score > bestScore) { bestScore = score; best = f; }
-          }
-          if (best) {
-            const dx = best.x - predator.x;
-            const dy = best.y - predator.y;
-            predator.angle = atan2(dy, dx);
-          }
-        }
-
-        predator.x += cos(predator.angle) * 2.0;
-        predator.y += sin(predator.angle) * 2.0;
-        predator.x = constrain(predator.x, 25, width-25);
-        predator.y = constrain(predator.y, 25, height-25);
-        predator.show();
-
-        updateUI();
-
-        // Render neural nets
-        if (foragers.length > 0) drawDetailedNet('net-forager1', foragers[0], true);
-        if (foragers.length > 1) drawDetailedNet('net-forager2', foragers[1], true);
-        drawDetailedNet('net-predator', predator, false);
-
-      } catch(e) {
-        console.error('Error in draw():', e);
       }
+
+      if (foragers.length > 0 && Date.now() - lastKillTime > KILL_COOLDOWN) {
+        let best = null, bestScore = -Infinity;
+        for (let f of foragers) {
+          const d = dist(f.x, f.y, predator.x, predator.y);
+          const score = (100 - f.energy) * 0.5 + (450 - d) * 0.5;
+          if (score > bestScore) { bestScore = score; best = f; }
+        }
+        if (best) {
+          const dx = best.x - predator.x;
+          const dy = best.y - predator.y;
+          predator.angle = atan2(dy, dx);
+        }
+      }
+
+      predator.x += cos(predator.angle) * 2.0;
+      predator.y += sin(predator.angle) * 2.0;
+      predator.x = constrain(predator.x, 25, width-25);
+      predator.y = constrain(predator.y, 25, height-25);
+      predator.show();
+
+      updateUI();
+
+      if (foragers.length > 0) drawDetailedNet('net-forager1', foragers[0], true);
+      if (foragers.length > 1) drawDetailedNet('net-forager2', foragers[1], true);
+      drawDetailedNet('net-predator', predator, false);
     }
 
     function updateUI() {
@@ -577,18 +575,8 @@
     }
 
     function drawDetailedNet(containerId, creature, isForager) {
-      console.log('drawDetailedNet called for:', containerId);
-      
       const container = document.getElementById(containerId);
-      if (!container) {
-        console.error('Container not found:', containerId);
-        return;
-      }
-      if (!creature) {
-        console.error('Creature is null for:', containerId);
-        return;
-      }
-
+      if (!container || !creature) return;
       container.innerHTML = '';
 
       try {
@@ -613,7 +601,6 @@
           else return `rgb(${Math.floor(239 + t*20)}, ${Math.floor(68 + t*80)}, ${Math.floor(68 + t*30)})`;
         }
 
-        // Headers
         const headers = [{x:ix,label:'Inputs'},{x:hx,label:'Hidden'},{x:ox,label:'Outputs'}];
         headers.forEach(h => {
           const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
@@ -623,7 +610,6 @@
           svg.appendChild(t);
         });
 
-        // Connections
         for (let i = 0; i < 6; i++) {
           for (let j = 0; j < 6; j++) {
             const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
@@ -650,7 +636,6 @@
           }
         }
 
-        // Neurons
         const inputLabels = ['F.∠','F.Dist','Danger','Energy','Mem','Bias'];
         for (let i = 0; i < 6; i++) {
           const act = inputs[i] || 0;
@@ -697,10 +682,8 @@
         }
 
         container.appendChild(svg);
-        console.log('Successfully drew net for:', containerId);
-
       } catch(e) {
-        console.error('Error in drawDetailedNet for ' + containerId + ':', e);
+        console.error('drawDetailedNet error:', e);
       }
     }
 
