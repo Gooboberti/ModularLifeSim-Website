@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MiniSimmy2 • Swarm Foundation</title>
+    <title>MiniSimmy2 • Swarm v0.14</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -23,7 +23,7 @@
                 </div>
                 <div>
                     <span class="font-display text-2xl tracking-tighter">MiniSimmy2</span>
-                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.13 • Swarm Foundation</span>
+                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.14 • Swarm + Sliders</span>
                 </div>
             </div>
             <div class="flex items-center gap-x-4 text-sm">
@@ -38,7 +38,7 @@
             <div class="flex justify-between items-center mb-4">
                 <div>
                     <h1 class="font-display text-3xl tracking-tighter">MiniSimmy2</h1>
-                    <p class="text-white/60 text-sm">Pheromone + Firefly foundation • Click creatures to inspect</p>
+                    <p class="text-white/60 text-sm">Pheromones + Firefly attraction • Full parameter control</p>
                 </div>
                 <div class="flex items-center gap-x-3 text-sm">
                     <div id="stats" class="font-mono px-4 py-1.5 bg-white/5 rounded-2xl text-xs flex gap-x-4"></div>
@@ -62,7 +62,7 @@
 
             <div class="pt-2 border-t border-white/10">
                 <div class="text-xs font-semibold text-white/70 mb-3">Parameters</div>
-                <div class="space-y-4 text-xs">
+                <div class="space-y-3.5 text-xs">
                     <div>
                         <div class="flex justify-between"><span class="slider-label">Energy Drain</span><span id="val-drain" class="font-mono text-emerald-400">0.038</span></div>
                         <input type="range" id="slider-drain" min="0.01" max="0.08" step="0.001" value="0.038" class="w-full accent-emerald-400">
@@ -70,6 +70,14 @@
                     <div>
                         <div class="flex justify-between"><span class="slider-label">Food per Particle</span><span id="val-particle" class="font-mono text-emerald-400">1.6</span></div>
                         <input type="range" id="slider-particle" min="0.5" max="4" step="0.1" value="1.6" class="w-full accent-emerald-400">
+                    </div>
+                    <div>
+                        <div class="flex justify-between"><span class="slider-label">Reproduction Chance</span><span id="val-repro" class="font-mono text-emerald-400">0.0042</span></div>
+                        <input type="range" id="slider-repro" min="0.001" max="0.015" step="0.0002" value="0.0042" class="w-full accent-emerald-400">
+                    </div>
+                    <div>
+                        <div class="flex justify-between"><span class="slider-label">Vortex Strength</span><span id="val-vortex" class="font-mono text-emerald-400">1.0</span></div>
+                        <input type="range" id="slider-vortex" min="0.3" max="2.5" step="0.1" value="1.0" class="w-full accent-emerald-400">
                     </div>
                     <div>
                         <div class="flex justify-between"><span class="slider-label">Pheromone Deposit</span><span id="val-phero" class="font-mono text-emerald-400">0.8</span></div>
@@ -90,10 +98,10 @@
                     <div><span class="text-emerald-400">● Green</span> = Day zone (Harvesters)</div>
                     <div><span class="text-sky-400">● Blue</span> = Night zone (Sensors)</div>
                     <div class="pt-1">White particles = Vortex food</div>
-                    <div>Colored dots near creatures = Pheromone trails (stronger = better success)</div>
+                    <div>Colored dots = Pheromone trails (stronger = more success)</div>
                     <div class="pt-2 text-white/50">Modules:</div>
-                    <div><span class="text-emerald-400">Harvester</span> — Better at Green + more pheromone deposit</div>
-                    <div><span class="text-sky-400">Sensor</span> — Better at Blue + pheromone sensitivity</div>
+                    <div><span class="text-emerald-400">Harvester</span> — Stronger on Green + better pheromone deposit</div>
+                    <div><span class="text-sky-400">Sensor</span> — Stronger on Blue + pheromone following</div>
                 </div>
             </div>
         </div>
@@ -189,6 +197,8 @@
             const mappings = [
                 ['slider-drain', 'val-drain', 'energyDrain', 3],
                 ['slider-particle', 'val-particle', 'particleFoodValue', 1],
+                ['slider-repro', 'val-repro', 'reproductionChance', 4],
+                ['slider-vortex', 'val-vortex', 'vortexMultiplier', 1],
                 ['slider-phero', 'val-phero', 'pheromoneDeposit', 1],
                 ['slider-firefly', 'val-firefly', 'fireflyAttraction', 1]
             ];
@@ -306,7 +316,7 @@
                 vortexParticles.push(new VortexParticle(true));
             }
 
-            // Pheromone system (simple decaying particles)
+            // Pheromone system
             for (let i = pheromones.length - 1; i >= 0; i--) {
                 let ph = pheromones[i];
                 ph.life -= 1;
@@ -315,20 +325,18 @@
                     continue;
                 }
 
-                // Draw pheromone
-                let alpha = map(ph.life, 0, 180, 0, 120);
+                let alpha = map(ph.life, 0, 180, 0, 110);
                 fill(ph.isGreen ? [52, 211, 153, alpha] : [56, 189, 248, alpha]);
                 noStroke();
-                circle(ph.x, ph.y, 4 + (ph.life / 60));
+                circle(ph.x, ph.y, 3.5 + (ph.life / 70));
 
-                // Creatures follow pheromones
                 for (let c of creatures) {
                     if (!c.isPredator) {
                         let d = dist(c.x, c.y, ph.x, ph.y);
-                        if (d < 55 && d > 3) {
+                        if (d < 52 && d > 3) {
                             let dx = ph.x - c.x;
                             let dy = ph.y - c.y;
-                            let force = (ph.isGreen === isDay ? 0.035 : 0.018);
+                            let force = (ph.isGreen === isDay ? 0.032 : 0.016);
                             c.vx += (dx / d) * force;
                             c.vy += (dy / d) * force;
                         }
@@ -700,8 +708,7 @@
                     this.energy = min(100, this.energy + g);
                     greenZone.food = max(0, greenZone.food - 0.32);
 
-                    // Deposit pheromone when successful on correct zone
-                    if (random() < 0.08) {
+                    if (random() < 0.09) {
                         pheromones.push({ x: this.x, y: this.y, life: 180, isGreen: true });
                     }
                     if (this.energy > 76) this.honey = min(11, this.honey + 0.2);
@@ -712,7 +719,7 @@
                     this.energy = min(100, this.energy + g);
                     blueZone.food = max(0, blueZone.food - 0.32);
 
-                    if (random() < 0.08) {
+                    if (random() < 0.09) {
                         pheromones.push({ x: this.x, y: this.y, life: 180, isGreen: false });
                     }
                     if (this.energy > 76) this.honey = min(11, this.honey + 0.2);
