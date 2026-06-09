@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mini Simmy • v0.19</title>
+  <title>Mini Simmy • v0.20</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
@@ -21,7 +21,7 @@
         </div>
         <div>
           <span class="font-display text-2xl">Mini Simmy</span>
-          <span class="text-xs ml-2 text-slate-500">v0.19 • Per-Node Audio + Sound Effects</span>
+          <span class="text-xs ml-2 text-slate-500">v0.20 • Stable Neural Viz</span>
         </div>
       </div>
 
@@ -55,7 +55,7 @@
 
     <div class="grid grid-cols-1 xl:grid-cols-12 gap-6">
       
-      <!-- Game Map -->
+      <!-- Game Map (Left) -->
       <div class="xl:col-span-5">
         <div class="bg-slate-900 border border-slate-800 rounded-3xl p-4 overflow-hidden">
           <div id="world"></div>
@@ -130,7 +130,7 @@
     // ==================== AUDIO SYSTEM ====================
     let audioCtx;
     let neuralSoundEnabled = true;
-    let masterVolume = 0.03; // Default volume = 3
+    let masterVolume = 0.03;
 
     let soundSettings = {
       sensitivity: 0.48,
@@ -164,7 +164,6 @@
       }
     }
 
-    // ==================== IMPROVED SOUND EFFECTS ====================
     function playEatSound() {
       if (!audioCtx || !neuralSoundEnabled || masterVolume < 0.005) return;
       const o = audioCtx.createOscillator();
@@ -200,7 +199,6 @@
 
     function playBirthSound() {
       if (!audioCtx || !neuralSoundEnabled || masterVolume < 0.005) return;
-      // Bright rising harmonic
       [660, 880, 1100].forEach((freq, i) => {
         setTimeout(() => {
           const o = audioCtx.createOscillator();
@@ -227,13 +225,11 @@
       const o = audioCtx.createOscillator();
       const g = audioCtx.createGain();
       const filter = audioCtx.createBiquadFilter();
-
       o.type = override.wave || (layer === 'input' ? soundSettings.inputWave : layer === 'hidden' ? soundSettings.hiddenWave : soundSettings.outputWave);
       filter.type = 'lowpass';
       filter.frequency.value = override.filter || soundSettings.filterCutoff;
       o.frequency.value = baseFreq * (override.detune || 1);
       g.gain.value = vol;
-
       o.connect(filter);
       filter.connect(g);
       g.connect(audioCtx.destination);
@@ -242,7 +238,20 @@
       setTimeout(() => { try { o.stop(); } catch(e){} }, duration * 1000 + 20);
     }
 
-    // ==================== PER-NODE AUDIO CONTROLS ====================
+    const inputFreqs = [820, 980, 1100, 1240, 1480, 1660];
+    const hiddenFreqs = [420, 500, 560, 630, 750, 840];
+    const outputFreqs = [320, 380, 420, 500, 560, 630];
+    let lastInputAct = [0,0,0,0,0,0], lastHiddenAct = [0,0,0,0,0,0], lastOutputAct = [0,0,0,0,0,0];
+
+    function triggerNeuralSounds(inputs, hiddens, outputs) {
+      if (!neuralSoundEnabled || !audioCtx) return;
+      const thresh = soundSettings.sensitivity;
+      for (let i = 0; i < 6; i++) if (inputs[i] > thresh && inputs[i] > lastInputAct[i] + 0.1) playNeuralTone(inputFreqs[i], inputs[i], 'input', i);
+      for (let j = 0; j < 6; j++) if (hiddens[j] > thresh + 0.05 && hiddens[j] > lastHiddenAct[j] + 0.08) playNeuralTone(hiddenFreqs[j], hiddens[j]*0.75, 'hidden', j);
+      for (let k = 0; k < 6; k++) if (outputs[k] > thresh && outputs[k] > lastOutputAct[k] + 0.08) playNeuralTone(outputFreqs[k], outputs[k]*0.7, 'output', k);
+      lastInputAct = [...inputs]; lastHiddenAct = [...hiddens]; lastOutputAct = [...outputs];
+    }
+
     function showNodeControls(layer, index) {
       const key = `${layer}-${index}`;
       const current = nodeAudioOverrides[key] || {};
@@ -267,7 +276,7 @@
               <label class="text-xs text-slate-400">Volume</label>
               <input type="range" id="node-vol" min="0.2" max="1.5" step="0.1" value="${current.volume || 0.8}" class="w-full accent-violet-500">
             </div>
-            <button onclick="saveNodeAudio('${key}', this)" class="w-full py-2.5 bg-violet-600 hover:bg-violet-500 rounded-2xl text-sm font-medium">Apply to this node</button>
+            <button onclick="saveNodeAudio('${key}', this)" class="w-full py-2.5 bg-violet-600 hover:bg-violet-500 rounded-2xl text-sm font-medium">Apply</button>
           </div>
         </div>`;
       document.body.appendChild(modal);
@@ -286,7 +295,6 @@
       modal.remove();
     }
 
-    // ==================== NAME GENERATOR ====================
     function generateSciFiName() {
       const prefixes = ['Kael','Vex','Thorne','Zyl','Ryn','Syl','Drak','Nyx','Korr','Vael'];
       const suffixes = ['-9','-12','ara','ith','on','yx','ar','en','os'];
@@ -313,6 +321,13 @@
       predator = new Creature(width * 0.5, height * 0.5, 'predator');
       for (let i = 0; i < 10; i++) foods.push(new Food(random(40, width-40), random(40, height-40)));
       startTime = Date.now();
+
+      // Force initial neural net draw after everything is ready
+      setTimeout(() => {
+        if (foragers.length > 0) drawDetailedNet('net-forager1', foragers[0], true);
+        if (foragers.length > 1) drawDetailedNet('net-forager2', foragers[1], true);
+        drawDetailedNet('net-predator', predator, false);
+      }, 120);
     }
 
     function draw() {
@@ -501,6 +516,12 @@
       foods = []; for (let i = 0; i < 10; i++) foods.push(new Food(random(40, width-40), random(40, height-40)));
       startTime = Date.now();
       lastKillTime = 0;
+
+      setTimeout(() => {
+        if (foragers.length > 0) drawDetailedNet('net-forager1', foragers[0], true);
+        if (foragers.length > 1) drawDetailedNet('net-forager2', foragers[1], true);
+        drawDetailedNet('net-predator', predator, false);
+      }, 80);
     }
 
     function drawDetailedNet(containerId, creature, isForager) {
