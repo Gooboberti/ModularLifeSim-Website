@@ -29,7 +29,7 @@
                 </div>
                 <div>
                     <span class="font-display text-2xl tracking-tighter">MiniSimmy2</span>
-                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.48 • Red Hazards as Passive Vortex Entities</span>
+                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.49 • AOE + Purple Flash + Drain Explosions</span>
                 </div>
             </div>
             <div class="flex items-center gap-x-4 text-sm">
@@ -45,7 +45,7 @@
                 <div class="flex items-center gap-x-4">
                     <div>
                         <h1 class="font-display text-3xl tracking-tighter">MiniSimmy2</h1>
-                        <p class="text-white/60 text-sm">Red hazards now behave like white particles + defaults updated</p>
+                        <p class="text-white/60 text-sm">Red hazards now have AOE impact + purple damage flash + drain explosions</p>
                     </div>
                     
                     <!-- Elapsed Time -->
@@ -356,7 +356,7 @@
 
                 <div>
                     <div class="font-semibold text-emerald-400 mb-1">Red Hazard Particles</div>
-                    <div class="text-white/70 text-xs">Passive red entities that drift with the vortex like white particles. On contact they deal massive damage and trigger panic rush toward food zones. High Sensor count reduces damage taken.</div>
+                    <div class="text-white/70 text-xs">Passive red entities that drift with the vortex. On impact they deal AOE damage + push nearby creatures and apply purple damage flash (DoT). If energy drops to predator threshold, predator behavior takes priority. When they reach the drain they explode into 4 damaging red beams.</div>
                 </div>
 
                 <div>
@@ -378,6 +378,7 @@
         let foodBlooms = [];
         let energyOrbs = [];
         let redHazards = [];
+        let redBeams = [];
         let evolutionHistory = [];
         let greenZone, blueZone;
         let timeOfDay = 0;
@@ -1002,74 +1003,134 @@
             modal.classList.add('hidden');
         }
 
-        // === RED HAZARD (now passive vortex-like entity) ===
+        // === RED HAZARD (passive vortex entity with AOE) ===
         class RedHazard {
             constructor() {
-                // Spawn more like white particles
                 let angle = random(TWO_PI);
                 let d = random(420, 580);
                 this.x = centerX + cos(angle) * d;
                 this.y = centerY + sin(angle) * d;
 
-                this.vx = random(-0.8, 0.8);
-                this.vy = random(-0.8, 0.8);
+                this.vx = random(-0.7, 0.7);
+                this.vy = random(-0.7, 0.7);
                 this.size = random(5.5, 8.5);
                 this.pulse = random(TWO_PI);
             }
 
             update(vortexDir, vortexStrength) {
-                // Strong vortex influence like white particles
                 let dx = this.x - centerX;
                 let dy = this.y - centerY;
                 let distToCenter = sqrt(dx * dx + dy * dy) || 1;
 
-                if (distToCenter < 6) {
-                    // Respawn near edge if it reaches center
-                    let angle = random(TWO_PI);
-                    let d = random(420, 580);
-                    this.x = centerX + cos(angle) * d;
-                    this.y = centerY + sin(angle) * d;
+                if (distToCenter < 8) {
+                    // Explode at drain
+                    this.explode();
                     return;
                 }
 
-                // Tangent (rotational) movement
+                // Strong vortex influence
                 let tangentX = -dy;
                 let tangentY = dx;
                 let len = sqrt(tangentX * tangentX + tangentY * tangentY) || 1;
 
-                let rotForce = 1.6 * vortexStrength * vortexDir;
+                let rotForce = 1.55 * vortexStrength * vortexDir;
                 this.vx += (tangentX / len) * rotForce;
                 this.vy += (tangentY / len) * rotForce;
 
-                // Strong inward pull (like white particles)
-                let pull = 1.1 * vortexStrength;
+                let pull = 1.05 * vortexStrength;
                 this.vx += (centerX - this.x) * pull / (distToCenter + 8);
                 this.vy += (centerY - this.y) * pull / (distToCenter + 8);
 
-                // Apply velocity
                 this.x += this.vx;
                 this.y += this.vy;
 
-                // Light damping
-                this.vx *= 0.88;
-                this.vy *= 0.88;
+                this.vx *= 0.87;
+                this.vy *= 0.87;
 
                 this.pulse += 0.09;
             }
 
+            explode() {
+                // Create 4 red beams shooting outward
+                for (let i = 0; i < 4; i++) {
+                    let angle = random(TWO_PI);
+                    redBeams.push(new RedBeam(this.x, this.y, angle));
+                }
+                // Remove this hazard
+                // (handled by caller)
+            }
+
             show() {
-                let alpha = 190 + sin(this.pulse) * 50;
+                let alpha = 195 + sin(this.pulse) * 50;
                 fill(239, 68, 68, alpha);
                 noStroke();
                 circle(this.x, this.y, this.size);
 
-                // Strong danger glow
-                fill(239, 68, 68, 55);
-                circle(this.x, this.y, this.size * 2.1);
+                fill(239, 68, 68, 60);
+                circle(this.x, this.y, this.size * 2.15);
 
-                // Bright core
-                fill(255, 220, 220, 230);
-                circle(this.x, this.y, this.size * 0.45);
+                fill(255, 225, 225, 235);
+                circle(this.x, this.y, this.size * 0.42);
+            }
+        }
+
+        // === RED BEAM (from drain explosion) ===
+        class RedBeam {
+            constructor(x, y, angle) {
+                this.x = x;
+                this.y = y;
+                this.angle = angle;
+                this.vx = cos(angle) * 4.8;
+                this.vy = sin(angle) * 4.8;
+                this.life = 48; // frames
+                this.width = 7;
+                this.damageApplied = false;
+            }
+
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.life--;
+
+                // Apply damage along the beam path
+                if (!this.damageApplied) {
+                    for (let c of creatures) {
+                        let d = dist(this.x, this.y, c.x, c.y);
+                        if (d < 38) {
+                            let sensorBonus = c.getModuleCount('sensor') * 0.35;
+                            let damage = 22 + random(4, 9) - sensorBonus;
+
+                            c.energy = max(0, c.energy - damage);
+                            c.damageFlash = 45; // purple flash + DoT
+
+                            // Push away from beam center
+                            let dx = c.x - this.x;
+                            let dy = c.y - this.y;
+                            let len = sqrt(dx*dx + dy*dy) || 1;
+                            c.vx += (dx / len) * 1.8;
+                            c.vy += (dy / len) * 1.8;
+
+                            if (c.energy > 15) {
+                                c.currentThought = "Hit by beam!";
+                            }
+                        }
+                    }
+                    this.damageApplied = true;
+                }
+            }
+
+            show() {
+                if (this.life <= 0) return;
+
+                let alpha = map(this.life, 0, 48, 0, 200);
+                stroke(239, 68, 68, alpha);
+                strokeWeight(this.width);
+                line(this.x - this.vx * 3, this.y - this.vy * 3, this.x, this.y);
+
+                // Faint trail
+                stroke(239, 68, 68, alpha * 0.35);
+                strokeWeight(this.width * 1.8);
+                line(this.x - this.vx * 8, this.y - this.vy * 8, this.x - this.vx * 2, this.y - this.vy * 2);
             }
         }
 
@@ -1148,39 +1209,76 @@
             fill(56, 189, 248, isDay ? 20 : 55);
             circle(blueZone.x, blueZone.y, blueDisplayR * 2.35);
 
-            // === RED HAZARDS (passive vortex entities) ===
+            // === RED BEAMS ===
+            for (let i = redBeams.length - 1; i >= 0; i--) {
+                let b = redBeams[i];
+                b.update();
+                b.show();
+
+                if (b.life <= 0) {
+                    redBeams.splice(i, 1);
+                }
+            }
+
+            // === RED HAZARDS ===
             for (let i = redHazards.length - 1; i >= 0; i--) {
                 let h = redHazards[i];
                 h.update(vortexDir, vortexStrength);
+
+                if (dist(h.x, h.y, centerX, centerY) < 8) {
+                    h.explode();
+                    redHazards.splice(i, 1);
+                    continue;
+                }
+
                 h.show();
 
                 for (let c of creatures) {
                     let d = dist(h.x, h.y, c.x, c.y);
                     if (d < h.size + 7) {
-                        // Massive damage on contact
+                        // === AOE IMPACT ===
                         let sensorBonus = c.getModuleCount('sensor') * 0.4;
-                        let damage = 32 + random(6, 14) - sensorBonus; // High base damage
+                        let baseDamage = 28 + random(5, 12) - sensorBonus;
 
-                        c.energy = max(0, c.energy - damage);
+                        c.energy = max(0, c.energy - baseDamage);
+                        c.damageFlash = 55; // Start purple flash + DoT
 
-                        // Strong panic rush to nearest food zone
-                        let target = isDay ? greenZone : blueZone;
-                        let dx = target.x - c.x;
-                        let dy = target.y - c.y;
+                        // Push the hit creature
+                        let dx = c.x - h.x;
+                        let dy = c.y - h.y;
                         let len = sqrt(dx*dx + dy*dy) || 1;
-                        c.vx += (dx / len) * 3.6;
-                        c.vy += (dy / len) * 3.6;
+                        c.vx += (dx / len) * 2.4;
+                        c.vy += (dy / len) * 2.4;
 
-                        c.currentThought = "PANIC!";
+                        if (c.energy > 15) {
+                            c.currentThought = "Hit!";
+                        }
 
-                        // Remove on hit (like white particles disappearing)
+                        // AOE to nearby creatures
+                        for (let other of creatures) {
+                            if (other === c) continue;
+                            let od = dist(h.x, h.y, other.x, other.y);
+                            if (od < 52) {
+                                let oSensor = other.getModuleCount('sensor') * 0.35;
+                                let oDamage = 14 + random(2, 6) - oSensor;
+                                other.energy = max(0, other.energy - oDamage);
+                                other.damageFlash = max(other.damageFlash || 0, 38);
+
+                                // Light push
+                                let odx = other.x - h.x;
+                                let ody = other.y - h.y;
+                                let olen = sqrt(odx*odx + ody*ody) || 1;
+                                other.vx += (odx / olen) * 1.1;
+                                other.vy += (ody / olen) * 1.1;
+                            }
+                        }
+
                         redHazards.splice(i, 1);
                         break;
                     }
                 }
 
-                // Keep population stable
-                if (redHazards.length < 10 && random() < 0.035) {
+                if (redHazards.length < 10 && random() < 0.03) {
                     redHazards.push(new RedHazard());
                 }
             }
@@ -1206,6 +1304,26 @@
 
             if (frameCount % Math.max(1, Math.floor(2 / timeScale)) === 0 && vortexParticles.length < 150) {
                 vortexParticles.push(new VortexParticle(true));
+            }
+
+            // Apply lingering DoT from purple flash
+            for (let c of creatures) {
+                if (c.damageFlash > 0) {
+                    c.damageFlash--;
+
+                    // Lingering damage over time
+                    if (frameCount % 8 === 0) {
+                        let dot = 0.8;
+                        c.energy = max(0, c.energy - dot);
+                    }
+
+                    // If they drop to predator threshold, stop flashing and become predator
+                    if (c.energy <= 15 && !c.isPredator) {
+                        c.isPredator = true;
+                        c.damageFlash = 0;
+                        c.currentThought = "Just fed";
+                    }
+                }
             }
 
             // Pheromones
@@ -1450,6 +1568,7 @@
                 this.isPredator = false; this.honey = 0;
                 this.generation = generation; this.children = []; this.childrenCount = 0;
                 this.killCount = 0; this.reproCooldown = 0; this.currentThought = "Exploring...";
+                this.damageFlash = 0; // purple flash timer
 
                 if (parentTraits) {
                     this.traits = {
@@ -1806,6 +1925,12 @@
                     circle(3, -3, 2.6 + min(this.honey * 0.08, 6));
                 }
 
+                // Purple damage flash overlay
+                if (this.damageFlash > 0) {
+                    fill(167, 139, 250, 160 + sin(frameCount * 0.6) * 40);
+                    circle(0, 0, s * 1.15);
+                }
+
                 fill(255, 255, 255, 130); textAlign(CENTER); textSize(4.6);
                 text(this.name, 0, -s - 1.5);
 
@@ -1832,7 +1957,7 @@
         }
 
         function resetSim() {
-            creatures = []; vortexParticles = []; pheromones = []; foodBlooms = []; energyOrbs = []; redHazards = []; evolutionHistory = [];
+            creatures = []; vortexParticles = []; pheromones = []; foodBlooms = []; energyOrbs = []; redHazards = []; redBeams = []; evolutionHistory = [];
             graphData = { pop: [], modules: [], predators: [], greenFood: [], blueFood: [] };
             greenZone.food = 320; blueZone.food = 320;
             globalReproCooldown = 0; selectedCreature = null; paused = false; timeScale = 1; simTime = 0;
