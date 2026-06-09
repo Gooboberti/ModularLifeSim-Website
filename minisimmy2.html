@@ -1422,14 +1422,17 @@
         let audioElement = null;
         let analyser = null;
         let musicData = { volume: 0, bass: 0, mids: 0, highs: 0 };
+
+        // Flexible mapping: each parameter has a chosen audio feature + strength
         let musicMappings = {
-            vortexStrength: 0.5,
-            foodPulse: 0.3,
-            redHazardRate: 0.4,
-            energyWallPulse: 0.5,
-            vortexFallSpeed: 0.3,
-            reproductionRate: 0.2,
-            socialPressure: 0.3
+            vortexStrength:   { feature: 'bass',    amount: 0.6 },
+            foodPulse:        { feature: 'mids',    amount: 0.45 },
+            redHazardRate:    { feature: 'highs',   amount: 0.55 },
+            energyWallPulse:  { feature: 'bass',    amount: 0.5 },
+            vortexFallSpeed:  { feature: 'volume',  amount: 0.35 },
+            reproductionRate: { feature: 'mids',    amount: 0.35 },
+            socialPressure:   { feature: 'highs',   amount: 0.45 },
+            particleSpawn:    { feature: 'highs',   amount: 0.5 }
         };
 
         function toggleEnergyWallMode() {
@@ -1623,6 +1626,14 @@
             musicData.bass = bassSum / bassEnd / 255;
             musicData.mids = midSum / (midEnd - bassEnd) / 255;
             musicData.highs = highSum / (bufferLength - midEnd) / 255;
+        }
+
+        // Helper: Get the current influence (0 to ~1) for a mapped parameter
+        function getMusicInfluence(key) {
+            if (!musicEnabled) return 0;
+            const map = musicMappings[key];
+            if (!map || !musicData[map.feature]) return 0;
+            return musicData[map.feature] * map.amount;
         }
 
         function updateQuickButtons() {
@@ -2360,6 +2371,9 @@
             let vortexPhase = (timeOfDay + 0.25) % 1;
             let vortexStrength = sin(vortexPhase * TWO_PI) * 0.5 + 0.5;
             vortexStrength *= settings.vortexMultiplier;
+
+            // Music reactivity
+            vortexStrength += getMusicInfluence('vortexStrength') * 2.5;
             let vortexDir = cos(vortexPhase * TWO_PI);
 
             stroke(255, 255, 255, 5);
@@ -2387,6 +2401,11 @@
 
             let greenDisplayR = Math.max(greenZone.minR, greenZone.baseR * (greenZone.food / greenZone.maxFood) * pulseG);
             let blueDisplayR = Math.max(blueZone.minR, blueZone.baseR * (blueZone.food / blueZone.maxFood) * pulseB);
+
+            // Music reactivity - food nodes pulse with music
+            const foodPulse = getMusicInfluence('foodPulse') * 0.6;
+            greenDisplayR *= (1 + foodPulse);
+            blueDisplayR *= (1 + foodPulse);
 
             fill(16, 185, 129, isDay ? 90 : 32);
             circle(greenZone.x, greenZone.y, greenDisplayR * 2);
@@ -2473,6 +2492,10 @@
                 const targetRedCount = 8;
                 if (redHazards.length < targetRedCount) {
                     let spawnChance = (targetRedCount - redHazards.length) * 0.11;
+
+                    // Music reactivity - red hazards spawn more during intense/high frequency music
+                    spawnChance += getMusicInfluence('redHazardRate') * 0.28;
+
                     if (random() < spawnChance) {
                         redHazards.push(new RedHazard());
                     }
