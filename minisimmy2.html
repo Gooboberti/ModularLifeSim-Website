@@ -1136,19 +1136,19 @@
 
             const ctx = getAudioContext();
 
-            // Short laser "pew" sound
+            // More obvious dual laser shot
             const osc = ctx.createOscillator();
             const gain = ctx.createGain();
             const filter = ctx.createBiquadFilter();
 
             osc.type = 'sawtooth';
-            osc.frequency.value = 880;
+            osc.frequency.value = 920;
 
             filter.type = 'lowpass';
-            filter.frequency.value = 1800;
+            filter.frequency.value = 2200;
 
-            gain.gain.value = 0.12 * effectsVolume;
-            gain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.18);
+            gain.gain.value = 0.22 * effectsVolume;
+            gain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.16);
 
             osc.connect(filter);
             filter.connect(gain);
@@ -1157,7 +1157,7 @@
 
             setTimeout(() => {
                 try { osc.stop(); } catch(e){}
-            }, 220);
+            }, 200);
         }
 
         function playBulletImpactSound() {
@@ -2721,33 +2721,72 @@
                 w.life -= 2.8; // faster base decay
 
                 if (w.life <= 0) {
-                    // Wall "glass" breaks → horrible acid explosion
-                    let explodeX = (w.x1 + w.x2) / 2;
-                    let explodeY = (w.y1 + w.y2) / 2;
-                    let sizeMult = (w.originalLength || 80) / 80;
+                    let length = w.originalLength || dist(w.x1, w.y1, w.x2, w.y2);
 
-                    // Play glass break + acid explosion sounds
-                    playWallBreakSound(sizeMult);
-                    playExplosionSound();
+                    // If wall is long enough, split into two smaller pieces
+                    if (length > 45) {
+                        let mx = (w.x1 + w.x2) / 2;
+                        let my = (w.y1 + w.y2) / 2;
 
-                    // Bigger explosion for larger walls
-                    explosions.push(new Explosion(explodeX, explodeY));
+                        // Create two new smaller walls
+                        let halfLife = w.life * 0.6 + 80;
 
-                    // Apply heavy purple damage in area (larger walls = worse)
-                    for (let c of creatures) {
-                        let d = dist(c.x, c.y, explodeX, explodeY);
-                        if (d < 85 * sizeMult) {
-                            let damage = 45 * sizeMult + random(8, 18);
-                            c.energy = max(0, c.energy - damage);
-                            c.purpleFlash = max(c.purpleFlash || 0, 120 + sizeMult * 30);
-                            c.mustEatWhite = true;
-                            c.ateWhiteParticle = false;
-                            c.currentThought = "Acid explosion!";
+                        // Left piece
+                        energyWalls.push({
+                            x1: w.x1,
+                            y1: w.y1,
+                            x2: mx,
+                            y2: my,
+                            life: halfLife,
+                            maxLife: halfLife,
+                            hitFlash: 0,
+                            vx: w.vx - 0.8,
+                            vy: w.vy - 0.8,
+                            originalLength: length * 0.5
+                        });
+
+                        // Right piece
+                        energyWalls.push({
+                            x1: mx,
+                            y1: my,
+                            x2: w.x2,
+                            y2: w.y2,
+                            life: halfLife,
+                            maxLife: halfLife,
+                            hitFlash: 0,
+                            vx: w.vx + 0.8,
+                            vy: w.vy + 0.8,
+                            originalLength: length * 0.5
+                        });
+
+                        // Small explosion at break point
+                        explosions.push(new Explosion(mx, my));
+                        playWallBreakSound(0.7);
+
+                        energyWalls.splice(i, 1);
+                        continue;
+
+                    } else {
+                        // Wall too small → final break with explosion
+                        let explodeX = (w.x1 + w.x2) / 2;
+                        let explodeY = (w.y1 + w.y2) / 2;
+
+                        playWallBreakSound(0.5);
+                        playExplosionSound();
+                        explosions.push(new Explosion(explodeX, explodeY));
+
+                        // Final damage burst
+                        for (let c of creatures) {
+                            let d = dist(c.x, c.y, explodeX, explodeY);
+                            if (d < 45) {
+                                c.energy = max(0, c.energy - 25);
+                                c.purpleFlash = max(c.purpleFlash || 0, 70);
+                            }
                         }
-                    }
 
-                    energyWalls.splice(i, 1);
-                    continue;
+                        energyWalls.splice(i, 1);
+                        continue;
+                    }
                 }
 
                 // Vortex influence on walls (they slowly drift and get pulled in)
@@ -3397,12 +3436,13 @@
                         let c = creatures[j];
 
                         if (dist(b.x, b.y, c.x, c.y) < 12) {
-                            c.energy -= 46;
-                            c.damageFlash = 60;
-                            c.purpleFlash = max(c.purpleFlash || 0, 82);
+                            // High damage - designed for 1-2 shot kills
+                            c.energy -= 82;
+                            c.damageFlash = 70;
+                            c.purpleFlash = max(c.purpleFlash || 0, 95);
 
-                            // Small explosion effect on impact
-                            explosions.push(new Explosion(b.x, b.y));
+                            // Create obvious explosion with AoE + knockback
+                            createBulletExplosion(b.x, b.y);
 
                             // Impact sound
                             playBulletImpactSound();
@@ -4636,6 +4676,46 @@
 
             // Firing sound
             playShipShootSound();
+        }
+
+        // ==================== BULLET EXPLOSION AoE ====================
+        function createBulletExplosion(x, y) {
+            // Visual explosion
+            explosions.push(new Explosion(x, y));
+
+            // AoE effect on nearby creatures
+            for (let c of creatures) {
+                let d = dist(c.x, c.y, x, y);
+                if (d < 55) {
+                    let falloff = map(d, 0, 55, 1.0, 0.3);
+
+                    // Extra damage from explosion
+                    c.energy -= 35 * falloff;
+                    c.damageFlash = 65;
+
+                    // Strong purple + slow
+                    c.purpleFlash = max(c.purpleFlash || 0, 110);
+                    c.vx *= (0.4 + falloff * 0.3);
+                    c.vy *= (0.4 + falloff * 0.3);
+
+                    // Knockback
+                    let dx = c.x - x;
+                    let dy = c.y - y;
+                    let len = sqrt(dx*dx + dy*dy) || 1;
+                    let knock = map(d, 0, 55, 4.5, 1.2);
+                    c.vx += (dx / len) * knock;
+                    c.vy += (dy / len) * knock;
+
+                    // Chance to turn into predator if they survive
+                    if (c.energy > 5 && c.energy < 35 && !c.isPredator && random() < 0.38) {
+                        c.isPredator = true;
+                        c.currentThought = "Blown into predator";
+                    }
+                }
+            }
+
+            // Extra explosion sound
+            playExplosionSound();
         }
     </script>
 </body>
