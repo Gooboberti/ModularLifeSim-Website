@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MiniSimmy2 • Debug Logs</title>
+    <title>MiniSimmy2 • Critical Fix</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -27,7 +27,7 @@
                 </div>
                 <div>
                     <span class="font-display text-2xl tracking-tighter">MiniSimmy2</span>
-                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.38 • Debug Logs</span>
+                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.39 • Critical Global Cooldown Fix</span>
                 </div>
             </div>
             <div class="flex items-center gap-x-4 text-sm">
@@ -43,7 +43,7 @@
                 <div class="flex items-center gap-x-4">
                     <div>
                         <h1 class="font-display text-3xl tracking-tighter">MiniSimmy2</h1>
-                        <p class="text-white/60 text-sm">Debug logs for reproduction</p>
+                        <p class="text-white/60 text-sm">Fixed global cooldown never decrementing</p>
                     </div>
                     
                     <!-- Elapsed Time -->
@@ -273,7 +273,6 @@
         let inspectorNeuralCtx;
         let masterVolume = 0.91;
         let lastClickedNode = null;
-        let lastReproLogTime = 0;
 
         let timeScale = 1;
         let paused = false;
@@ -285,7 +284,7 @@
         let settings = {
             energyDrain: 0.108,
             particleFoodValue: 1.3,
-            reproductionChance: 0.09,
+            reproductionChance: 0.12,
             zoneAttraction: 0.075,
             socialResist: 0.14,
             vortexMultiplier: 5.0,
@@ -750,6 +749,9 @@
             const timeEl = document.getElementById('sim-time');
             if (timeEl) timeEl.innerText = formatSimTime(simTime);
 
+            // === CRITICAL FIX: Decrement global cooldown every frame ===
+            if (globalReproCooldown > 0) globalReproCooldown--;
+
             timeOfDay = (frameCount * timeScale % dayLength) / dayLength;
             let isDay = timeOfDay < 0.5;
 
@@ -915,13 +917,12 @@
                 updateGraphData();
             }
 
-            // Reproduction debug logging
             let readyCount = 0;
             for (let i = creatures.length - 1; i >= 0; i--) {
                 let c = creatures[i];
                 c.update(isDay, vortexDir, vortexStrength, timeScale);
 
-                const energyReady = c.energy > 68;
+                const energyReady = c.energy > 62;   // Lowered threshold
                 const cooldownsReady = c.reproCooldown <= 0 && globalReproCooldown <= 0;
                 const isReady = energyReady && cooldownsReady;
 
@@ -929,14 +930,17 @@
 
                 if (isReady) {
                     let chance = settings.reproductionChance;
-                    if (c.energy > 85) chance *= 3.5;
-                    else if (c.energy > 75) chance *= 2.0;
+
+                    if (c.energy > 80) {
+                        chance *= 4.5;   // Very strong bonus at high energy
+                    } else if (c.energy > 70) {
+                        chance *= 2.5;
+                    }
 
                     const roll = random();
                     const effectiveChance = chance * timeScale;
 
-                    // Log occasionally to avoid spam
-                    if (frameCount % 30 === 0 || c.energy > 90) {
+                    if (frameCount % 20 === 0 || c.energy > 85) {
                         console.log(`[Repro] ${c.name} energy=${Math.floor(c.energy)} ready=true chance=${effectiveChance.toFixed(3)} roll=${roll.toFixed(3)}`);
                     }
 
@@ -944,9 +948,9 @@
                         let offspring = c.reproduce();
                         if (offspring) {
                             creatures.push(offspring);
-                            globalReproCooldown = 4;
-                            c.reproCooldown = 22;
-                            c.energy -= 7;
+                            globalReproCooldown = 2;   // Much shorter global cooldown
+                            c.reproCooldown = 18;
+                            c.energy -= 6;
                             c.children.push(offspring.name);
                             c.childrenCount++;
                             console.log(`[BIRTH] ${c.name} → ${offspring.name} | New pop: ${creatures.length}`);
@@ -971,9 +975,8 @@
                 }
             }
 
-            // Occasional summary log
-            if (frameCount % 120 === 0 && creatures.length > 0) {
-                console.log(`[Status] Pop=${creatures.length} | Ready creatures this tick: ${readyCount} | globalCooldown=${globalReproCooldown}`);
+            if (frameCount % 90 === 0 && creatures.length > 0) {
+                console.log(`[Status] Pop=${creatures.length} | Ready this tick: ${readyCount} | globalCooldown=${globalReproCooldown}`);
             }
 
             let pressure = Math.max(0, (creatures.length - 12) * 0.0055);
