@@ -498,7 +498,7 @@
                 <button onclick="hideMusicModal()" class="text-white/60 hover:text-white text-3xl leading-none">&times;</button>
             </div>
 
-            <!-- Toggle -->
+            <!-- Toggle + Presets -->
             <div class="flex items-center justify-between bg-[#0a0a0f] border border-white/10 rounded-2xl p-4 mb-6">
                 <div>
                     <div class="font-semibold">Music Reactivity</div>
@@ -508,6 +508,17 @@
                     <input type="checkbox" id="music-toggle" class="sr-only peer" onchange="toggleMusicReactivity()">
                     <div class="w-11 h-6 bg-white/20 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
                 </label>
+            </div>
+
+            <!-- Presets -->
+            <div class="mb-6">
+                <div class="text-xs text-white/60 mb-2">Quick Presets</div>
+                <div class="flex flex-wrap gap-2">
+                    <button onclick="applyMusicPreset('aggressive')" class="px-3 py-1 text-xs bg-red-500/80 hover:bg-red-500 rounded-xl">Aggressive</button>
+                    <button onclick="applyMusicPreset('atmospheric')" class="px-3 py-1 text-xs bg-sky-500/80 hover:bg-sky-500 rounded-xl">Atmospheric</button>
+                    <button onclick="applyMusicPreset('rhythmic')" class="px-3 py-1 text-xs bg-amber-500/80 hover:bg-amber-500 rounded-xl">Rhythmic</button>
+                    <button onclick="applyMusicPreset('default')" class="px-3 py-1 text-xs bg-white/10 hover:bg-white/20 rounded-xl">Default</button>
+                </div>
             </div>
 
             <!-- Player -->
@@ -767,7 +778,7 @@
             reproductionChance: 0.03,
             zoneAttraction: 0.075,
             socialResist: 0.14,
-            vortexMultiplier: 3,
+            vortexMultiplier: 4.5, // Increased base for more dramatic music reactivity
             pheromoneDeposit: 3.4,
             zonePullStrength: 0.5
         };
@@ -1421,14 +1432,22 @@
         let audioContext = null;
         let audioElement = null;
         let analyser = null;
-        let musicData = { volume: 0, bass: 0, mids: 0, highs: 0 };
+        let musicData = { 
+            volume: 0, 
+            subBass: 0, 
+            bass: 0, 
+            lowMids: 0, 
+            mids: 0, 
+            highMids: 0, 
+            highs: 0 
+        };
 
         // Flexible mapping: each parameter has a chosen audio feature + strength
         // Significantly boosted for obvious reactivity
         let musicMappings = {
-            vortexStrength:   { feature: 'bass',    amount: 2.2 },
+            vortexStrength:   { feature: 'bass',    amount: 3.5 }, // Very strong for testing
             foodPulse:        { feature: 'mids',    amount: 1.6 },
-            redHazardRate:    { feature: 'highs',   amount: 2.0 },
+            redHazardRate:    { feature: 'highs',   amount: 3.0 }, // Very strong for testing
             energyWallPulse:  { feature: 'bass',    amount: 1.8 },
             vortexFallSpeed:  { feature: 'volume',  amount: 1.3 },
             reproductionRate: { feature: 'mids',    amount: 1.5 },
@@ -1512,33 +1531,72 @@
 
         function syncMusicSliders() {
             const mapping = {
-                'slider-vortex': musicMappings.vortexStrength,
-                'slider-food': musicMappings.foodPulse,
-                'slider-red': musicMappings.redHazardRate,
-                'slider-wall': musicMappings.energyWallPulse,
-                'slider-fall': musicMappings.vortexFallSpeed,
-                'slider-repro': musicMappings.reproductionRate
+                'slider-vortex': musicMappings.vortexStrength?.amount || musicMappings.vortexStrength,
+                'slider-food': musicMappings.foodPulse?.amount || musicMappings.foodPulse,
+                'slider-red': musicMappings.redHazardRate?.amount || musicMappings.redHazardRate,
+                'slider-wall': musicMappings.energyWallPulse?.amount || musicMappings.energyWallPulse,
+                'slider-fall': musicMappings.vortexFallSpeed?.amount || musicMappings.vortexFallSpeed,
+                'slider-repro': musicMappings.reproductionRate?.amount || musicMappings.reproductionRate
             };
 
             for (let id in mapping) {
                 const slider = document.getElementById(id);
                 if (slider) slider.value = mapping[id];
             }
+        }
 
-            // Update text displays
-            const displays = {
-                'map-vortex': musicMappings.vortexStrength,
-                'map-food': musicMappings.foodPulse,
-                'map-red': musicMappings.redHazardRate,
-                'map-wall': musicMappings.energyWallPulse,
-                'map-fall': musicMappings.vortexFallSpeed,
-                'map-repro': musicMappings.reproductionRate
-            };
-
-            for (let id in displays) {
-                const el = document.getElementById(id);
-                if (el) el.innerText = Math.round(displays[id] * 100) + '%';
+        function applyMusicPreset(preset) {
+            if (preset === 'aggressive') {
+                musicMappings = {
+                    vortexStrength:   { feature: 'bass',    amount: 3.8 },
+                    foodPulse:        { feature: 'highMids', amount: 1.4 },
+                    redHazardRate:    { feature: 'highs',   amount: 3.5 },
+                    energyWallPulse:  { feature: 'bass',    amount: 2.8 },
+                    vortexFallSpeed:  { feature: 'volume',  amount: 1.6 },
+                    reproductionRate: { feature: 'mids',    amount: 1.2 },
+                    socialPressure:   { feature: 'highs',   amount: 2.5 },
+                    particleSpawn:    { feature: 'highs',   amount: 2.8 }
+                };
+            } 
+            else if (preset === 'atmospheric') {
+                musicMappings = {
+                    vortexStrength:   { feature: 'mids',    amount: 1.8 },
+                    foodPulse:        { feature: 'mids',    amount: 2.8 },
+                    redHazardRate:    { feature: 'lowMids', amount: 0.8 },
+                    energyWallPulse:  { feature: 'volume',  amount: 2.2 },
+                    vortexFallSpeed:  { feature: 'volume',  amount: 2.5 },
+                    reproductionRate: { feature: 'mids',    amount: 2.4 },
+                    socialPressure:   { feature: 'lowMids', amount: 1.0 },
+                    particleSpawn:    { feature: 'highMids', amount: 1.5 }
+                };
+            } 
+            else if (preset === 'rhythmic') {
+                musicMappings = {
+                    vortexStrength:   { feature: 'bass',    amount: 2.8 },
+                    foodPulse:        { feature: 'lowMids', amount: 1.6 },
+                    redHazardRate:    { feature: 'highs',   amount: 2.2 },
+                    energyWallPulse:  { feature: 'bass',    amount: 3.2 },
+                    vortexFallSpeed:  { feature: 'bass',    amount: 2.0 },
+                    reproductionRate: { feature: 'mids',    amount: 1.8 },
+                    socialPressure:   { feature: 'highMids', amount: 2.0 },
+                    particleSpawn:    { feature: 'highs',   amount: 3.5 }
+                };
+            } 
+            else { // default
+                musicMappings = {
+                    vortexStrength:   { feature: 'bass',    amount: 2.2 },
+                    foodPulse:        { feature: 'mids',    amount: 1.6 },
+                    redHazardRate:    { feature: 'highs',   amount: 2.0 },
+                    energyWallPulse:  { feature: 'bass',    amount: 1.8 },
+                    vortexFallSpeed:  { feature: 'volume',  amount: 1.3 },
+                    reproductionRate: { feature: 'mids',    amount: 1.5 },
+                    socialPressure:   { feature: 'highs',   amount: 1.7 },
+                    particleSpawn:    { feature: 'highs',   amount: 1.8 }
+                };
             }
+
+            // Refresh sliders in modal
+            syncMusicSliders();
         }
 
         function loadMusicFile(event) {
@@ -1607,26 +1665,40 @@
             const dataArray = new Uint8Array(bufferLength);
             analyser.getByteFrequencyData(dataArray);
 
-            // Calculate features
+            // Calculate overall volume
             let sum = 0;
-            let bassSum = 0;
-            let midSum = 0;
-            let highSum = 0;
-
-            const bassEnd = Math.floor(bufferLength * 0.1);
-            const midEnd = Math.floor(bufferLength * 0.5);
-
             for (let i = 0; i < bufferLength; i++) {
                 sum += dataArray[i];
-                if (i < bassEnd) bassSum += dataArray[i];
-                else if (i < midEnd) midSum += dataArray[i];
-                else highSum += dataArray[i];
             }
-
             musicData.volume = sum / bufferLength / 255;
-            musicData.bass = bassSum / bassEnd / 255;
-            musicData.mids = midSum / (midEnd - bassEnd) / 255;
-            musicData.highs = highSum / (bufferLength - midEnd) / 255;
+
+            // === Improved Frequency Band Separation (more perceptually accurate) ===
+            // Using approximate frequency ranges instead of simple percentage splits
+
+            // Helper to get average of a bin range
+            const getBandAverage = (startBin, endBin) => {
+                if (endBin <= startBin) return 0;
+                let s = 0;
+                for (let i = startBin; i < endBin && i < bufferLength; i++) {
+                    s += dataArray[i];
+                }
+                return s / (endBin - startBin) / 255;
+            };
+
+            // Approximate bin ranges (assuming 256 fftSize → 128 bins, sampleRate ~44100/48000)
+            // These are rough but much better than linear percentage splits
+            const subBassEnd   = Math.floor(bufferLength * 0.06);   // ~20-80Hz
+            const bassEnd      = Math.floor(bufferLength * 0.15);   // ~80-250Hz
+            const lowMidsEnd   = Math.floor(bufferLength * 0.28);   // ~250-600Hz
+            const midsEnd      = Math.floor(bufferLength * 0.55);   // ~600-2.5kHz
+            const highMidsEnd  = Math.floor(bufferLength * 0.78);   // ~2.5k-6kHz
+
+            musicData.subBass   = getBandAverage(0, subBassEnd);
+            musicData.bass      = getBandAverage(subBassEnd, bassEnd);
+            musicData.lowMids   = getBandAverage(bassEnd, lowMidsEnd);
+            musicData.mids      = getBandAverage(lowMidsEnd, midsEnd);
+            musicData.highMids  = getBandAverage(midsEnd, highMidsEnd);
+            musicData.highs     = getBandAverage(highMidsEnd, bufferLength);
         }
 
         // Helper: Get the current influence (0 to ~1) for a mapped parameter
@@ -2186,6 +2258,13 @@
                 this.x += this.vx;
                 this.y += this.vy;
 
+                // Music-reactive jerky motion on red hazards
+                if (musicEnabled && musicData.highs > 0.4) {
+                    let jerk = (musicData.highs - 0.4) * 3.2;
+                    this.vx += random(-jerk, jerk);
+                    this.vy += random(-jerk, jerk);
+                }
+
                 this.vx *= 0.86;
                 this.vy *= 0.86;
 
@@ -2306,12 +2385,6 @@
         function draw() {
             background(12, 14, 22);
 
-            // Minor screen shake with strong bass
-            if (musicEnabled && musicData.bass > 0.4) {
-                let shake = (musicData.bass - 0.4) * 8; // max ~4.8 pixels
-                translate(random(-shake, shake), random(-shake, shake));
-            }
-
             if (paused) {
                 drawWorld();
                 updateMainStats();
@@ -2379,8 +2452,8 @@
             let vortexStrength = sin(vortexPhase * TWO_PI) * 0.5 + 0.5;
             vortexStrength *= settings.vortexMultiplier;
 
-            // Music reactivity
-            vortexStrength += getMusicInfluence('vortexStrength') * 2.5;
+            // Music reactivity - significantly boosted for obvious effect
+            vortexStrength += getMusicInfluence('vortexStrength') * 5.5;
             let vortexDir = cos(vortexPhase * TWO_PI);
 
             stroke(255, 255, 255, 5);
@@ -3169,11 +3242,11 @@
                 text('NIGHT', 16, 24);
             }
 
-            // Live Music Debug
+            // Live Music Debug - Improved frequency bands
             if (musicEnabled) {
-                fill(200, 255, 200, 200);
-                textSize(11);
-                text(`Bass: ${(musicData.bass * 100).toFixed(0)}%  |  Mids: ${(musicData.mids * 100).toFixed(0)}%  |  Highs: ${(musicData.highs * 100).toFixed(0)}%  |  Vol: ${(musicData.volume * 100).toFixed(0)}%`, 16, height - 12);
+                fill(180, 255, 200, 210);
+                textSize(10);
+                text(`Sub: ${(musicData.subBass*100).toFixed(0)}  Bass: ${(musicData.bass*100).toFixed(0)}  LowM: ${(musicData.lowMids*100).toFixed(0)}  Mids: ${(musicData.mids*100).toFixed(0)}  HiM: ${(musicData.highMids*100).toFixed(0)}  High: ${(musicData.highs*100).toFixed(0)}  |  Vol: ${(musicData.volume*100).toFixed(0)}`, 16, height - 10);
             }
 
             updateMainStats();
@@ -3391,13 +3464,24 @@
                 let dy = this.y - centerY;
                 let distToCenter = sqrt(dx * dx + dy * dy) || 1;
                 if (distToCenter < 3.5) { this.life = 0; return; }
+
                 let tangentX = -dy, tangentY = dx;
                 let len = sqrt(tangentX * tangentX + tangentY * tangentY) || 1;
+
+                // Base movement
                 this.x += (tangentX / len) * 1.25 * vortexStrength * vortexDir;
                 this.y += (tangentY / len) * 1.25 * vortexStrength * vortexDir;
+
                 let pull = 0.82 * vortexStrength;
                 this.x += (centerX - this.x) * pull / (distToCenter + 0.8);
                 this.y += (centerY - this.y) * pull / (distToCenter + 0.8);
+
+                // Music-reactive jerky motion (to the beat)
+                if (musicEnabled && musicData.bass > 0.35) {
+                    let jerk = (musicData.bass - 0.35) * 2.8;
+                    this.x += random(-jerk, jerk);
+                    this.y += random(-jerk, jerk);
+                }
             }
             show() {
                 fill(255, 255, 255, 185);
