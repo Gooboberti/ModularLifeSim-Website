@@ -30,7 +30,7 @@
                 </div>
                 <div>
                     <span class="font-display text-2xl tracking-tighter">MiniSimmy2</span>
-                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.66 • Vortex Energy Orbs + Slow Brown Honey</span>
+                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.67 • Red Hazards Recycle into New Modular Creatures</span>
                 </div>
             </div>
             <div class="flex items-center gap-x-4 text-sm">
@@ -46,7 +46,7 @@
                 <div class="flex items-center gap-x-4">
                     <div>
                         <h1 class="font-display text-3xl tracking-tighter">MiniSimmy2</h1>
-                        <p class="text-white/60 text-sm">Energy orbs now feel the vortex. Honey moves much slower, turns brown over time, and becomes a signaling food patch when it stops.</p>
+                        <p class="text-white/60 text-sm">Red hazards that reach the center now recycle into new creatures with 1 random module that sail in from the outer edge like other particles.</p>
                     </div>
                     
                     <div class="px-4 py-1.5 bg-white/5 border border-white/10 rounded-2xl text-sm font-mono">
@@ -324,16 +324,25 @@
                         <span>Yellow → Brown Honey Blooms</span>
                     </div>
                     <div class="text-white/80">
-                        Deposited by living creatures with excess honey. They now move **much slower** toward the active food node and are heavily influenced by the vortex. Over time they turn from bright yellow to brown. When they finally stop (or time out), they become a visible food patch that emits attraction signals and can be eaten from.
+                        Deposited by living creatures with excess honey. They move slowly and are heavily influenced by the vortex. They turn brown over time and become signaling food patches when they stop.
                     </div>
                 </div>
 
                 <div class="border-l-4 border-emerald-400 pl-4">
                     <div class="font-semibold text-emerald-400 mb-1 flex items-center gap-x-2">
-                        <span>Green Energy Orbs (now vortex-affected)</span>
+                        <span>Green Energy Orbs (vortex-affected)</span>
                     </div>
                     <div class="text-white/80">
-                        Released when creatures die. They recycle energy to the active node. They are now affected by the vortex (spin + pull) just like honey, so their path is no longer perfectly straight.
+                        Released on creature death. Recycle energy to the active node. Now drift with the vortex.
+                    </div>
+                </div>
+
+                <div class="border-l-4 border-red-500 pl-4">
+                    <div class="font-semibold text-red-400 mb-1 flex items-center gap-x-2">
+                        <span>Red Hazard Particles → New Creatures</span>
+                    </div>
+                    <div class="text-white/80">
+                        When red hazards reach the center of the vortex, they are removed and **recycled** into new creatures. These new creatures spawn from the outer edge and sail inward with the vortex flow, each starting with exactly 1 random module. This creates a constant influx of fresh modular life.
                     </div>
                 </div>
 
@@ -342,16 +351,7 @@
                         <span>Green & Blue Pheromones</span>
                     </div>
                     <div class="text-white/80">
-                        Stationary signals dropped near the active zone. They attract creatures. Strength controlled by the Pheromone Strength slider.
-                    </div>
-                </div>
-
-                <div class="border-l-4 border-red-500 pl-4">
-                    <div class="font-semibold text-red-400 mb-1 flex items-center gap-x-2">
-                        <span>Red Hazard Particles + Purple DoT</span>
-                    </div>
-                    <div class="text-white/80">
-                        Vortex-following threats. Cause direct damage + AOE + lingering purple damage-over-time. High-Sensor creatures resist and adapt.
+                        Stationary attraction signals dropped near the active food zone.
                     </div>
                 </div>
             </div>
@@ -1321,7 +1321,8 @@
                 h.update(vortexDir, vortexStrength);
 
                 if (dist(h.x, h.y, centerX, centerY) < 8) {
-                    h.explode();
+                    // Recycle red hazard into a new creature that sails in from the outer edge
+                    spawnCreatureFromVortexEdge(h.x, h.y, vortexDir, vortexStrength);
                     redHazards.splice(i, 1);
                     continue;
                 }
@@ -1483,13 +1484,12 @@
                 }
             }
 
-            // FOOD BLOOMS - much slower, vortex heavy, color shift yellow → brown, become signaling food patch
+            // FOOD BLOOMS
             for (let i = foodBlooms.length - 1; i >= 0; i--) {
                 let b = foodBlooms[i];
                 b.life -= timeScale;
                 b.age = (b.age || 0) + timeScale;
 
-                // Vortex influence (strong)
                 let dx = b.x - centerX;
                 let dy = b.y - centerY;
                 let distToCenter = sqrt(dx * dx + dy * dy) || 1;
@@ -1499,26 +1499,24 @@
                     let tangentY = dx;
                     let len = sqrt(tangentX * tangentX + tangentY * tangentY) || 1;
 
-                    let rotForce = 0.85 * vortexStrength * vortexDir; // stronger vortex drift
+                    let rotForce = 0.85 * vortexStrength * vortexDir;
                     b.x += (tangentX / len) * rotForce * timeScale;
                     b.y += (tangentY / len) * rotForce * timeScale;
 
-                    let pull = 0.25 * vortexStrength; // weaker direct pull
+                    let pull = 0.25 * vortexStrength;
                     b.x += (centerX - b.x) * pull / (distToCenter + 18) * timeScale;
                     b.y += (centerY - b.y) * pull / (distToCenter + 18) * timeScale;
                 }
 
-                // Much slower movement toward target
                 let target = b.targetIsGreen ? greenZone : blueZone;
                 let tdx = target.x - b.x;
                 let tdy = target.y - b.y;
                 let tdist = sqrt(tdx*tdx + tdy*tdy) || 1;
 
-                let moveSpeed = 0.55; // much slower than before
+                let moveSpeed = 0.55;
                 b.x += (tdx / tdist) * moveSpeed * timeScale;
                 b.y += (tdy / tdist) * moveSpeed * timeScale;
 
-                // Color shift: yellow → brown over time
                 let progress = constrain(b.age / 420, 0, 1);
                 let r = lerp(255, 139, progress);
                 let g = lerp(220, 90, progress);
@@ -1537,7 +1535,6 @@
                         else blueZone.food = min(blueZone.maxFood, blueZone.food + 18);
                         playDepositSound();
                     } else {
-                        // Become a proper signaling food patch
                         staticFoodPatches.push({
                             x: b.x,
                             y: b.y,
@@ -1551,13 +1548,11 @@
                 }
             }
 
-            // Static Food Patches (now more like small signaling food nodes)
             for (let i = staticFoodPatches.length - 1; i >= 0; i--) {
                 let p = staticFoodPatches[i];
                 p.life -= timeScale;
                 p.radius = max(4, p.radius * 0.985);
 
-                // Emit stronger attraction signals
                 if (frameCount % 14 === 0 && random() < 0.75) {
                     pheromones.push({
                         x: p.x,
@@ -1588,12 +1583,10 @@
                 }
             }
 
-            // ENERGY ORBS - now vortex affected like honey
             for (let i = energyOrbs.length - 1; i >= 0; i--) {
                 let o = energyOrbs[i];
                 o.life -= timeScale;
 
-                // Vortex influence
                 let dx = o.x - centerX;
                 let dy = o.y - centerY;
                 let distToCenter = sqrt(dx * dx + dy * dy) || 1;
@@ -1717,6 +1710,58 @@
             }
 
             updateMainStats();
+        }
+
+        // New function: Spawn a new creature from the outer edge when a red hazard reaches the center
+        function spawnCreatureFromVortexEdge(hazardX, hazardY, vortexDir, vortexStrength) {
+            // Spawn from outer edge in a random direction
+            let angle = random(TWO_PI);
+            let spawnDist = random(470, 590);
+            let spawnX = centerX + cos(angle) * spawnDist;
+            let spawnY = centerY + sin(angle) * spawnDist;
+
+            // Create new creature with only 1 random module
+            let newCreature = new Creature(spawnX, spawnY);
+            newCreature.modules = []; // reset to start with exactly 1 module
+
+            let types = ['harvester', 'sensor', 'mover', 'resistant', 'explorer', 'communicator'];
+            let colors = { 'harvester': '#34d399', 'sensor': '#38bdf8', 'mover': '#a78bfa', 'resistant': '#f472b6', 'explorer': '#fbbf24', 'communicator': '#c084fc' };
+
+            let randomType = random(types);
+            let ang = random(TWO_PI);
+            let di = random(5.5, 9.5);
+            newCreature.modules.push({
+                type: randomType,
+                color: colors[randomType],
+                offsetX: cos(ang) * di,
+                offsetY: sin(ang) * di,
+                tier: 1
+            });
+
+            newCreature.updateSpecialization();
+            newCreature.energy = 38; // fresh start energy
+            newCreature.currentThought = "Sailing in...";
+
+            // Give it initial velocity so it sails inward with the vortex
+            let dx = centerX - spawnX;
+            let dy = centerY - spawnY;
+            let len = sqrt(dx*dx + dy*dy) || 1;
+
+            let inwardForce = 0.9;
+            newCreature.vx = (dx / len) * inwardForce;
+            newCreature.vy = (dy / len) * inwardForce;
+
+            // Add some vortex tangent velocity
+            let tangentX = -dy;
+            let tangentY = dx;
+            let tlen = sqrt(tangentX*tangentX + tangentY*tangentY) || 1;
+            newCreature.vx += (tangentX / tlen) * 0.6 * vortexStrength * vortexDir;
+            newCreature.vy += (tangentY / tlen) * 0.6 * vortexStrength * vortexDir;
+
+            creatures.push(newCreature);
+
+            // Small birth sound
+            if (Math.random() < 0.6) playBirthSound();
         }
 
         function formatSimTime(seconds) {
