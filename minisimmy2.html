@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MiniSimmy2 • Neural + Pheromones</title>
+    <title>MiniSimmy2 • Food Blooms</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -23,7 +23,7 @@
                 </div>
                 <div>
                     <span class="font-display text-2xl tracking-tighter">MiniSimmy2</span>
-                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.15 • Neural Accuracy</span>
+                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.16 • Food Blooms</span>
                 </div>
             </div>
             <div class="flex items-center gap-x-4 text-sm">
@@ -38,7 +38,7 @@
             <div class="flex justify-between items-center mb-4">
                 <div>
                     <h1 class="font-display text-3xl tracking-tighter">MiniSimmy2</h1>
-                    <p class="text-white/60 text-sm">Accurate 6-4-6 Neural Net • Clickable nodes • Stronger pheromones</p>
+                    <p class="text-white/60 text-sm">Creatures carry more energy • Deposit food blooms that travel to the active node</p>
                 </div>
                 <div class="flex items-center gap-x-3 text-sm">
                     <div id="stats" class="font-mono px-4 py-1.5 bg-white/5 rounded-2xl text-xs flex gap-x-4"></div>
@@ -98,7 +98,8 @@
                     <div><span class="text-emerald-400">● Green</span> = Day zone (Harvesters)</div>
                     <div><span class="text-sky-400">● Blue</span> = Night zone (Sensors)</div>
                     <div class="pt-1">White particles = Vortex food</div>
-                    <div>Colored dots = Pheromone trails (brighter = stronger success signal)</div>
+                    <div>Colored dots = Pheromone trails</div>
+                    <div class="pt-1">Glowing moving circles = Food blooms (travel to active node, contain 20 food)</div>
                 </div>
             </div>
         </div>
@@ -141,7 +142,6 @@
                 <div id="inspect-thought" class="text-sm bg-white/5 rounded-2xl px-4 py-2 text-white/80"></div>
             </div>
 
-            <!-- Accurate Neural Net -->
             <div class="mb-4">
                 <div class="text-xs text-white/50 mb-1.5 flex justify-between">
                     <span>Neural Net (6-4-6) — Click nodes for info</span>
@@ -161,6 +161,7 @@
         let creatures = [];
         let vortexParticles = [];
         let pheromones = [];
+        let foodBlooms = [];
         let greenZone, blueZone;
         let timeOfDay = 0;
         let dayLength = 1600;
@@ -321,7 +322,7 @@
                 vortexParticles.push(new VortexParticle(true));
             }
 
-            // Pheromones - more obvious
+            // Pheromones
             for (let i = pheromones.length - 1; i >= 0; i--) {
                 let ph = pheromones[i];
                 ph.life -= 1.2;
@@ -336,7 +337,6 @@
                 noStroke();
                 circle(ph.x, ph.y, size);
 
-                // Glow
                 fill(ph.isGreen ? [52, 211, 153, alpha * 0.3] : [56, 189, 248, alpha * 0.3]);
                 circle(ph.x, ph.y, size * 1.6);
 
@@ -351,6 +351,45 @@
                             c.vy += (dy / d) * force;
                         }
                     }
+                }
+            }
+
+            // Food Blooms - shrinking + traveling to active node
+            for (let i = foodBlooms.length - 1; i >= 0; i--) {
+                let b = foodBlooms[i];
+                b.life--;
+
+                let target = b.targetIsGreen ? greenZone : blueZone;
+                let dx = target.x - b.x;
+                let dy = target.y - b.y;
+                let distToTarget = sqrt(dx*dx + dy*dy) || 1;
+
+                // Move toward target
+                b.x += (dx / distToTarget) * 1.8;
+                b.y += (dy / distToTarget) * 1.8;
+
+                // Shrink as it travels
+                b.radius = max(3, b.radius * 0.985);
+
+                // Draw bloom
+                let alpha = map(b.life, 0, 280, 0, 180);
+                fill(255, 220, 100, alpha);
+                noStroke();
+                circle(b.x, b.y, b.radius);
+
+                // Inner glow
+                fill(255, 240, 180, alpha * 0.5);
+                circle(b.x, b.y, b.radius * 0.6);
+
+                // Arrived at target
+                if (distToTarget < 12 || b.life <= 0) {
+                    if (b.targetIsGreen) {
+                        greenZone.food = min(280, greenZone.food + 20);
+                    } else {
+                        blueZone.food = min(280, blueZone.food + 20);
+                    }
+                    playSound(620, 'sine', 0.35, 0.035);
+                    foodBlooms.splice(i, 1);
                 }
             }
 
@@ -510,7 +549,6 @@
 
             const t = frameCount * 0.085;
 
-            // Exact 6-4-6 structure
             const layers = [6, 4, 6];
             const positions = [];
 
@@ -523,7 +561,6 @@
                 }
             }
 
-            // Connections with simulated strength
             ctx.strokeStyle = '#475569';
             ctx.lineWidth = 1;
             for (let l = 0; l < positions.length - 1; l++) {
@@ -540,7 +577,6 @@
             }
             ctx.globalAlpha = 1;
 
-            // Nodes
             for (let l = 0; l < positions.length; l++) {
                 for (let i = 0; i < positions[l].length; i++) {
                     const p = positions[l][i];
@@ -555,7 +591,6 @@
                     ctx.arc(p.x, p.y, size, 0, Math.PI * 2);
                     ctx.fill();
 
-                    // Pulse ring
                     ctx.strokeStyle = 'rgba(255,255,255,0.25)';
                     ctx.lineWidth = 1.5;
                     ctx.beginPath();
@@ -759,11 +794,19 @@
                         this.currentThought = "Seeking resources";
                     }
 
+                    // Accumulate more honey (increased storage)
                     if (this.honey > 4.5 && random() < 0.0032) {
                         this.honey -= 4;
-                        if (random() < 0.5) greenZone.food = min(175, greenZone.food + 5);
-                        else blueZone.food = min(175, blueZone.food + 5);
-                        this.currentThought = "Depositing food";
+                        // Prefer depositing toward the currently active food node
+                        let targetIsGreen = isDay;
+                        foodBlooms.push({
+                            x: this.x,
+                            y: this.y,
+                            radius: 18,
+                            life: 280,
+                            targetIsGreen: targetIsGreen
+                        });
+                        this.currentThought = "Depositing bloom";
                         playSound(540, 'sine', 0.12, 0.025);
                     }
                 }
@@ -781,10 +824,12 @@
                     this.energy = min(100, this.energy + g);
                     greenZone.food = max(0, greenZone.food - 0.32);
 
+                    // Store more energy as honey
+                    if (this.energy > 76) this.honey = min(28, this.honey + 0.35);
+
                     if (random() < 0.09) {
                         pheromones.push({ x: this.x, y: this.y, life: 220, isGreen: true });
                     }
-                    if (this.energy > 76) this.honey = min(11, this.honey + 0.2);
                 }
 
                 if (inB && !isDay && blueZone.food > 0) {
@@ -792,10 +837,11 @@
                     this.energy = min(100, this.energy + g);
                     blueZone.food = max(0, blueZone.food - 0.32);
 
+                    if (this.energy > 76) this.honey = min(28, this.honey + 0.35);
+
                     if (random() < 0.09) {
                         pheromones.push({ x: this.x, y: this.y, life: 220, isGreen: false });
                     }
-                    if (this.energy > 76) this.honey = min(11, this.honey + 0.2);
                 }
             }
 
@@ -809,8 +855,10 @@
                 noStroke(); fill(255, 255, 255, 45);
                 circle(-s * 0.1, -s * 0.1, s * 0.16);
 
-                if (this.honey > 0.5) {
-                    fill('#f59e0b'); circle(3, -3, 2.6 + this.honey * 0.03);
+                // Show larger honey ball when carrying a lot
+                if (this.honey > 3) {
+                    fill('#f59e0b');
+                    circle(3, -3, 2.6 + min(this.honey * 0.08, 6));
                 }
 
                 fill(255, 255, 255, 130); textAlign(CENTER); textSize(4.6);
@@ -825,7 +873,7 @@
         }
 
         function resetSim() {
-            creatures = []; vortexParticles = []; pheromones = [];
+            creatures = []; vortexParticles = []; pheromones = []; foodBlooms = [];
             greenZone.food = 150; blueZone.food = 150;
             globalReproCooldown = 0; selectedCreature = null;
             closeInspector();
