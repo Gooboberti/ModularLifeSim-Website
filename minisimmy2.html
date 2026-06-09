@@ -29,7 +29,7 @@
                 </div>
                 <div>
                     <span class="font-display text-2xl tracking-tighter">MiniSimmy2</span>
-                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.45 • Tier Visuals + Legend Popup + Waveforms</span>
+                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.46 • Red Hazards Added</span>
                 </div>
             </div>
             <div class="flex items-center gap-x-4 text-sm">
@@ -45,7 +45,7 @@
                 <div class="flex items-center gap-x-4">
                     <div>
                         <h1 class="font-display text-3xl tracking-tighter">MiniSimmy2</h1>
-                        <p class="text-white/60 text-sm">Tier colors + borders • Legend popup • Waveform control</p>
+                        <p class="text-white/60 text-sm">Red hazard particles now active</p>
                     </div>
                     
                     <!-- Elapsed Time -->
@@ -356,7 +356,7 @@
 
                 <div>
                     <div class="font-semibold text-emerald-400 mb-1">Red Hazard Particles</div>
-                    <div class="text-white/70 text-xs">Dangerous red particles. High Sensor count helps detect and avoid them. Impact causes energy drain + panic behavior toward food zones.</div>
+                    <div class="text-white/70 text-xs">Dangerous red particles that drift in the field. Creatures with high Sensor count can detect and avoid them. On impact they cause heavy energy drain and trigger panic behavior (rush toward nearest food zone).</div>
                 </div>
 
                 <div>
@@ -520,13 +520,10 @@
             densityVal.innerText = soundDensity.toFixed(2);
             densitySlider.oninput = () => { soundDensity = parseFloat(densitySlider.value); densityVal.innerText = soundDensity.toFixed(2); };
 
-            // Waveform selector
             const waveformSelect = document.getElementById('waveform-select');
             if (waveformSelect) {
                 waveformSelect.value = defaultWaveform;
-                waveformSelect.onchange = () => {
-                    defaultWaveform = waveformSelect.value;
-                };
+                waveformSelect.onchange = () => { defaultWaveform = waveformSelect.value; };
             }
         }
 
@@ -573,6 +570,11 @@
 
             for (let i = 0; i < 120; i++) {
                 vortexParticles.push(new VortexParticle());
+            }
+
+            // Spawn some red hazards
+            for (let i = 0; i < 12; i++) {
+                redHazards.push(new RedHazard());
             }
 
             setupSliders();
@@ -831,7 +833,6 @@
                 }
             }
 
-            // Modules list with bonuses
             const modulesList = document.getElementById('inspect-modules-list');
             if (modulesList) {
                 if (c.modules.length === 0) {
@@ -1002,6 +1003,59 @@
             modal.classList.add('hidden');
         }
 
+        // === RED HAZARD PARTICLE CLASS ===
+        class RedHazard {
+            constructor() {
+                this.x = random(width);
+                this.y = random(height);
+                this.vx = random(-0.6, 0.6);
+                this.vy = random(-0.6, 0.6);
+                this.size = random(6, 9);
+                this.life = 9999;
+                this.pulse = random(TWO_PI);
+            }
+
+            update(vortexDir, vortexStrength) {
+                // Gentle movement + some vortex influence
+                this.x += this.vx;
+                this.y += this.vy;
+
+                // Slight vortex pull
+                let dx = this.x - centerX;
+                let dy = this.y - centerY;
+                let dist = sqrt(dx*dx + dy*dy) || 1;
+                if (dist > 30) {
+                    let pull = 0.015 * vortexStrength;
+                    this.vx += (centerX - this.x) * pull / dist;
+                    this.vy += (centerY - this.y) * pull / dist;
+                }
+
+                // Bounce off edges softly
+                if (this.x < 20 || this.x > width - 20) this.vx *= -0.8;
+                if (this.y < 20 || this.y > height - 20) this.vy *= -0.8;
+
+                this.x = constrain(this.x, 10, width - 10);
+                this.y = constrain(this.y, 10, height - 10);
+
+                this.pulse += 0.08;
+            }
+
+            show() {
+                let alpha = 180 + sin(this.pulse) * 40;
+                fill(239, 68, 68, alpha);
+                noStroke();
+                circle(this.x, this.y, this.size);
+
+                // Danger glow
+                fill(239, 68, 68, 35);
+                circle(this.x, this.y, this.size * 1.8);
+
+                // Core
+                fill(255, 200, 200, 200);
+                circle(this.x, this.y, this.size * 0.4);
+            }
+        }
+
         function draw() {
             background(12, 14, 22);
 
@@ -1076,6 +1130,44 @@
             circle(blueZone.x, blueZone.y, blueDisplayR * 2);
             fill(56, 189, 248, isDay ? 20 : 55);
             circle(blueZone.x, blueZone.y, blueDisplayR * 2.35);
+
+            // === RED HAZARDS ===
+            for (let i = redHazards.length - 1; i >= 0; i--) {
+                let h = redHazards[i];
+                h.update(vortexDir, vortexStrength);
+                h.show();
+
+                // Check collision with creatures
+                for (let c of creatures) {
+                    let d = dist(h.x, h.y, c.x, c.y);
+                    if (d < h.size + 8) {
+                        // Impact!
+                        let sensorBonus = c.getModuleCount('sensor') * 0.35;
+                        let damage = 18 + random(4, 9) - sensorBonus;
+
+                        c.energy = max(0, c.energy - damage);
+
+                        // Panic behavior - rush toward nearest food zone
+                        let target = isDay ? greenZone : blueZone;
+                        let dx = target.x - c.x;
+                        let dy = target.y - c.y;
+                        let len = sqrt(dx*dx + dy*dy) || 1;
+                        c.vx += (dx / len) * 2.8;
+                        c.vy += (dy / len) * 2.8;
+
+                        c.currentThought = "PANIC!";
+
+                        // Remove hazard on hit
+                        redHazards.splice(i, 1);
+                        break;
+                    }
+                }
+
+                // Respawn if too few
+                if (redHazards.length < 8 && random() < 0.02) {
+                    redHazards.push(new RedHazard());
+                }
+            }
 
             // Vortex particles
             for (let i = vortexParticles.length - 1; i >= 0; i--) {
@@ -1431,7 +1523,6 @@
             reproduce() {
                 let newModules = this.modules.map(m => ({...m}));
 
-                // Tier fusion logic: 3 of same tier → upgrade one to next tier
                 let typeTierCounts = {};
                 for (let m of newModules) {
                     const key = m.type + '-' + (m.tier || 1);
@@ -1447,7 +1538,6 @@
                         for (let m of newModules) {
                             if (m.type === type && (m.tier || 1) === currentTier) {
                                 m.tier = nextTier;
-                                // Keep original color, add yellow border via rendering
                                 break;
                             }
                         }
@@ -1704,7 +1794,6 @@
                 text(this.name, 0, -s - 1.5);
 
                 for (let m of this.modules) {
-                    // Keep original module color
                     fill(m.color);
                     stroke(255, 255, 255, 4);
                     strokeWeight(0.15);
@@ -1714,7 +1803,6 @@
 
                     circle(m.offsetX, m.offsetY, size);
 
-                    // Yellow border/ring for upgraded modules (Tier 2+)
                     if (tier > 1) {
                         stroke('#fbbf24');
                         strokeWeight(tier === 2 ? 1.2 : tier === 3 ? 1.6 : 2.0);
@@ -1770,6 +1858,7 @@
 
             for (let i = 0; i < 9; i++) creatures.push(new Creature(random(width), random(height)));
             for (let i = 0; i < 120; i++) vortexParticles.push(new VortexParticle());
+            for (let i = 0; i < 12; i++) redHazards.push(new RedHazard());
 
             if (miniChartCtx) drawMiniChart();
             updateMainStats();
