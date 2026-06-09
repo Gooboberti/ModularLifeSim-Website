@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MiniSimmy2 • Genetic Memory</title>
+    <title>MiniSimmy2 • Social Flocking</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -23,7 +23,7 @@
                 </div>
                 <div>
                     <span class="font-display text-2xl tracking-tighter">MiniSimmy2</span>
-                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.23 • Genetic Memory (Phase 2)</span>
+                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.24 • Phase 3: Social Flocking</span>
                 </div>
             </div>
             <div class="flex items-center gap-x-4 text-sm">
@@ -38,7 +38,7 @@
             <div class="flex justify-between items-center mb-4">
                 <div>
                     <h1 class="font-display text-3xl tracking-tighter">MiniSimmy2</h1>
-                    <p class="text-white/60 text-sm">Phase 2: Heritable behavioral traits + evolution statistics</p>
+                    <p class="text-white/60 text-sm">Phase 3: Module-based flocking + group bonuses</p>
                 </div>
                 <div class="flex items-center gap-x-3 text-sm">
                     <div id="stats" class="font-mono px-4 py-1.5 bg-white/5 rounded-2xl text-xs flex gap-x-4"></div>
@@ -167,7 +167,7 @@
         let pheromones = [];
         let foodBlooms = [];
         let energyOrbs = [];
-        let evolutionHistory = []; // For Phase 2 stats
+        let evolutionHistory = [];
         let greenZone, blueZone;
         let timeOfDay = 0;
         let dayLength = 1600;
@@ -254,7 +254,6 @@
                 neuralCanvas.addEventListener('click', handleNeuralClick);
             }
 
-            // Initialize evolution history
             evolutionHistory = [];
         }
 
@@ -483,7 +482,6 @@
             let pressure = Math.max(0, (creatures.length - 12) * 0.0055);
             for (let c of creatures) c.energy -= pressure;
 
-            // Record evolution stats every ~60 frames
             if (frameCount % 60 === 0 && creatures.length > 0) {
                 recordEvolutionStats();
             }
@@ -498,30 +496,19 @@
             let totalModules = 0;
             let totalEnergy = 0;
             let explorerCount = 0;
-            let communicatorCount = 0;
 
             for (let c of creatures) {
                 totalModules += c.modules.length;
                 totalEnergy += c.energy;
                 if (c.getModuleCount('explorer') > 0) explorerCount++;
-                if (c.getModuleCount('communicator') > 0) communicatorCount++;
             }
 
             const avgModules = totalModules / creatures.length;
             const avgEnergy = totalEnergy / creatures.length;
             const explorerPercent = (explorerCount / creatures.length) * 100;
 
-            evolutionHistory.push({
-                frame: frameCount,
-                avgModules: avgModules,
-                avgEnergy: avgEnergy,
-                explorerPercent: explorerPercent
-            });
-
-            // Keep only last 120 entries (~2 minutes of history)
-            if (evolutionHistory.length > 120) {
-                evolutionHistory.shift();
-            }
+            evolutionHistory.push({ frame: frameCount, avgModules, avgEnergy, explorerPercent });
+            if (evolutionHistory.length > 120) evolutionHistory.shift();
         }
 
         function handleMousePress() {
@@ -749,7 +736,6 @@
                 this.reproCooldown = 0;
                 this.currentThought = "Exploring...";
 
-                // Phase 2: Heritable behavioral traits (genetic memory)
                 if (parentTraits) {
                     this.traits = {
                         pheromoneSensitivity: constrain(parentTraits.pheromoneSensitivity + random(-0.08, 0.08), 0.6, 1.6),
@@ -797,6 +783,19 @@
                 if (this.getModuleCount('harvester') > 0) bonus += 0.008;
                 if (this.getModuleCount('resistant') > 0) bonus += 0.006;
                 return bonus;
+            }
+
+            getSimilarNeighborCount() {
+                let count = 0;
+                const myTypes = new Set(this.modules.map(m => m.type));
+                for (let o of creatures) {
+                    if (o === this) continue;
+                    const otherTypes = new Set(o.modules.map(m => m.type));
+                    let shared = 0;
+                    for (let t of myTypes) if (otherTypes.has(t)) shared++;
+                    if (shared >= 1 && dist(this.x, this.y, o.x, o.y) < 55) count++;
+                }
+                return count;
             }
 
             reproduce() {
@@ -856,6 +855,54 @@
                     }
 
                     let explorerBonus = (this.getModuleCount('explorer') * 0.18) + (this.traits.explorationBias - 1) * 0.25;
+
+                    // === Phase 3: Module-based Flocking ===
+                    let similarNeighbors = this.getSimilarNeighborCount();
+                    let inGroup = similarNeighbors >= 3;
+
+                    if (inGroup) {
+                        this.currentThought = "With allies";
+                        // Group bonus: slightly lower energy drain
+                        this.energy += 0.004;
+                    }
+
+                    // Alignment + Cohesion with similar-module creatures
+                    if (similarNeighbors > 0) {
+                        let avgVx = 0, avgVy = 0, avgX = 0, avgY = 0, count = 0;
+                        const myTypes = new Set(this.modules.map(m => m.type));
+
+                        for (let o of creatures) {
+                            if (o === this) continue;
+                            const otherTypes = new Set(o.modules.map(m => m.type));
+                            let shared = 0;
+                            for (let t of myTypes) if (otherTypes.has(t)) shared++;
+
+                            if (shared >= 1 && dist(this.x, this.y, o.x, o.y) < 55) {
+                                avgVx += o.vx;
+                                avgVy += o.vy;
+                                avgX += o.x;
+                                avgY += o.y;
+                                count++;
+                            }
+                        }
+
+                        if (count > 0) {
+                            avgVx /= count; avgVy /= count; avgX /= count; avgY /= count;
+
+                            // Alignment
+                            let alignStrength = 0.035 * Math.min(similarNeighbors / 3, 1.5);
+                            this.vx += (avgVx - this.vx) * alignStrength;
+                            this.vy += (avgVy - this.vy) * alignStrength;
+
+                            // Cohesion
+                            let cohesionStrength = 0.028 * Math.min(similarNeighbors / 3, 1.5);
+                            let cdx = avgX - this.x;
+                            let cdy = avgY - this.y;
+                            let clen = sqrt(cdx*cdx + cdy*cdy) || 1;
+                            this.vx += (cdx / clen) * cohesionStrength;
+                            this.vy += (cdy / clen) * cohesionStrength;
+                        }
+                    }
 
                     let bestNeighbor = null;
                     let bestFitness = 0;
@@ -939,6 +986,7 @@
                     if (this.energy > 76) this.honey = min(28, this.honey + 0.35);
 
                     let pheroChance = this.getModuleCount('communicator') > 0 ? 0.13 : 0.09;
+                    if (inG && this.getSimilarNeighborCount() >= 3) pheroChance *= 1.4; // Group bonus
                     if (random() < pheroChance) {
                         pheromones.push({ x: this.x, y: this.y, life: 220, isGreen: true });
                     }
@@ -952,6 +1000,7 @@
                     if (this.energy > 76) this.honey = min(28, this.honey + 0.35);
 
                     let pheroChance = this.getModuleCount('communicator') > 0 ? 0.13 : 0.09;
+                    if (inB && this.getSimilarNeighborCount() >= 3) pheroChance *= 1.4;
                     if (random() < pheroChance) {
                         pheromones.push({ x: this.x, y: this.y, life: 220, isGreen: false });
                     }
