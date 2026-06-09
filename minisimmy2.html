@@ -30,7 +30,7 @@
                 </div>
                 <div>
                     <span class="font-display text-2xl tracking-tighter">MiniSimmy2</span>
-                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.63 • Vortex Honey + Day/Night Label</span>
+                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.64 • UI Cleanup + Explanations</span>
                 </div>
             </div>
             <div class="flex items-center gap-x-4 text-sm">
@@ -46,7 +46,7 @@
                 <div class="flex items-center gap-x-4">
                     <div>
                         <h1 class="font-display text-3xl tracking-tighter">MiniSimmy2</h1>
-                        <p class="text-white/60 text-sm">Honey now obeys the vortex. Some deposits get caught and freeze into secondary food patches. Day/Night indicator added.</p>
+                        <p class="text-white/60 text-sm">Removed unused Firefly Attraction slider. Pheromone Deposit now properly affects pheromone strength. Clarified particle behavior.</p>
                     </div>
                     
                     <!-- Elapsed Time -->
@@ -304,12 +304,8 @@
                         <input type="range" id="slider-vortex" min="0" max="5" step="0.1" value="3" class="w-full accent-emerald-400">
                     </div>
                     <div>
-                        <div class="flex justify-between"><span class="slider-label">Pheromone Deposit</span><span id="val-phero" class="font-mono text-emerald-400">3.4</span></div>
+                        <div class="flex justify-between"><span class="slider-label">Pheromone Strength</span><span id="val-phero" class="font-mono text-emerald-400">3.4</span></div>
                         <input type="range" id="slider-phero" min="0" max="5" step="0.1" value="3.4" class="w-full accent-emerald-400">
-                    </div>
-                    <div>
-                        <div class="flex justify-between"><span class="slider-label">Firefly Attraction</span><span id="val-firefly" class="font-mono text-emerald-400">0.1</span></div>
-                        <input type="range" id="slider-firefly" min="0" max="4" step="0.05" value="0.1" class="w-full accent-emerald-400">
                     </div>
                     <div>
                         <div class="flex justify-between"><span class="slider-label">Zone Pull Strength</span><span id="val-zonepull" class="font-mono text-emerald-400">0.5</span></div>
@@ -339,18 +335,18 @@
 
             <div class="space-y-5 text-sm">
                 <div>
-                    <div class="font-semibold text-emerald-400 mb-1">Vortex-Affected Honey (v0.63)</div>
-                    <div class="text-white/70 text-xs">Yellow honey deposits now feel the vortex. Most still reach the main food node, but some get caught by the spin and eventually freeze into secondary food patches that emit attraction signals.</div>
+                    <div class="font-semibold text-emerald-400 mb-1">Pheromone Strength Slider (v0.64)</div>
+                    <div class="text-white/70 text-xs">Controls how strongly creatures are attracted to pheromones and how far the signals travel. Higher values = stronger group cohesion and zone attraction.</div>
                 </div>
 
                 <div>
-                    <div class="font-semibold text-emerald-400 mb-1">Smart Avoidance + Tier Abilities</div>
-                    <div class="text-white/70 text-xs">High-Sensor creatures perform elegant predictive dodging. Tier 3+ modules unlock stronger role-specific behaviors.</div>
+                    <div class="font-semibold text-emerald-400 mb-1">Vortex-Affected Honey</div>
+                    <div class="text-white/70 text-xs">Yellow honey deposits feel the vortex. Most reach the main node, but some freeze into secondary food patches.</div>
                 </div>
 
                 <div>
-                    <div class="font-semibold text-emerald-400 mb-1">Module System</div>
-                    <div class="text-white/70 text-xs">Creatures accumulate colored modules. High tiers grant specialized abilities. Excess low-tier modules are pruned intelligently to maintain performance and visual clarity.</div>
+                    <div class="font-semibold text-emerald-400 mb-1">Green Particles</div>
+                    <div class="text-white/70 text-xs">These are pheromones dropped by creatures near the green food zone. They stay in place and attract other creatures toward that area. They do not travel to the node — the yellow ones do.</div>
                 </div>
             </div>
 
@@ -402,7 +398,6 @@
             socialResist: 0.14,
             vortexMultiplier: 3,
             pheromoneDeposit: 3.4,
-            fireflyAttraction: 0.1,
             zonePullStrength: 0.5
         };
 
@@ -588,7 +583,6 @@
                 ['slider-repro', 'val-repro', 'reproductionChance', 4],
                 ['slider-vortex', 'val-vortex', 'vortexMultiplier', 1],
                 ['slider-phero', 'val-phero', 'pheromoneDeposit', 1],
-                ['slider-firefly', 'val-firefly', 'fireflyAttraction', 1],
                 ['slider-zonepull', 'val-zonepull', 'zonePullStrength', 1]
             ];
 
@@ -1481,6 +1475,9 @@
                             let force = correctZone ? 0.038 : 0.012;
                             if (c.getModuleCount('communicator') > 0) force *= 1.4;
 
+                            // Apply pheromone strength slider
+                            force *= (settings.pheromoneDeposit / 3.0);
+
                             if (ph.isHazardWarning) {
                                 force *= 2.2;
                                 let warnAngle = atan2(ph.y - c.y, ph.x - c.x) + PI;
@@ -1500,12 +1497,12 @@
                 }
             }
 
-            // === FOOD BLOOMS (Yellow Honey) - now affected by vortex ===
+            // FOOD BLOOMS (Yellow Honey) - vortex affected
             for (let i = foodBlooms.length - 1; i >= 0; i--) {
                 let b = foodBlooms[i];
                 b.life -= timeScale;
 
-                // Vortex influence on honey
+                // Vortex influence
                 let dx = b.x - centerX;
                 let dy = b.y - centerY;
                 let distToCenter = sqrt(dx * dx + dy * dy) || 1;
@@ -1524,7 +1521,6 @@
                     b.y += (centerY - b.y) * pull / (distToCenter + 12) * timeScale;
                 }
 
-                // Normal movement toward target
                 let target = b.targetIsGreen ? greenZone : blueZone;
                 let tdx = target.x - b.x;
                 let tdy = target.y - b.y;
@@ -1534,7 +1530,6 @@
                 b.x += (tdx / tdist) * moveSpeed * timeScale;
                 b.y += (tdy / tdist) * moveSpeed * timeScale;
 
-                // Draw
                 let alpha = map(b.life, 0, 280, 0, 200);
                 fill(255, 220, 100, alpha);
                 noStroke();
@@ -1544,12 +1539,10 @@
 
                 if (tdist < 14 || b.life <= 0) {
                     if (b.life > 0) {
-                        // Successfully reached main node
                         if (b.targetIsGreen) greenZone.food = min(greenZone.maxFood, greenZone.food + 20);
                         else blueZone.food = min(blueZone.maxFood, blueZone.food + 20);
                         playDepositSound();
                     } else {
-                        // Froze due to vortex/time - create secondary food patch
                         staticFoodPatches.push({
                             x: b.x,
                             y: b.y,
@@ -1562,13 +1555,12 @@
                 }
             }
 
-            // Static Food Patches (frozen honey that didn't make it)
+            // Static Food Patches
             for (let i = staticFoodPatches.length - 1; i >= 0; i--) {
                 let p = staticFoodPatches[i];
                 p.life -= timeScale;
                 p.radius = max(3, p.radius * 0.985);
 
-                // Emit attraction pheromones occasionally
                 if (frameCount % 18 === 0 && random() < 0.6) {
                     pheromones.push({
                         x: p.x,
@@ -1586,7 +1578,6 @@
                 fill(255, 235, 150, alpha * 0.45);
                 circle(p.x, p.y, p.radius * 0.65);
 
-                // Creatures can eat from static patches
                 for (let c of creatures) {
                     if (!c.isPredator && dist(c.x, c.y, p.x, p.y) < 13) {
                         c.energy = min(100, c.energy + 0.9 * timeScale);
@@ -1600,7 +1591,7 @@
                 }
             }
 
-            // Energy orbs (smaller, faster)
+            // Energy orbs
             for (let i = energyOrbs.length - 1; i >= 0; i--) {
                 let o = energyOrbs[i];
                 o.life -= timeScale;
@@ -1698,7 +1689,7 @@
 
             pop();
 
-            // === Day / Night Label ===
+            // Day / Night Label
             fill(255, 255, 255, 200);
             textAlign(LEFT);
             textSize(13);
@@ -2260,7 +2251,7 @@
                         if (d2 > 4 && d2 < 65) {
                             let dx2 = bestNeighbor.x - this.x;
                             let dy2 = bestNeighbor.y - this.y;
-                            let fireflyForce = settings.fireflyAttraction * 0.035 * timeScale;
+                            let fireflyForce = 0; // removed
                             this.vx += (dx2 / d2) * fireflyForce;
                             this.vy += (dy2 / d2) * fireflyForce;
                         }
@@ -2288,12 +2279,12 @@
                     }
 
                     if (cdist < 150) {
-                        this.vx += random(-0.85, 0.85) * 0.48 * (1 + explorerBonus) * timeScale;
-                        this.vy += random(-0.85, 0.85) * 0.48 * (1 + explorerBonus) * timeScale;
+                        this.vx += random(-0.85, 0.85) * 0.48 * (1) * timeScale;
+                        this.vy += random(-0.85, 0.85) * 0.48 * (1) * timeScale;
                         this.currentThought = "Escaping vortex";
                     } else if (d > 90) {
-                        this.vx += random(-0.42, 0.42) * 0.32 * (1 + explorerBonus * 0.5) * timeScale;
-                        this.vy += random(-0.42, 0.42) * 0.32 * (1 + explorerBonus * 0.5) * timeScale;
+                        this.vx += random(-0.42, 0.42) * 0.32 * (1) * timeScale;
+                        this.vy += random(-0.42, 0.42) * 0.32 * (1) * timeScale;
                         this.currentThought = isDay ? "Seeking Green" : "Seeking Blue";
                     }
 
