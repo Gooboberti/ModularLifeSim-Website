@@ -29,7 +29,7 @@
                 </div>
                 <div>
                     <span class="font-display text-2xl tracking-tighter">MiniSimmy2</span>
-                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.54 • Hazard Sensing + Active Avoidance (A+B)</span>
+                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.55 • Evolutionary Selection for Hazard Avoidance (Phase C)</span>
                 </div>
             </div>
             <div class="flex items-center gap-x-4 text-sm">
@@ -45,7 +45,7 @@
                 <div class="flex items-center gap-x-4">
                     <div>
                         <h1 class="font-display text-3xl tracking-tighter">MiniSimmy2</h1>
-                        <p class="text-white/60 text-sm">Brains can now sense red hazards + actively dodge them. Sensor modules improve detection.</p>
+                        <p class="text-white/60 text-sm">Good avoiders now live longer and reproduce more successfully. Generational improvement in hazard avoidance.</p>
                     </div>
                     
                     <!-- Elapsed Time -->
@@ -177,6 +177,7 @@
                             <div><span class="text-white/50">Gen:</span> <span id="inspect-gen" class="font-mono text-white"></span></div>
                             <div><span class="text-white/50">Kids:</span> <span id="inspect-kids" class="font-mono text-white"></span></div>
                             <div><span class="text-white/50">Kills:</span> <span id="inspect-kills" class="font-mono text-red-400"></span></div>
+                            <div><span class="text-white/50">Hazards Avoided:</span> <span id="inspect-hazards-avoided" class="font-mono text-emerald-400"></span></div>
                         </div>
                     </div>
 
@@ -360,8 +361,8 @@
                 </div>
 
                 <div>
-                    <div class="font-semibold text-emerald-400 mb-1">Hazard Avoidance (New in v0.54)</div>
-                    <div class="text-white/70 text-xs">Creatures now sense nearby red hazards through their neural inputs (Hazard Distance + Direction). High-tier Sensor modules improve detection range and reaction quality. Creatures actively dodge when close.</div>
+                    <div class="font-semibold text-emerald-400 mb-1">Hazard Avoidance Evolution (v0.54–v0.55)</div>
+                    <div class="text-white/70 text-xs">Brains sense hazards (Distance + Direction). Sensor modules + hazardAvoidance trait improve reaction. Good avoiders survive longer and reproduce more successfully, driving generational improvement.</div>
                 </div>
 
                 <div>
@@ -887,6 +888,9 @@
             document.getElementById('inspect-kills').innerText = c.killCount;
             document.getElementById('inspect-thought').innerText = c.currentThought || '—';
 
+            const hazardsAvoidedEl = document.getElementById('inspect-hazards-avoided');
+            if (hazardsAvoidedEl) hazardsAvoidedEl.innerText = c.hazardsAvoided || 0;
+
             const energyPct = Math.max(0, Math.min(100, c.energy));
             const energyBar = document.getElementById('inspect-energy-bar');
             const energyText = document.getElementById('inspect-energy-text');
@@ -1364,6 +1368,7 @@
 
                         c.energy = max(0, c.energy - baseDamage);
                         c.damageFlash = 55;
+                        c.hazardDamageTaken = (c.hazardDamageTaken || 0) + baseDamage;
 
                         let dx = c.x - h.x;
                         let dy = c.y - h.y;
@@ -1384,6 +1389,7 @@
                                 let oDamage = 14 + random(2, 6) - oSensor;
                                 other.energy = max(0, other.energy - oDamage);
                                 other.damageFlash = max(other.damageFlash || 0, 38);
+                                other.hazardDamageTaken = (other.hazardDamageTaken || 0) + oDamage;
 
                                 let odx = other.x - h.x;
                                 let ody = other.y - h.y;
@@ -1568,6 +1574,11 @@
                 if (isReady) {
                     let chance = settings.reproductionChance;
 
+                    // Phase C: Good avoiders get slight reproductive advantage
+                    let avoidanceBonus = 1 + (c.hazardsAvoided || 0) * 0.004;
+                    if ((c.hazardDamageTaken || 0) > 50) avoidanceBonus *= 0.7; // penalty for taking lots of damage
+                    chance *= avoidanceBonus;
+
                     if (c.energy > 80) {
                         chance *= 4.5;
                     } else if (c.energy > 70) {
@@ -1707,6 +1718,8 @@
                 this.generation = generation; this.children = []; this.childrenCount = 0;
                 this.killCount = 0; this.reproCooldown = 0; this.currentThought = "Exploring...";
                 this.damageFlash = 0;
+                this.hazardsAvoided = 0;
+                this.hazardDamageTaken = 0;
 
                 if (parentTraits) {
                     this.traits = {
@@ -1856,13 +1869,15 @@
                 let drain = settings.energyDrain - this.getEfficiencyBonus();
                 this.energy -= Math.max(0.005, drain * timeScale);
 
-                // NEW: Hazard sensing + active avoidance (Phases A+B)
+                // Hazard sensing + active avoidance (Phases A+B)
                 let hazardInfo = this.getNearestHazardInfo();
                 let sensorLevel = this.getTieredModuleCount('sensor');
 
                 // Sensor modules improve hazard detection quality
                 let detectionQuality = 0.6 + (sensorLevel * 0.12);
                 let effectiveHazardDist = hazardInfo.dist * detectionQuality;
+
+                let dodgedThisFrame = false;
 
                 if (effectiveHazardDist > 0.15) {  // Only react when reasonably close
                     // Calculate avoidance direction (opposite of hazard)
@@ -1883,6 +1898,13 @@
                     let traitBonus = (this.traits.hazardAvoidance - 1) * 0.6;
                     this.vx += cos(avoidAngle) * traitBonus * 0.02 * timeScale;
                     this.vy += sin(avoidAngle) * traitBonus * 0.02 * timeScale;
+
+                    dodgedThisFrame = true;
+                }
+
+                // Phase C: Track successful avoidance
+                if (dodgedThisFrame && effectiveHazardDist > 0.25) {
+                    this.hazardsAvoided = (this.hazardsAvoided || 0) + 1;
                 }
 
                 if (this.isPredator) {
