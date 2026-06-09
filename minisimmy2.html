@@ -165,6 +165,12 @@
                     <i class="fa-solid fa-wind text-sky-400"></i>
                     <span>Cursor Push</span>
                 </button>
+
+                <button onclick="toggleSpaceship()" id="quick-ship-btn"
+                    class="px-5 py-2 text-sm font-medium rounded-2xl bg-white/10 hover:bg-white/20 flex items-center gap-x-2 border border-white/10 active:scale-[0.985] transition-transform">
+                    <i class="fa-solid fa-rocket text-emerald-400"></i>
+                    <span>Spaceship</span>
+                </button>
             </div>
         </div>
 
@@ -1317,11 +1323,13 @@
 
         function getEnvironmentModifiers() {
             if (environmentPhase === 0) {
-                return { energyGainMult: 1.35, drainMult: 0.82, reproMult: 1.6 };
+                // Fertile - very generous
+                return { energyGainMult: 1.85, drainMult: 0.65, reproMult: 2.4, vortexMult: 0.75 };
             } else if (environmentPhase === 1) {
-                return { energyGainMult: 1.0, drainMult: 1.0, reproMult: 1.0 };
+                return { energyGainMult: 1.0, drainMult: 1.0, reproMult: 1.0, vortexMult: 1.0 };
             } else {
-                return { energyGainMult: 0.65, drainMult: 1.45, reproMult: 0.55 };
+                // Drought - harsh
+                return { energyGainMult: 0.55, drainMult: 1.85, reproMult: 0.35, vortexMult: 1.45 };
             }
         }
 
@@ -1442,6 +1450,16 @@
             highs: 0 
         };
 
+        // Spaceship Power-up (Space Invaders style)
+        let spaceshipActive = false;
+        let shipX = 400;
+        let shipY = 0;
+        let bullets = [];
+        let bombs = 0;
+        let lastShotTime = 0;
+        let shipMode = 'machinegun'; // 'machinegun' or 'bomb'
+        let showMobileControls = false;
+
         // Flexible mapping: each parameter has a chosen audio feature + strength
         // Significantly boosted for obvious reactivity
         let musicMappings = {
@@ -1479,6 +1497,24 @@
             } else {
                 btn.classList.remove('bg-sky-500/80', 'text-white');
                 btn.classList.add('bg-white/10');
+            }
+        }
+
+        function toggleSpaceship() {
+            spaceshipActive = !spaceshipActive;
+            const btn = document.getElementById('quick-ship-btn');
+
+            if (spaceshipActive) {
+                btn.classList.add('bg-emerald-500/80', 'text-white');
+                btn.classList.remove('bg-white/10');
+                shipX = width / 2;
+                shipY = height - 45;
+                bullets = [];
+                if (bombs < 3) bombs = 3; // start with a few bombs
+            } else {
+                btn.classList.remove('bg-emerald-500/80', 'text-white');
+                btn.classList.add('bg-white/10');
+                bullets = [];
             }
         }
 
@@ -2452,6 +2488,10 @@
             let vortexStrength = sin(vortexPhase * TWO_PI) * 0.5 + 0.5;
             vortexStrength *= settings.vortexMultiplier;
 
+            // Environmental modifier on vortex
+            const envMods = getEnvironmentModifiers();
+            vortexStrength *= envMods.vortexMult || 1.0;
+
             // Music reactivity - significantly boosted for obvious effect
             vortexStrength += getMusicInfluence('vortexStrength') * 5.5;
             let vortexDir = cos(vortexPhase * TWO_PI);
@@ -2479,8 +2519,15 @@
             const pulseG = sin(frameCount * 0.11) * 0.05 + 1;
             const pulseB = sin(frameCount * 0.1 + 1.1) * 0.05 + 1;
 
-            let greenDisplayR = Math.max(greenZone.minR, greenZone.baseR * (greenZone.food / greenZone.maxFood) * pulseG);
-            let blueDisplayR = Math.max(blueZone.minR, blueZone.baseR * (blueZone.food / blueZone.maxFood) * pulseB);
+            // Environmental phase strongly affects zone size
+            let envSizeMult = 1.0;
+            if (environmentPhase === 0) envSizeMult = 2.6;      // Fertile - very large, almost to center
+            else if (environmentPhase === 2) envSizeMult = 0.32; // Drought - barely visible
+
+            let greenDisplayR = Math.max(greenZone.minR * (environmentPhase === 2 ? 0.6 : 1), 
+                                         greenZone.baseR * (greenZone.food / greenZone.maxFood) * pulseG * envSizeMult);
+            let blueDisplayR = Math.max(blueZone.minR * (environmentPhase === 2 ? 0.6 : 1), 
+                                        blueZone.baseR * (blueZone.food / blueZone.maxFood) * pulseB * envSizeMult);
 
             // Music reactivity - food nodes pulse with music
             const foodPulse = getMusicInfluence('foodPulse') * 0.6;
@@ -3225,6 +3272,90 @@
                 }
             }
 
+            // ==================== SPACESHIP + BULLETS ====================
+            if (spaceshipActive) {
+                // Draw ship
+                push();
+                translate(shipX, shipY);
+                fill(80, 220, 140);
+                noStroke();
+                // Simple spaceship shape
+                beginShape();
+                vertex(0, -18);
+                vertex(-14, 10);
+                vertex(-6, 6);
+                vertex(6, 6);
+                vertex(14, 10);
+                endShape(CLOSE);
+
+                fill(255);
+                rect(-3, -8, 6, 8);
+
+                // Mode indicator
+                if (shipMode === 'bomb' && bombs > 0) {
+                    fill(255, 100, 100);
+                    ellipse(0, -26, 8, 8);
+                }
+                pop();
+
+                // Update and draw bullets
+                for (let i = bullets.length - 1; i >= 0; i--) {
+                    let b = bullets[i];
+                    b.x += b.vx;
+                    b.y += b.vy;
+
+                    if (b.isBomb) {
+                        fill(255, 80, 80);
+                        ellipse(b.x, b.y, b.radius * 2, b.radius * 2);
+                        fill(255, 200, 100);
+                        ellipse(b.x, b.y, b.radius, b.radius);
+                    } else {
+                        fill(255, 255, 200);
+                        rect(b.x - 1.5, b.y - 6, 3, 12);
+                    }
+
+                    // Remove if off screen
+                    if (b.y < -20) {
+                        bullets.splice(i, 1);
+                        continue;
+                    }
+
+                    // Bullet collision with creatures
+                    for (let j = creatures.length - 1; j >= 0; j--) {
+                        let c = creatures[j];
+                        if (dist(b.x, b.y, c.x, c.y) < (b.isBomb ? 22 : 9)) {
+                            c.energy -= b.isBomb ? 45 : 18;
+                            c.damageFlash = 40;
+                            if (b.isBomb) {
+                                c.purpleFlash = max(c.purpleFlash || 0, 60);
+                            }
+                            if (!b.isBomb && random() < 0.15) {
+                                // Small chance to drop a bomb pickup when hitting with machine gun
+                                if (random() < 0.4) bombs = min(bombs + 1, 8);
+                            }
+                            bullets.splice(i, 1);
+                            break;
+                        }
+                    }
+                }
+
+                // Bullet collision with red particles (to earn bombs)
+                for (let i = bullets.length - 1; i >= 0; i--) {
+                    let b = bullets[i];
+                    if (b.isBomb) continue;
+
+                    for (let j = redHazards.length - 1; j >= 0; j--) {
+                        let r = redHazards[j];
+                        if (dist(b.x, b.y, r.x, r.y) < 18) {
+                            redHazards.splice(j, 1);
+                            bombs = min(bombs + 1, 12);
+                            bullets.splice(i, 1);
+                            break;
+                        }
+                    }
+                }
+            }
+
             // Draw floating texts again on top (screen space for better visibility)
             if (showDamageNumbers) {
                 for (let ft of floatingTexts) {
@@ -3739,6 +3870,24 @@
                     if (effectiveHazardDist > 0.62) {
                         avoidStrength *= 1.7;
                         this.currentThought = "Dodging hazard!";
+                    }
+
+                    // Avoid spaceship bullets when active
+                    if (spaceshipActive && bullets.length > 0) {
+                        for (let b of bullets) {
+                            let d = dist(this.x, this.y, b.x, b.y);
+                            if (d < 65) {
+                                let dx = this.x - b.x;
+                                let dy = this.y - b.y;
+                                let len = sqrt(dx*dx + dy*dy) || 1;
+                                let avoid = map(d, 0, 65, 2.8, 0.4);
+                                this.vx += (dx / len) * avoid * 0.045 * timeScale;
+                                this.vy += (dy / len) * avoid * 0.045 * timeScale;
+                                if (d < 35 && this.currentThought.length < 14) {
+                                    this.currentThought = "Dodging bullets!";
+                                }
+                            }
+                        }
                     }
 
                     let adaptationBoost = this.adaptationLevel * 0.016;
@@ -4375,6 +4524,68 @@
 
             if (miniChartCtx) drawMiniChart();
             updateMainStats();
+        }
+
+        // ==================== SPACESHIP CONTROLS ====================
+
+        document.addEventListener('keydown', function(e) {
+            if (!spaceshipActive) return;
+
+            if (e.key === 'ArrowLeft') {
+                shipX -= 18;
+            }
+            if (e.key === 'ArrowRight') {
+                shipX += 18;
+            }
+            if (e.key === ' ' || e.key === 'Spacebar') {
+                e.preventDefault();
+                shootFromShip();
+            }
+            if (e.key.toLowerCase() === 'b') {
+                shipMode = (shipMode === 'machinegun') ? 'bomb' : 'machinegun';
+            }
+
+            shipX = constrain(shipX, 30, width - 30);
+        });
+
+        // Mouse controls (click to focus then move + click to shoot)
+        let mouseControlActive = false;
+
+        document.addEventListener('click', function(e) {
+            if (!spaceshipActive) return;
+
+            const rect = document.querySelector('canvas').getBoundingClientRect();
+            if (e.clientX > rect.left && e.clientX < rect.right && e.clientY > rect.top && e.clientY < rect.bottom) {
+                mouseControlActive = true;
+                shootFromShip();
+            }
+        });
+
+        document.addEventListener('mousemove', function(e) {
+            if (!spaceshipActive || !mouseControlActive) return;
+
+            const rect = document.querySelector('canvas').getBoundingClientRect();
+            shipX = e.clientX - rect.left;
+            shipX = constrain(shipX, 30, width - 30);
+        });
+
+        function shootFromShip() {
+            if (!spaceshipActive) return;
+            const now = Date.now();
+
+            if (shipMode === 'machinegun') {
+                if (now - lastShotTime < 140) return; // machine gun rate
+                lastShotTime = now;
+
+                bullets.push({ x: shipX - 8, y: shipY - 10, vx: 0, vy: -11, isBomb: false });
+                bullets.push({ x: shipX + 8, y: shipY - 10, vx: 0, vy: -11, isBomb: false });
+            } 
+            else if (shipMode === 'bomb' && bombs > 0) {
+                if (now - lastShotTime < 450) return;
+                lastShotTime = now;
+                bombs--;
+                bullets.push({ x: shipX, y: shipY - 10, vx: 0, vy: -6, isBomb: true, radius: 9 });
+            }
         }
     </script>
 </body>
