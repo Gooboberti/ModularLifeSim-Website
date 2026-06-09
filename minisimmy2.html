@@ -2106,8 +2106,25 @@
                 w.life -= 2.8; // faster base decay
 
                 if (w.life <= 0) {
-                    // Nice pop effect when wall disappears
-                    explosions.push(new Explosion((w.x1 + w.x2) / 2, (w.y1 + w.y2) / 2));
+                    // Wall "glass" breaks → horrible acid explosion
+                    let explodeX = (w.x1 + w.x2) / 2;
+                    let explodeY = (w.y1 + w.y2) / 2;
+                    let sizeMult = (w.originalLength || 80) / 80;
+
+                    // Bigger explosion for larger walls
+                    explosions.push(new Explosion(explodeX, explodeY));
+
+                    // Apply heavy purple damage in area (larger walls = worse)
+                    for (let c of creatures) {
+                        let d = dist(c.x, c.y, explodeX, explodeY);
+                        if (d < 85 * sizeMult) {
+                            let damage = 28 * sizeMult + random(5, 12);
+                            c.energy = max(0, c.energy - damage);
+                            c.purpleFlash = max(c.purpleFlash || 0, 95 + sizeMult * 25);
+                            c.currentThought = "Acid explosion!";
+                        }
+                    }
+
                     energyWalls.splice(i, 1);
                     continue;
                 }
@@ -2125,13 +2142,13 @@
                 let tlen = sqrt(tangentX * tangentX + tangentY * tangentY) || 1;
 
                 let vortexDir = cos((timeOfDay + 0.25) * TWO_PI);
-                let rotForce = 0.45 * settings.vortexMultiplier * vortexDir;
+                let rotForce = 0.12 * settings.vortexMultiplier * vortexDir; // much slower
 
                 w.vx += (tangentX / tlen) * rotForce;
                 w.vy += (tangentY / tlen) * rotForce;
 
-                // Inward pull
-                let pull = 0.28 * settings.vortexMultiplier;
+                // Inward pull (very slow)
+                let pull = 0.07 * settings.vortexMultiplier;
                 w.vx += (centerX - mx) * pull / (distToCenter + 20);
                 w.vy += (centerY - my) * pull / (distToCenter + 20);
 
@@ -2146,30 +2163,50 @@
                 w.vy *= 0.92;
 
                 let lifeRatio = w.life / w.maxLife;
-                let alpha = map(lifeRatio, 0, 1, 30, 235);
-                let glowAlpha = map(lifeRatio, 0, 1, 8, 95);
-                let thickness = map(lifeRatio, 0, 1, 2.5, 8); // shrink when dying
+                let alpha = map(lifeRatio, 0, 1, 45, 220);
+                let thickness = map(lifeRatio, 0, 1, 3, 9);
 
-                // Soft blue glow when being hit by creatures
+                // === Glass perimeter + Acid inside effect ===
+                let mx = (w.x1 + w.x2) / 2;
+                let my = (w.y1 + w.y2) / 2;
+
+                // Soft blue hit flash (when creatures are breaking the glass)
                 if (w.hitFlash > 0) {
                     w.hitFlash--;
                     push();
-                    stroke(100, 180, 255, 160 + w.hitFlash * 4); // soft blue
-                    strokeWeight(thickness * 2.2);
+                    stroke(120, 200, 255, 130 + w.hitFlash * 5);
+                    strokeWeight(thickness * 2.4);
                     strokeCap(ROUND);
                     line(w.x1, w.y1, w.x2, w.y2);
                     pop();
                 }
 
+                // Outer glass edge (bright, glassy)
                 push();
-                stroke(167, 139, 250, alpha);
-                strokeWeight(thickness);
+                stroke(200, 230, 255, alpha * 0.9);
+                strokeWeight(thickness * 0.65);
+                strokeCap(ROUND);
+                line(w.x1, w.y1, w.x2, w.y2);
+                pop();
+
+                // Inner acid (toxic dark purple-green)
+                push();
+                stroke(80, 40, 120, alpha * 0.75);
+                strokeWeight(thickness * 0.9);
                 strokeCap(ROUND);
                 line(w.x1, w.y1, w.x2, w.y2);
 
-                // normal glow (also shrinks)
-                stroke(167, 139, 250, glowAlpha);
-                strokeWeight(thickness * 1.9);
+                // Acid highlight / bubbling feel
+                stroke(140, 60, 180, alpha * 0.45);
+                strokeWeight(thickness * 0.35);
+                line(w.x1, w.y1, w.x2, w.y2);
+                pop();
+
+                // Subtle outer glow
+                push();
+                stroke(167, 139, 250, map(lifeRatio, 0, 1, 15, 70));
+                strokeWeight(thickness * 1.7);
+                strokeCap(ROUND);
                 line(w.x1, w.y1, w.x2, w.y2);
                 pop();
             }
@@ -2194,8 +2231,8 @@
                 }
 
                 for (let c of creatures) {
-                    let harvesterBonus = c.getTieredModuleCount('harvester') * 3.2;
-                    let pickupRange = 8 + harvesterBonus;
+                    let harvesterBonus = c.getTieredModuleCount('harvester') * 4.5;
+                    let pickupRange = 14 + harvesterBonus; // increased across the board
 
                     if (dist(p.x, p.y, c.x, c.y) < pickupRange) {
                         c.energy = min(100, c.energy + settings.particleFoodValue * timeScale);
@@ -2776,16 +2813,18 @@
                     totalScore -= totalCost;
                     addFloatingText(wallStartX, wallStartY - 15, `-${totalCost}`, '#c026ff');
 
+                    const length = sqrt((mouseX - wallStartX)**2 + (mouseY - wallStartY)**2);
                     energyWalls.push({
                         x1: wallStartX,
                         y1: wallStartY,
                         x2: mouseX,
                         y2: mouseY,
-                        life: 2400,
-                        maxLife: 2400,
+                        life: 1800 + length * 1.8,   // larger walls are tougher
+                        maxLife: 1800 + length * 1.8,
                         hitFlash: 0,
                         vx: 0,
-                        vy: 0
+                        vy: 0,
+                        originalLength: length
                     });
                 } else {
                     // Not enough points - flash warning
@@ -3128,7 +3167,7 @@
                     }
                 }
 
-                if (tieredHarv >= 3 && this.honey > 4.5 && random() < 0.008 * timeScale) {
+                if (tieredHarv >= 3 && this.honey > 4.5 && random() < 0.0035 * timeScale) {
                     this.honey -= 3.5;
                     let targetIsGreen = isDay;
                     foodBlooms.push({ x: this.x, y: this.y, radius: 18, life: 350, targetIsGreen, age: 0 });
@@ -3358,7 +3397,7 @@
                         this.currentThought = isDay ? "Seeking Green" : "Seeking Blue";
                     }
 
-                    if (this.honey > 4.5 && random() < 0.003 * timeScale) {
+                    if (this.honey > 4.5 && random() < 0.0015 * timeScale) {
                         this.honey -= 4;
                         let targetIsGreen = isDay;
                         foodBlooms.push({
@@ -3441,13 +3480,13 @@
                             let dy = this.y - my;
                             let len = sqrt(dx*dx + dy*dy) || 1;
 
-                            let bounceForce = 2.1; // much stronger bounce
+                            let bounceForce = 3.2; // even stronger bounce
                             this.vx += (dx / len) * bounceForce;
                             this.vy += (dy / len) * bounceForce;
 
                             // Extra push away from wall to prevent clipping
-                            this.vx += (dx / len) * 0.8;
-                            this.vy += (dy / len) * 0.8;
+                            this.vx += (dx / len) * 1.1;
+                            this.vy += (dy / len) * 1.1;
 
                             // Turn purple + take damage over time
                             this.purpleFlash = 65;
