@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MiniSimmy2 • Reproduction Fixed</title>
+    <title>MiniSimmy2 • Debug Logs</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -27,7 +27,7 @@
                 </div>
                 <div>
                     <span class="font-display text-2xl tracking-tighter">MiniSimmy2</span>
-                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.37 • Reproduction Actually Works</span>
+                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.38 • Debug Logs</span>
                 </div>
             </div>
             <div class="flex items-center gap-x-4 text-sm">
@@ -43,7 +43,7 @@
                 <div class="flex items-center gap-x-4">
                     <div>
                         <h1 class="font-display text-3xl tracking-tighter">MiniSimmy2</h1>
-                        <p class="text-white/60 text-sm">Reproduction now triggers reliably at high energy</p>
+                        <p class="text-white/60 text-sm">Debug logs for reproduction</p>
                     </div>
                     
                     <!-- Elapsed Time -->
@@ -87,7 +87,7 @@
             <div id="canvas-container" class="rounded-3xl overflow-hidden border border-white/10 shadow-2xl"></div>
             
             <div class="mt-2 text-xs text-white/40 text-center">
-                Space = Pause • +/- = Speed • Zoom buttons work • Click creature to inspect
+                Space = Pause • +/- = Speed • Zoom buttons work • Click creature to inspect • Open DevTools console for repro logs
             </div>
         </div>
 
@@ -273,6 +273,7 @@
         let inspectorNeuralCtx;
         let masterVolume = 0.91;
         let lastClickedNode = null;
+        let lastReproLogTime = 0;
 
         let timeScale = 1;
         let paused = false;
@@ -284,7 +285,7 @@
         let settings = {
             energyDrain: 0.108,
             particleFoodValue: 1.3,
-            reproductionChance: 0.08,
+            reproductionChance: 0.09,
             zoneAttraction: 0.075,
             socialResist: 0.14,
             vortexMultiplier: 5.0,
@@ -914,30 +915,41 @@
                 updateGraphData();
             }
 
+            // Reproduction debug logging
+            let readyCount = 0;
             for (let i = creatures.length - 1; i >= 0; i--) {
                 let c = creatures[i];
                 c.update(isDay, vortexDir, vortexStrength, timeScale);
 
-                // Much more reliable reproduction when energy is high and ready
-                if (c.energy > 68 && c.reproCooldown <= 0 && globalReproCooldown <= 0) {
-                    let chance = settings.reproductionChance;
+                const energyReady = c.energy > 68;
+                const cooldownsReady = c.reproCooldown <= 0 && globalReproCooldown <= 0;
+                const isReady = energyReady && cooldownsReady;
 
-                    // Strong bonus when energy is very high
-                    if (c.energy > 85) {
-                        chance = chance * 3.5;                    // Very high energy = strong priority
-                    } else if (c.energy > 75) {
-                        chance = chance * 2.0;
+                if (isReady) readyCount++;
+
+                if (isReady) {
+                    let chance = settings.reproductionChance;
+                    if (c.energy > 85) chance *= 3.5;
+                    else if (c.energy > 75) chance *= 2.0;
+
+                    const roll = random();
+                    const effectiveChance = chance * timeScale;
+
+                    // Log occasionally to avoid spam
+                    if (frameCount % 30 === 0 || c.energy > 90) {
+                        console.log(`[Repro] ${c.name} energy=${Math.floor(c.energy)} ready=true chance=${effectiveChance.toFixed(3)} roll=${roll.toFixed(3)}`);
                     }
 
-                    if (random() < chance * timeScale) {
+                    if (roll < effectiveChance) {
                         let offspring = c.reproduce();
                         if (offspring) {
                             creatures.push(offspring);
-                            globalReproCooldown = 4;           // Very short global cooldown
+                            globalReproCooldown = 4;
                             c.reproCooldown = 22;
                             c.energy -= 7;
                             c.children.push(offspring.name);
                             c.childrenCount++;
+                            console.log(`[BIRTH] ${c.name} → ${offspring.name} | New pop: ${creatures.length}`);
                             playSound(880 + random(-12,12), 'sine', 0.24, 0.038);
                         }
                     }
@@ -957,6 +969,11 @@
                 } else {
                     c.show();
                 }
+            }
+
+            // Occasional summary log
+            if (frameCount % 120 === 0 && creatures.length > 0) {
+                console.log(`[Status] Pop=${creatures.length} | Ready creatures this tick: ${readyCount} | globalCooldown=${globalReproCooldown}`);
             }
 
             let pressure = Math.max(0, (creatures.length - 12) * 0.0055);
