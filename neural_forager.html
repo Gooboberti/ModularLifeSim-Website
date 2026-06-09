@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mini Simmy • v0.20</title>
+  <title>Mini Simmy • v0.21</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
@@ -21,22 +21,27 @@
         </div>
         <div>
           <span class="font-display text-2xl">Mini Simmy</span>
-          <span class="text-xs ml-2 text-slate-500">v0.20 • Stable Neural Viz</span>
+          <span class="text-xs ml-2 text-slate-500">v0.21 • Master Audio Panel</span>
         </div>
       </div>
 
       <div class="flex items-center gap-x-3 text-sm">
+        <!-- Master Audio Button -->
+        <button onclick="showAudioPanel()" 
+                class="flex items-center gap-x-2 px-4 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-2xl text-sm">
+          <i class="fa-solid fa-sliders-h"></i>
+          <span>Audio Panel</span>
+        </button>
+
         <div class="flex items-center gap-x-2 bg-slate-900 border border-slate-700 rounded-2xl px-3 py-1.5">
           <button onclick="toggleMute()" class="flex items-center gap-x-2 px-3 py-1 rounded-xl hover:bg-slate-800 transition-colors text-sm font-medium">
             <i class="fa-solid fa-volume-up text-emerald-400" id="mute-icon"></i>
             <span id="mute-text" class="hidden sm:inline">Sound On</span>
           </button>
-          <input type="range" id="volume-slider" min="0" max="100" value="3" class="w-20 accent-violet-500 cursor-pointer" oninput="updateVolume(this.value)">
-          <span id="volume-value" class="text-xs text-slate-400 w-8 text-right font-mono">3</span>
+          <input type="range" id="volume-slider" min="0" max="100" value="25" class="w-20 accent-violet-500 cursor-pointer" oninput="updateVolume(this.value)">
+          <span id="volume-value" class="text-xs text-slate-400 w-8 text-right font-mono">25</span>
         </div>
-        <button onclick="showSoundSettings()" class="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-2xl text-sm">
-          <i class="fa-solid fa-sliders-h"></i>
-        </button>
+
         <a href="index.html" class="hover:text-white px-2">Back</a>
         <button onclick="resetSim()" class="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-2xl text-sm flex items-center gap-x-2">
           <i class="fa-solid fa-undo"></i> <span>Reset</span>
@@ -55,7 +60,7 @@
 
     <div class="grid grid-cols-1 xl:grid-cols-12 gap-6">
       
-      <!-- Game Map (Left) -->
+      <!-- Game Map -->
       <div class="xl:col-span-5">
         <div class="bg-slate-900 border border-slate-800 rounded-3xl p-4 overflow-hidden">
           <div id="world"></div>
@@ -66,7 +71,7 @@
         </div>
       </div>
 
-      <!-- Brains (2 over 1 under) -->
+      <!-- Brains -->
       <div class="xl:col-span-7">
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
           
@@ -80,7 +85,6 @@
               <span class="text-xs text-emerald-400">Energy: <span id="energy-forager1">70</span></span>
             </div>
             <div id="net-forager1" class="min-h-[210px]"></div>
-            <div id="log-forager1" class="mt-1.5 text-[10px] text-emerald-400/70 h-6 overflow-hidden"></div>
           </div>
 
           <!-- Forager 2 -->
@@ -93,7 +97,6 @@
               <span class="text-xs text-emerald-400">Energy: <span id="energy-forager2">70</span></span>
             </div>
             <div id="net-forager2" class="min-h-[210px]"></div>
-            <div id="log-forager2" class="mt-1.5 text-[10px] text-emerald-400/70 h-6 overflow-hidden"></div>
           </div>
 
           <!-- Predator -->
@@ -106,7 +109,6 @@
               <span class="text-xs text-red-400">Energy: <span id="energy-predator">70</span></span>
             </div>
             <div id="net-predator" class="min-h-[210px]"></div>
-            <div id="log-predator" class="mt-1.5 text-[10px] text-red-400/70 h-6 overflow-hidden"></div>
           </div>
 
           <!-- Legend -->
@@ -115,7 +117,7 @@
             <div class="text-xs text-slate-400 space-y-1.5">
               <div><span class="text-emerald-400">●</span> Forager — Evolves survival traits</div>
               <div><span class="text-red-400">●</span> Predator — Targets weakest target (3s cooldown)</div>
-              <div class="pt-1">Click any neuron to adjust its sound.</div>
+              <div class="pt-1">Use the <strong>Audio Panel</strong> to shape the harmonic sounds.</div>
               <div class="pt-1 text-[10px]">Higher generation = longer surviving bloodlines.</div>
             </div>
           </div>
@@ -127,20 +129,20 @@
   </div>
 
   <script>
-    // ==================== AUDIO SYSTEM ====================
+    // ==================== MASTER AUDIO SYSTEM ====================
     let audioCtx;
     let neuralSoundEnabled = true;
-    let masterVolume = 0.03;
+    let masterVolume = 0.25;
 
-    let soundSettings = {
-      sensitivity: 0.48,
+    // Master Audio Settings
+    let audioSettings = {
+      sensitivity: 0.45,
       inputWave: 'sine',
       hiddenWave: 'triangle',
       outputWave: 'sine',
-      filterCutoff: 1300
+      filterCutoff: 1400,
+      harmonicRichness: 0.08   // detune amount
     };
-
-    let nodeAudioOverrides = {};
 
     function initAudio() {
       if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -164,71 +166,81 @@
       }
     }
 
+    // ==================== SOUND EFFECTS ====================
     function playEatSound() {
-      if (!audioCtx || !neuralSoundEnabled || masterVolume < 0.005) return;
+      if (!audioCtx || !neuralSoundEnabled || masterVolume < 0.01) return;
       const o = audioCtx.createOscillator();
       const g = audioCtx.createGain();
       o.type = 'sine';
-      o.frequency.value = 880;
-      g.gain.value = 0.12 * masterVolume;
+      o.frequency.value = 920;
+      g.gain.value = 0.15 * masterVolume;
       o.connect(g);
       g.connect(audioCtx.destination);
       o.start();
-      g.gain.linearRampToValueAtTime(0.0001, audioCtx.currentTime + 0.18);
-      setTimeout(() => { try { o.stop(); } catch(e){} }, 220);
+      g.gain.linearRampToValueAtTime(0.0001, audioCtx.currentTime + 0.16);
+      setTimeout(() => { try { o.stop(); } catch(e){} }, 200);
     }
 
     function playDeathSound() {
-      if (!audioCtx || !neuralSoundEnabled || masterVolume < 0.005) return;
+      if (!audioCtx || !neuralSoundEnabled || masterVolume < 0.01) return;
       const o = audioCtx.createOscillator();
       const g = audioCtx.createGain();
       const filter = audioCtx.createBiquadFilter();
       o.type = 'sawtooth';
-      o.frequency.value = 220;
+      o.frequency.value = 180;
       filter.type = 'lowpass';
-      filter.frequency.value = 800;
-      g.gain.value = 0.18 * masterVolume;
+      filter.frequency.value = 650;
+      g.gain.value = 0.22 * masterVolume;
       o.connect(filter);
       filter.connect(g);
       g.connect(audioCtx.destination);
       o.start();
-      o.frequency.linearRampToValueAtTime(80, audioCtx.currentTime + 0.6);
-      g.gain.linearRampToValueAtTime(0.0001, audioCtx.currentTime + 0.65);
-      setTimeout(() => { try { o.stop(); } catch(e){} }, 700);
+      o.frequency.linearRampToValueAtTime(60, audioCtx.currentTime + 0.7);
+      g.gain.linearRampToValueAtTime(0.0001, audioCtx.currentTime + 0.75);
+      setTimeout(() => { try { o.stop(); } catch(e){} }, 800);
     }
 
     function playBirthSound() {
-      if (!audioCtx || !neuralSoundEnabled || masterVolume < 0.005) return;
-      [660, 880, 1100].forEach((freq, i) => {
+      if (!audioCtx || !neuralSoundEnabled || masterVolume < 0.01) return;
+      [720, 960, 1200].forEach((freq, i) => {
         setTimeout(() => {
           const o = audioCtx.createOscillator();
           const g = audioCtx.createGain();
           o.type = 'sine';
           o.frequency.value = freq;
-          g.gain.value = 0.09 * masterVolume;
+          g.gain.value = 0.1 * masterVolume;
           o.connect(g);
           g.connect(audioCtx.destination);
           o.start();
-          g.gain.linearRampToValueAtTime(0.0001, audioCtx.currentTime + 0.35);
-          setTimeout(() => { try { o.stop(); } catch(e){} }, 400);
-        }, i * 60);
+          g.gain.linearRampToValueAtTime(0.0001, audioCtx.currentTime + 0.4);
+          setTimeout(() => { try { o.stop(); } catch(e){} }, 450);
+        }, i * 55);
       });
     }
 
-    function playNeuralTone(baseFreq, intensity, layer = 'input', nodeIndex = 0) {
-      if (!audioCtx || !neuralSoundEnabled || masterVolume < 0.005) return;
-      const key = `${layer}-${nodeIndex}`;
-      const override = nodeAudioOverrides[key] || {};
-      const vol = Math.max(0.008, Math.min(0.18, intensity * masterVolume * (override.volume || 0.6)));
-      const duration = 0.3 + intensity * 0.08;
+    function playNeuralTone(baseFreq, intensity, layer = 'input') {
+      if (!audioCtx || !neuralSoundEnabled || masterVolume < 0.01) return;
+
+      const vol = Math.max(0.01, Math.min(0.2, intensity * masterVolume * 0.7));
+      const duration = 0.28 + intensity * 0.1;
 
       const o = audioCtx.createOscillator();
       const g = audioCtx.createGain();
       const filter = audioCtx.createBiquadFilter();
-      o.type = override.wave || (layer === 'input' ? soundSettings.inputWave : layer === 'hidden' ? soundSettings.hiddenWave : soundSettings.outputWave);
+
+      let wave = audioSettings.inputWave;
+      if (layer === 'hidden') wave = audioSettings.hiddenWave;
+      if (layer === 'output') wave = audioSettings.outputWave;
+
+      o.type = wave;
       filter.type = 'lowpass';
-      filter.frequency.value = override.filter || soundSettings.filterCutoff;
-      o.frequency.value = baseFreq * (override.detune || 1);
+      filter.frequency.value = audioSettings.filterCutoff;
+
+      o.frequency.value = baseFreq;
+      if (audioSettings.harmonicRichness > 0) {
+        o.detune.value = (Math.random() - 0.5) * audioSettings.harmonicRichness * 40;
+      }
+
       g.gain.value = vol;
       o.connect(filter);
       filter.connect(g);
@@ -238,67 +250,114 @@
       setTimeout(() => { try { o.stop(); } catch(e){} }, duration * 1000 + 20);
     }
 
-    const inputFreqs = [820, 980, 1100, 1240, 1480, 1660];
-    const hiddenFreqs = [420, 500, 560, 630, 750, 840];
-    const outputFreqs = [320, 380, 420, 500, 560, 630];
-    let lastInputAct = [0,0,0,0,0,0], lastHiddenAct = [0,0,0,0,0,0], lastOutputAct = [0,0,0,0,0,0];
-
-    function triggerNeuralSounds(inputs, hiddens, outputs) {
-      if (!neuralSoundEnabled || !audioCtx) return;
-      const thresh = soundSettings.sensitivity;
-      for (let i = 0; i < 6; i++) if (inputs[i] > thresh && inputs[i] > lastInputAct[i] + 0.1) playNeuralTone(inputFreqs[i], inputs[i], 'input', i);
-      for (let j = 0; j < 6; j++) if (hiddens[j] > thresh + 0.05 && hiddens[j] > lastHiddenAct[j] + 0.08) playNeuralTone(hiddenFreqs[j], hiddens[j]*0.75, 'hidden', j);
-      for (let k = 0; k < 6; k++) if (outputs[k] > thresh && outputs[k] > lastOutputAct[k] + 0.08) playNeuralTone(outputFreqs[k], outputs[k]*0.7, 'output', k);
-      lastInputAct = [...inputs]; lastHiddenAct = [...hiddens]; lastOutputAct = [...outputs];
-    }
-
-    function showNodeControls(layer, index) {
-      const key = `${layer}-${index}`;
-      const current = nodeAudioOverrides[key] || {};
+    // ==================== MASTER AUDIO PANEL ====================
+    function showAudioPanel() {
       const modal = document.createElement('div');
       modal.className = 'fixed inset-0 bg-black/70 flex items-center justify-center z-[100]';
       modal.innerHTML = `
-        <div class="bg-slate-900 border border-slate-700 rounded-3xl p-6 w-full max-w-xs mx-4">
-          <div class="flex justify-between mb-4">
-            <div class="font-semibold">${layer} Node ${index + 1}</div>
-            <button onclick="this.closest('.fixed').remove()" class="text-xl">×</button>
+        <div class="bg-slate-900 border border-slate-700 rounded-3xl p-8 w-full max-w-md mx-4">
+          <div class="flex justify-between items-center mb-6">
+            <h3 class="text-xl font-semibold">Master Audio Panel</h3>
+            <button onclick="this.closest('.fixed').remove()" class="text-2xl leading-none">×</button>
           </div>
-          <div class="space-y-4 text-sm">
+
+          <div class="space-y-6">
+            <!-- Sensitivity -->
             <div>
-              <label class="text-xs text-slate-400">Waveform</label>
-              <select id="node-wave" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2">
-                <option value="sine">Sine (soft)</option>
-                <option value="triangle">Triangle</option>
-                <option value="sawtooth">Sawtooth</option>
-              </select>
+              <label class="block text-sm text-slate-400 mb-1">Trigger Sensitivity</label>
+              <input type="range" id="sens" min="0.2" max="0.8" step="0.05" value="${audioSettings.sensitivity}" class="w-full accent-violet-500">
             </div>
+
+            <!-- Waveforms -->
+            <div class="grid grid-cols-3 gap-4">
+              <div>
+                <label class="text-xs text-slate-400">Inputs</label>
+                <select id="wave-input" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-sm">
+                  <option value="sine">Sine</option>
+                  <option value="triangle">Triangle</option>
+                  <option value="sawtooth">Sawtooth</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-xs text-slate-400">Hidden</label>
+                <select id="wave-hidden" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-sm">
+                  <option value="sine">Sine</option>
+                  <option value="triangle">Triangle</option>
+                  <option value="sawtooth">Sawtooth</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-xs text-slate-400">Outputs</label>
+                <select id="wave-output" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-sm">
+                  <option value="sine">Sine</option>
+                  <option value="triangle">Triangle</option>
+                  <option value="sawtooth">Sawtooth</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Filter -->
             <div>
-              <label class="text-xs text-slate-400">Volume</label>
-              <input type="range" id="node-vol" min="0.2" max="1.5" step="0.1" value="${current.volume || 0.8}" class="w-full accent-violet-500">
+              <label class="block text-sm text-slate-400 mb-1">Filter Cutoff</label>
+              <input type="range" id="filter" min="400" max="2800" step="50" value="${audioSettings.filterCutoff}" class="w-full accent-violet-500">
             </div>
-            <button onclick="saveNodeAudio('${key}', this)" class="w-full py-2.5 bg-violet-600 hover:bg-violet-500 rounded-2xl text-sm font-medium">Apply</button>
+
+            <!-- Harmonic Richness -->
+            <div>
+              <label class="block text-sm text-slate-400 mb-1">Harmonic Richness</label>
+              <input type="range" id="richness" min="0" max="0.25" step="0.01" value="${audioSettings.harmonicRichness}" class="w-full accent-violet-500">
+            </div>
+
+            <div class="flex gap-3 pt-2">
+              <button onclick="applyAudioSettings(this)" class="flex-1 py-3 bg-violet-600 hover:bg-violet-500 rounded-2xl font-medium">Apply</button>
+              <button onclick="applyAudioPreset('soothing', this)" class="flex-1 py-3 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 rounded-2xl font-medium">Soothing</button>
+              <button onclick="applyAudioPreset('bright', this)" class="flex-1 py-3 bg-sky-600/20 hover:bg-sky-600/30 text-sky-400 rounded-2xl font-medium">Bright</button>
+            </div>
           </div>
-        </div>`;
+        </div>
+      `;
       document.body.appendChild(modal);
+
+      // Set current values
       setTimeout(() => {
-        document.getElementById('node-wave').value = current.wave || 'sine';
-        document.getElementById('node-vol').value = current.volume || 0.8;
+        document.getElementById('sens').value = audioSettings.sensitivity;
+        document.getElementById('wave-input').value = audioSettings.inputWave;
+        document.getElementById('wave-hidden').value = audioSettings.hiddenWave;
+        document.getElementById('wave-output').value = audioSettings.outputWave;
+        document.getElementById('filter').value = audioSettings.filterCutoff;
+        document.getElementById('richness').value = audioSettings.harmonicRichness;
       }, 30);
     }
 
-    function saveNodeAudio(key, btn) {
+    function applyAudioSettings(btn) {
       const modal = btn.closest('.fixed');
-      nodeAudioOverrides[key] = {
-        wave: document.getElementById('node-wave').value,
-        volume: parseFloat(document.getElementById('node-vol').value)
-      };
+      audioSettings.sensitivity = parseFloat(document.getElementById('sens').value);
+      audioSettings.inputWave = document.getElementById('wave-input').value;
+      audioSettings.hiddenWave = document.getElementById('wave-hidden').value;
+      audioSettings.outputWave = document.getElementById('wave-output').value;
+      audioSettings.filterCutoff = parseFloat(document.getElementById('filter').value);
+      audioSettings.harmonicRichness = parseFloat(document.getElementById('richness').value);
       modal.remove();
     }
 
-    function generateSciFiName() {
-      const prefixes = ['Kael','Vex','Thorne','Zyl','Ryn','Syl','Drak','Nyx','Korr','Vael'];
-      const suffixes = ['-9','-12','ara','ith','on','yx','ar','en','os'];
-      return prefixes[Math.floor(Math.random()*prefixes.length)] + suffixes[Math.floor(Math.random()*suffixes.length)];
+    function applyAudioPreset(preset, btn) {
+      const modal = btn.closest('.fixed');
+      if (preset === 'soothing') {
+        audioSettings.sensitivity = 0.5;
+        audioSettings.inputWave = 'sine';
+        audioSettings.hiddenWave = 'triangle';
+        audioSettings.outputWave = 'sine';
+        audioSettings.filterCutoff = 1100;
+        audioSettings.harmonicRichness = 0.03;
+      } else if (preset === 'bright') {
+        audioSettings.sensitivity = 0.38;
+        audioSettings.inputWave = 'triangle';
+        audioSettings.hiddenWave = 'sine';
+        audioSettings.outputWave = 'triangle';
+        audioSettings.filterCutoff = 1800;
+        audioSettings.harmonicRichness = 0.12;
+      }
+      modal.remove();
     }
 
     // ==================== GAME ====================
@@ -321,13 +380,6 @@
       predator = new Creature(width * 0.5, height * 0.5, 'predator');
       for (let i = 0; i < 10; i++) foods.push(new Food(random(40, width-40), random(40, height-40)));
       startTime = Date.now();
-
-      // Force initial neural net draw after everything is ready
-      setTimeout(() => {
-        if (foragers.length > 0) drawDetailedNet('net-forager1', foragers[0], true);
-        if (foragers.length > 1) drawDetailedNet('net-forager2', foragers[1], true);
-        drawDetailedNet('net-predator', predator, false);
-      }, 120);
     }
 
     function draw() {
@@ -377,7 +429,6 @@
       predator.show();
 
       updateUI();
-
       if (foragers.length > 0) drawDetailedNet('net-forager1', foragers[0], true);
       if (foragers.length > 1) drawDetailedNet('net-forager2', foragers[1], true);
       drawDetailedNet('net-predator', predator, false);
@@ -440,10 +491,7 @@
         if (this.type === 'predator') return;
 
         let nf = null, fd = Infinity;
-        for (let f of foods) {
-          let d = dist(this.x, this.y, f.x, f.y);
-          if (d < fd) { fd = d; nf = f; }
-        }
+        for (let f of foods) { let d = dist(this.x, this.y, f.x, f.y); if (d < fd) { fd = d; nf = f; } }
 
         let dx = other.x - this.x, dy = other.y - this.y;
         let distOther = dist(this.x, this.y, other.x, other.y);
@@ -516,12 +564,6 @@
       foods = []; for (let i = 0; i < 10; i++) foods.push(new Food(random(40, width-40), random(40, height-40)));
       startTime = Date.now();
       lastKillTime = 0;
-
-      setTimeout(() => {
-        if (foragers.length > 0) drawDetailedNet('net-forager1', foragers[0], true);
-        if (foragers.length > 1) drawDetailedNet('net-forager2', foragers[1], true);
-        drawDetailedNet('net-predator', predator, false);
-      }, 80);
     }
 
     function drawDetailedNet(containerId, creature, isForager) {
@@ -544,7 +586,14 @@
       const hiddens = creature.lastHidden || new Array(6).fill(0.5);
       const outputs = creature.lastOutputs || [0,0,0,0,0,0];
 
-      triggerNeuralSounds(inputs, hiddens, outputs);
+      // Neural sonification using master settings
+      if (neuralSoundEnabled) {
+        const thresh = audioSettings.sensitivity;
+        for (let i = 0; i < 6; i++) if (inputs[i] > thresh && inputs[i] > lastInputAct[i] + 0.1) playNeuralTone(inputFreqs[i], inputs[i], 'input');
+        for (let j = 0; j < 6; j++) if (hiddens[j] > thresh + 0.05 && hiddens[j] > lastHiddenAct[j] + 0.08) playNeuralTone(hiddenFreqs[j], hiddens[j]*0.75, 'hidden');
+        for (let k = 0; k < 6; k++) if (outputs[k] > thresh && outputs[k] > lastOutputAct[k] + 0.08) playNeuralTone(outputFreqs[k], outputs[k]*0.7, 'output');
+        lastInputAct = [...inputs]; lastHiddenAct = [...hiddens]; lastOutputAct = [...outputs];
+      }
 
       function activationFill(act) {
         const t = Math.max(0.15, Math.min(1, act || 0));
@@ -595,8 +644,6 @@
         c.setAttribute('r', (6.5 + act * 3).toFixed(1));
         c.setAttribute('fill', activationFill(act));
         c.setAttribute('stroke', accent); c.setAttribute('stroke-width', '2');
-        c.setAttribute('style', 'cursor: pointer');
-        c.onclick = () => showNodeControls('input', i);
         svg.appendChild(c);
 
         const lbl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
@@ -614,8 +661,6 @@
         c.setAttribute('r', (5 + act * 2.2).toFixed(1));
         c.setAttribute('fill', activationFill(act));
         c.setAttribute('stroke', '#64748b'); c.setAttribute('stroke-width', '1.5');
-        c.setAttribute('style', 'cursor: pointer');
-        c.onclick = () => showNodeControls('hidden', j);
         svg.appendChild(c);
       }
 
@@ -627,8 +672,6 @@
         c.setAttribute('r', (6.5 + act * 3).toFixed(1));
         c.setAttribute('fill', activationFill(act));
         c.setAttribute('stroke', accent); c.setAttribute('stroke-width', '2');
-        c.setAttribute('style', 'cursor: pointer');
-        c.onclick = () => showNodeControls('output', k);
         svg.appendChild(c);
 
         const lbl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
