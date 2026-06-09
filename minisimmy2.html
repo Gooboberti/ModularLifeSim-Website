@@ -30,7 +30,7 @@
                 </div>
                 <div>
                     <span class="font-display text-2xl tracking-tighter">MiniSimmy2</span>
-                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.57 • Critical Bugfix (RedBeam damage)</span>
+                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.58 • Lifetime Adaptation (Phase E)</span>
                 </div>
             </div>
             <div class="flex items-center gap-x-4 text-sm">
@@ -46,7 +46,7 @@
                 <div class="flex items-center gap-x-4">
                     <div>
                         <h1 class="font-display text-3xl tracking-tighter">MiniSimmy2</h1>
-                        <p class="text-white/60 text-sm">Communicators emit hazard warnings. Nearby creatures react and dodge together as groups.</p>
+                        <p class="text-white/60 text-sm">Creatures now improve at hazard avoidance *during their own lifetime* through experience and adaptation.</p>
                     </div>
                     
                     <!-- Elapsed Time -->
@@ -362,8 +362,13 @@
                 </div>
 
                 <div>
+                    <div class="font-semibold text-emerald-400 mb-1">Lifetime Adaptation (Phase E)</div>
+                    <div class="text-white/70 text-xs">Creatures accumulate "Hazard Experience" during their life. More experience = slightly stronger and faster avoidance reactions. Good survivors become noticeably better at dodging red hazards over time within a single lifespan.</div>
+                </div>
+
+                <div>
                     <div class="font-semibold text-emerald-400 mb-1">Social Hazard Warnings (Phase D)</div>
-                    <div class="text-white/70 text-xs">Creatures with Communicator modules emit hazard warning signals when they detect strong threats. Nearby creatures (especially Communicators) react to these warnings and dodge together. Violet specialization excels at this.</div>
+                    <div class="text-white/70 text-xs">Creatures with Communicator modules emit hazard warning signals when they detect strong threats. Nearby creatures (especially Communicators) react to these warnings and dodge together.</div>
                 </div>
 
                 <div>
@@ -1748,6 +1753,7 @@
                 this.damageFlash = 0;
                 this.hazardsAvoided = 0;
                 this.hazardDamageTaken = 0;
+                this.adaptationLevel = 0; // Phase E: Lifetime adaptation / experience
 
                 if (parentTraits) {
                     this.traits = {
@@ -1895,7 +1901,7 @@
                 let drain = settings.energyDrain - this.getEfficiencyBonus();
                 this.energy -= Math.max(0.005, drain * timeScale);
 
-                // Hazard sensing + active avoidance
+                // Hazard sensing + active avoidance + Lifetime Adaptation (Phase E)
                 let hazardInfo = this.getNearestHazardInfo();
                 let sensorLevel = this.getTieredModuleCount('sensor');
 
@@ -1913,6 +1919,10 @@
                         this.currentThought = "Dodging hazard!";
                     }
 
+                    // Phase E: Lifetime adaptation boost
+                    let adaptationBoost = this.adaptationLevel * 0.018;
+                    avoidStrength += adaptationBoost;
+
                     this.vx += cos(avoidAngle) * avoidStrength * 0.035 * timeScale;
                     this.vy += sin(avoidAngle) * avoidStrength * 0.035 * timeScale;
 
@@ -1925,6 +1935,14 @@
 
                 if (dodgedThisFrame && effectiveHazardDist > 0.25) {
                     this.hazardsAvoided = (this.hazardsAvoided || 0) + 1;
+
+                    // Phase E: Gain adaptation experience from successful dodges
+                    this.adaptationLevel = min(12, (this.adaptationLevel || 0) + 0.045);
+                }
+
+                // Small passive adaptation gain from simply surviving near hazards
+                if (effectiveHazardDist > 0.08 && effectiveHazardDist < 0.55) {
+                    this.adaptationLevel = min(12, (this.adaptationLevel || 0) + 0.008 * timeScale);
                 }
 
                 // Phase D: Emit hazard warning if Communicator + strong threat
