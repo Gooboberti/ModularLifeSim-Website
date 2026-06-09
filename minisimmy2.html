@@ -128,6 +128,66 @@
         </div>
     </div>
 
+    <!-- Semi-transparent Inspector Popup -->
+    <div id="inspector" class="hidden fixed inset-0 z-[100] flex items-center justify-center">
+        <!-- Backdrop -->
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeInspector()"></div>
+
+        <!-- Modal Content -->
+        <div class="relative w-[380px] bg-[#0a0a0f]/90 border border-white/20 rounded-3xl p-6 shadow-2xl backdrop-blur-xl">
+            <div class="flex justify-between items-center mb-4">
+                <div class="font-semibold text-xl" id="inspect-name"></div>
+                <button onclick="closeInspector()" class="text-white/60 hover:text-white text-2xl leading-none">&times;</button>
+            </div>
+
+            <!-- Energy Bar -->
+            <div class="mb-5">
+                <div class="flex justify-between text-xs mb-1.5">
+                    <div class="text-white/60">Energy</div>
+                    <div id="inspect-energy-text" class="font-mono text-sm"></div>
+                </div>
+                <div class="h-3 bg-white/10 rounded-full overflow-hidden relative">
+                    <div id="inspect-energy-bar" class="h-3 bg-gradient-to-r from-red-400 via-yellow-400 to-emerald-400 transition-all duration-200" style="width:60%"></div>
+                    <div class="absolute top-0 h-3 w-0.5 bg-red-500" style="left:15%"></div>
+                    <div class="absolute top-0 h-3 w-0.5 bg-violet-400" style="left:80%"></div>
+                </div>
+                <div class="flex justify-between text-[10px] text-white/40 mt-1">
+                    <div>Predation</div>
+                    <div>Reproduction</div>
+                </div>
+            </div>
+
+            <div class="bg-white/5 rounded-2xl p-4 mb-5 text-sm">
+                <div class="grid grid-cols-2 gap-y-1.5 text-xs">
+                    <div class="text-white/50">Generation</div>
+                    <div id="inspect-gen" class="font-mono text-emerald-400"></div>
+                    <div class="text-white/50">Children</div>
+                    <div id="inspect-children" class="font-mono"></div>
+                    <div class="text-white/50">Kills</div>
+                    <div id="inspect-kills" class="font-mono text-red-400"></div>
+                    <div class="text-white/50">Repro Cooldown</div>
+                    <div id="inspect-repro" class="font-mono text-amber-400"></div>
+                </div>
+            </div>
+
+            <div class="mb-5">
+                <div class="text-xs text-white/50 mb-1.5">Current Thought</div>
+                <div id="inspect-thought" class="text-sm bg-white/5 rounded-2xl px-4 py-2 text-white/80"></div>
+            </div>
+
+            <!-- Animated Neural Net -->
+            <div class="mb-5">
+                <div class="text-xs text-white/50 mb-1.5">Neural Net</div>
+                <canvas id="neural-canvas" width="320" height="170" class="neural-canvas w-full rounded-2xl"></canvas>
+            </div>
+
+            <div>
+                <div class="text-xs text-white/50 mb-1.5">Children</div>
+                <div id="inspect-children-list" class="text-xs bg-white/5 rounded-2xl p-3 max-h-20 overflow-auto"></div>
+            </div>
+        </div>
+    </div>
+
     <script>
         let creatures = [];
         let vortexParticles = [];
@@ -141,7 +201,6 @@
         let neuralCtx;
         let masterVolume = 0.12;
 
-        // Tunable settings
         let settings = {
             energyDrain: 0.038,
             particleFoodValue: 1.6,
@@ -158,7 +217,6 @@
         }
 
         function setupSliders() {
-            // Volume
             const volSlider = document.getElementById('volume-slider');
             const volValue = document.getElementById('volume-value');
             volSlider.value = masterVolume;
@@ -168,65 +226,26 @@
                 volValue.innerText = Math.round(masterVolume * 100) + '%';
             };
 
-            // Energy Drain
-            const drainSlider = document.getElementById('slider-drain');
-            const drainVal = document.getElementById('val-drain');
-            drainSlider.value = settings.energyDrain;
-            drainVal.innerText = settings.energyDrain.toFixed(3);
-            drainSlider.oninput = () => {
-                settings.energyDrain = parseFloat(drainSlider.value);
-                drainVal.innerText = settings.energyDrain.toFixed(3);
-            };
+            const mappings = [
+                ['slider-drain', 'val-drain', 'energyDrain', 3],
+                ['slider-particle', 'val-particle', 'particleFoodValue', 1],
+                ['slider-repro', 'val-repro', 'reproductionChance', 4],
+                ['slider-attraction', 'val-attraction', 'zoneAttraction', 3],
+                ['slider-social', 'val-social', 'socialResist', 2],
+                ['slider-vortex', 'val-vortex', 'vortexMultiplier', 1]
+            ];
 
-            // Particle Food
-            const particleSlider = document.getElementById('slider-particle');
-            const particleVal = document.getElementById('val-particle');
-            particleSlider.value = settings.particleFoodValue;
-            particleVal.innerText = settings.particleFoodValue.toFixed(1);
-            particleSlider.oninput = () => {
-                settings.particleFoodValue = parseFloat(particleSlider.value);
-                particleVal.innerText = settings.particleFoodValue.toFixed(1);
-            };
-
-            // Reproduction Chance
-            const reproSlider = document.getElementById('slider-repro');
-            const reproVal = document.getElementById('val-repro');
-            reproSlider.value = settings.reproductionChance;
-            reproVal.innerText = settings.reproductionChance.toFixed(4);
-            reproSlider.oninput = () => {
-                settings.reproductionChance = parseFloat(reproSlider.value);
-                reproVal.innerText = settings.reproductionChance.toFixed(4);
-            };
-
-            // Zone Attraction
-            const attrSlider = document.getElementById('slider-attraction');
-            const attrVal = document.getElementById('val-attraction');
-            attrSlider.value = settings.zoneAttraction;
-            attrVal.innerText = settings.zoneAttraction.toFixed(3);
-            attrSlider.oninput = () => {
-                settings.zoneAttraction = parseFloat(attrSlider.value);
-                attrVal.innerText = settings.zoneAttraction.toFixed(3);
-            };
-
-            // Social Resistance
-            const socialSlider = document.getElementById('slider-social');
-            const socialVal = document.getElementById('val-social');
-            socialSlider.value = settings.socialResist;
-            socialVal.innerText = settings.socialResist.toFixed(2);
-            socialSlider.oninput = () => {
-                settings.socialResist = parseFloat(socialSlider.value);
-                socialVal.innerText = settings.socialResist.toFixed(2);
-            };
-
-            // Vortex Multiplier
-            const vortexSlider = document.getElementById('slider-vortex');
-            const vortexVal = document.getElementById('val-vortex');
-            vortexSlider.value = settings.vortexMultiplier;
-            vortexVal.innerText = settings.vortexMultiplier.toFixed(1);
-            vortexSlider.oninput = () => {
-                settings.vortexMultiplier = parseFloat(vortexSlider.value);
-                vortexVal.innerText = settings.vortexMultiplier.toFixed(1);
-            };
+            mappings.forEach(([sliderId, valId, key, decimals]) => {
+                const slider = document.getElementById(sliderId);
+                const val = document.getElementById(valId);
+                if (!slider || !val) return;
+                slider.value = settings[key];
+                val.innerText = settings[key].toFixed(decimals);
+                slider.oninput = () => {
+                    settings[key] = parseFloat(slider.value);
+                    val.innerText = settings[key].toFixed(decimals);
+                };
+            });
         }
 
         function setup() {
@@ -250,7 +269,7 @@
 
             setupSliders();
 
-            let neuralCanvas = document.getElementById('neural-canvas');
+            const neuralCanvas = document.getElementById('neural-canvas');
             if (neuralCanvas) neuralCtx = neuralCanvas.getContext('2d');
         }
 
@@ -307,7 +326,6 @@
             fill(70, 75, 85, 45);
             circle(centerX - 5, centerY - 5, 9);
 
-            // Vortex particles
             for (let i = vortexParticles.length - 1; i >= 0; i--) {
                 let p = vortexParticles[i];
                 p.update(vortexDir, vortexStrength);
@@ -329,7 +347,6 @@
                 vortexParticles.push(new VortexParticle(true));
             }
 
-            // Zones
             fill(16, 185, 129, isDay ? 100 : 22);
             circle(greenZone.x, greenZone.y, greenZone.r * 2);
             fill(255); textAlign(CENTER); textSize(10);
@@ -385,10 +402,9 @@
             for (let c of creatures) {
                 if (dist(mouseX, mouseY, c.x, c.y) < 14) {
                     selectedCreature = c;
-                    // For now we keep the floating inspector behavior
-                    // You can expand this later to show in sidebar
-                    document.getElementById('inspector').classList.remove('hidden');
-                    document.getElementById('inspector').classList.add('flex');
+                    const inspector = document.getElementById('inspector');
+                    inspector.classList.remove('hidden');
+                    inspector.classList.add('flex');
                     updateInspector();
                     return;
                 }
@@ -396,32 +412,85 @@
         }
 
         function closeInspector() {
+            const inspector = document.getElementById('inspector');
+            inspector.classList.remove('flex');
+            inspector.classList.add('hidden');
             selectedCreature = null;
-            document.getElementById('inspector').classList.remove('flex');
-            document.getElementById('inspector').classList.add('hidden');
         }
 
         function updateInspector() {
             if (!selectedCreature) return;
-            let c = selectedCreature;
+            const c = selectedCreature;
+
             document.getElementById('inspect-name').innerText = c.name;
             document.getElementById('inspect-gen').innerText = c.generation;
             document.getElementById('inspect-children').innerText = c.childrenCount;
             document.getElementById('inspect-kills').innerText = c.killCount;
 
-            let energyPct = Math.max(0, Math.min(100, c.energy));
+            const energyPct = Math.max(0, Math.min(100, c.energy));
             document.getElementById('inspect-energy-bar').style.width = energyPct + '%';
             document.getElementById('inspect-energy-text').innerText = Math.floor(c.energy);
 
-            let reproText = c.reproCooldown > 0 ? `Cooldown (${c.reproCooldown})` : 'Ready';
+            const reproText = c.reproCooldown > 0 ? `Cooldown (${c.reproCooldown})` : 'Ready';
             document.getElementById('inspect-repro').innerText = reproText;
 
             document.getElementById('inspect-thought').innerText = c.currentThought;
 
-            let list = document.getElementById('inspect-children-list');
+            const list = document.getElementById('inspect-children-list');
             list.innerHTML = c.children.length > 0 ? c.children.join(', ') : 'None yet';
 
-            // neural net drawing can stay as is
+            drawAnimatedNeuralNet(c);
+        }
+
+        function drawAnimatedNeuralNet(creature) {
+            if (!neuralCtx) return;
+            const ctx = neuralCtx;
+            ctx.clearRect(0, 0, 320, 170);
+
+            const t = frameCount * 0.08;
+            const layers = [6, 4, 6];
+            const positions = [];
+
+            for (let l = 0; l < layers.length; l++) {
+                const x = 40 + l * 95;
+                positions[l] = [];
+                for (let n = 0; n < layers[l]; n++) {
+                    const y = 28 + n * (115 / (layers[l] - 1));
+                    positions[l].push({x, y});
+                }
+            }
+
+            ctx.strokeStyle = '#475569';
+            ctx.lineWidth = 1;
+            for (let l = 0; l < positions.length - 1; l++) {
+                for (let a of positions[l]) {
+                    for (let b of positions[l + 1]) {
+                        ctx.beginPath();
+                        ctx.moveTo(a.x, a.y);
+                        ctx.lineTo(b.x, b.y);
+                        ctx.stroke();
+                    }
+                }
+            }
+
+            for (let l = 0; l < positions.length; l++) {
+                for (let i = 0; i < positions[l].length; i++) {
+                    const p = positions[l][i];
+                    const activation = Math.sin(t + i * 1.0 + l * 0.6) * 0.5 + 0.5;
+                    const size = 6 + activation * 4;
+
+                    ctx.fillStyle = l === 0 ? '#38bdf8' : (l === 2 ? '#f472b6' : '#a78bfa');
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, size, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, size + Math.sin(t * 2 + i) * 2, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+            }
         }
 
         function updateStats() {
@@ -434,7 +503,7 @@
             document.getElementById('stats').innerHTML = `
                 <span>Pop: <span class="text-emerald-400">${creatures.length}</span></span>
                 <span>Pred: <span class="text-red-400">${predators}</span></span>
-                <span>Avg Mod: <span class="text-violet-400">${(totalModules/creatures.length).toFixed(1)}</span></span>
+                <span>Avg Mod: <span class="text-violet-400">${(totalModules / creatures.length).toFixed(1)}</span></span>
             `;
         }
 
@@ -456,12 +525,12 @@
             update(vortexDir, vortexStrength) {
                 let dx = this.x - centerX;
                 let dy = this.y - centerY;
-                let distToCenter = sqrt(dx*dx + dy*dy) || 1;
+                let distToCenter = sqrt(dx * dx + dy * dy) || 1;
 
                 if (distToCenter < 4) { this.life = 0; return; }
 
                 let tangentX = -dy, tangentY = dx;
-                let len = sqrt(tangentX*tangentX + tangentY*tangentY) || 1;
+                let len = sqrt(tangentX * tangentX + tangentY * tangentY) || 1;
                 this.x += (tangentX / len) * 1.4 * vortexStrength * vortexDir;
                 this.y += (tangentY / len) * 1.4 * vortexStrength * vortexDir;
 
@@ -479,7 +548,8 @@
 
         class Creature {
             constructor(x, y, parentModules = null, generation = 1) {
-                this.x = x; this.y = y;
+                this.x = x;
+                this.y = y;
                 this.vx = random(-0.45, 0.45);
                 this.vy = random(-0.45, 0.45);
                 this.energy = parentModules ? 41 : 52 + random(21);
@@ -493,29 +563,29 @@
                 this.reproCooldown = 0;
                 this.currentThought = "Exploring...";
 
-                let types = ['harvester','sensor','mover','resistant'];
-                let colors = {'harvester':'#34d399','sensor':'#38bdf8','mover':'#a78bfa','resistant':'#f472b6'};
+                let types = ['harvester', 'sensor', 'mover', 'resistant'];
+                let colors = { 'harvester': '#34d399', 'sensor': '#38bdf8', 'mover': '#a78bfa', 'resistant': '#f472b6' };
 
                 if (parentModules) {
-                    this.modules = parentModules.map(m => ({...m}));
+                    this.modules = parentModules.map(m => ({ ...m }));
                     if (random() < 0.44 && this.modules.length < 7) {
                         let nt = random(types);
                         let ang = random(TWO_PI), di = random(5.5, 9.5);
-                        this.modules.push({type:nt, color:colors[nt], offsetX:cos(ang)*di, offsetY:sin(ang)*di});
+                        this.modules.push({ type: nt, color: colors[nt], offsetX: cos(ang) * di, offsetY: sin(ang) * di });
                     }
                 } else {
                     this.modules = [];
                     if (random() < 0.44) {
                         let t = random(types), ang = random(TWO_PI), di = random(5.5, 9.5);
-                        this.modules.push({type:t, color:colors[t], offsetX:cos(ang)*di, offsetY:sin(ang)*di});
+                        this.modules.push({ type: t, color: colors[t], offsetX: cos(ang) * di, offsetY: sin(ang) * di });
                     }
                 }
             }
 
-            getModuleCount(type){ return this.modules.filter(m=>m.type===type).length; }
+            getModuleCount(type) { return this.modules.filter(m => m.type === type).length; }
 
             reproduce() {
-                return new Creature(this.x + random(-7,7), this.y + random(-7,7), this.modules, this.generation + 1);
+                return new Creature(this.x + random(-7, 7), this.y + random(-7, 7), this.modules, this.generation + 1);
             }
 
             update(isDay, vortexDir, vortexStrength) {
@@ -542,11 +612,11 @@
                         let d = dist(this.x, this.y, target.x, target.y);
                         if (d > 3.5 && d < 135) {
                             let dx = target.x - this.x, dy = target.y - this.y;
-                            this.vx += (dx/d) * 0.09; this.vy += (dy/d) * 0.09;
+                            this.vx += (dx / d) * 0.09; this.vy += (dy / d) * 0.09;
                         }
                         if (d < 7) {
                             let stolen = Math.min(2, target.modules.length);
-                            for (let i=0; i<stolen; i++) if (target.modules.length>0) this.modules.push(target.modules.pop());
+                            for (let i = 0; i < stolen; i++) if (target.modules.length > 0) this.modules.push(target.modules.pop());
                             this.energy = 74;
                             target.energy = 0;
                             this.killCount++;
@@ -562,8 +632,8 @@
 
                     if (d > 3 && tgt.food > 0) {
                         let pull = settings.zoneAttraction + this.getModuleCount('harvester') * 0.012;
-                        this.vx += (dx/d) * pull;
-                        this.vy += (dy/d) * pull;
+                        this.vx += (dx / d) * pull;
+                        this.vy += (dy / d) * pull;
                     }
 
                     let neighbors = 0;
@@ -574,8 +644,8 @@
 
                     let cdist = dist(this.x, this.y, centerX, centerY);
                     if (cdist > 16 && cdist < 420) {
-                        let tx = - (this.y - centerY), ty = (this.x - centerX);
-                        let tlen = sqrt(tx*tx + ty*ty) || 1;
+                        let tx = -(this.y - centerY), ty = (this.x - centerX);
+                        let tlen = sqrt(tx * tx + ty * ty) || 1;
                         let vForce = 0.72 * vortexStrength * vortexDir * (1 - socialResist);
                         this.vx += (tx / tlen) * vForce;
                         this.vy += (ty / tlen) * vForce;
@@ -586,12 +656,12 @@
                     }
 
                     if (cdist < 150) {
-                        this.vx += random(-0.85,0.85)*0.48;
-                        this.vy += random(-0.85,0.85)*0.48;
+                        this.vx += random(-0.85, 0.85) * 0.48;
+                        this.vy += random(-0.85, 0.85) * 0.48;
                         this.currentThought = "Escaping vortex";
                     } else if (d > 75) {
-                        this.vx += random(-0.42,0.42)*0.32;
-                        this.vy += random(-0.42,0.42)*0.32;
+                        this.vx += random(-0.42, 0.42) * 0.32;
+                        this.vy += random(-0.42, 0.42) * 0.32;
                         this.currentThought = "Wandering";
                     } else {
                         this.currentThought = "Seeking resources";
@@ -599,8 +669,8 @@
 
                     if (this.honey > 4.5 && random() < 0.0032) {
                         this.honey -= 4;
-                        if (random()<0.5) greenZone.food = min(175, greenZone.food+5);
-                        else blueZone.food = min(175, blueZone.food+5);
+                        if (random() < 0.5) greenZone.food = min(175, greenZone.food + 5);
+                        else blueZone.food = min(175, blueZone.food + 5);
                         this.currentThought = "Depositing food";
                         playSound(540, 'sine', 0.12, 0.025);
                     }
@@ -608,20 +678,20 @@
 
                 this.x += this.vx; this.y += this.vy;
                 this.vx *= 0.82; this.vy *= 0.82;
-                this.x = constrain(this.x, 8, width-8);
-                this.y = constrain(this.y, 8, height-8);
+                this.x = constrain(this.x, 8, width - 8);
+                this.y = constrain(this.y, 8, height - 8);
 
-                let inG = dist(this.x,this.y,greenZone.x,greenZone.y) < greenZone.r;
-                let inB = dist(this.x,this.y,blueZone.x,blueZone.y) < blueZone.r;
+                let inG = dist(this.x, this.y, greenZone.x, greenZone.y) < greenZone.r;
+                let inB = dist(this.x, this.y, blueZone.x, blueZone.y) < blueZone.r;
 
                 if (inG && isDay && greenZone.food > 0) {
-                    let g = 0.28 + this.getModuleCount('harvester')*0.1;
+                    let g = 0.28 + this.getModuleCount('harvester') * 0.1;
                     this.energy = min(100, this.energy + g);
                     greenZone.food = max(0, greenZone.food - 0.32);
                     if (this.energy > 76) this.honey = min(11, this.honey + 0.2);
                 }
                 if (inB && !isDay && blueZone.food > 0) {
-                    let g = 0.28 + this.getModuleCount('sensor')*0.09;
+                    let g = 0.28 + this.getModuleCount('sensor') * 0.09;
                     this.energy = min(100, this.energy + g);
                     blueZone.food = max(0, blueZone.food - 0.32);
                     if (this.energy > 76) this.honey = min(11, this.honey + 0.2);
@@ -634,19 +704,19 @@
                 fill(this.isPredator ? '#f87171' : '#facc15');
                 stroke(this.isPredator ? '#fecaca' : '#fef08c');
                 strokeWeight(1.1);
-                circle(0,0,s);
-                noStroke(); fill(255,255,255,45);
-                circle(-s*0.1, -s*0.1, s*0.16);
+                circle(0, 0, s);
+                noStroke(); fill(255, 255, 255, 45);
+                circle(-s * 0.1, -s * 0.1, s * 0.16);
 
                 if (this.honey > 0.5) {
-                    fill('#f59e0b'); circle(3, -3, 2.6 + this.honey*0.03);
+                    fill('#f59e0b'); circle(3, -3, 2.6 + this.honey * 0.03);
                 }
 
-                fill(255,255,255,130); textAlign(CENTER); textSize(4.6);
-                text(this.name, 0, -s-1.5);
+                fill(255, 255, 255, 130); textAlign(CENTER); textSize(4.6);
+                text(this.name, 0, -s - 1.5);
 
                 for (let m of this.modules) {
-                    fill(m.color); stroke(255,255,255,4); strokeWeight(0.15);
+                    fill(m.color); stroke(255, 255, 255, 4); strokeWeight(0.15);
                     circle(m.offsetX, m.offsetY, 3.5);
                 }
                 pop();
@@ -657,11 +727,10 @@
             creatures = []; vortexParticles = [];
             greenZone.food = 150; blueZone.food = 150;
             globalReproCooldown = 0; selectedCreature = null;
-            document.getElementById('inspector').classList.remove('flex');
-            document.getElementById('inspector').classList.add('hidden');
+            closeInspector();
 
-            for (let i=0; i<9; i++) creatures.push(new Creature(random(width), random(height)));
-            for (let i=0; i<95; i++) vortexParticles.push(new VortexParticle());
+            for (let i = 0; i < 9; i++) creatures.push(new Creature(random(width), random(height)));
+            for (let i = 0; i < 95; i++) vortexParticles.push(new VortexParticle());
         }
     </script>
 </body>
