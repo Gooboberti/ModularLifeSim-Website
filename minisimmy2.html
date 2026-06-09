@@ -42,7 +42,7 @@
                 </div>
                 <div>
                     <span class="font-display text-xl sm:text-2xl tracking-tighter">MiniSimmy2</span>
-                    <span class="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.79.1 • Syntax fix (break;)</span>
+                    <span class="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.80 • Audio Stability + Limiter</span>
                 </div>
             </div>
             
@@ -61,7 +61,7 @@
                 <div class="flex items-center gap-x-3">
                     <div>
                         <h1 class="font-display text-2xl sm:text-3xl tracking-tighter">MiniSimmy2</h1>
-                        <p class="text-white/60 text-xs sm:text-sm">Groups can now socially pressure outliers into becoming predators</p>
+                        <p class="text-white/60 text-xs sm:text-sm">Audio cleaned up + master limiter added</p>
                     </div>
                 </div>
                 
@@ -456,13 +456,19 @@
         let globalReproCooldown = 0;
         let centerX, centerY;
         let selectedCreature = null;
-        let masterVolume = 0.14;
-        let effectsVolume = 0.85;
-        let ambientVolume = 1.85;
+
+        // Audio variables
+        let masterVolume = 0.12;
+        let effectsVolume = 0.65;
+        let ambientVolume = 1.6;
         let pitchShift = 0.98;
-        let soundDensity = 1.70;
+        let soundDensity = 1.55;
         let defaultWaveform = 'triangle';
         let audioCtx;
+        let masterGain;
+        let compressor;
+        let activeVoices = 0;
+        const MAX_VOICES = 18;
 
         let cursorHumOsc = null;
         let cursorHumGain = null;
@@ -482,9 +488,9 @@
         let redHazardsEnabled = true;
         let cursorHazardActive = false;
 
-        // === NEW: Environmental Cycle System (Phase 1) ===
-        let environmentPhase = 0; // 0 = Fertile, 1 = Normal, 2 = Drought
-        let envCycleLength = 2200; // ~36 seconds per phase at 60fps
+        // Environmental Cycle
+        let environmentPhase = 0;
+        let envCycleLength = 2200;
         let envPhaseProgress = 0;
         let envLabelElement = null;
 
@@ -508,7 +514,30 @@
         function getAudioContext() {
             if (!audioCtx) {
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+                // Create master audio chain with limiter
+                masterGain = audioCtx.createGain();
+                compressor = audioCtx.createDynamicsCompressor();
+
+                // Compressor settings for limiting (gentle but effective)
+                compressor.threshold.value = -18;
+                compressor.knee.value = 8;
+                compressor.ratio.value = 12;
+                compressor.attack.value = 0.003;
+                compressor.release.value = 0.25;
+
+                masterGain.gain.value = masterVolume;
+
+                // Chain: sounds → masterGain → compressor → destination
+                masterGain.connect(compressor);
+                compressor.connect(audioCtx.destination);
             }
+
+            // Resume if suspended (required after user gesture)
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+
             return audioCtx;
         }
 
@@ -530,11 +559,11 @@
 
             cursorHumOsc.connect(cursorHumFilter);
             cursorHumFilter.connect(cursorHumGain);
-            cursorHumGain.connect(ctx.destination);
+            cursorHumGain.connect(masterGain);   // now goes through limiter
 
             cursorHumOsc.start();
 
-            const targetVol = 0.018 * effectsVolume * masterVolume;
+            const targetVol = 0.015 * effectsVolume;
             cursorHumGain.gain.linearRampToValueAtTime(targetVol, ctx.currentTime + 0.8);
         }
 
@@ -553,6 +582,9 @@
         }
 
         function playCursorDamageSound(creature) {
+            if (activeVoices > MAX_VOICES) return;
+            activeVoices++;
+
             const ctx = getAudioContext();
 
             const osc1 = ctx.createOscillator();
@@ -564,37 +596,49 @@
             filter1.type = 'lowpass';
             filter1.frequency.value = 420;
 
-            gain1.gain.value = 0.22 * effectsVolume * masterVolume;
+            gain1.gain.value = 0.18 * effectsVolume;
             gain1.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.35);
 
             osc1.connect(filter1);
             filter1.connect(gain1);
-            gain1.connect(ctx.destination);
+            gain1.connect(masterGain);
             osc1.start();
-            setTimeout(() => { try { osc1.stop(); } catch(e){} }, 400);
 
             setTimeout(() => {
+                try { osc1.stop(); } catch(e){}
+                activeVoices = Math.max(0, activeVoices - 1);
+            }, 400);
+
+            // second layer
+            setTimeout(() => {
+                if (activeVoices > MAX_VOICES) return;
+                activeVoices++;
+
                 const osc2 = ctx.createOscillator();
                 const gain2 = ctx.createGain();
                 const filter2 = ctx.createBiquadFilter();
 
                 osc2.type = 'square';
                 osc2.frequency.value = 185 + Math.random() * 40;
-
                 filter2.type = 'bandpass';
                 filter2.frequency.value = 680;
                 filter2.Q.value = 2.2;
 
-                gain2.gain.value = 0.09 * effectsVolume * masterVolume;
+                gain2.gain.value = 0.08 * effectsVolume;
                 gain2.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.22);
 
                 osc2.connect(filter2);
                 filter2.connect(gain2);
-                gain2.connect(ctx.destination);
+                gain2.connect(masterGain);
                 osc2.start();
-                setTimeout(() => { try { osc2.stop(); } catch(e){} }, 280);
+
+                setTimeout(() => {
+                    try { osc2.stop(); } catch(e){}
+                    activeVoices = Math.max(0, activeVoices - 1);
+                }, 280);
             }, 25);
 
+            // noise layer
             const noise = ctx.createBufferSource();
             const noiseGain = ctx.createGain();
             const noiseFilter = ctx.createBiquadFilter();
@@ -610,17 +654,24 @@
             noiseFilter.frequency.value = 1200;
             noiseFilter.Q.value = 1.6;
 
-            noiseGain.gain.value = 0.07 * effectsVolume * masterVolume;
+            noiseGain.gain.value = 0.06 * effectsVolume;
             noiseGain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.18);
 
             noise.connect(noiseFilter);
             noiseFilter.connect(noiseGain);
-            noiseGain.connect(ctx.destination);
+            noiseGain.connect(masterGain);
             noise.start();
-            setTimeout(() => { try { noise.stop(); } catch(e){} }, 220);
+
+            setTimeout(() => {
+                try { noise.stop(); } catch(e){}
+                activeVoices = Math.max(0, activeVoices - 1);
+            }, 220);
         }
 
-        function playTone(freq, type = null, duration = 0.25, volume = 0.06, detune = 0, attack = 0.01, release = 0.2) {
+        function playTone(freq, type = null, duration = 0.28, volume = 0.055, detune = 0, attack = 0.012, release = 0.22) {
+            if (activeVoices > MAX_VOICES) return;
+            activeVoices++;
+
             const ctx = getAudioContext();
             const osc = ctx.createOscillator();
             const gain = ctx.createGain();
@@ -631,56 +682,62 @@
             if (detune) osc.detune.value = detune;
 
             filter.type = 'lowpass';
-            filter.frequency.value = 2202;
+            filter.frequency.value = 2100;
 
-            const finalVol = volume * effectsVolume * masterVolume;
+            const finalVol = volume * effectsVolume;
             gain.gain.value = 0;
             gain.gain.linearRampToValueAtTime(finalVol, ctx.currentTime + attack);
             gain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + duration);
 
             osc.connect(filter);
             filter.connect(gain);
-            gain.connect(ctx.destination);
+            gain.connect(masterGain);
 
             osc.start();
-            setTimeout(() => { try { osc.stop(); } catch(e){} }, (duration + 0.1) * 1000);
+
+            setTimeout(() => {
+                try { osc.stop(); } catch(e){}
+                activeVoices = Math.max(0, activeVoices - 1);
+            }, (duration + 0.12) * 1000);
         }
 
         function playBirthSound() {
-            playTone(880, 'sine', 0.35, 0.045, 0, 0.02, 0.3);
-            setTimeout(() => playTone(1108, 'sine', 0.28, 0.035, 12, 0.015, 0.25), 60);
-            setTimeout(() => playTone(1320, 'sine', 0.22, 0.028, -8, 0.01, 0.2), 110);
+            playTone(880, 'sine', 0.38, 0.04, 0, 0.02, 0.32);
+            setTimeout(() => playTone(1108, 'sine', 0.30, 0.032, 12, 0.015, 0.26), 55);
+            setTimeout(() => playTone(1320, 'sine', 0.24, 0.026, -8, 0.01, 0.22), 105);
         }
 
         function playEatSound(isGreenZone = true) {
-            if (Math.random() > soundDensity * 0.6) return;
+            if (Math.random() > soundDensity * 0.55) return;
             const base = isGreenZone ? 620 : 780;
-            playTone(base, 'triangle', 0.18, 0.035, 0, 0.005, 0.16);
-            setTimeout(() => playTone(base * 1.5, 'triangle', 0.12, 0.022, 5, 0.003, 0.1), 25);
+            playTone(base, 'triangle', 0.20, 0.032, 0, 0.006, 0.18);
+            setTimeout(() => playTone(base * 1.5, 'triangle', 0.13, 0.02, 5, 0.004, 0.12), 22);
         }
 
         function playDeathSound() {
-            playTone(220, 'sawtooth', 0.45, 0.04, 0, 0.02, 0.4);
-            setTimeout(() => playTone(175, 'sine', 0.35, 0.03, -10, 0.01, 0.3), 80);
+            playTone(220, 'sawtooth', 0.48, 0.038, 0, 0.02, 0.42);
+            setTimeout(() => playTone(175, 'sine', 0.38, 0.028, -10, 0.012, 0.32), 75);
         }
 
         function playDepositSound() {
-            playTone(540, 'sine', 0.22, 0.03, 0, 0.01, 0.2);
-            setTimeout(() => playTone(680, 'sine', 0.16, 0.025, 8, 0.008, 0.14), 40);
+            playTone(540, 'sine', 0.24, 0.028, 0, 0.012, 0.22);
+            setTimeout(() => playTone(680, 'sine', 0.17, 0.022, 8, 0.008, 0.15), 38);
         }
 
         function playPredatorFeedSound() {
-            playTone(165, 'sawtooth', 0.2, 0.045, 0, 0.01, 0.18);
-            setTimeout(() => playTone(210, 'sine', 0.15, 0.035, 15, 0.005, 0.12), 30);
+            playTone(165, 'sawtooth', 0.22, 0.042, 0, 0.01, 0.20);
+            setTimeout(() => playTone(210, 'sine', 0.16, 0.032, 15, 0.006, 0.14), 28);
         }
 
         function playAmbientPulse(isDay) {
             const freq = isDay ? 48 : 42;
-            const vol = (isDay ? 0.008 : 0.012) * ambientVolume;
-            playTone(freq, 'sine', 1.8, vol, 0, 0.3, 1.4);
+            const vol = (isDay ? 0.007 : 0.011) * ambientVolume;
+            playTone(freq, 'sine', 1.9, vol, 0, 0.35, 1.5);
         }
 
         function playExplosionSound() {
+            if (activeVoices > MAX_VOICES - 3) return;
+
             const ctx = getAudioContext();
 
             const osc1 = ctx.createOscillator();
@@ -692,14 +749,15 @@
             filter1.type = 'lowpass';
             filter1.frequency.value = 420;
 
-            gain1.gain.value = 0.18 * effectsVolume * masterVolume;
+            gain1.gain.value = 0.16 * effectsVolume;
             gain1.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.65);
 
             osc1.connect(filter1);
             filter1.connect(gain1);
-            gain1.connect(ctx.destination);
+            gain1.connect(masterGain);
             osc1.start();
-            setTimeout(() => { try { osc1.stop(); } catch(e){} }, 700);
+
+            setTimeout(() => { try { osc1.stop(); } catch(e){} }, 720);
 
             setTimeout(() => {
                 const osc2 = ctx.createOscillator();
@@ -722,18 +780,21 @@
                 noiseFilter.frequency.value = 1200;
                 noiseFilter.Q.value = 1.8;
 
-                noiseGain.gain.value = 0.09 * effectsVolume * masterVolume;
+                noiseGain.gain.value = 0.08 * effectsVolume;
                 noiseGain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.45);
 
                 osc2.connect(noiseFilter);
                 noise.connect(noiseFilter);
                 noiseFilter.connect(noiseGain);
-                noiseGain.connect(ctx.destination);
+                noiseGain.connect(masterGain);
 
                 osc2.start();
                 noise.start();
-                setTimeout(() => { try { osc2.stop(); noise.stop(); } catch(e){} }, 480);
-            }, 35);
+
+                setTimeout(() => {
+                    try { osc2.stop(); noise.stop(); } catch(e){}
+                }, 500);
+            }, 32);
         }
 
         function setupSoundSliders() {
@@ -798,9 +859,7 @@
             document.addEventListener('keydown', handleKeyPress);
             document.getElementById('speed-1').classList.add('active', 'bg-emerald-500', 'text-[#0a0a0f]');
 
-            // Create environmental label element
             createEnvLabel();
-
             updateMainStats();
         }
 
@@ -835,7 +894,6 @@
             envLabelElement.style.color = color;
             envLabelElement.classList.remove('hidden');
 
-            // Fade out after a few seconds
             setTimeout(() => {
                 if (envLabelElement) envLabelElement.style.transition = 'opacity 1.2s ease';
                 if (envLabelElement) envLabelElement.style.opacity = '0';
@@ -881,26 +939,11 @@
 
         function getEnvironmentModifiers() {
             if (environmentPhase === 0) {
-                // Fertile
-                return {
-                    energyGainMult: 1.35,
-                    drainMult: 0.82,
-                    reproMult: 1.6
-                };
+                return { energyGainMult: 1.35, drainMult: 0.82, reproMult: 1.6 };
             } else if (environmentPhase === 1) {
-                // Normal
-                return {
-                    energyGainMult: 1.0,
-                    drainMult: 1.0,
-                    reproMult: 1.0
-                };
+                return { energyGainMult: 1.0, drainMult: 1.0, reproMult: 1.0 };
             } else {
-                // Drought
-                return {
-                    energyGainMult: 0.65,
-                    drainMult: 1.45,
-                    reproMult: 0.55
-                };
+                return { energyGainMult: 0.65, drainMult: 1.45, reproMult: 0.55 };
             }
         }
 
@@ -1535,7 +1578,6 @@
 
             if (globalReproCooldown > 0) globalReproCooldown--;
 
-            // === Environmental Cycle Update ===
             envPhaseProgress += timeScale;
             if (envPhaseProgress >= envCycleLength) {
                 envPhaseProgress = 0;
@@ -1554,14 +1596,13 @@
                 if (Math.random() < 0.55 * soundDensity) playAmbientPulse(isDay);
             }
 
-            // Background tint based on environment
             let env = getEnvironmentModifiers();
             if (environmentPhase === 0) {
-                fill(16, 48, 32, 22); // Fertile green tint
+                fill(16, 48, 32, 22);
             } else if (environmentPhase === 1) {
                 fill(18, 22, 28, 18);
             } else {
-                fill(48, 28, 18, 26); // Drought brown/orange tint
+                fill(48, 28, 18, 26);
             }
             rect(0, 0, width, height);
 
@@ -2290,7 +2331,6 @@
                 return count;
             }
 
-            // NEW: Get nearby creatures for social pressure logic
             getLocalGroup(radius) {
                 let group = [];
                 for (let o of creatures) {
@@ -2750,8 +2790,7 @@
                         playDepositSound();
                     }
 
-                    // === NEW: Social Pressure / Outcast Logic ===
-                    // If in a decent-sized local group, minority specializations can be pressured into becoming predators
+                    // Social Pressure / Outcast Logic
                     let localGroup = this.getLocalGroup(58);
                     if (localGroup.length >= 5) {
                         let mySpec = this.specialization;
@@ -2764,11 +2803,9 @@
                         let groupSize = localGroup.length;
                         let myRatio = myCount / groupSize;
 
-                        // If you're clearly in the minority (outcast)
                         if (myRatio < 0.18) {
                             let pressureChance = 0.0065 * timeScale;
 
-                            // Stronger pressure if group is very large or very homogeneous
                             if (groupSize > 9) pressureChance *= 1.6;
                             if (myRatio < 0.10) pressureChance *= 1.7;
 
