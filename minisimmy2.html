@@ -21,7 +21,7 @@
                 </div>
                 <div>
                     <span class="font-display text-2xl tracking-tighter">MiniSimmy2</span>
-                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-400">Vortex v0.6</span>
+                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-400">Vortex v0.61</span>
                 </div>
             </div>
             <div class="flex items-center gap-x-4 text-sm">
@@ -35,7 +35,7 @@
         <div class="flex justify-between items-center mb-4">
             <div>
                 <h1 class="font-display text-3xl tracking-tighter">MiniSimmy2 — Vortex</h1>
-                <p class="text-white/60 text-sm">Vortex field • Day/Night flow reversal • Waste blooms • Food deposition</p>
+                <p class="text-white/60 text-sm">Stronger spiral drain • Particles stay bright until center • Creatures feel the pull</p>
             </div>
             <div class="flex items-center gap-x-4 text-sm">
                 <div id="stats" class="font-mono px-4 py-1.5 bg-white/5 rounded-2xl text-xs flex gap-x-4"></div>
@@ -48,7 +48,7 @@
         <div id="canvas-container" class="rounded-3xl overflow-hidden border border-white/10 shadow-2xl"></div>
 
         <div class="mt-3 text-xs text-white/50">
-            White particles = vortex flow. Touching them feeds creatures. Vortex reverses direction at day/night transition. Black sphere = vortex center.
+            White particles spiral toward the black center. They stay bright until consumed or reach the drain. Creatures feel a gentle pull toward the vortex.
         </div>
     </div>
 
@@ -82,8 +82,8 @@
                 creatures.push(new Creature(random(width), random(height)));
             }
 
-            // Initial vortex particles
-            for (let i = 0; i < 60; i++) {
+            // More initial particles
+            for (let i = 0; i < 85; i++) {
                 vortexParticles.push(new VortexParticle());
             }
         }
@@ -94,89 +94,82 @@
             timeOfDay = (frameCount % dayLength) / dayLength;
             let isDay = timeOfDay < 0.5;
 
-            // Detect day/night transition for vortex reversal
-            if (isDay !== lastIsDay) {
-                lastIsDay = isDay;
-            }
+            if (isDay !== lastIsDay) lastIsDay = isDay;
 
-            // Background tint
             if (isDay) fill(18, 35, 26, 25);
             else fill(12, 25, 42, 35);
             rect(0, 0, width, height);
 
-            // Vortex strength (peaks at noon and midnight, zero at transitions)
-            let vortexPhase = (timeOfDay + 0.25) % 1; // shift so peaks align with noon/midnight
-            let vortexStrength = sin(vortexPhase * TWO_PI) * 0.5 + 0.5; // 0 to 1, peaks twice per cycle
-            let vortexDir = isDay ? 1 : -1; // clockwise during day, counter-clockwise at night
+            // Vortex strength (peaks at noon/midnight)
+            let vortexPhase = (timeOfDay + 0.25) % 1;
+            let vortexStrength = sin(vortexPhase * TWO_PI) * 0.5 + 0.5;
+            let vortexDir = isDay ? 1 : -1;
 
-            // Draw vortex field lines (subtle)
-            stroke(255, 255, 255, 12);
+            // Subtle vortex field rings
+            stroke(255, 255, 255, 10);
             strokeWeight(1);
             noFill();
-            for (let r = 80; r < 420; r += 55) {
+            for (let r = 70; r < 450; r += 50) {
                 ellipse(centerX, centerY, r * 2, r * 2);
             }
 
-            // Shiny black sphere at center
-            fill(20, 22, 30);
-            stroke(60, 65, 80);
-            strokeWeight(3);
-            circle(centerX, centerY, 22);
-            // Highlight
+            // Shiny black center sphere
+            fill(18, 20, 28);
+            stroke(55, 60, 75);
+            strokeWeight(3.5);
+            circle(centerX, centerY, 24);
             noStroke();
-            fill(80, 85, 95, 60);
-            circle(centerX - 5, centerY - 5, 8);
+            fill(75, 80, 90, 55);
+            circle(centerX - 6, centerY - 6, 9);
 
-            // Update and draw vortex particles
+            // Vortex particles
             for (let i = vortexParticles.length - 1; i >= 0; i--) {
                 let p = vortexParticles[i];
                 p.update(vortexDir, vortexStrength);
                 p.show();
 
-                // Feed creatures on contact
+                // Feed creatures
                 for (let c of creatures) {
-                    if (dist(p.x, p.y, c.x, c.y) < 11) {
-                        c.energy = min(100, c.energy + 2.2);
-                        p.life = 0; // consume particle
+                    if (dist(p.x, p.y, c.x, c.y) < 12) {
+                        c.energy = min(100, c.energy + 2.5);
+                        p.life = 0;
                     }
                 }
 
-                if (p.life <= 0) {
+                if (p.life <= 0 || dist(p.x, p.y, centerX, centerY) < 10) {
                     vortexParticles.splice(i, 1);
                 }
             }
 
-            // Spawn new particles from perimeter
-            if (frameCount % 3 === 0 && vortexParticles.length < 75) {
+            // Spawn more particles from edges
+            if (frameCount % 2 === 0 && vortexParticles.length < 110) {
                 vortexParticles.push(new VortexParticle(true));
             }
 
-            // Draw zones
-            fill(16, 185, 129, isDay ? 135 : 38);
+            // Zones
+            fill(16, 185, 129, isDay ? 130 : 35);
             circle(greenZone.x, greenZone.y, greenZone.r * 2);
             fill(255); textAlign(CENTER); textSize(10);
             text(`GREEN ${Math.floor(greenZone.food)}`, greenZone.x, greenZone.y - greenZone.r - 9);
 
-            fill(56, 189, 248, isDay ? 38 : 135);
+            fill(56, 189, 248, isDay ? 35 : 130);
             circle(blueZone.x, blueZone.y, blueZone.r * 2);
             fill(255);
             text(`BLUE ${Math.floor(blueZone.food)}`, blueZone.x, blueZone.y - blueZone.r - 9);
 
-            // Global reproduction cooldown
-            if (globalReproCooldown > 0) globalReproCooldown -= 0.5;
+            if (globalReproCooldown > 0) globalReproCooldown -= 0.45;
 
-            // Update creatures
+            // Creatures
             for (let i = creatures.length - 1; i >= 0; i--) {
                 let c = creatures[i];
                 c.update(isDay, vortexDir, vortexStrength);
 
-                // Reproduction
-                if (c.energy > 80 && globalReproCooldown <= 0 && random() < 0.0065) {
+                if (c.energy > 79 && globalReproCooldown <= 0 && random() < 0.006) {
                     let offspring = c.reproduce();
                     if (offspring) {
                         creatures.push(offspring);
-                        globalReproCooldown = 15;
-                        c.energy -= 16;
+                        globalReproCooldown = 14;
+                        c.energy -= 15;
                     }
                 }
 
@@ -187,11 +180,8 @@
                 }
             }
 
-            // High population energy drain
-            let pressure = Math.max(0, (creatures.length - 16) * 0.009);
-            for (let c of creatures) {
-                c.energy -= pressure;
-            }
+            let pressure = Math.max(0, (creatures.length - 15) * 0.0085);
+            for (let c of creatures) c.energy -= pressure;
 
             updateStats();
         }
@@ -216,50 +206,53 @@
             constructor(fromEdge = false) {
                 if (fromEdge) {
                     let angle = random(TWO_PI);
-                    let distFromCenter = random(380, 520);
+                    let distFromCenter = random(400, 530);
                     this.x = centerX + cos(angle) * distFromCenter;
                     this.y = centerY + sin(angle) * distFromCenter;
                 } else {
                     this.x = random(width);
                     this.y = random(height);
                 }
-                this.life = random(80, 160);
-                this.size = random(2.2, 3.4);
+                this.life = random(120, 220); // longer life
+                this.size = random(2.4, 3.6);
             }
 
             update(vortexDir, vortexStrength) {
                 let dx = this.x - centerX;
                 let dy = this.y - centerY;
-                let distToCenter = sqrt(dx*dx + dy*dy);
+                let distToCenter = sqrt(dx*dx + dy*dy) || 1;
 
-                if (distToCenter < 12) {
+                if (distToCenter < 9) {
                     this.life = 0;
                     return;
                 }
 
-                // Vortex force (clockwise or counter-clockwise)
+                // Strong tangential vortex force
                 let tangentX = -dy;
                 let tangentY = dx;
-                let len = sqrt(tangentX*tangentX + tangentY*tangentY);
-                if (len > 0) {
-                    tangentX /= len;
-                    tangentY /= len;
-                }
+                let len = sqrt(tangentX*tangentX + tangentY*tangentY) || 1;
+                tangentX /= len;
+                tangentY /= len;
 
-                let vortexForce = 0.9 * vortexStrength * vortexDir;
+                let vortexForce = 1.35 * vortexStrength * vortexDir; // stronger
                 this.x += tangentX * vortexForce;
                 this.y += tangentY * vortexForce;
 
-                // Pull toward center
-                let pull = 0.45 * vortexStrength;
-                this.x += (centerX - this.x) * pull / (distToCenter + 10);
-                this.y += (centerY - this.y) * pull / (distToCenter + 10);
+                // Strong spiral pull toward center
+                let pull = 0.85 * vortexStrength;
+                this.x += (centerX - this.x) * pull / (distToCenter + 8);
+                this.y += (centerY - this.y) * pull / (distToCenter + 8);
 
                 this.life -= 1;
             }
 
             show() {
-                fill(255, 255, 255, map(this.life, 0, 120, 0, 180));
+                // Stay bright until very close to center
+                let alpha = 220;
+                if (dist(this.x, this.y, centerX, centerY) < 35) {
+                    alpha = map(dist(this.x, this.y, centerX, centerY), 0, 35, 40, 220);
+                }
+                fill(255, 255, 255, alpha);
                 noStroke();
                 circle(this.x, this.y, this.size);
             }
@@ -271,7 +264,7 @@
                 this.y = y;
                 this.vx = random(-0.6, 0.6);
                 this.vy = random(-0.6, 0.6);
-                this.energy = parentModules ? 50 : 62 + random(14);
+                this.energy = parentModules ? 48 : 60 + random(14);
                 this.name = generateSciFiName();
                 this.isPredator = false;
                 this.honey = 0;
@@ -281,7 +274,7 @@
 
                 if (parentModules) {
                     this.modules = parentModules.map(m => ({...m}));
-                    if (random() < 0.5 && this.modules.length < 7) {
+                    if (random() < 0.48 && this.modules.length < 7) {
                         let newType = random(types);
                         let angle = random(TWO_PI);
                         let dist = random(6, 10);
@@ -289,7 +282,7 @@
                     }
                 } else {
                     this.modules = [];
-                    if (random() < 0.5) {
+                    if (random() < 0.48) {
                         let type = random(types);
                         let angle = random(TWO_PI);
                         let dist = random(6, 10);
@@ -301,17 +294,15 @@
             getModuleCount(type) { return this.modules.filter(m => m.type === type).length; }
 
             reproduce() {
-                return new Creature(this.x + random(-12,12), this.y + random(-12,12), this.modules);
+                return new Creature(this.x + random(-11,11), this.y + random(-11,11), this.modules);
             }
 
             update(isDay, vortexDir, vortexStrength) {
                 if (!this.isPredator && this.energy < 15) this.isPredator = true;
 
-                // Increased idle energy drain
-                this.energy -= 0.038;
+                this.energy -= 0.037;
 
                 if (this.isPredator) {
-                    // Target weakest (standard creatures first, then other predators)
                     let target = null;
                     let lowest = Infinity;
                     let hasPrey = false;
@@ -325,7 +316,6 @@
                         }
                     }
                     if (!hasPrey) {
-                        // No standard prey left — target other predators
                         for (let other of creatures) {
                             if (other === this || !other.isPredator) continue;
                             if (other.energy < lowest) {
@@ -337,72 +327,84 @@
 
                     if (target) {
                         let d = dist(this.x, this.y, target.x, target.y);
-                        if (d > 5 && d < 180) {
+                        if (d > 5 && d < 170) {
                             let dx = target.x - this.x;
                             let dy = target.y - this.y;
-                            this.vx += (dx / d) * 0.15;
-                            this.vy += (dy / d) * 0.15;
+                            this.vx += (dx / d) * 0.14;
+                            this.vy += (dy / d) * 0.14;
                         }
-                        if (d < 12) {
+                        if (d < 11) {
                             let stolen = Math.min(2, target.modules.length);
                             for (let i = 0; i < stolen; i++) if (target.modules.length > 0) this.modules.push(target.modules.pop());
-                            this.energy = 90;
+                            this.energy = 88;
                             target.energy = 0;
                         }
                     }
                 } else {
-                    // Normal creatures + vortex influence
                     let target = isDay ? greenZone : blueZone;
                     let dx = target.x - this.x;
                     let dy = target.y - this.y;
                     let d = dist(this.x, this.y, target.x, target.y);
 
-                    if (d > 7 && target.food > 2) {
-                        this.vx += (dx / d) * 0.055;
-                        this.vy += (dy / d) * 0.055;
+                    if (d > 6 && target.food > 1) {
+                        this.vx += (dx / d) * 0.05;
+                        this.vy += (dy / d) * 0.05;
                     }
 
-                    // Wandering / exploration when not near food
-                    if (d > 120) {
-                        this.vx += random(-0.8, 0.8) * 0.6;
-                        this.vy += random(-0.8, 0.8) * 0.6;
+                    // Wandering
+                    if (d > 110) {
+                        this.vx += random(-0.7, 0.7) * 0.55;
+                        this.vy += random(-0.7, 0.7) * 0.55;
                     }
 
-                    // Food deposition motivation
-                    if (this.honey > 9 && random() < 0.006) {
-                        this.honey -= 8;
-                        // Create temporary food patch
-                        if (random() < 0.5) {
-                            greenZone.food = min(220, greenZone.food + 14);
-                        } else {
-                            blueZone.food = min(220, blueZone.food + 14);
-                        }
+                    // Vortex pull on creatures (gentle spiral drain)
+                    let cdx = this.x - centerX;
+                    let cdy = this.y - centerY;
+                    let cdist = sqrt(cdx*cdx + cdy*cdy) || 1;
+
+                    if (cdist > 30 && cdist < 380) {
+                        // Tangential
+                        let tX = -cdy;
+                        let tY = cdx;
+                        let tLen = sqrt(tX*tX + tY*tY) || 1;
+                        this.vx += (tX / tLen) * 0.35 * vortexStrength * vortexDir;
+                        this.vy += (tY / tLen) * 0.35 * vortexStrength * vortexDir;
+
+                        // Inward pull
+                        let pull = 0.28 * vortexStrength;
+                        this.vx += (centerX - this.x) * pull / (cdist + 20);
+                        this.vy += (centerY - this.y) * pull / (cdist + 20);
+                    }
+
+                    // Food deposition
+                    if (this.honey > 8 && random() < 0.0055) {
+                        this.honey -= 7;
+                        if (random() < 0.5) greenZone.food = min(210, greenZone.food + 12);
+                        else blueZone.food = min(210, blueZone.food + 12);
                     }
                 }
 
-                // Apply movement
                 this.x += this.vx;
                 this.y += this.vy;
-                this.vx *= 0.89;
-                this.vy *= 0.89;
-                this.x = constrain(this.x, 14, width-14);
-                this.y = constrain(this.y, 14, height-14);
+                this.vx *= 0.88;
+                this.vy *= 0.88;
+                this.x = constrain(this.x, 13, width-13);
+                this.y = constrain(this.y, 13, height-13);
 
-                // Zone feeding
                 let inGreen = dist(this.x, this.y, greenZone.x, greenZone.y) < greenZone.r;
                 let inBlue = dist(this.x, this.y, blueZone.x, blueZone.y) < blueZone.r;
 
                 if (inGreen && isDay && greenZone.food > 0) {
-                    let gain = 0.4 + this.getModuleCount('harvester') * 0.16;
+                    let gain = 0.38 + this.getModuleCount('harvester') * 0.15;
                     this.energy = min(100, this.energy + gain);
-                    greenZone.food = max(0, greenZone.food - 0.65);
-                    if (this.energy > 88) this.honey = min(20, this.honey + 0.45);
+                    greenZone.food = max(0, greenZone.food - 0.6);
+                    if (this.energy > 87) this.honey = min(18, this.honey + 0.4);
                 }
                 if (inBlue && !isDay && blueZone.food > 0) {
-                    let gain = 0.4 + this.getModuleCount('harvester') * 0.16;
+                    let gain = 0.38 + this.getModuleCount('harvester') * 0.15;
                     this.energy = min(100, this.energy + gain);
-                    blueZone.food = max(0, blueZone.food - 0.65);
-                    if (this.energy > 88) this.honey = min(20, this.honey + 0.45);
+                    blueZone.food = max(0, blueZone.food - 0.6);
+                    if (this.energy > 87) this.honey = min(18, this.honey + 0.4);
                 }
             }
 
@@ -410,7 +412,7 @@
                 push();
                 translate(this.x, this.y);
 
-                let coreSize = 10.5 + this.modules.length * 0.32;
+                let coreSize = 10 + this.modules.length * 0.3;
                 if (this.isPredator) {
                     fill(248, 113, 113);
                     stroke(255, 180, 180);
@@ -418,28 +420,28 @@
                     fill(250, 204, 21);
                     stroke(255, 255, 220);
                 }
-                strokeWeight(2);
+                strokeWeight(1.8);
                 circle(0, 0, coreSize);
 
                 noStroke();
-                fill(255, 255, 255, 80);
-                circle(-coreSize * 0.17, -coreSize * 0.17, coreSize * 0.3);
+                fill(255, 255, 255, 75);
+                circle(-coreSize * 0.16, -coreSize * 0.16, coreSize * 0.28);
 
-                if (this.honey > 3) {
-                    fill(245, 158, 11, 200);
-                    circle(6, -6, 4.5 + this.honey * 0.1);
+                if (this.honey > 2.5) {
+                    fill(245, 158, 11, 195);
+                    circle(5.5, -5.5, 4 + this.honey * 0.09);
                 }
 
-                fill(255, 255, 255, 190);
+                fill(255, 255, 255, 180);
                 textAlign(CENTER);
-                textSize(7);
-                text(this.name, 0, -coreSize - 4);
+                textSize(6.5);
+                text(this.name, 0, -coreSize - 3.5);
 
                 for (let m of this.modules) {
                     fill(m.color);
-                    stroke(255, 255, 255, 18);
-                    strokeWeight(0.6);
-                    circle(m.offsetX, m.offsetY, 5.5);
+                    stroke(255, 255, 255, 15);
+                    strokeWeight(0.5);
+                    circle(m.offsetX, m.offsetY, 5.2);
                 }
 
                 pop();
@@ -455,7 +457,7 @@
             for (let i = 0; i < 9; i++) {
                 creatures.push(new Creature(random(width), random(height)));
             }
-            for (let i = 0; i < 55; i++) {
+            for (let i = 0; i < 80; i++) {
                 vortexParticles.push(new VortexParticle());
             }
         }
