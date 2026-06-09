@@ -84,6 +84,12 @@
                         <span class="text-white/50">Sim Time:</span> 
                         <span id="sim-time" class="text-emerald-400 font-semibold">00:00</span>
                     </div>
+
+                    <!-- FPS Counter for performance monitoring -->
+                    <div class="px-2.5 py-1 bg-white/5 border border-white/10 rounded-2xl text-xs font-mono flex items-center gap-x-1">
+                        <span class="text-white/50">FPS:</span> 
+                        <span id="fps-counter" class="text-emerald-400 font-semibold w-8 text-right">60</span>
+                    </div>
                     
                     <div class="flex items-center bg-[#121218] border border-white/10 rounded-2xl p-1 text-xs">
                         <button onclick="togglePause()" id="pause-btn" class="time-btn px-3 py-1 rounded-xl bg-white/10 hover:bg-white/20 flex items-center gap-x-1.5">
@@ -606,6 +612,11 @@
         let paused = false;
         let simTime = 0;
         let zoomLevel = 1.0;
+
+        // Performance monitoring
+        let frameCountForFPS = 0;
+        let lastFPSUpdate = 0;
+        let currentFPS = 60;
         let miniChartCtx;
         let graphData = { pop: [], modules: [], predators: [], greenFood: [], blueFood: [] };
 
@@ -1980,6 +1991,23 @@
             const timeEl = document.getElementById('sim-time');
             if (timeEl) timeEl.innerText = formatSimTime(simTime);
 
+            // FPS calculation
+            frameCountForFPS++;
+            const now = Date.now();
+            if (now - lastFPSUpdate > 500) {
+                currentFPS = Math.round((frameCountForFPS * 1000) / (now - lastFPSUpdate));
+                const fpsEl = document.getElementById('fps-counter');
+                if (fpsEl) {
+                    fpsEl.innerText = currentFPS;
+                    // Color code performance
+                    if (currentFPS >= 50) fpsEl.style.color = '#34d399';
+                    else if (currentFPS >= 30) fpsEl.style.color = '#fbbf24';
+                    else fpsEl.style.color = '#f87171';
+                }
+                frameCountForFPS = 0;
+                lastFPSUpdate = now;
+            }
+
             if (globalReproCooldown > 0) globalReproCooldown--;
 
             envPhaseProgress += timeScale;
@@ -2308,7 +2336,13 @@
                 }
             }
 
-            if (frameCount % Math.max(1, Math.floor(2 / timeScale)) === 0 && vortexParticles.length < 130) {
+            // Dynamic particle limit for better performance
+            let maxVortexParticles = 130;
+            if (currentFPS < 45) maxVortexParticles = 80;
+            if (currentFPS < 30) maxVortexParticles = 50;
+            if (creatures.length > 120) maxVortexParticles = Math.min(maxVortexParticles, 70);
+
+            if (frameCount % Math.max(1, Math.floor(2 / timeScale)) === 0 && vortexParticles.length < maxVortexParticles) {
                 vortexParticles.push(new VortexParticle(true));
             }
 
