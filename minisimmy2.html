@@ -756,6 +756,7 @@
         let unlockedSpeeds = {2: true, 4: true}; // 2x and 4x are free and always unlocked; 8x removed completely
         let redHazardsUnlocked = false;
         let cursorHazardUnlocked = false;
+        let persistentHazard = { x: 0, y: 0, active: false };
 
         let timeScale = 1;
         let paused = false;
@@ -2721,17 +2722,27 @@
                 w.life -= 2.8; // faster base decay
 
                 if (w.life <= 0) {
+                    // Check if wall is currently immune from splitting
+                    if (w.immuneUntil && frameCount < w.immuneUntil) {
+                        // Still immune — just destroy without splitting
+                        let explodeX = (w.x1 + w.x2) / 2;
+                        let explodeY = (w.y1 + w.y2) / 2;
+                        playWallBreakSound(0.4);
+                        explosions.push(new Explosion(explodeX, explodeY));
+                        energyWalls.splice(i, 1);
+                        continue;
+                    }
+
                     let length = w.originalLength || dist(w.x1, w.y1, w.x2, w.y2);
 
-                    // If wall is long enough, split into two smaller pieces
+                    // Split into exactly two pieces down the middle (if long enough)
                     if (length > 45) {
                         let mx = (w.x1 + w.x2) / 2;
                         let my = (w.y1 + w.y2) / 2;
 
-                        // Create two new smaller walls
-                        let halfLife = w.life * 0.6 + 80;
+                        let halfLife = Math.max(60, w.life * 0.55 + 60);
 
-                        // Left piece
+                        // Left half
                         energyWalls.push({
                             x1: w.x1,
                             y1: w.y1,
@@ -2740,12 +2751,13 @@
                             life: halfLife,
                             maxLife: halfLife,
                             hitFlash: 0,
-                            vx: w.vx - 0.8,
-                            vy: w.vy - 0.8,
-                            originalLength: length * 0.5
+                            vx: w.vx - 1.0,
+                            vy: w.vy - 1.0,
+                            originalLength: length * 0.5,
+                            immuneUntil: frameCount + 65   // Immune for ~1 second
                         });
 
-                        // Right piece
+                        // Right half
                         energyWalls.push({
                             x1: mx,
                             y1: my,
@@ -2754,33 +2766,33 @@
                             life: halfLife,
                             maxLife: halfLife,
                             hitFlash: 0,
-                            vx: w.vx + 0.8,
-                            vy: w.vy + 0.8,
-                            originalLength: length * 0.5
+                            vx: w.vx + 1.0,
+                            vy: w.vy + 1.0,
+                            originalLength: length * 0.5,
+                            immuneUntil: frameCount + 65   // Immune for ~1 second
                         });
 
-                        // Small explosion at break point
+                        // Break effect at the split point
                         explosions.push(new Explosion(mx, my));
-                        playWallBreakSound(0.7);
+                        playWallBreakSound(0.65);
 
                         energyWalls.splice(i, 1);
                         continue;
 
                     } else {
-                        // Wall too small → final break with explosion
+                        // Final small wall break
                         let explodeX = (w.x1 + w.x2) / 2;
                         let explodeY = (w.y1 + w.y2) / 2;
 
-                        playWallBreakSound(0.5);
+                        playWallBreakSound(0.45);
                         playExplosionSound();
                         explosions.push(new Explosion(explodeX, explodeY));
 
-                        // Final damage burst
                         for (let c of creatures) {
                             let d = dist(c.x, c.y, explodeX, explodeY);
-                            if (d < 45) {
-                                c.energy = max(0, c.energy - 25);
-                                c.purpleFlash = max(c.purpleFlash || 0, 70);
+                            if (d < 42) {
+                                c.energy = max(0, c.energy - 22);
+                                c.purpleFlash = max(c.purpleFlash || 0, 65);
                             }
                         }
 
@@ -3367,6 +3379,38 @@
                         }
                     }
                 }
+
+                // Persistent placed Hazard Cursor (long-term damage field you can leave on the map)
+                if (persistentHazard.active) {
+                    for (let c of creatures) {
+                        let d = dist(persistentHazard.x, persistentHazard.y, c.x, c.y);
+                        if (d < 42) {
+                            let damage = 2.8 + random(0.3, 1.2);
+                            c.energy = max(0, c.energy - damage * timeScale);
+                            c.damageFlash = max(c.damageFlash || 0, 35);
+                            c.purpleFlash = max(c.purpleFlash || 0, 50);
+
+                            // Gentle repel so creatures don't camp in it
+                            if (d > 3) {
+                                let dx = c.x - persistentHazard.x;
+                                let dy = c.y - persistentHazard.y;
+                                let len = sqrt(dx*dx + dy*dy) || 1;
+                                c.vx += (dx / len) * 1.8 * timeScale;
+                                c.vy += (dy / len) * 1.8 * timeScale;
+                            }
+                        }
+                    }
+
+                    // Visual indicator for the placed hazard
+                    push();
+                    translate(persistentHazard.x, persistentHazard.y);
+                    fill(239, 68, 68, 45);
+                    noStroke();
+                    circle(0, 0, 58);
+                    fill(239, 68, 68, 180);
+                    circle(0, 0, 28);
+                    pop();
+                }
             }
 
             // ==================== SPACESHIP + BULLETS ====================
@@ -3592,7 +3636,7 @@
                 }
             }
 
-            // Click to place a persistent Red Hazard on the map (when Cursor Hazard mode is active)
+            // Click to place / move persistent Hazard Cursor on the map
             if (cursorHazardActive) {
                 // Don't place if clicking near a creature (to avoid conflict with inspector)
                 let nearCreature = false;
@@ -3603,12 +3647,9 @@
                     }
                 }
                 if (!nearCreature) {
-                    let placed = new RedHazard();
-                    placed.x = mouseX;
-                    placed.y = mouseY;
-                    placed.vx = random(-0.3, 0.3); // slight movement so it doesn't feel completely static
-                    placed.vy = random(-0.3, 0.3);
-                    redHazards.push(placed);
+                    persistentHazard.x = mouseX;
+                    persistentHazard.y = mouseY;
+                    persistentHazard.active = true;
                 }
             }
         }
@@ -3657,12 +3698,13 @@
                         y1: wallStartY,
                         x2: mouseX,
                         y2: mouseY,
-                        life: 1800 + length * 1.8,   // larger walls are tougher
+                        life: 1800 + length * 1.8,
                         maxLife: 1800 + length * 1.8,
                         hitFlash: 0,
                         vx: 0,
                         vy: 0,
-                        originalLength: length
+                        originalLength: length,
+                        immuneUntil: frameCount + 30   // brief immunity on creation
                     });
                 } else {
                     // Not enough points - flash warning
