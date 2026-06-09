@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MiniSimmy2 • Inspector</title>
+    <title>MiniSimmy2 • Reproduction Fix</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -27,7 +27,7 @@
                 </div>
                 <div>
                     <span class="font-display text-2xl tracking-tighter">MiniSimmy2</span>
-                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.34 • Creature Inspector</span>
+                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.35 • Reproduction Priority</span>
                 </div>
             </div>
             <div class="flex items-center gap-x-4 text-sm">
@@ -43,7 +43,7 @@
                 <div class="flex items-center gap-x-4">
                     <div>
                         <h1 class="font-display text-3xl tracking-tighter">MiniSimmy2</h1>
-                        <p class="text-white/60 text-sm">Creature inspector + mini chart</p>
+                        <p class="text-white/60 text-sm">Reproduction now has higher priority</p>
                     </div>
                     
                     <!-- Elapsed Time -->
@@ -142,7 +142,6 @@
                 </div>
 
                 <div class="bg-[#0a0a0f] border border-white/10 rounded-2xl p-3 space-y-3">
-                    <!-- Basic Info -->
                     <div>
                         <div id="inspect-name" class="font-semibold text-lg text-emerald-400"></div>
                         <div class="flex gap-x-4 text-xs mt-1">
@@ -152,19 +151,16 @@
                         </div>
                     </div>
 
-                    <!-- Current Thought -->
                     <div>
                         <div class="inspector-label">Current Thought</div>
                         <div id="inspect-thought" class="text-sm bg-white/5 rounded-xl px-3 py-1.5 text-white/90"></div>
                     </div>
 
-                    <!-- Children List -->
                     <div>
                         <div class="inspector-label mb-1">Children</div>
                         <div id="inspect-children-list" class="text-xs bg-white/5 rounded-xl p-2 max-h-16 overflow-auto text-white/80"></div>
                     </div>
 
-                    <!-- Live Neural Net -->
                     <div>
                         <div class="inspector-label mb-1 flex justify-between">
                             <span>Neural Net (6-4-6)</span>
@@ -248,7 +244,6 @@
         let globalReproCooldown = 0;
         let centerX, centerY;
         let selectedCreature = null;
-        let neuralCtx;
         let inspectorNeuralCtx;
         let masterVolume = 0.91;
         let lastClickedNode = null;
@@ -263,7 +258,7 @@
         let settings = {
             energyDrain: 0.108,
             particleFoodValue: 1.3,
-            reproductionChance: 0.05,
+            reproductionChance: 0.065,   // Slightly increased
             zoneAttraction: 0.075,
             socialResist: 0.14,
             vortexMultiplier: 5.0,
@@ -421,7 +416,6 @@
             const plotW = w - padding * 2;
             const plotH = h - padding * 2;
 
-            // Population max now goes up to at least 100
             const maxPop = Math.max(100, ...graphData.pop) * 1.1;
             const maxMod = Math.max(...graphData.modules, 1) * 1.15;
             const maxPred = Math.max(...graphData.predators, 1) * 1.15;
@@ -438,7 +432,6 @@
                 ctx.stroke();
             }
 
-            // Population
             ctx.strokeStyle = '#34d399';
             ctx.lineWidth = 1.8;
             ctx.beginPath();
@@ -450,7 +443,6 @@
             }
             ctx.stroke();
 
-            // Avg Modules
             ctx.strokeStyle = '#a78bfa';
             ctx.lineWidth = 1.3;
             ctx.beginPath();
@@ -462,7 +454,6 @@
             }
             ctx.stroke();
 
-            // Predators
             ctx.strokeStyle = '#f87171';
             ctx.lineWidth = 1.3;
             ctx.beginPath();
@@ -474,7 +465,6 @@
             }
             ctx.stroke();
 
-            // Green Food
             ctx.strokeStyle = '#34d399';
             ctx.lineWidth = 1.2;
             ctx.beginPath();
@@ -486,7 +476,6 @@
             }
             ctx.stroke();
 
-            // Blue Food
             ctx.strokeStyle = '#38bdf8';
             ctx.lineWidth = 1.2;
             ctx.beginPath();
@@ -521,7 +510,6 @@
             if (greenFoodEl) greenFoodEl.innerText = Math.floor(greenZone.food);
             if (blueFoodEl) blueFoodEl.innerText = Math.floor(blueZone.food);
 
-            // Update inspector if open
             if (selectedCreature) updateInspector();
         }
 
@@ -578,7 +566,6 @@
                 }
             }
 
-            // Connections
             ctx.strokeStyle = '#475569';
             ctx.lineWidth = 0.8;
             for (let l = 0; l < positions.length - 1; l++) {
@@ -595,7 +582,6 @@
             }
             ctx.globalAlpha = 1;
 
-            // Nodes with labels
             const inputLabels = ['Energy', 'Zone Dist', 'Phero', 'Neighbors', 'Vortex', 'Fitness'];
             const outputLabels = ['MoveX', 'MoveY', 'Deposit', 'Signal', 'Energy', 'Social'];
 
@@ -613,14 +599,12 @@
                     ctx.arc(p.x, p.y, size, 0, Math.PI * 2);
                     ctx.fill();
 
-                    // Subtle outer ring animation
                     ctx.strokeStyle = 'rgba(255,255,255,0.2)';
                     ctx.lineWidth = 1;
                     ctx.beginPath();
                     ctx.arc(p.x, p.y, size + Math.sin(t * 2.5 + i) * 2, 0, Math.PI * 2);
                     ctx.stroke();
 
-                    // Small labels for inputs/outputs
                     if (l === 0 && inputLabels[i]) {
                         ctx.fillStyle = '#64748b';
                         ctx.font = '8px Inter, system-ui';
@@ -634,7 +618,6 @@
                 }
             }
 
-            // Layer labels
             ctx.fillStyle = '#475569';
             ctx.font = '9px Inter, system-ui';
             ctx.fillText('Input', 8, 105);
@@ -890,16 +873,21 @@
                 let c = creatures[i];
                 c.update(isDay, vortexDir, vortexStrength, timeScale);
 
-                if (c.energy > 74 && c.reproCooldown <= 0 && globalReproCooldown <= 0 && random() < settings.reproductionChance * timeScale) {
-                    let offspring = c.reproduce();
-                    if (offspring) {
-                        creatures.push(offspring);
-                        globalReproCooldown = 9;
-                        c.reproCooldown = 36;
-                        c.energy -= 9;
-                        c.children.push(offspring.name);
-                        c.childrenCount++;
-                        playSound(880 + random(-12,12), 'sine', 0.24, 0.038);
+                // Reproduction now has higher priority when ready
+                const reproReady = c.energy > 68 && c.reproCooldown <= 0 && globalReproCooldown <= 0;
+                if (reproReady) {
+                    const energyBonus = map(c.energy, 68, 100, 1.0, 2.2);
+                    if (random() < settings.reproductionChance * energyBonus * timeScale) {
+                        let offspring = c.reproduce();
+                        if (offspring) {
+                            creatures.push(offspring);
+                            globalReproCooldown = 6;           // Reduced global cooldown
+                            c.reproCooldown = 28;
+                            c.energy -= 8;
+                            c.children.push(offspring.name);
+                            c.childrenCount++;
+                            playSound(880 + random(-12,12), 'sine', 0.24, 0.038);
+                        }
                     }
                 }
 
@@ -972,7 +960,6 @@
                     return;
                 }
             }
-            // Clicked empty space → deselect
             if (selectedCreature) deselectCreature();
         }
 
@@ -981,7 +968,6 @@
         }
 
         function showNodeInfo(layer, index) {
-            // kept for compatibility
         }
 
         function closeInspector() {
@@ -989,7 +975,6 @@
         }
 
         function drawAnimatedNeuralNet(creature) {
-            // legacy - not used in new inspector
         }
 
         class VortexParticle {
@@ -1272,7 +1257,6 @@
                 push(); translate(this.x, this.y);
                 let s = 7.5 + this.modules.length * 0.18;
 
-                // Selected ring
                 if (selectedCreature === this) {
                     stroke(255, 255, 255, 180);
                     strokeWeight(2.5);
