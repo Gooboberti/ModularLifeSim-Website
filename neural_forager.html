@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mini Simmy • v0.15</title>
+  <title>Mini Simmy • v0.16</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
@@ -21,7 +21,7 @@
         </div>
         <div>
           <span class="font-display text-2xl">Mini Simmy</span>
-          <span class="text-xs ml-2 text-slate-500">v0.15 • Evolution Mode</span>
+          <span class="text-xs ml-2 text-slate-500">v0.16 • Evolution + Fixed Neural Viz</span>
         </div>
       </div>
 
@@ -54,7 +54,7 @@
     <div class="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-6 gap-y-3">
       <div>
         <h1 class="font-display text-4xl sm:text-5xl tracking-tighter">Mini Simmy</h1>
-        <p class="text-slate-400 text-sm sm:text-base">Evolution Mode • 2 Foragers → Death + Mutation</p>
+        <p class="text-slate-400 text-sm sm:text-base">Evolution Mode • Neural Viz + Per-Node Audio Fixed</p>
       </div>
       <div class="flex gap-x-3">
         <button onclick="resetSim()" class="px-5 py-2 bg-slate-800 hover:bg-slate-700 rounded-2xl text-sm flex items-center gap-x-2">
@@ -113,7 +113,7 @@
   </div>
 
   <script>
-    // ==================== AUDIO SYSTEM (unchanged from v0.14) ====================
+    // ==================== AUDIO SYSTEM ====================
     let audioCtx;
     let neuralSoundEnabled = true;
     let masterVolume = 0.35;
@@ -217,15 +217,19 @@
             <button onclick="this.closest('.fixed').remove()" class="text-xl">×</button>
           </div>
           <div class="space-y-4 text-sm">
-            <div><label class="text-xs text-slate-400">Waveform</label>
+            <div>
+              <label class="text-xs text-slate-400">Waveform</label>
               <select id="node-wave" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2">
-                <option value="sine">Sine</option><option value="triangle">Triangle</option><option value="sawtooth">Sawtooth</option>
+                <option value="sine">Sine</option>
+                <option value="triangle">Triangle</option>
+                <option value="sawtooth">Sawtooth</option>
               </select>
             </div>
-            <div><label class="text-xs text-slate-400">Volume</label>
+            <div>
+              <label class="text-xs text-slate-400">Volume</label>
               <input type="range" id="node-vol" min="0.2" max="1.5" step="0.1" value="${current.volume || 0.8}" class="w-full accent-violet-500">
             </div>
-            <button onclick="saveNodeAudio('${key}', this)" class="w-full py-2.5 bg-violet-600 hover:bg-violet-500 rounded-2xl text-sm font-medium">Apply</button>
+            <button onclick="saveNodeAudio('${key}', this)" class="w-full py-2.5 bg-violet-600 hover:bg-violet-500 rounded-2xl text-sm font-medium">Apply to this node</button>
           </div>
         </div>`;
       document.body.appendChild(modal);
@@ -258,7 +262,7 @@
       if (container) container.innerHTML = '';
     }
 
-    // ==================== EVOLUTIONARY SIM ====================
+    // ==================== GAME ====================
     let foragers = [];
     let predator;
     let foods = [];
@@ -269,8 +273,8 @@
       c.parent('world');
 
       foragers = [
-        new Creature(width * 0.25, height * 0.4, 'forager'),
-        new Creature(width * 0.75, height * 0.6, 'forager')
+        new Creature(width * 0.3, height * 0.4, 'forager'),
+        new Creature(width * 0.7, height * 0.6, 'forager')
       ];
       predator = new Creature(width * 0.5, height * 0.5, 'predator');
 
@@ -287,51 +291,56 @@
 
       for (let f of foods) f.show();
 
-      // Update & draw foragers
+      // Update foragers
       for (let i = foragers.length - 1; i >= 0; i--) {
         const f = foragers[i];
         f.update(predator);
         f.show();
 
-        // Check predator collision
-        if (dist(f.x, f.y, predator.x, predator.y) < 18) {
-          logDecision('Forager killed → 2 offspring spawned');
-          // Kill and reproduce
-          const x = f.x;
-          const y = f.y;
+        // Collision with predator
+        if (dist(f.x, f.y, predator.x, predator.y) < 17) {
+          logDecision('Forager killed → 2 mutated offspring');
+          const deathX = f.x;
+          const deathY = f.y;
           foragers.splice(i, 1);
-          // Spawn two mutated children
-          foragers.push(new Creature(x + random(-25,25), y + random(-25,25), 'forager', f));
-          foragers.push(new Creature(x + random(-25,25), y + random(-25,25), 'forager', f));
+
+          // Spawn two children (capped population)
+          if (foragers.length < 6) {
+            foragers.push(new Creature(deathX + random(-20,20), deathY + random(-20,20), 'forager', f));
+            foragers.push(new Creature(deathX + random(-20,20), deathY + random(-20,20), 'forager', f));
+          }
           break;
         }
       }
 
-      predator.update(null);
-      predator.show();
-
-      // Predator targets weakest/closest forager
+      // Predator logic
       if (foragers.length > 0) {
+        let best = null;
         let bestScore = -Infinity;
-        let target = null;
         for (let f of foragers) {
-          const distScore = 1 - (dist(f.x, f.y, predator.x, predator.y) / 500);
-          const energyScore = (100 - f.energy) / 100;
-          const score = distScore * 0.6 + energyScore * 0.4;
+          const d = dist(f.x, f.y, predator.x, predator.y);
+          const score = (100 - f.energy) * 0.5 + (400 - d) * 0.5;
           if (score > bestScore) {
             bestScore = score;
-            target = f;
+            best = f;
           }
         }
-        if (target) {
-          // Simple pursuit toward best target
-          const dx = target.x - predator.x;
-          const dy = target.y - predator.y;
+        if (best) {
+          const dx = best.x - predator.x;
+          const dy = best.y - predator.y;
           predator.angle = atan2(dy, dx);
         }
       }
 
-      drawDetailedNet('net-forager', foragers[0] || predator, true);
+      predator.x += cos(predator.angle) * 2.1;
+      predator.y += sin(predator.angle) * 2.1;
+      predator.x = constrain(predator.x, 25, width - 25);
+      predator.y = constrain(predator.y, 25, height - 25);
+      predator.show();
+
+      // Draw neural nets (use first forager if exists)
+      const displayForager = foragers.length > 0 ? foragers[0] : predator;
+      drawDetailedNet('net-forager', displayForager, true);
       drawDetailedNet('net-predator', predator, false);
 
       if (foragers.length > 0) {
@@ -350,7 +359,6 @@
         this.size = type === 'predator' ? 15 : 12;
 
         if (parent && type === 'forager') {
-          // Inherit + mutate
           this.foodWeight = parent.foodWeight * (1 + random(-0.12, 0.12));
           this.dangerWeight = parent.dangerWeight * (1 + random(-0.12, 0.12));
           this.memoryInfluence = parent.memoryInfluence * (1 + random(-0.1, 0.1));
@@ -360,11 +368,6 @@
           this.dangerWeight = 1.2;
           this.memoryInfluence = 0.8;
           this.exploreBias = 0.6;
-        } else {
-          this.foodWeight = 0;
-          this.dangerWeight = 0;
-          this.memoryInfluence = 0;
-          this.exploreBias = 0;
         }
 
         this.lastInputs = [0,0,0,0,0,0];
@@ -373,16 +376,8 @@
       }
 
       update(other) {
-        if (this.type === 'predator') {
-          // Predator movement handled in draw()
-          this.x += cos(this.angle) * 2.2;
-          this.y += sin(this.angle) * 2.2;
-          this.x = constrain(this.x, 25, width - 25);
-          this.y = constrain(this.y, 25, height - 25);
-          return;
-        }
+        if (this.type === 'predator') return;
 
-        // Forager logic with heritable parameters
         let nf = null, fd = Infinity;
         for (let f of foods) {
           let d = dist(this.x, this.y, f.x, f.y);
@@ -403,15 +398,7 @@
           fdist = constrain(fd / 380, 0, 1);
         }
 
-        let inputs = [
-          fa,
-          fdist,
-          constrain(distOther / 280, 0, 1),
-          this.energy / 100,
-          this.memory,
-          -0.3
-        ];
-
+        let inputs = [fa, fdist, constrain(distOther / 280, 0, 1), this.energy / 100, this.memory, -0.3];
         this.memory = this.memory * 0.78 + (fa * 0.25) + (inputs[2] * -0.55);
 
         let hidden = new Array(6).fill(0);
@@ -481,8 +468,8 @@
 
     function resetSim() {
       foragers = [
-        new Creature(width * 0.25, height * 0.4, 'forager'),
-        new Creature(width * 0.75, height * 0.6, 'forager')
+        new Creature(width * 0.3, height * 0.4, 'forager'),
+        new Creature(width * 0.7, height * 0.6, 'forager')
       ];
       predator = new Creature(width * 0.5, height * 0.5, 'predator');
       foods = [];
@@ -491,20 +478,155 @@
     }
 
     function drawDetailedNet(containerId, creature, isForager) {
-      // Same as v0.14 (kept for brevity - the visualization works)
       const container = document.getElementById(containerId);
       if (!container || !creature) return;
       container.innerHTML = '';
-      // ... (visualization code from previous version)
-      // For space, the neural viz remains functional as before.
+
+      const accent = isForager ? '#34d399' : '#f87171';
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('width', '100%');
+      svg.setAttribute('height', '240');
+      svg.setAttribute('viewBox', '0 0 420 240');
+
+      const ix = 78, hx = 210, ox = 342;
+      const iy = [42, 80, 118, 156, 194, 232];
+      const hy = [42, 80, 118, 156, 194, 232];
+      const oy = [42, 80, 118, 156, 194, 232];
+
+      const inputs = creature.lastInputs || [0,0,0,0,0,0];
+      const hiddens = creature.lastHidden || new Array(6).fill(0.5);
+      const outputs = creature.lastOutputs || [0,0,0,0,0,0];
+
+      triggerNeuralSounds(inputs, hiddens, outputs);
+
+      function activationFill(act) {
+        const t = Math.max(0.15, Math.min(1, act || 0));
+        if (isForager) {
+          return `rgb(${Math.floor(16 + t*120)}, ${Math.floor(185 + t*50)}, ${Math.floor(129 + t*40)})`;
+        } else {
+          return `rgb(${Math.floor(239 + t*20)}, ${Math.floor(68 + t*80)}, ${Math.floor(68 + t*30)})`;
+        }
+      }
+
+      // Headers
+      const headers = [
+        {x: ix, label: 'Inputs'},
+        {x: hx, label: 'Hidden'},
+        {x: ox, label: 'Outputs'}
+      ];
+      headers.forEach(h => {
+        const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        t.setAttribute('x', h.x);
+        t.setAttribute('y', 18);
+        t.setAttribute('fill', '#64748b');
+        t.setAttribute('font-size', '9.5');
+        t.setAttribute('text-anchor', 'middle');
+        t.textContent = h.label;
+        svg.appendChild(t);
+      });
+
+      // Connections
+      for (let i = 0; i < 6; i++) {
+        for (let j = 0; j < 6; j++) {
+          const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          line.setAttribute('x1', ix);
+          line.setAttribute('y1', iy[i]);
+          line.setAttribute('x2', hx);
+          line.setAttribute('y2', hy[j]);
+          const intensity = Math.max(0.1, (inputs[i]||0)*0.55 + (hiddens[j]||0)*0.45);
+          line.setAttribute('stroke', '#475569');
+          line.setAttribute('stroke-width', (0.55 + intensity * 2.3).toFixed(1));
+          line.setAttribute('stroke-opacity', (0.28 + intensity * 0.55).toFixed(1));
+          svg.appendChild(line);
+        }
+      }
+
+      for (let j = 0; j < 6; j++) {
+        for (let k = 0; k < 6; k++) {
+          const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          line.setAttribute('x1', hx);
+          line.setAttribute('y1', hy[j]);
+          line.setAttribute('x2', ox);
+          line.setAttribute('y2', oy[k]);
+          const intensity = Math.max(0.1, (hiddens[j]||0)*0.5 + (outputs[k]||0)*0.5);
+          line.setAttribute('stroke', '#475569');
+          line.setAttribute('stroke-width', (0.55 + intensity * 2.3).toFixed(1));
+          line.setAttribute('stroke-opacity', (0.28 + intensity * 0.55).toFixed(1));
+          svg.appendChild(line);
+        }
+      }
+
+      // Neurons (clickable)
+      const inputLabels = ['F.∠', 'F.Dist', 'Danger', 'Energy', 'Mem', 'Bias'];
+      for (let i = 0; i < 6; i++) {
+        const act = inputs[i] || 0;
+        const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        c.setAttribute('cx', ix);
+        c.setAttribute('cy', iy[i]);
+        c.setAttribute('r', (7 + act * 3.3).toFixed(1));
+        c.setAttribute('fill', activationFill(act));
+        c.setAttribute('stroke', accent);
+        c.setAttribute('stroke-width', '2');
+        c.setAttribute('style', 'cursor: pointer');
+        c.onclick = () => showNodeControls('input', i);
+        svg.appendChild(c);
+
+        const lbl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        lbl.setAttribute('x', ix - 45);
+        lbl.setAttribute('y', iy[i] + 3);
+        lbl.setAttribute('fill', '#94a3b8');
+        lbl.setAttribute('font-size', '7.5');
+        lbl.setAttribute('text-anchor', 'end');
+        lbl.textContent = inputLabels[i];
+        svg.appendChild(lbl);
+      }
+
+      for (let j = 0; j < 6; j++) {
+        const act = hiddens[j] || 0;
+        const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        c.setAttribute('cx', hx);
+        c.setAttribute('cy', hy[j]);
+        c.setAttribute('r', (5.5 + act * 2.4).toFixed(1));
+        c.setAttribute('fill', activationFill(act));
+        c.setAttribute('stroke', '#64748b');
+        c.setAttribute('stroke-width', '1.5');
+        c.setAttribute('style', 'cursor: pointer');
+        c.onclick = () => showNodeControls('hidden', j);
+        svg.appendChild(c);
+      }
+
+      const outputLabels = ['Turn', 'Speed', 'Attack', 'Flee', 'Expl', 'Cons'];
+      for (let k = 0; k < 6; k++) {
+        const act = outputs[k] || 0;
+        const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        c.setAttribute('cx', ox);
+        c.setAttribute('cy', oy[k]);
+        c.setAttribute('r', (7 + act * 3.3).toFixed(1));
+        c.setAttribute('fill', activationFill(act));
+        c.setAttribute('stroke', accent);
+        c.setAttribute('stroke-width', '2');
+        c.setAttribute('style', 'cursor: pointer');
+        c.onclick = () => showNodeControls('output', k);
+        svg.appendChild(c);
+
+        const lbl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        lbl.setAttribute('x', ox + 14);
+        lbl.setAttribute('y', oy[k] + 3);
+        lbl.setAttribute('fill', '#94a3b8');
+        lbl.setAttribute('font-size', '7.5');
+        lbl.textContent = outputLabels[k];
+        svg.appendChild(lbl);
+      }
+
+      container.appendChild(svg);
     }
 
     function showInfo(type) {
-      alert(type === 'forager' ? 'Foragers now evolve their decision weights through death and reproduction.' : 'Predator targets the weakest available forager.');
+      alert(type === 'forager' ? 'Foragers evolve their decision weights through death and reproduction.' : 'Predator targets the weakest + closest forager.');
     }
 
     function showHowItWorks() {
-      alert('v0.15 — Evolution Mode\n\n• 2 foragers start\n• Predator kills → 2 mutated children replace it\n• Decision weights evolve over generations\n• Click neurons for audio controls\n• Watch selection pressure in action');
+      alert('v0.16 Fixed\n\n• Neural nets fully restored and animated\n• Click any neuron for per-node audio controls\n• Stable evolution with 2 starting foragers\n• Predator intelligently targets weak targets');
     }
 
     function playSound(freq, duration) {
