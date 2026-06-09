@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MiniSimmy2 • Phase 3</title>
+    <title>MiniSimmy2 • Phase 4</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -21,7 +21,7 @@
                 </div>
                 <div>
                     <span class="font-display text-2xl tracking-tighter">MiniSimmy2</span>
-                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-400">Phase 3</span>
+                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">Phase 4 • Stable</span>
                 </div>
             </div>
             <div class="flex items-center gap-x-4 text-sm">
@@ -33,8 +33,8 @@
     <div class="max-w-screen-2xl mx-auto px-6 pt-6">
         <div class="flex justify-between items-center mb-4">
             <div>
-                <h1 class="font-display text-3xl tracking-tighter">MiniSimmy2 — Phase 3</h1>
-                <p class="text-white/60 text-sm">Stronger evolution • Population stats • Module-driven behavior</p>
+                <h1 class="font-display text-3xl tracking-tighter">MiniSimmy2 — Phase 4</h1>
+                <p class="text-white/60 text-sm">Polished • Sound design • Stable evolution toy</p>
             </div>
             <div class="flex items-center gap-x-4 text-sm">
                 <div id="stats" class="font-mono px-4 py-1.5 bg-white/5 rounded-2xl text-xs flex gap-x-4"></div>
@@ -60,8 +60,57 @@
         let timeOfDay = 0;
         let dayLength = 1200;
         let lastReproTime = 0;
+        let audioCtx;
+
+        function initAudio() {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+
+        function playReproSound() {
+            if (!audioCtx) return;
+            const o = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            o.type = 'sine';
+            o.frequency.value = 880;
+            g.gain.value = 0.06;
+            o.connect(g);
+            g.connect(audioCtx.destination);
+            o.start();
+            g.gain.linearRampToValueAtTime(0.0001, audioCtx.currentTime + 0.35);
+            setTimeout(() => { try { o.stop(); } catch(e){} }, 400);
+        }
+
+        function playEnergySound() {
+            if (!audioCtx || random() > 0.3) return;
+            const o = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            o.type = 'sine';
+            o.frequency.value = 1240;
+            g.gain.value = 0.025;
+            o.connect(g);
+            g.connect(audioCtx.destination);
+            o.start();
+            g.gain.linearRampToValueAtTime(0.0001, audioCtx.currentTime + 0.12);
+            setTimeout(() => { try { o.stop(); } catch(e){} }, 150);
+        }
+
+        function playDeathSound() {
+            if (!audioCtx) return;
+            const o = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            o.type = 'sawtooth';
+            o.frequency.value = 220;
+            g.gain.value = 0.08;
+            o.connect(g);
+            g.connect(audioCtx.destination);
+            o.start();
+            o.frequency.linearRampToValueAtTime(80, audioCtx.currentTime + 0.4);
+            g.gain.linearRampToValueAtTime(0.0001, audioCtx.currentTime + 0.45);
+            setTimeout(() => { try { o.stop(); } catch(e){} }, 500);
+        }
 
         function setup() {
+            initAudio();
             let canvas = createCanvas(900, 620);
             canvas.parent('canvas-container');
 
@@ -84,46 +133,45 @@
             rect(0, 0, width, height);
 
             // Zones
-            let greenAlpha = isDay ? 165 : 50;
+            let greenAlpha = isDay ? 160 : 48;
             fill(16, 185, 129, greenAlpha); noStroke();
             circle(greenZone.x, greenZone.y, greenZone.r * 2);
 
-            let blueAlpha = isDay ? 50 : 165;
+            let blueAlpha = isDay ? 48 : 160;
             fill(56, 189, 248, blueAlpha);
             circle(blueZone.x, blueZone.y, blueZone.r * 2);
 
-            fill(255, 255, 255, 170);
+            fill(255, 255, 255, 165);
             textAlign(CENTER); textSize(11);
             text("GREEN", greenZone.x, greenZone.y - greenZone.r - 14);
             text("BLUE", blueZone.x, blueZone.y - blueZone.r - 14);
 
-            // Update & draw
             for (let i = creatures.length - 1; i >= 0; i--) {
                 let c = creatures[i];
                 c.update(isDay);
 
-                if (c.energy > 87 && frameCount - lastReproTime > 6 && random() < 0.014) {
+                if (c.energy > 86 && frameCount - lastReproTime > 5 && random() < 0.013) {
                     let offspring = c.reproduce();
-                    if (offspring && creatures.length < 30) {
+                    if (offspring && creatures.length < 28) {
                         creatures.push(offspring);
                         lastReproTime = frameCount;
-                        c.energy -= 24;
+                        c.energy -= 23;
+                        playReproSound();
                     }
                 }
 
                 if (c.energy <= 0) {
+                    playDeathSound();
                     creatures.splice(i, 1);
                 } else {
                     c.show();
                 }
             }
 
-            // Population control
-            while (creatures.length > 26) {
+            while (creatures.length > 25) {
                 creatures.splice(floor(random(creatures.length)), 1);
             }
 
-            // Stats panel
             updateStats();
         }
 
@@ -135,14 +183,10 @@
 
             for (let c of creatures) {
                 totalModules += c.modules.length;
-                for (let m of c.modules) {
-                    typeCounts[m.type]++;
-                }
+                for (let m of c.modules) typeCounts[m.type]++;
             }
 
             let avgModules = (totalModules / creatures.length).toFixed(1);
-
-            // Find dominant type
             let dominant = Object.keys(typeCounts).reduce((a, b) => typeCounts[a] > typeCounts[b] ? a : b);
             let dominantName = dominant.charAt(0).toUpperCase() + dominant.slice(1);
 
@@ -159,8 +203,8 @@
                 this.y = y;
                 this.vx = random(-1, 1);
                 this.vy = random(-1, 1);
-                this.energy = parentModules ? 62 : 72 + random(18);
-                this.baseSize = 12.5;
+                this.energy = parentModules ? 60 : 70 + random(20);
+                this.baseSize = 12;
 
                 let types = ['harvester', 'sensor', 'mover', 'resistant'];
                 let colors = {
@@ -172,7 +216,7 @@
 
                 if (parentModules) {
                     this.modules = parentModules.map(m => ({...m}));
-                    if (random() < 0.5 && this.modules.length < 8) {
+                    if (random() < 0.48 && this.modules.length < 8) {
                         let newType = random(types);
                         let angle = random(TWO_PI);
                         let dist = random(9, 13);
@@ -188,7 +232,7 @@
                     let count = floor(random(3, 6));
                     for (let i = 0; i < count; i++) {
                         let type = random(types);
-                        let angle = (TWO_PI / count) * i + random(-0.25, 0.25);
+                        let angle = (TWO_PI / count) * i + random(-0.2, 0.2);
                         let dist = random(9, 13);
                         this.modules.push({
                             type: type,
@@ -205,7 +249,7 @@
             }
 
             reproduce() {
-                return new Creature(this.x + random(-20, 20), this.y + random(-20, 20), this.modules);
+                return new Creature(this.x + random(-18, 18), this.y + random(-18, 18), this.modules);
             }
 
             update(isDay) {
@@ -219,36 +263,35 @@
                     avoidX = greenZone.x; avoidY = greenZone.y;
                 }
 
-                // Stronger module effects
-                let moverBonus = 1 + this.getModuleCount('mover') * 0.15;
-                let sensorBonus = 1 + this.getModuleCount('sensor') * 0.1;
+                let moverBonus = 1 + this.getModuleCount('mover') * 0.14;
+                let sensorBonus = 1 + this.getModuleCount('sensor') * 0.09;
 
                 let dx = targetX - this.x;
                 let dy = targetY - this.y;
                 let d = dist(this.x, this.y, targetX, targetY);
 
-                if (d > 6) {
-                    this.vx += (dx / d) * 0.09 * sensorBonus;
-                    this.vy += (dy / d) * 0.09 * sensorBonus;
+                if (d > 5) {
+                    this.vx += (dx / d) * 0.085 * sensorBonus;
+                    this.vy += (dy / d) * 0.085 * sensorBonus;
                 }
 
                 let db = dist(this.x, this.y, avoidX, avoidY);
-                if (db < 155) {
+                if (db < 150) {
                     let ax = this.x - avoidX;
                     let ay = this.y - avoidY;
-                    this.vx += (ax / db) * 0.11;
-                    this.vy += (ay / db) * 0.11;
+                    this.vx += (ax / db) * 0.105;
+                    this.vy += (ay / db) * 0.105;
                 }
 
                 this.x += this.vx * moverBonus;
                 this.y += this.vy * moverBonus;
-                this.vx *= 0.92;
-                this.vy *= 0.92;
+                this.vx *= 0.915;
+                this.vy *= 0.915;
 
-                this.x = constrain(this.x, 22, width - 22);
-                this.y = constrain(this.y, 22, height - 22);
+                this.x = constrain(this.x, 20, width - 20);
+                this.y = constrain(this.y, 20, height - 20);
 
-                this.energy -= 0.026;
+                this.energy -= 0.024;
 
                 let inGreen = dist(this.x, this.y, greenZone.x, greenZone.y) < greenZone.r;
                 let inBlue = dist(this.x, this.y, blueZone.x, blueZone.y) < blueZone.r;
@@ -256,38 +299,45 @@
                 let harvester = this.getModuleCount('harvester');
                 let resistant = this.getModuleCount('resistant');
 
-                if (inGreen && isDay) this.energy = min(100, this.energy + 0.5 + harvester * 0.22);
-                if (inBlue && !isDay) this.energy = min(100, this.energy + 0.5 + harvester * 0.22);
+                if (inGreen && isDay) {
+                    this.energy = min(100, this.energy + 0.48 + harvester * 0.2);
+                    if (harvester > 0) playEnergySound();
+                }
+                if (inBlue && !isDay) {
+                    this.energy = min(100, this.energy + 0.48 + harvester * 0.2);
+                    if (harvester > 0) playEnergySound();
+                }
 
-                let harmReduction = resistant * 0.1;
-                if (inGreen && !isDay) this.energy -= (0.18 - harmReduction);
-                if (inBlue && isDay) this.energy -= (0.18 - harmReduction);
+                let harmReduction = resistant * 0.09;
+                if (inGreen && !isDay) this.energy -= (0.16 - harmReduction);
+                if (inBlue && isDay) this.energy -= (0.16 - harmReduction);
             }
 
             show() {
                 push();
                 translate(this.x, this.y);
 
-                let coreSize = this.baseSize + this.modules.length * 0.5;
+                let coreSize = this.baseSize + this.modules.length * 0.48;
+                let pulse = 1 + (this.energy / 140);
 
                 fill(250, 204, 21);
                 stroke(255, 255, 220);
                 strokeWeight(2.5);
-                circle(0, 0, coreSize);
+                circle(0, 0, coreSize * pulse);
 
                 noStroke();
-                fill(255, 255, 255, 95);
-                circle(-coreSize * 0.17, -coreSize * 0.17, coreSize * 0.36);
+                fill(255, 255, 255, 90);
+                circle(-coreSize * 0.16, -coreSize * 0.16, coreSize * 0.35);
 
                 for (let m of this.modules) {
                     fill(m.color);
-                    stroke(255, 255, 255, 30);
+                    stroke(255, 255, 255, 28);
                     strokeWeight(1);
-                    circle(m.offsetX, m.offsetY, 7);
+                    circle(m.offsetX, m.offsetY, 6.8);
 
                     noStroke();
-                    fill(255, 255, 255, 75);
-                    circle(m.offsetX - 1.5, m.offsetY - 1.5, 2.5);
+                    fill(255, 255, 255, 70);
+                    circle(m.offsetX - 1.4, m.offsetY - 1.4, 2.4);
                 }
 
                 pop();
