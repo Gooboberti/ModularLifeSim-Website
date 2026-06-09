@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MiniSimmy2 • Social Flocking</title>
+    <title>MiniSimmy2 • Time Controls</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -12,6 +12,14 @@
         .font-display { font-family: 'Space Grotesk', 'Inter', sans-serif; font-weight: 600; }
         .neural-canvas { border: 1px solid #334155; border-radius: 12px; background: #0f111a; cursor: pointer; }
         .slider-label { font-size: 10px; color: #64748b; }
+        .time-btn {
+            transition: all 0.1s ease;
+        }
+        .time-btn.active {
+            background-color: #34d399;
+            color: #0a0a0f;
+            font-weight: 600;
+        }
     </style>
 </head>
 <body class="bg-[#0a0a0f] text-[#e0e0ea]">
@@ -23,7 +31,7 @@
                 </div>
                 <div>
                     <span class="font-display text-2xl tracking-tighter">MiniSimmy2</span>
-                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.24 • Phase 3: Social Flocking</span>
+                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.25 • Time Controls</span>
                 </div>
             </div>
             <div class="flex items-center gap-x-4 text-sm">
@@ -35,11 +43,32 @@
 
     <div class="max-w-screen-2xl mx-auto px-6 pt-6 flex gap-6">
         <div class="flex-1">
-            <div class="flex justify-between items-center mb-4">
+            <div class="flex justify-between items-center mb-3">
                 <div>
                     <h1 class="font-display text-3xl tracking-tighter">MiniSimmy2</h1>
-                    <p class="text-white/60 text-sm">Phase 3: Module-based flocking + group bonuses</p>
+                    <p class="text-white/60 text-sm">Time controls + simulation speed</p>
                 </div>
+                
+                <!-- Time Controls -->
+                <div class="flex items-center gap-x-2 bg-[#121218] border border-white/10 rounded-2xl p-1.5">
+                    <button onclick="togglePause()" id="pause-btn"
+                            class="time-btn px-4 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 flex items-center gap-x-2 text-sm">
+                        <i class="fa-solid fa-pause"></i>
+                        <span id="pause-text">Pause</span>
+                    </button>
+                    
+                    <div class="w-px h-5 bg-white/20 mx-1"></div>
+                    
+                    <button onclick="setTimeScale(0.5)" id="speed-0.5"
+                            class="time-btn px-3 py-1.5 rounded-xl text-xs hover:bg-white/10">0.5×</button>
+                    <button onclick="setTimeScale(1)" id="speed-1"
+                            class="time-btn px-3 py-1.5 rounded-xl text-xs active bg-emerald-500 text-[#0a0a0f] font-semibold">1×</button>
+                    <button onclick="setTimeScale(2)" id="speed-2"
+                            class="time-btn px-3 py-1.5 rounded-xl text-xs hover:bg-white/10">2×</button>
+                    <button onclick="setTimeScale(4)" id="speed-4"
+                            class="time-btn px-3 py-1.5 rounded-xl text-xs hover:bg-white/10">4×</button>
+                </div>
+
                 <div class="flex items-center gap-x-3 text-sm">
                     <div id="stats" class="font-mono px-4 py-1.5 bg-white/5 rounded-2xl text-xs flex gap-x-4"></div>
                     <button onclick="resetSim()" class="px-4 py-1.5 bg-white/10 hover:bg-white/20 rounded-2xl text-sm flex items-center gap-x-2">
@@ -49,6 +78,10 @@
             </div>
 
             <div id="canvas-container" class="rounded-3xl overflow-hidden border border-white/10 shadow-2xl"></div>
+            
+            <div class="mt-2 text-xs text-white/40 text-center">
+                Space = Pause/Play &nbsp;&nbsp; • &nbsp;&nbsp; +/- = Change speed
+            </div>
         </div>
 
         <div class="w-80 bg-[#121218] border border-white/10 rounded-3xl p-5 flex flex-col gap-5 overflow-auto max-h-[calc(100vh-120px)]">
@@ -179,6 +212,10 @@
         let masterVolume = 0.91;
         let lastClickedNode = null;
 
+        // Time control variables
+        let timeScale = 1;
+        let paused = false;
+
         let settings = {
             energyDrain: 0.108,
             particleFoodValue: 1.3,
@@ -255,6 +292,49 @@
             }
 
             evolutionHistory = [];
+            
+            // Keyboard shortcuts
+            document.addEventListener('keydown', handleKeyPress);
+            
+            // Set initial active speed button
+            document.getElementById('speed-1').classList.add('active', 'bg-emerald-500', 'text-[#0a0a0f]');
+        }
+
+        function handleKeyPress(e) {
+            if (e.key === ' ') {
+                e.preventDefault();
+                togglePause();
+            }
+            if (e.key === '+') setTimeScale(Math.min(8, timeScale * 2));
+            if (e.key === '-') setTimeScale(Math.max(0.25, timeScale / 2));
+        }
+
+        function togglePause() {
+            paused = !paused;
+            const btn = document.getElementById('pause-btn');
+            const text = document.getElementById('pause-text');
+            
+            if (paused) {
+                btn.classList.add('bg-red-500/80', 'text-white');
+                btn.classList.remove('bg-white/10');
+                text.innerHTML = 'Resume';
+            } else {
+                btn.classList.remove('bg-red-500/80', 'text-white');
+                btn.classList.add('bg-white/10');
+                text.innerHTML = 'Pause';
+            }
+        }
+
+        function setTimeScale(scale) {
+            timeScale = scale;
+            
+            // Update active button styling
+            document.querySelectorAll('[id^="speed-"]').forEach(el => {
+                el.classList.remove('active', 'bg-emerald-500', 'text-[#0a0a0f]');
+                if (parseFloat(el.id.split('-')[1]) === scale) {
+                    el.classList.add('active', 'bg-emerald-500', 'text-[#0a0a0f]');
+                }
+            });
         }
 
         function playSound(freq, type = 'sine', duration = 0.2, vol = 0.06, detune = 0) {
@@ -277,7 +357,14 @@
         function draw() {
             background(12, 14, 22);
 
-            timeOfDay = (frameCount % dayLength) / dayLength;
+            if (paused) {
+                // Still draw everything but skip updates
+                drawWorld();
+                return;
+            }
+
+            // Apply time scale to day/night cycle
+            timeOfDay = (frameCount * timeScale % dayLength) / dayLength;
             let isDay = timeOfDay < 0.5;
 
             if (isDay !== lastIsDay) {
@@ -310,7 +397,7 @@
             fill(70, 75, 85, 45);
             circle(centerX - 5, centerY - 5, 9);
 
-            // Vortex particles
+            // Vortex particles (affected by timeScale)
             for (let i = vortexParticles.length - 1; i >= 0; i--) {
                 let p = vortexParticles[i];
                 p.update(vortexDir, vortexStrength);
@@ -318,7 +405,7 @@
 
                 for (let c of creatures) {
                     if (dist(p.x, p.y, c.x, c.y) < 9) {
-                        c.energy = min(100, c.energy + settings.particleFoodValue);
+                        c.energy = min(100, c.energy + settings.particleFoodValue * timeScale);
                         p.life = 0;
                     }
                 }
@@ -328,14 +415,14 @@
                 }
             }
 
-            if (frameCount % 2 === 0 && vortexParticles.length < 130) {
+            if (frameCount % Math.max(1, Math.floor(2 / timeScale)) === 0 && vortexParticles.length < 130) {
                 vortexParticles.push(new VortexParticle(true));
             }
 
             // Pheromones
             for (let i = pheromones.length - 1; i >= 0; i--) {
                 let ph = pheromones[i];
-                ph.life -= 1.2;
+                ph.life -= 1.2 * timeScale;
                 if (ph.life <= 0) {
                     pheromones.splice(i, 1);
                     continue;
@@ -359,32 +446,31 @@
                             if (c.getModuleCount('communicator') > 0) force *= 1.4;
                             let dx = ph.x - c.x;
                             let dy = ph.y - c.y;
-                            c.vx += (dx / d) * force;
-                            c.vy += (dy / d) * force;
+                            c.vx += (dx / d) * force * timeScale;
+                            c.vy += (dy / d) * force * timeScale;
                         }
                     }
                 }
             }
 
-            // Food Blooms
+            // Food Blooms & Energy Orbs (speed affected)
             for (let i = foodBlooms.length - 1; i >= 0; i--) {
                 let b = foodBlooms[i];
-                b.life--;
+                b.life -= timeScale;
 
                 let target = b.targetIsGreen ? greenZone : blueZone;
                 let dx = target.x - b.x;
                 let dy = target.y - b.y;
                 let distToTarget = sqrt(dx*dx + dy*dy) || 1;
 
-                b.x += (dx / distToTarget) * 1.8;
-                b.y += (dy / distToTarget) * 1.8;
+                b.x += (dx / distToTarget) * 1.8 * timeScale;
+                b.y += (dy / distToTarget) * 1.8 * timeScale;
                 b.radius = max(3, b.radius * 0.985);
 
                 let alpha = map(b.life, 0, 280, 0, 180);
                 fill(255, 220, 100, alpha);
                 noStroke();
                 circle(b.x, b.y, b.radius);
-
                 fill(255, 240, 180, alpha * 0.5);
                 circle(b.x, b.y, b.radius * 0.6);
 
@@ -396,25 +482,23 @@
                 }
             }
 
-            // Energy Orbs
             for (let i = energyOrbs.length - 1; i >= 0; i--) {
                 let o = energyOrbs[i];
-                o.life--;
+                o.life -= timeScale;
 
                 let target = o.targetIsGreen ? greenZone : blueZone;
                 let dx = target.x - o.x;
                 let dy = target.y - o.y;
                 let distToTarget = sqrt(dx*dx + dy*dy) || 1;
 
-                o.x += (dx / distToTarget) * 2.2;
-                o.y += (dy / distToTarget) * 2.2;
+                o.x += (dx / distToTarget) * 2.2 * timeScale;
+                o.y += (dy / distToTarget) * 2.2 * timeScale;
                 o.radius = max(2, o.radius * 0.97);
 
                 let alpha = map(o.life, 0, 220, 0, 200);
                 fill(180, 255, 200, alpha);
                 noStroke();
                 circle(o.x, o.y, o.radius);
-
                 fill(200, 255, 220, alpha * 0.4);
                 circle(o.x, o.y, o.radius * 1.5);
 
@@ -437,13 +521,13 @@
             fill(255);
             text(`BLUE ${Math.floor(blueZone.food)}`, blueZone.x, blueZone.y - blueZone.r - 6);
 
-            if (globalReproCooldown > 0) globalReproCooldown -= 0.26;
+            if (globalReproCooldown > 0) globalReproCooldown -= 0.26 * timeScale;
 
             for (let i = creatures.length - 1; i >= 0; i--) {
                 let c = creatures[i];
-                c.update(isDay, vortexDir, vortexStrength);
+                c.update(isDay, vortexDir, vortexStrength, timeScale);
 
-                if (c.energy > 74 && c.reproCooldown <= 0 && globalReproCooldown <= 0 && random() < settings.reproductionChance) {
+                if (c.energy > 74 && c.reproCooldown <= 0 && globalReproCooldown <= 0 && random() < settings.reproductionChance * timeScale) {
                     let offspring = c.reproduce();
                     if (offspring) {
                         creatures.push(offspring);
@@ -456,7 +540,7 @@
                     }
                 }
 
-                if (c.energy < 25 && random() < 0.01) {
+                if (c.energy < 25 && random() < 0.01 * timeScale) {
                     playSound(205 + random(-10,10), 'sawtooth', 0.14, 0.02);
                     c.currentThought = "Hungry";
                 }
@@ -480,9 +564,9 @@
             }
 
             let pressure = Math.max(0, (creatures.length - 12) * 0.0055);
-            for (let c of creatures) c.energy -= pressure;
+            for (let c of creatures) c.energy -= pressure * timeScale;
 
-            if (frameCount % 60 === 0 && creatures.length > 0) {
+            if (frameCount % Math.max(1, Math.floor(60 / timeScale)) === 0 && creatures.length > 0) {
                 recordEvolutionStats();
             }
 
@@ -492,23 +576,26 @@
             if (selectedCreature) updateInspector();
         }
 
-        function recordEvolutionStats() {
-            let totalModules = 0;
-            let totalEnergy = 0;
-            let explorerCount = 0;
-
+        function drawWorld() {
+            // Simplified draw for paused state
+            background(12, 14, 22);
+            
+            // Draw zones
+            fill(16, 185, 129, 80);
+            circle(greenZone.x, greenZone.y, greenZone.r * 2);
+            fill(56, 189, 248, 80);
+            circle(blueZone.x, blueZone.y, blueZone.r * 2);
+            
+            // Draw creatures
             for (let c of creatures) {
-                totalModules += c.modules.length;
-                totalEnergy += c.energy;
-                if (c.getModuleCount('explorer') > 0) explorerCount++;
+                c.show();
             }
-
-            const avgModules = totalModules / creatures.length;
-            const avgEnergy = totalEnergy / creatures.length;
-            const explorerPercent = (explorerCount / creatures.length) * 100;
-
-            evolutionHistory.push({ frame: frameCount, avgModules, avgEnergy, explorerPercent });
-            if (evolutionHistory.length > 120) evolutionHistory.shift();
+            
+            // Draw particles (static)
+            for (let p of vortexParticles) {
+                fill(255, 255, 255, 120);
+                circle(p.x, p.y, p.size);
+            }
         }
 
         function handleMousePress() {
@@ -802,13 +889,13 @@
                 return new Creature(this.x + random(-7, 7), this.y + random(-7, 7), this.modules, this.generation + 1, this.traits);
             }
 
-            update(isDay, vortexDir, vortexStrength) {
+            update(isDay, vortexDir, vortexStrength, timeScale = 1) {
                 if (this.reproCooldown > 0) this.reproCooldown--;
 
                 if (!this.isPredator && this.energy < 15) this.isPredator = true;
 
                 let drain = settings.energyDrain - this.getEfficiencyBonus();
-                this.energy -= Math.max(0.005, drain);
+                this.energy -= Math.max(0.005, drain * timeScale);
 
                 if (this.isPredator) {
                     let target = null, lowest = Infinity, hasPrey = false;
@@ -827,7 +914,8 @@
                         let d = dist(this.x, this.y, target.x, target.y);
                         if (d > 3.5 && d < 135) {
                             let dx = target.x - this.x, dy = target.y - this.y;
-                            this.vx += (dx / d) * 0.09; this.vy += (dy / d) * 0.09;
+                            this.vx += (dx / d) * 0.09 * timeScale;
+                            this.vy += (dy / d) * 0.09 * timeScale;
                         }
                         if (d < 7) {
                             let stolen = Math.min(2, target.modules.length);
@@ -849,24 +937,21 @@
                     if (d > 8) {
                         let hungerFactor = map(this.energy, 0, 60, 1.6, 0.9);
                         let pull = settings.zonePullStrength * hungerFactor + this.getModuleCount('harvester') * 0.025;
-                        this.vx += (dx / d) * pull;
-                        this.vy += (dy / d) * pull;
+                        this.vx += (dx / d) * pull * timeScale;
+                        this.vy += (dy / d) * pull * timeScale;
                         this.currentThought = isDay ? "Going to Green" : "Going to Blue";
                     }
 
                     let explorerBonus = (this.getModuleCount('explorer') * 0.18) + (this.traits.explorationBias - 1) * 0.25;
 
-                    // === Phase 3: Module-based Flocking ===
                     let similarNeighbors = this.getSimilarNeighborCount();
                     let inGroup = similarNeighbors >= 3;
 
                     if (inGroup) {
                         this.currentThought = "With allies";
-                        // Group bonus: slightly lower energy drain
-                        this.energy += 0.004;
+                        this.energy += 0.004 * timeScale;
                     }
 
-                    // Alignment + Cohesion with similar-module creatures
                     if (similarNeighbors > 0) {
                         let avgVx = 0, avgVy = 0, avgX = 0, avgY = 0, count = 0;
                         const myTypes = new Set(this.modules.map(m => m.type));
@@ -889,13 +974,11 @@
                         if (count > 0) {
                             avgVx /= count; avgVy /= count; avgX /= count; avgY /= count;
 
-                            // Alignment
-                            let alignStrength = 0.035 * Math.min(similarNeighbors / 3, 1.5);
+                            let alignStrength = 0.035 * Math.min(similarNeighbors / 3, 1.5) * timeScale;
                             this.vx += (avgVx - this.vx) * alignStrength;
                             this.vy += (avgVy - this.vy) * alignStrength;
 
-                            // Cohesion
-                            let cohesionStrength = 0.028 * Math.min(similarNeighbors / 3, 1.5);
+                            let cohesionStrength = 0.028 * Math.min(similarNeighbors / 3, 1.5) * timeScale;
                             let cdx = avgX - this.x;
                             let cdy = avgY - this.y;
                             let clen = sqrt(cdx*cdx + cdy*cdy) || 1;
@@ -919,7 +1002,7 @@
                         if (d2 > 4 && d2 < 65) {
                             let dx2 = bestNeighbor.x - this.x;
                             let dy2 = bestNeighbor.y - this.y;
-                            let fireflyForce = settings.fireflyAttraction * 0.035;
+                            let fireflyForce = settings.fireflyAttraction * 0.035 * timeScale;
                             this.vx += (dx2 / d2) * fireflyForce;
                             this.vy += (dy2 / d2) * fireflyForce;
                         }
@@ -937,25 +1020,25 @@
                         let tlen = sqrt(tx * tx + ty * ty) || 1;
                         let vForce = 0.72 * vortexStrength * vortexDir * (1 - socialResist);
                         vForce *= (1 - (this.traits.vortexResistance - 1) * 0.35);
-                        this.vx += (tx / tlen) * vForce;
-                        this.vy += (ty / tlen) * vForce;
+                        this.vx += (tx / tlen) * vForce * timeScale;
+                        this.vy += (ty / tlen) * vForce * timeScale;
 
                         let pull = 0.4 * vortexStrength * (1 - socialResist);
-                        this.vx += (centerX - this.x) * pull / (cdist + 6);
-                        this.vy += (centerY - this.y) * pull / (cdist + 6);
+                        this.vx += (centerX - this.x) * pull / (cdist + 6) * timeScale;
+                        this.vy += (centerY - this.y) * pull / (cdist + 6) * timeScale;
                     }
 
                     if (cdist < 150) {
-                        this.vx += random(-0.85, 0.85) * 0.48 * (1 + explorerBonus);
-                        this.vy += random(-0.85, 0.85) * 0.48 * (1 + explorerBonus);
+                        this.vx += random(-0.85, 0.85) * 0.48 * (1 + explorerBonus) * timeScale;
+                        this.vy += random(-0.85, 0.85) * 0.48 * (1 + explorerBonus) * timeScale;
                         this.currentThought = "Escaping vortex";
                     } else if (d > 90) {
-                        this.vx += random(-0.42, 0.42) * 0.32 * (1 + explorerBonus * 0.5);
-                        this.vy += random(-0.42, 0.42) * 0.32 * (1 + explorerBonus * 0.5);
+                        this.vx += random(-0.42, 0.42) * 0.32 * (1 + explorerBonus * 0.5) * timeScale;
+                        this.vy += random(-0.42, 0.42) * 0.32 * (1 + explorerBonus * 0.5) * timeScale;
                         this.currentThought = isDay ? "Seeking Green" : "Seeking Blue";
                     }
 
-                    if (this.honey > 5 && random() < 0.0035) {
+                    if (this.honey > 5 && random() < 0.0035 * timeScale) {
                         this.honey -= 4.5;
                         let targetIsGreen = isDay;
                         foodBlooms.push({
@@ -980,28 +1063,28 @@
 
                 if (inG && isDay && greenZone.food > 0) {
                     let g = 0.28 + this.getModuleCount('harvester') * 0.1;
-                    this.energy = min(100, this.energy + g);
-                    greenZone.food = max(0, greenZone.food - 0.32);
+                    this.energy = min(100, this.energy + g * timeScale);
+                    greenZone.food = max(0, greenZone.food - 0.32 * timeScale);
 
-                    if (this.energy > 76) this.honey = min(28, this.honey + 0.35);
+                    if (this.energy > 76) this.honey = min(28, this.honey + 0.35 * timeScale);
 
                     let pheroChance = this.getModuleCount('communicator') > 0 ? 0.13 : 0.09;
-                    if (inG && this.getSimilarNeighborCount() >= 3) pheroChance *= 1.4; // Group bonus
-                    if (random() < pheroChance) {
+                    if (inG && this.getSimilarNeighborCount() >= 3) pheroChance *= 1.4;
+                    if (random() < pheroChance * timeScale) {
                         pheromones.push({ x: this.x, y: this.y, life: 220, isGreen: true });
                     }
                 }
 
                 if (inB && !isDay && blueZone.food > 0) {
                     let g = 0.28 + this.getModuleCount('sensor') * 0.09;
-                    this.energy = min(100, this.energy + g);
-                    blueZone.food = max(0, blueZone.food - 0.32);
+                    this.energy = min(100, this.energy + g * timeScale);
+                    blueZone.food = max(0, blueZone.food - 0.32 * timeScale);
 
-                    if (this.energy > 76) this.honey = min(28, this.honey + 0.35);
+                    if (this.energy > 76) this.honey = min(28, this.honey + 0.35 * timeScale);
 
                     let pheroChance = this.getModuleCount('communicator') > 0 ? 0.13 : 0.09;
                     if (inB && this.getSimilarNeighborCount() >= 3) pheroChance *= 1.4;
-                    if (random() < pheroChance) {
+                    if (random() < pheroChance * timeScale) {
                         pheromones.push({ x: this.x, y: this.y, life: 220, isGreen: false });
                     }
                 }
@@ -1037,6 +1120,20 @@
             creatures = []; vortexParticles = []; pheromones = []; foodBlooms = []; energyOrbs = []; evolutionHistory = [];
             greenZone.food = 150; blueZone.food = 150;
             globalReproCooldown = 0; selectedCreature = null;
+            paused = false;
+            timeScale = 1;
+            
+            // Reset pause button
+            const pauseBtn = document.getElementById('pause-btn');
+            const pauseText = document.getElementById('pause-text');
+            pauseBtn.classList.remove('bg-red-500/80', 'text-white');
+            pauseBtn.classList.add('bg-white/10');
+            pauseText.innerHTML = 'Pause';
+            
+            // Reset speed buttons
+            document.querySelectorAll('[id^="speed-"]').forEach(el => el.classList.remove('active', 'bg-emerald-500', 'text-[#0a0a0f]'));
+            document.getElementById('speed-1').classList.add('active', 'bg-emerald-500', 'text-[#0a0a0f]');
+            
             closeInspector();
 
             for (let i = 0; i < 9; i++) creatures.push(new Creature(random(width), random(height)));
