@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mini Simmy • v0.12</title>
+  <title>Mini Simmy • v0.13</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
@@ -21,18 +21,26 @@
         </div>
         <div>
           <span class="font-display text-2xl">Mini Simmy</span>
-          <span class="text-xs ml-2 text-slate-500">v0.12 • Soothing Harmonic Sounds</span>
+          <span class="text-xs ml-2 text-slate-500">v0.13 • Soothing Sounds</span>
         </div>
       </div>
 
       <div class="flex items-center gap-x-3 text-sm">
+        <!-- Sound Settings -->
+        <button onclick="showSoundSettings()" 
+                class="flex items-center gap-x-2 px-4 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-2xl text-sm">
+          <i class="fa-solid fa-sliders-h"></i>
+          <span class="hidden sm:inline">Sound Settings</span>
+        </button>
+
+        <!-- Volume Controls -->
         <div class="flex items-center gap-x-2 bg-slate-900 border border-slate-700 rounded-2xl px-3 py-1.5">
           <button onclick="toggleMute()" class="flex items-center gap-x-2 px-3 py-1 rounded-xl hover:bg-slate-800 transition-colors text-sm font-medium">
             <i class="fa-solid fa-volume-up text-emerald-400" id="mute-icon"></i>
             <span id="mute-text" class="hidden sm:inline">Sound On</span>
           </button>
-          <input type="range" id="volume-slider" min="0" max="100" value="55" class="w-20 sm:w-28 accent-violet-500 cursor-pointer" oninput="updateVolume(this.value)">
-          <span id="volume-value" class="text-xs text-slate-400 w-8 text-right font-mono">55</span>
+          <input type="range" id="volume-slider" min="0" max="100" value="35" class="w-20 sm:w-28 accent-violet-500 cursor-pointer" oninput="updateVolume(this.value)">
+          <span id="volume-value" class="text-xs text-slate-400 w-8 text-right font-mono">35</span>
         </div>
 
         <a href="index.html" class="hover:text-white px-2">Back</a>
@@ -128,9 +136,18 @@
   </div>
 
   <script>
+    // ==================== AUDIO SYSTEM ====================
     let audioCtx;
     let neuralSoundEnabled = true;
-    let masterVolume = 0.55;   // lowered default
+    let masterVolume = 0.35;
+
+    let soundSettings = {
+      sensitivity: 0.48,
+      inputWave: 'sine',
+      hiddenWave: 'triangle',
+      outputWave: 'sine',
+      filterCutoff: 1300
+    };
 
     function initAudio() {
       if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -156,28 +173,23 @@
       }
     }
 
-    // Much softer, soothing sound design
-    function playNeuralTone(baseFreq, intensity) {
+    function playNeuralTone(baseFreq, intensity, layer = 'input') {
       if (!audioCtx || !neuralSoundEnabled || masterVolume < 0.01) return;
 
-      const vol = Math.max(0.015, Math.min(0.28, intensity * masterVolume * 0.65));
-      const duration = 0.28 + intensity * 0.12;   // longer, gentler decay
+      const vol = Math.max(0.01, Math.min(0.2, intensity * masterVolume * 0.55));
+      const duration = 0.35 + intensity * 0.08;
 
       const o = audioCtx.createOscillator();
       const g = audioCtx.createGain();
       const filter = audioCtx.createBiquadFilter();
 
-      // Prefer softer waveforms
-      if (baseFreq > 850) {
-        o.type = 'sine';
-        filter.frequency.value = 1800;
-      } else if (baseFreq > 480) {
-        o.type = 'triangle';
-        filter.frequency.value = 1400;
-      } else {
-        o.type = 'sine';           // changed from sawtooth for softness
-        filter.frequency.value = 900;
-      }
+      let waveType = soundSettings.inputWave;
+      if (layer === 'hidden') waveType = soundSettings.hiddenWave;
+      if (layer === 'output') waveType = soundSettings.outputWave;
+
+      o.type = waveType;
+      filter.type = 'lowpass';
+      filter.frequency.value = soundSettings.filterCutoff;
 
       o.frequency.value = baseFreq;
       g.gain.value = vol;
@@ -188,12 +200,12 @@
 
       o.start();
       g.gain.linearRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
-      setTimeout(() => { try { o.stop(); } catch(e){} }, duration * 1000 + 30);
+      setTimeout(() => { try { o.stop(); } catch(e){} }, duration * 1000 + 20);
     }
 
-    const inputFreqs = [880, 1047, 1175, 1319, 1568, 1760];
-    const hiddenFreqs = [440, 523, 587, 659, 784, 880];
-    const outputFreqs = [330, 392, 440, 523, 587, 659];
+    const inputFreqs = [820, 980, 1100, 1240, 1480, 1660];
+    const hiddenFreqs = [420, 500, 560, 630, 750, 840];
+    const outputFreqs = [320, 380, 420, 500, 560, 630];
 
     let lastInputAct = [0,0,0,0,0,0];
     let lastHiddenAct = [0,0,0,0,0,0];
@@ -201,32 +213,123 @@
 
     function triggerNeuralSounds(inputs, hiddens, outputs) {
       if (!neuralSoundEnabled || !audioCtx) return;
+      const thresh = soundSettings.sensitivity;
 
       for (let i = 0; i < 6; i++) {
         const act = inputs[i] || 0;
-        if (act > 0.45 && act > lastInputAct[i] + 0.12) {
-          playNeuralTone(inputFreqs[i], act);
+        if (act > thresh && act > lastInputAct[i] + 0.1) {
+          playNeuralTone(inputFreqs[i], act, 'input');
         }
         lastInputAct[i] = act;
       }
 
       for (let j = 0; j < 6; j++) {
         const act = hiddens[j] || 0;
-        if (act > 0.5 && act > lastHiddenAct[j] + 0.1) {
-          playNeuralTone(hiddenFreqs[j], act * 0.75);
+        if (act > thresh + 0.05 && act > lastHiddenAct[j] + 0.08) {
+          playNeuralTone(hiddenFreqs[j], act * 0.75, 'hidden');
         }
         lastHiddenAct[j] = act;
       }
 
       for (let k = 0; k < 6; k++) {
         const act = outputs[k] || 0;
-        if (act > 0.45 && act > lastOutputAct[k] + 0.1) {
-          playNeuralTone(outputFreqs[k], act * 0.7);
+        if (act > thresh && act > lastOutputAct[k] + 0.08) {
+          playNeuralTone(outputFreqs[k], act * 0.7, 'output');
         }
         lastOutputAct[k] = act;
       }
     }
 
+    // ==================== SOUND SETTINGS MODAL ====================
+    function showSoundSettings() {
+      const modal = document.createElement('div');
+      modal.className = 'fixed inset-0 bg-black/70 flex items-center justify-center z-[100]';
+      modal.innerHTML = `
+        <div class="bg-slate-900 border border-slate-700 rounded-3xl p-8 w-full max-w-md mx-4">
+          <div class="flex justify-between items-center mb-6">
+            <h3 class="text-xl font-semibold">Sound Settings</h3>
+            <button onclick="this.closest('.fixed').remove()" class="text-2xl leading-none text-slate-400 hover:text-white">×</button>
+          </div>
+
+          <div class="space-y-6">
+            <div>
+              <label class="block text-sm text-slate-400 mb-1">Trigger Sensitivity</label>
+              <input type="range" id="sens-slider" min="0.25" max="0.75" step="0.05" value="${soundSettings.sensitivity}" class="w-full accent-violet-500">
+              <div class="flex justify-between text-xs text-slate-500 mt-1">
+                <div>Less sounds</div><div>More sounds</div>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-3 gap-4">
+              <div>
+                <label class="block text-sm text-slate-400 mb-1">Inputs</label>
+                <select id="wave-input" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-sm">
+                  <option value="sine">Sine (softest)</option>
+                  <option value="triangle">Triangle</option>
+                  <option value="sawtooth">Sawtooth</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm text-slate-400 mb-1">Hidden</label>
+                <select id="wave-hidden" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-sm">
+                  <option value="sine">Sine (softest)</option>
+                  <option value="triangle">Triangle</option>
+                  <option value="sawtooth">Sawtooth</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm text-slate-400 mb-1">Outputs</label>
+                <select id="wave-output" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-sm">
+                  <option value="sine">Sine (softest)</option>
+                  <option value="triangle">Triangle</option>
+                  <option value="sawtooth">Sawtooth</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="flex gap-3 pt-2">
+              <button onclick="applySoundSettings(this)" 
+                      class="flex-1 py-3 bg-violet-600 hover:bg-violet-500 rounded-2xl font-medium">
+                Apply
+              </button>
+              <button onclick="applySoothingPreset(this)" 
+                      class="flex-1 py-3 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 rounded-2xl font-medium">
+                Soothing Preset
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+
+      setTimeout(() => {
+        document.getElementById('sens-slider').value = soundSettings.sensitivity;
+        document.getElementById('wave-input').value = soundSettings.inputWave;
+        document.getElementById('wave-hidden').value = soundSettings.hiddenWave;
+        document.getElementById('wave-output').value = soundSettings.outputWave;
+      }, 30);
+    }
+
+    function applySoundSettings(btn) {
+      const modal = btn.closest('.fixed');
+      soundSettings.sensitivity = parseFloat(document.getElementById('sens-slider').value);
+      soundSettings.inputWave = document.getElementById('wave-input').value;
+      soundSettings.hiddenWave = document.getElementById('wave-hidden').value;
+      soundSettings.outputWave = document.getElementById('wave-output').value;
+      modal.remove();
+    }
+
+    function applySoothingPreset(btn) {
+      const modal = btn.closest('.fixed');
+      soundSettings.sensitivity = 0.5;
+      soundSettings.inputWave = 'sine';
+      soundSettings.hiddenWave = 'triangle';
+      soundSettings.outputWave = 'sine';
+      soundSettings.filterCutoff = 1200;
+      modal.remove();
+    }
+
+    // ==================== GAME LOGIC ====================
     let forager, predator;
     let foods = [];
 
@@ -303,8 +406,7 @@
         }
 
         let inputs = [
-          fa,
-          fdist,
+          fa, fdist,
           constrain(distOther / 280, 0, 1),
           this.energy / 100,
           this.memory,
@@ -344,14 +446,14 @@
         this.x += cos(this.angle) * this.speed;
         this.y += sin(this.angle) * this.speed;
 
-        // Improved boundary handling (bounce + strong clamp)
+        // Better boundaries
         const margin = 28;
         if (this.x < margin || this.x > width - margin) {
-          this.angle = PI - this.angle + random(-0.3, 0.3);
+          this.angle = PI - this.angle + random(-0.25, 0.25);
           this.x = constrain(this.x, margin, width - margin);
         }
         if (this.y < margin || this.y > height - margin) {
-          this.angle = -this.angle + random(-0.3, 0.3);
+          this.angle = -this.angle + random(-0.25, 0.25);
           this.y = constrain(this.y, margin, height - margin);
         }
 
@@ -366,7 +468,7 @@
         if (this.type === 'predator' && distOther < 17) {
           other.energy = max(8, other.energy - 14);
           this.energy = min(100, this.energy + 12);
-          playSound(280, 0.18);
+          playSound(280, 0.16);
         }
 
         this.lastInputs = inputs;
@@ -543,7 +645,7 @@
     }
 
     function showHowItWorks() {
-      alert('Mini Simmy v0.12\n\nSofter harmonic sounds + improved boundaries.\nEach neuron now plays gentle, soothing tones.');
+      alert('Mini Simmy v0.13\n\nSoothing harmonic sounds with adjustable settings.\nUse the Sound Settings button to change waveforms and sensitivity.');
     }
 
     function playSound(freq, duration) {
