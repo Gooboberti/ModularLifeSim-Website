@@ -1,0 +1,1220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chrono Lounge • Graphical Timer | Gooboberti</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&amp;family=Space+Grotesk:wght@500;600&amp;display=swap');
+        
+        body {
+            font-family: 'Inter', system_ui, sans-serif;
+        }
+        
+        .font-display {
+            font-family: 'Space Grotesk', 'Inter', sans-serif;
+            font-weight: 600;
+        }
+
+        .section-header {
+            font-size: 0.75rem;
+            letter-spacing: 1.5px;
+            font-weight: 600;
+            color: #a5b4fc;
+        }
+
+        #roomScene {
+            box-shadow: 0 25px 60px -15px rgb(0 0 0 / 0.5), 
+                       inset 0 1px 0 rgba(255,255,255,0.08);
+            transition: box-shadow 0.3s ease;
+        }
+
+        .room-layer {
+            transition: transform 0.2s cubic-bezier(0.23, 1, 0.32, 1);
+        }
+
+        .clock-bezel {
+            box-shadow: 0 20px 40px -10px rgb(0 0 0 / 0.6),
+                       inset 0 0 0 12px #25201e,
+                       inset 0 4px 8px rgba(255,255,255,0.15),
+                       inset 0 -4px 8px rgba(0,0,0,0.4);
+        }
+
+        .flame {
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform-origin: bottom center;
+            animation: flicker 0.8s infinite alternate ease-in-out;
+            border-radius: 50% 50% 20% 20%;
+            filter: blur(1px);
+        }
+
+        @keyframes flicker {
+            0% { transform: scaleY(0.95) scaleX(0.9) translateX(-50%); }
+            100% { transform: scaleY(1.15) scaleX(1.05) translateX(-50%); }
+        }
+
+        .flame2 { animation-duration: 0.6s; animation-delay: 0.2s; }
+        .flame3 { animation-duration: 1.1s; animation-delay: 0.4s; }
+
+        .nav-active {
+            color: #a5b4fc;
+            border-bottom: 2px solid #a5b4fc;
+        }
+
+        .theme-btn {
+            transition: all 0.2s cubic-bezier(0.23, 1.0, 0.32, 1);
+        }
+        .theme-btn.active {
+            transform: scale(1.05);
+            box-shadow: 0 0 0 3px #a5b4fc33;
+        }
+
+        .timer-input {
+            background: #0a0a0f;
+            border: 1px solid #ffffff1a;
+            color: #e0e0ea;
+            font-family: monospace;
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+        .timer-input:focus {
+            outline: none;
+            border-color: #a5b4fc;
+            box-shadow: 0 0 0 3px #a5b4fc22;
+        }
+
+        .mini-btn {
+            transition: all 0.1s ease;
+        }
+        .mini-btn:active {
+            transform: scale(0.92);
+        }
+
+        canvas {
+            image-rendering: crisp-edges;
+        }
+    </style>
+</head>
+<body class="bg-[#0a0a0f] text-[#e0e0ea]">
+    <!-- Navbar -->
+    <nav class="border-b border-white/10 bg-[#0a0a0f]/95 backdrop-blur-lg sticky top-0 z-50">
+        <div class="max-w-screen-2xl mx-auto px-6 py-4 flex items-center justify-between">
+            <div class="flex items-center gap-x-4">
+                <div class="w-9 h-9 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center">
+                    <i class="fa-solid fa-clock text-[#0a0a0f]"></i>
+                </div>
+                <div>
+                    <span class="font-display text-2xl tracking-tighter font-semibold">Chrono Lounge</span>
+                    <span class="ml-2 text-sm text-white/50">by Gooboberti</span>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-x-3">
+                <button onclick="showRoadmap()" 
+                        class="px-4 py-2 text-sm flex items-center gap-x-2 rounded-2xl border border-white/15 hover:bg-white/5 transition-all">
+                    <i class="fa-solid fa-map-signs"></i>
+                    <span class="hidden sm:inline">Roadmap</span>
+                </button>
+                
+                <a href="index.html#experiments" 
+                   class="px-5 py-2 text-sm flex items-center gap-x-2 rounded-2xl border border-white/15 hover:bg-white/5 transition-all">
+                    <i class="fa-solid fa-arrow-left"></i>
+                    <span class="hidden sm:inline">Back to Experiments</span>
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="max-w-screen-2xl mx-auto px-6 pt-8 pb-12">
+        <!-- Header -->
+        <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-y-4 mb-8">
+            <div>
+                <div class="flex items-center gap-x-3 mb-2">
+                    <div class="px-3 py-1 rounded-2xl bg-amber-500/10 text-amber-400 text-xs font-medium tracking-widest flex items-center gap-x-1.5">
+                        <div class="w-1.5 h-1.5 bg-amber-400 rounded-full animate-pulse"></div>
+                        FOCUS • STREAM • RELAX
+                    </div>
+                </div>
+                <h1 class="font-display text-5xl tracking-tighter">Chrono Lounge</h1>
+                <p class="text-xl text-white/70 mt-1">Immersive living room countdown timer with customizable themes and pseudo-depth visuals.</p>
+            </div>
+            
+            <div class="flex items-center gap-x-3">
+                <div id="currentThemeLabel" 
+                     class="px-4 py-1.5 bg-[#121218] border border-white/10 rounded-2xl text-sm flex items-center gap-x-2">
+                    <i class="fa-solid fa-palette text-amber-400"></i>
+                    <span id="themeName">Cozy Hearth</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid lg:grid-cols-12 gap-6">
+            <!-- Left Controls -->
+            <div class="lg:col-span-3 space-y-6">
+                <!-- Timer Setup -->
+                <div class="bg-[#121218] border border-white/10 rounded-3xl p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="font-semibold flex items-center gap-x-2 text-lg">
+                            <i class="fa-solid fa-stopwatch text-amber-400"></i> 
+                            <span>Set Timer</span>
+                        </h3>
+                    </div>
+                    
+                    <!-- Time Inputs -->
+                    <div class="grid grid-cols-3 gap-3 mb-5">
+                        <div>
+                            <div class="text-[10px] uppercase tracking-widest text-white/50 mb-1.5 pl-1">HOURS</div>
+                            <div class="flex items-center bg-[#0a0a0f] border border-white/10 rounded-2xl p-1">
+                                <button onclick="adjustTime('hours', -1)" class="mini-btn w-8 h-8 flex items-center justify-center text-white/60 hover:text-white active:bg-white/5 rounded-xl">−</button>
+                                <input id="hoursInput" type="number" value="0" min="0" max="23" 
+                                       class="timer-input flex-1 text-center bg-transparent border-0 focus:ring-0 w-full" 
+                                       oninput="updateFromInputs()">
+                                <button onclick="adjustTime('hours', 1)" class="mini-btn w-8 h-8 flex items-center justify-center text-white/60 hover:text-white active:bg-white/5 rounded-xl">+</button>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="text-[10px] uppercase tracking-widest text-white/50 mb-1.5 pl-1">MINUTES</div>
+                            <div class="flex items-center bg-[#0a0a0f] border border-white/10 rounded-2xl p-1">
+                                <button onclick="adjustTime('minutes', -1)" class="mini-btn w-8 h-8 flex items-center justify-center text-white/60 hover:text-white active:bg-white/5 rounded-xl">−</button>
+                                <input id="minutesInput" type="number" value="5" min="0" max="59" 
+                                       class="timer-input flex-1 text-center bg-transparent border-0 focus:ring-0 w-full" 
+                                       oninput="updateFromInputs()">
+                                <button onclick="adjustTime('minutes', 1)" class="mini-btn w-8 h-8 flex items-center justify-center text-white/60 hover:text-white active:bg-white/5 rounded-xl">+</button>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="text-[10px] uppercase tracking-widest text-white/50 mb-1.5 pl-1">SECONDS</div>
+                            <div class="flex items-center bg-[#0a0a0f] border border-white/10 rounded-2xl p-1">
+                                <button onclick="adjustTime('seconds', -1)" class="mini-btn w-8 h-8 flex items-center justify-center text-white/60 hover:text-white active:bg-white/5 rounded-xl">−</button>
+                                <input id="secondsInput" type="number" value="0" min="0" max="59" 
+                                       class="timer-input flex-1 text-center bg-transparent border-0 focus:ring-0 w-full" 
+                                       oninput="updateFromInputs()">
+                                <button onclick="adjustTime('seconds', 1)" class="mini-btn w-8 h-8 flex items-center justify-center text-white/60 hover:text-white active:bg-white/5 rounded-xl">+</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Presets -->
+                    <div class="mb-4">
+                        <div class="text-[10px] uppercase tracking-widest text-white/50 mb-2 pl-1">QUICK PRESETS</div>
+                        <div class="flex flex-wrap gap-2">
+                            <button onclick="setPreset(5*60)" class="px-3.5 py-1.5 text-xs bg-white/5 hover:bg-white/10 active:bg-white/15 rounded-2xl transition-colors">5 min</button>
+                            <button onclick="setPreset(10*60)" class="px-3.5 py-1.5 text-xs bg-white/5 hover:bg-white/10 active:bg-white/15 rounded-2xl transition-colors">10 min</button>
+                            <button onclick="setPreset(25*60)" class="px-3.5 py-1.5 text-xs bg-white/5 hover:bg-white/10 active:bg-white/15 rounded-2xl transition-colors">25 min</button>
+                            <button onclick="setPreset(45*60)" class="px-3.5 py-1.5 text-xs bg-white/5 hover:bg-white/10 active:bg-white/15 rounded-2xl transition-colors">45 min</button>
+                            <button onclick="setPreset(60*60)" class="px-3.5 py-1.5 text-xs bg-white/5 hover:bg-white/10 active:bg-white/15 rounded-2xl transition-colors">1 hour</button>
+                        </div>
+                    </div>
+
+                    <!-- Main Controls -->
+                    <div class="flex gap-3">
+                        <button id="startPauseBtn" onclick="toggleTimer()"
+                                class="flex-1 flex items-center justify-center gap-x-2.5 px-8 py-4 bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-300 hover:to-orange-400 text-[#0a0a0f] font-semibold text-lg rounded-3xl transition-all active:scale-[0.985]">
+                            <i id="playIcon" class="fa-solid fa-play mr-1"></i>
+                            <span id="startPauseText">Start</span>
+                        </button>
+                        <button onclick="resetTimer()" 
+                                class="px-5 py-4 border border-white/15 hover:bg-white/5 rounded-3xl flex items-center justify-center text-lg transition-all active:scale-[0.985]" title="Reset">
+                            <i class="fa-solid fa-undo"></i>
+                        </button>
+                    </div>
+                    
+                    <div class="mt-3 text-center">
+                        <button onclick="addTime(60)" class="text-xs px-3 py-1 bg-white/5 hover:bg-white/10 rounded-2xl transition-colors">+1 min</button>
+                        <button onclick="addTime(5*60)" class="text-xs px-3 py-1 bg-white/5 hover:bg-white/10 rounded-2xl transition-colors ml-1">+5 min</button>
+                    </div>
+                </div>
+
+                <!-- Themes -->
+                <div class="bg-[#121218] border border-white/10 rounded-3xl p-6">
+                    <h3 class="font-semibold mb-4 flex items-center gap-x-2">
+                        <i class="fa-solid fa-palette text-amber-400"></i> 
+                        <span>Themes</span>
+                    </h3>
+                    <div class="grid grid-cols-2 gap-2" id="themeGrid">
+                        <!-- Populated by JS -->
+                    </div>
+                    <p class="text-[10px] text-white/50 mt-3">Click to switch living room &amp; clock style. More skins coming.</p>
+                </div>
+
+                <!-- Sound Controls -->
+                <div class="bg-[#121218] border border-white/10 rounded-3xl p-6">
+                    <h3 class="font-semibold mb-4 flex items-center gap-x-2">
+                        <i class="fa-solid fa-volume-up text-amber-400"></i> 
+                        <span>Sound &amp; Effects</span>
+                    </h3>
+                    
+                    <div class="space-y-4">
+                        <label class="flex items-center justify-between cursor-pointer">
+                            <span class="text-sm">Enable Sounds</span>
+                            <input type="checkbox" id="soundToggle" checked class="accent-amber-400 w-4 h-4">
+                        </label>
+                        
+                        <div>
+                            <div class="flex justify-between text-xs mb-1.5">
+                                <span class="text-white/60">Volume</span>
+                                <span id="volumeValue" class="font-mono text-amber-400">70%</span>
+                            </div>
+                            <input type="range" id="volumeSlider" min="0" max="1" step="0.05" value="0.7" 
+                                   class="w-full accent-amber-400">
+                        </div>
+
+                        <div>
+                            <div class="text-xs text-white/60 mb-1.5">Alarm Style</div>
+                            <select id="alarmStyle" class="w-full bg-[#0a0a0f] border border-white/10 text-sm rounded-2xl px-3 py-2 focus:outline-none focus:border-amber-400">
+                                <option value="classic">Classic Beep</option>
+                                <option value="chime">Gentle Chime</option>
+                                <option value="digital">Digital Alert</option>
+                            </select>
+                        </div>
+
+                        <label class="flex items-center justify-between text-sm cursor-pointer">
+                            <span>Tick on seconds</span>
+                            <input type="checkbox" id="tickToggle" checked class="accent-amber-400 w-4 h-4">
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Scene -->
+            <div class="lg:col-span-9">
+                <div id="roomScene" 
+                     class="relative w-full aspect-video lg:aspect-[16/9.5] max-h-[68vh] bg-[#25201e] border border-white/10 rounded-3xl overflow-hidden cursor-default select-none">
+                    
+                    <!-- Wall Background -->
+                    <div id="wallLayer" class="absolute inset-0 bg-gradient-to-br from-[#3a3230] via-[#2c2522] to-[#25201e] room-layer"></div>
+                    
+                    <!-- Subtle Wall Paneling / Texture -->
+                    <div class="absolute inset-0 opacity-30 room-layer" 
+                         style="background-image: linear-gradient(#ffffff08 1px, transparent 1px), linear-gradient(90deg, #ffffff08 1px, transparent 1px); background-size: 48px 48px;"></div>
+
+                    <!-- Window (Left) -->
+                    <div id="windowLayer" class="absolute top-[12%] left-[4%] w-[23%] h-[38%] rounded-2xl overflow-hidden border-[6px] border-[#3a3230] shadow-inner room-layer">
+                        <div class="absolute inset-0 bg-gradient-to-br from-[#2a4a6e] via-[#1e3a5f] to-[#15283f]"></div>
+                        <!-- Window grid -->
+                        <div class="absolute inset-0" style="background-image: linear-gradient(rgba(255,255,255,0.12) 1.5px, transparent 1.5px), linear-gradient(90deg, rgba(255,255,255,0.12) 1.5px, transparent 1.5px); background-size: 50% 50%;"></div>
+                        <!-- Subtle night glow or stars hint -->
+                        <div class="absolute inset-0 opacity-40" style="background: radial-gradient(circle at 30% 30%, #ffffff22 0%, transparent 60%);"></div>
+                        <!-- Curtain hint -->
+                        <div class="absolute -left-1 top-0 bottom-0 w-4 bg-gradient-to-r from-[#2c2522] to-transparent"></div>
+                        <div class="absolute -right-1 top-0 bottom-0 w-4 bg-gradient-to-l from-[#2c2522] to-transparent"></div>
+                    </div>
+
+                    <!-- Fireplace (Right) -->
+                    <div id="fireplaceLayer" class="absolute bottom-[6%] right-[3%] w-[26%] h-[34%] bg-[#2a2522] border border-[#3a3230] rounded-t-3xl overflow-hidden room-layer">
+                        <!-- Mantel -->
+                        <div class="absolute -top-[10px] left-0 right-0 h-[14px] bg-gradient-to-r from-[#3a3230] via-[#4a423a] to-[#3a3230] rounded"></div>
+                        <!-- Logs -->
+                        <div class="absolute bottom-[22%] left-[18%] right-[18%] h-[18px] bg-[#4a3f35] rounded-full shadow-inner"></div>
+                        <div class="absolute bottom-[18%] left-[25%] right-[25%] h-[12px] bg-[#3a2f28] rounded-full"></div>
+                        <!-- Flames Container -->
+                        <div id="flamesContainer" class="absolute bottom-[26%] left-[22%] right-[22%] h-[55%]">
+                            <div class="flame w-[22%] h-[65%] left-[18%] bg-gradient-to-t from-orange-600 via-amber-400 to-yellow-300" style="animation-duration: 0.75s;"></div>
+                            <div class="flame flame2 w-[18%] h-[75%] left-[38%] bg-gradient-to-t from-orange-700 via-amber-500 to-yellow-200" style="animation-duration: 0.55s; animation-delay: 180ms;"></div>
+                            <div class="flame flame3 w-[26%] h-[60%] left-[55%] bg-gradient-to-t from-orange-600 via-yellow-400 to-amber-300" style="animation-duration: 1.05s; animation-delay: 320ms;"></div>
+                        </div>
+                        <!-- Inner glow -->
+                        <div class="absolute inset-0 bg-gradient-to-t from-amber-900/30 via-transparent to-transparent pointer-events-none"></div>
+                    </div>
+
+                    <!-- Central Clock on Mantel -->
+                    <div id="clockContainer" class="absolute top-[38%] left-1/2 -translate-x-1/2 w-[36%] max-w-[380px] aspect-square room-layer z-10">
+                        <!-- Shadow under clock -->
+                        <div class="absolute -bottom-5 left-1/2 -translate-x-1/2 w-[78%] h-8 bg-black/50 blur-2xl rounded-full"></div>
+                        
+                        <!-- Bezel / Frame -->
+                        <div class="clock-bezel relative w-full h-full rounded-full p-[14px] bg-gradient-to-br from-[#5a524a] via-[#3a3230] to-[#1f1a18] border border-white/10">
+                            <!-- Inner face wrapper -->
+                            <div id="clockFace" class="w-full h-full rounded-full overflow-hidden shadow-[inset_0_0_40px_rgba(0,0,0,0.6)] bg-[#f5f0e6]" 
+                                 style="box-shadow: inset 0 8px 16px rgba(0,0,0,0.35), inset 0 -4px 10px rgba(255,255,255,0.25);">
+                                <canvas id="clockCanvas" width="500" height="500" class="w-full h-full block"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Decorative Lamp (Left of clock) -->
+                    <div class="absolute top-[26%] left-[13%] w-[7%] h-[22%] room-layer z-20 pointer-events-none">
+                        <div class="absolute bottom-0 left-1/2 -translate-x-1/2 w-[55%] h-[12%] bg-[#3a3230] rounded-full"></div>
+                        <div class="absolute bottom-[8%] left-1/2 -translate-x-1/2 w-[12%] h-[55%] bg-gradient-to-t from-[#5a524a] to-[#d4af37]"></div>
+                        <div class="absolute top-[2%] left-1/2 -translate-x-1/2 w-[75%] h-[28%] bg-gradient-to-br from-[#d4af37] to-[#f4d35e] rounded-t-full shadow-[0_0_18px_#f4d35e,0_0_32px_#d4af3788]"></div>
+                    </div>
+
+                    <!-- Small Plant or Decor (Right) -->
+                    <div class="absolute bottom-[22%] right-[18%] w-[6%] h-[14%] room-layer z-20 pointer-events-none">
+                        <div class="absolute bottom-0 left-1/2 -translate-x-1/2 w-[70%] h-[22%] bg-[#2a3a2a] rounded-t-full"></div>
+                        <div class="absolute bottom-[18%] left-1/2 -translate-x-1/2 w-[38%] h-[55%] bg-[#3a5a3a] rounded-t-full"></div>
+                    </div>
+
+                    <!-- Status / Interaction hint overlay (subtle) -->
+                    <div class="absolute bottom-4 left-4 px-3 py-1 bg-black/40 backdrop-blur rounded-2xl text-[10px] text-white/50 flex items-center gap-x-1.5 pointer-events-none">
+                        <i class="fa-solid fa-mouse-pointer text-[9px]"></i> 
+                        <span>Move mouse for depth • Click clock to pause</span>
+                    </div>
+                </div>
+
+                <!-- Status & Remaining -->
+                <div class="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-y-3 px-1">
+                    <div id="statusText" class="font-medium text-white/70 flex items-center gap-x-2">
+                        <span>Ready to focus</span>
+                    </div>
+                    
+                    <div class="flex items-baseline gap-x-3">
+                        <div id="remainingDisplay" 
+                             class="font-mono text-4xl sm:text-5xl font-semibold tracking-tighter text-amber-400 tabular-nums">00:05:00</div>
+                        <div class="text-xs text-white/50 self-end pb-1">REMAINING</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer note -->
+        <div class="mt-8 text-center text-xs text-white/40">
+            Semi-interactive scene with pseudo-3D depth. Themes change the environment and clock aesthetics. 
+            Scalable for future image-based skins, advanced animations &amp; more. Built for streams &amp; deep work.
+        </div>
+    </div>
+
+    <!-- Roadmap Modal -->
+    <div id="roadmapModal" onclick="if (event.target.id === 'roadmapModal') closeRoadmap()" class="hidden fixed inset-0 bg-black/90 flex items-center justify-center z-[200] p-4">
+        <div onclick="event.stopImmediatePropagation()" class="bg-[#121218] border border-white/10 rounded-3xl max-w-3xl w-full max-h-[92vh] overflow-auto">
+            <div class="sticky top-0 bg-[#121218] border-b border-white/10 px-8 py-5 flex items-center justify-between rounded-t-3xl z-10">
+                <div>
+                    <div class="section-header">PROJECT ROADMAP</div>
+                    <h2 class="font-display text-3xl tracking-tighter">Chrono Lounge Evolution</h2>
+                </div>
+                <button onclick="closeRoadmap()" class="text-3xl text-white/40 hover:text-white transition-colors">&times;</button>
+            </div>
+            
+            <div class="px-8 py-8 space-y-9 text-sm">
+                <!-- v1 -->
+                <div>
+                    <div class="flex items-center gap-x-2 mb-3">
+                        <div class="px-3 py-0.5 rounded text-xs bg-emerald-500/10 text-emerald-400 font-medium">v1 • LIVE</div>
+                    </div>
+                    <div class="grid sm:grid-cols-2 gap-x-8 gap-y-2 text-white/80">
+                        <div class="flex gap-x-2"><i class="fa-solid fa-check text-emerald-400 mt-1"></i> <span>Living room layered scene with fireplace, window &amp; decor</span></div>
+                        <div class="flex gap-x-2"><i class="fa-solid fa-check text-emerald-400 mt-1"></i> <span>Canvas analog countdown clock with progress ring &amp; 3 hands</span></div>
+                        <div class="flex gap-x-2"><i class="fa-solid fa-check text-emerald-400 mt-1"></i> <span>5 distinct themes (Cozy, Vintage, Cyber, Zen, Enchanted)</span></div>
+                        <div class="flex gap-x-2"><i class="fa-solid fa-check text-emerald-400 mt-1"></i> <span>Precise H/M/S inputs, quick presets, add-time buttons</span></div>
+                        <div class="flex gap-x-2"><i class="fa-solid fa-check text-emerald-400 mt-1"></i> <span>Web Audio API alarm + optional ticking sounds + volume</span></div>
+                        <div class="flex gap-x-2"><i class="fa-solid fa-check text-emerald-400 mt-1"></i> <span>Mouse parallax depth effect &amp; click-to-pause on clock</span></div>
+                        <div class="flex gap-x-2"><i class="fa-solid fa-check text-emerald-400 mt-1"></i> <span>Fully self-contained standalone HTML (no deps beyond CDNs)</span></div>
+                        <div class="flex gap-x-2"><i class="fa-solid fa-check text-emerald-400 mt-1"></i> <span>In-app Roadmap viewer &amp; scalable JS architecture</span></div>
+                    </div>
+                </div>
+
+                <!-- Next -->
+                <div>
+                    <div class="flex items-center gap-x-2 mb-3">
+                        <div class="px-3 py-0.5 rounded text-xs bg-amber-500/10 text-amber-400 font-medium">NEXT UP</div>
+                    </div>
+                    <ul class="space-y-2 text-white/75 pl-1">
+                        <li class="flex gap-x-2"><span class="text-amber-400">→</span> Image-backed skins &amp; custom backgrounds (file upload or generated assets)</li>
+                        <li class="flex gap-x-2"><span class="text-amber-400">→</span> Enhanced clock variants (ornate hands, digital overlay, pendulum swing)</li>
+                        <li class="flex gap-x-2"><span class="text-amber-400">→</span> Richer animations: floating dust, light beams, reactive fire intensity</li>
+                        <li class="flex gap-x-2"><span class="text-amber-400">→</span> Stream overlay mode (transparent background, minimal chrome, OBS-ready)</li>
+                        <li class="flex gap-x-2"><span class="text-amber-400">→</span> localStorage presets, session history &amp; quick-recall buttons</li>
+                        <li class="flex gap-x-2"><span class="text-amber-400">→</span> Mobile-first refinements &amp; touch gesture support (drag hands?)</li>
+                    </ul>
+                </div>
+
+                <!-- Future -->
+                <div>
+                    <div class="flex items-center gap-x-2 mb-3">
+                        <div class="px-3 py-0.5 rounded text-xs bg-rose-500/10 text-rose-400 font-medium">FUTURE VISIONS</div>
+                    </div>
+                    <ul class="space-y-2 text-white/75 pl-1">
+                        <li class="flex gap-x-2"><span class="text-rose-400">→</span> Grok Imagine powered custom theme/skin generation from text prompts</li>
+                        <li class="flex gap-x-2"><span class="text-rose-400">→</span> Ambient soundscapes (crackling fire, rain on window, soft vinyl) layered with alarm</li>
+                        <li class="flex gap-x-2"><span class="text-rose-400">→</span> Shared / synced timers for collaborative focus or stream audience participation</li>
+                        <li class="flex gap-x-2"><span class="text-rose-400">→</span> Export beautiful session videos/GIFs or thumbnail packs for content creation</li>
+                        <li class="flex gap-x-2"><span class="text-rose-400">→</span> Drag-to-adjust hands on canvas + advanced color &amp; style pickers</li>
+                        <li class="flex gap-x-2"><span class="text-rose-400">→</span> Subtle interactive room elements (click plant to water, adjust lamp warmth)</li>
+                        <li class="flex gap-x-2"><span class="text-rose-400">→</span> Deep ties to Modular Life Sim (in-sim timers, creature focus sessions?)</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="border-t border-white/10 px-8 py-5 text-xs text-white/50 flex flex-col sm:flex-row sm:items-center gap-y-2 justify-between rounded-b-3xl">
+                <div>This project is designed for iterative, scalable development. Your feedback shapes the next layers.</div>
+                <div class="text-amber-400 hover:underline cursor-pointer" onclick="closeRoadmap(); window.location.href='https://x.com/Gooboberti'">Suggest on X →</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Tailwind script
+        function initTailwind() {
+            document.documentElement.style.setProperty('--accent', '#a5b4fc');
+        }
+
+        // State
+        let remaining = 300; // default 5 min
+        let isRunning = false;
+        let targetEndTime = null;
+        let initialTotal = 300;
+        let rafId = null;
+        let lastSecond = -1;
+        let alarmInterval = null;
+        let audioCtx = null;
+        let masterGain = null;
+        let currentTheme = 'cozy';
+        let soundEnabled = true;
+        let tickEnabled = true;
+
+        const themes = {
+            cozy: {
+                name: 'Cozy Hearth',
+                accent: '#b87333',
+                faceColor: '#f5f0e6',
+                handColor: '#2c2522',
+                roomBg: 'linear-gradient(to bottom right, #3a3230, #2c2522, #25201e)',
+                wallExtra: '#3a3230',
+                flame: true,
+                desc: 'Warm woods, crackling fire, brass accents'
+            },
+            vintage: {
+                name: 'Vintage Study',
+                accent: '#8b7355',
+                faceColor: '#e8d9c0',
+                handColor: '#3a2f22',
+                roomBg: 'linear-gradient(to bottom right, #2f2a24, #25201e, #1f1b18)',
+                wallExtra: '#2f2a24',
+                flame: false,
+                desc: 'Leather, aged paper, classic brass clock'
+            },
+            cyber: {
+                name: 'Neon Loft',
+                accent: '#00f0ff',
+                faceColor: '#0f1620',
+                handColor: '#e0f7ff',
+                roomBg: 'linear-gradient(to bottom right, #0a0f1a, #111827, #0f172a)',
+                wallExtra: '#1e2937',
+                flame: false,
+                desc: 'Holographic clock, city lights, cyberpunk vibes'
+            },
+            zen: {
+                name: 'Zen Garden',
+                accent: '#6b8e6b',
+                faceColor: '#f8f1e3',
+                handColor: '#3a3a2a',
+                roomBg: 'linear-gradient(to bottom right, #3a3a32, #2a2a24, #1f1f1a)',
+                wallExtra: '#3a3a32',
+                flame: false,
+                desc: 'Minimal, light woods, calm natural tones'
+            },
+            enchanted: {
+                name: 'Enchanted Hearth',
+                accent: '#c084fc',
+                faceColor: '#2a1f3d',
+                handColor: '#e0d4ff',
+                roomBg: 'linear-gradient(to bottom right, #2a1f3d, #1a1628, #120f1f)',
+                wallExtra: '#2a1f3d',
+                flame: true,
+                desc: 'Magical glow, floating clock feel, fantasy interior'
+            }
+        };
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                masterGain = audioCtx.createGain();
+                masterGain.gain.value = 0.7;
+                masterGain.connect(audioCtx.destination);
+            }
+            return audioCtx;
+        }
+
+        function updateVolume() {
+            const vol = parseFloat(document.getElementById('volumeSlider').value);
+            document.getElementById('volumeValue').textContent = Math.round(vol * 100) + '%';
+            if (masterGain) masterGain.gain.value = vol;
+        }
+
+        function playTickSound() {
+            if (!soundEnabled || !tickEnabled || !isRunning) return;
+            try {
+                const ctx = initAudio();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                const filter = ctx.createBiquadFilter();
+                
+                osc.type = 'square';
+                osc.frequency.value = 1480;
+                filter.type = 'lowpass';
+                filter.frequency.value = 2200;
+                
+                const g = ctx.createGain();
+                g.gain.value = (masterGain ? masterGain.gain.value : 0.7) * 0.035;
+                
+                osc.connect(filter);
+                filter.connect(g);
+                g.connect(ctx.destination);
+                
+                osc.start();
+                g.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.045);
+                setTimeout(() => osc.stop(), 80);
+            } catch(e) {}
+        }
+
+        function playAlarmSound() {
+            if (alarmInterval) return;
+            const ctx = initAudio();
+            const style = document.getElementById('alarmStyle').value;
+            const vol = (masterGain ? masterGain.gain.value : 0.7) * 0.45;
+
+            if (style === 'chime') {
+                // Gentle repeating soft tones
+                let count = 0;
+                alarmInterval = setInterval(() => {
+                    if (count++ > 18) { stopAlarm(); return; }
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.value = 620 + (count % 3) * 40;
+                    gain.gain.value = vol * 0.6;
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start();
+                    gain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 1.1);
+                    setTimeout(() => osc.stop(), 1200);
+                }, 1350);
+            } else if (style === 'digital') {
+                alarmInterval = setInterval(() => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    const filter = ctx.createBiquadFilter();
+                    osc.type = 'sawtooth';
+                    osc.frequency.value = 920;
+                    filter.type = 'bandpass';
+                    filter.frequency.value = 1400;
+                    filter.Q.value = 4;
+                    gain.gain.value = vol * 0.55;
+                    osc.connect(filter);
+                    filter.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start();
+                    gain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.35);
+                    setTimeout(() => osc.stop(), 420);
+                }, 520);
+            } else {
+                // Classic beep
+                alarmInterval = setInterval(() => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = 'square';
+                    osc.frequency.value = 880;
+                    gain.gain.value = vol * 0.5;
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start();
+                    gain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.55);
+                    setTimeout(() => osc.stop(), 650);
+                }, 980);
+            }
+        }
+
+        function stopAlarm() {
+            if (alarmInterval) {
+                clearInterval(alarmInterval);
+                alarmInterval = null;
+            }
+        }
+
+        function updateFromInputs() {
+            if (isRunning) {
+                // Pause if editing while running
+                isRunning = false;
+                if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+                updateStartPauseBtn();
+            }
+            const h = parseInt(document.getElementById('hoursInput').value) || 0;
+            const m = parseInt(document.getElementById('minutesInput').value) || 0;
+            const s = parseInt(document.getElementById('secondsInput').value) || 0;
+            remaining = h * 3600 + m * 60 + s;
+            initialTotal = remaining;
+            updateUI();
+            drawClock();
+        }
+
+        function adjustTime(unit, delta) {
+            let h = parseInt(document.getElementById('hoursInput').value) || 0;
+            let m = parseInt(document.getElementById('minutesInput').value) || 0;
+            let s = parseInt(document.getElementById('secondsInput').value) || 0;
+
+            if (unit === 'hours') h = Math.max(0, Math.min(23, h + delta));
+            if (unit === 'minutes') m = Math.max(0, Math.min(59, m + delta));
+            if (unit === 'seconds') s = Math.max(0, Math.min(59, s + delta));
+
+            document.getElementById('hoursInput').value = h;
+            document.getElementById('minutesInput').value = m;
+            document.getElementById('secondsInput').value = s;
+
+            updateFromInputs();
+        }
+
+        function setPreset(seconds) {
+            if (isRunning) {
+                isRunning = false;
+                if (rafId) cancelAnimationFrame(rafId);
+            }
+            remaining = seconds;
+            initialTotal = seconds;
+            
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = seconds % 60;
+            
+            document.getElementById('hoursInput').value = h;
+            document.getElementById('minutesInput').value = m;
+            document.getElementById('secondsInput').value = s;
+            
+            updateUI();
+            drawClock();
+            updateStartPauseBtn();
+        }
+
+        function addTime(secondsToAdd) {
+            remaining = Math.max(0, remaining + secondsToAdd);
+            if (!isRunning) {
+                initialTotal = remaining;
+            }
+            // sync inputs
+            const h = Math.floor(remaining / 3600);
+            const m = Math.floor((remaining % 3600) / 60);
+            const s = remaining % 60;
+            document.getElementById('hoursInput').value = h;
+            document.getElementById('minutesInput').value = m;
+            document.getElementById('secondsInput').value = s;
+            
+            updateUI();
+            drawClock();
+        }
+
+        function updateStartPauseBtn() {
+            const btn = document.getElementById('startPauseBtn');
+            const icon = document.getElementById('playIcon');
+            const text = document.getElementById('startPauseText');
+            
+            if (isRunning) {
+                btn.classList.remove('from-amber-400', 'to-orange-500');
+                btn.classList.add('from-red-400', 'to-rose-500', 'hover:from-red-300', 'hover:to-rose-400');
+                icon.classList.remove('fa-play');
+                icon.classList.add('fa-pause');
+                text.textContent = 'Pause';
+            } else {
+                btn.classList.remove('from-red-400', 'to-rose-500', 'hover:from-red-300', 'hover:to-rose-400');
+                btn.classList.add('from-amber-400', 'to-orange-500', 'hover:from-amber-300', 'hover:to-orange-400');
+                icon.classList.remove('fa-pause');
+                icon.classList.add('fa-play');
+                text.textContent = remaining > 0 ? 'Start' : 'Reset';
+            }
+        }
+
+        function toggleTimer() {
+            const btn = document.getElementById('startPauseBtn');
+            
+            if (isRunning) {
+                // Pause
+                isRunning = false;
+                if (rafId) {
+                    cancelAnimationFrame(rafId);
+                    rafId = null;
+                }
+                updateStartPauseBtn();
+                document.getElementById('statusText').innerHTML = '<span class="text-amber-400">Paused</span> • Click Start to resume';
+            } else {
+                if (remaining <= 0) {
+                    resetTimer();
+                    return;
+                }
+                // Start or resume
+                isRunning = true;
+                targetEndTime = Date.now() + (remaining * 1000);
+                initialTotal = remaining;
+                lastSecond = Math.floor(remaining);
+                updateStartPauseBtn();
+                document.getElementById('statusText').innerHTML = 'Counting down... <span class="text-emerald-400">Focus mode</span>';
+                startAnimationLoop();
+            }
+        }
+
+        function resetTimer() {
+            isRunning = false;
+            if (rafId) {
+                cancelAnimationFrame(rafId);
+                rafId = null;
+            }
+            stopAlarm();
+            
+            remaining = 0;
+            initialTotal = 0;
+            targetEndTime = null;
+            
+            document.getElementById('hoursInput').value = 0;
+            document.getElementById('minutesInput').value = 0;
+            document.getElementById('secondsInput').value = 0;
+            
+            updateUI();
+            drawClock();
+            updateStartPauseBtn();
+            document.getElementById('statusText').innerHTML = 'Timer reset. Set a new time to begin.';
+        }
+
+        function updateUI() {
+            // Update display
+            const display = document.getElementById('remainingDisplay');
+            const h = Math.floor(remaining / 3600);
+            const m = Math.floor((remaining % 3600) / 60);
+            const s = remaining % 60;
+            display.textContent = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+
+            // Sync inputs if not focused (avoid fighting user)
+            if (document.activeElement.id !== 'hoursInput' && 
+                document.activeElement.id !== 'minutesInput' && 
+                document.activeElement.id !== 'secondsInput') {
+                document.getElementById('hoursInput').value = h;
+                document.getElementById('minutesInput').value = m;
+                document.getElementById('secondsInput').value = s;
+            }
+
+            // Status
+            const status = document.getElementById('statusText');
+            if (remaining === 0 && !isRunning) {
+                status.innerHTML = '<span class="text-emerald-400">Complete!</span> Great session.';
+            } else if (!isRunning && remaining > 0) {
+                status.innerHTML = 'Ready • Adjust time or press Start';
+            }
+        }
+
+        function triggerTimeUp() {
+            isRunning = false;
+            if (rafId) cancelAnimationFrame(rafId);
+            updateStartPauseBtn();
+            
+            const status = document.getElementById('statusText');
+            status.innerHTML = '<span class="text-rose-400 font-semibold">Time\'s up!</span> Session complete.';
+            
+            // Visual flash on clock
+            const face = document.getElementById('clockFace');
+            face.style.transition = 'box-shadow 0.1s ease';
+            face.style.boxShadow = '0 0 0 12px #f43f5e33, inset 0 8px 16px rgba(0,0,0,0.35)';
+            setTimeout(() => {
+                face.style.boxShadow = 'inset 0 8px 16px rgba(0,0,0,0.35), inset 0 -4px 10px rgba(255,255,255,0.25)';
+            }, 280);
+
+            playAlarmSound();
+            
+            // Auto stop alarm after ~25s if not manually stopped
+            setTimeout(() => {
+                if (alarmInterval) {
+                    // leave it playing until user stops or new action
+                }
+            }, 25000);
+        }
+
+        function startAnimationLoop() {
+            if (rafId) cancelAnimationFrame(rafId);
+            
+            function loop() {
+                if (isRunning && targetEndTime) {
+                    const now = Date.now();
+                    remaining = Math.max(0, Math.ceil((targetEndTime - now) / 1000));
+                    
+                    const currentSec = Math.floor(remaining);
+                    if (currentSec !== lastSecond) {
+                        lastSecond = currentSec;
+                        if (tickEnabled) playTickSound();
+                    }
+                    
+                    if (remaining <= 0) {
+                        remaining = 0;
+                        triggerTimeUp();
+                        updateUI();
+                        drawClock();
+                        return;
+                    }
+                }
+                
+                updateUI();
+                drawClock();
+                
+                rafId = requestAnimationFrame(loop);
+            }
+            
+            rafId = requestAnimationFrame(loop);
+        }
+
+        function drawClock() {
+            const canvas = document.getElementById('clockCanvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d', { alpha: true });
+            const w = canvas.width;
+            const h = canvas.height;
+            const cx = w / 2;
+            const cy = h / 2;
+            const radius = Math.min(w, h) / 2 * 0.82;
+
+            const theme = themes[currentTheme] || themes.cozy;
+            const faceColor = theme.faceColor || '#f5f0e6';
+            const handColor = theme.handColor || '#2c2522';
+            const accentColor = theme.accent || '#b87333';
+
+            ctx.clearRect(0, 0, w, h);
+
+            // Progress ring background (subtle)
+            const progress = (initialTotal > 0) ? (remaining / initialTotal) : 1;
+            ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+            ctx.lineWidth = 7;
+            ctx.beginPath();
+            ctx.arc(cx, cy, radius * 1.08, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Progress arc (remaining)
+            ctx.strokeStyle = accentColor;
+            ctx.lineWidth = 7;
+            ctx.lineCap = 'round';
+            const startA = -Math.PI / 2;
+            const endA = startA + (progress * Math.PI * 2);
+            ctx.beginPath();
+            ctx.arc(cx, cy, radius * 1.08, startA, endA);
+            ctx.stroke();
+
+            // Bezel shadow
+            ctx.shadowColor = 'rgba(0,0,0,0.55)';
+            ctx.shadowBlur = 18;
+            ctx.shadowOffsetX = 6;
+            ctx.shadowOffsetY = 9;
+            ctx.beginPath();
+            ctx.arc(cx, cy, radius + 14, 0, Math.PI * 2);
+            ctx.fillStyle = '#25201e';
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 0;
+
+            // Main face
+            ctx.beginPath();
+            ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+            ctx.fillStyle = faceColor;
+            ctx.fill();
+
+            // Subtle inner bevel
+            ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(cx, cy, radius * 0.96, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Hour tick marks
+            ctx.strokeStyle = handColor;
+            ctx.lineWidth = 3.5;
+            for (let i = 0; i < 12; i++) {
+                const ang = (i * 30 - 90) * Math.PI / 180;
+                const x1 = cx + Math.cos(ang) * (radius * 0.78);
+                const y1 = cy + Math.sin(ang) * (radius * 0.78);
+                const x2 = cx + Math.cos(ang) * (radius * 0.94);
+                const y2 = cy + Math.sin(ang) * (radius * 0.94);
+                ctx.beginPath();
+                ctx.moveTo(x1, y1);
+                ctx.lineTo(x2, y2);
+                ctx.stroke();
+            }
+
+            // Minute tick marks
+            ctx.lineWidth = 1.8;
+            for (let i = 0; i < 60; i++) {
+                if (i % 5 === 0) continue;
+                const ang = (i * 6 - 90) * Math.PI / 180;
+                const x1 = cx + Math.cos(ang) * (radius * 0.85);
+                const y1 = cy + Math.sin(ang) * (radius * 0.85);
+                const x2 = cx + Math.cos(ang) * (radius * 0.94);
+                const y2 = cy + Math.sin(ang) * (radius * 0.94);
+                ctx.beginPath();
+                ctx.moveTo(x1, y1);
+                ctx.lineTo(x2, y2);
+                ctx.stroke();
+            }
+
+            // Numerals (12, 3, 6, 9)
+            ctx.fillStyle = handColor;
+            ctx.font = `700 ${Math.floor(radius * 0.135)}px Inter, system-ui, sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            const positions = [
+                {num: '12', deg: 0},
+                {num: '3', deg: 90},
+                {num: '6', deg: 180},
+                {num: '9', deg: 270}
+            ];
+            positions.forEach(p => {
+                const ang = (p.deg - 90) * Math.PI / 180;
+                const nx = cx + Math.cos(ang) * (radius * 0.62);
+                const ny = cy + Math.sin(ang) * (radius * 0.62);
+                ctx.fillText(p.num, nx, ny);
+            });
+
+            // Calculate hand angles from remaining time
+            const hrs = Math.floor(remaining / 3600) % 12;
+            const mins = Math.floor((remaining % 3600) / 60);
+            const secs = remaining % 60;
+
+            const hourAngle = ((hrs + mins / 60) * 30 - 90) * Math.PI / 180;
+            const minAngle = ((mins + secs / 60) * 6 - 90) * Math.PI / 180;
+            const secAngle = (secs * 6 - 90) * Math.PI / 180;
+
+            // Draw hand helper
+            function drawHand(angleRad, lenFactor, width, color, tail = false) {
+                ctx.save();
+                ctx.translate(cx, cy);
+                ctx.rotate(angleRad);
+                ctx.shadowColor = 'rgba(0,0,0,0.45)';
+                ctx.shadowBlur = 7;
+                ctx.shadowOffsetX = 1.5;
+                ctx.shadowOffsetY = 3;
+                ctx.strokeStyle = color;
+                ctx.lineWidth = width;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                ctx.beginPath();
+                if (tail) ctx.moveTo(0, lenFactor * 0.18);
+                else ctx.moveTo(0, 0);
+                ctx.lineTo(0, -radius * lenFactor);
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            // Hour hand
+            drawHand(hourAngle, 0.48, 8, accentColor, true);
+            // Minute hand
+            drawHand(minAngle, 0.72, 5.5, handColor, true);
+            // Second hand (accent or red-ish)
+            drawHand(secAngle, 0.82, 2.2, '#c2410f');
+
+            // Center cap
+            ctx.beginPath();
+            ctx.arc(cx, cy, radius * 0.065, 0, Math.PI * 2);
+            ctx.fillStyle = accentColor;
+            ctx.fill();
+            ctx.strokeStyle = '#ffffffcc';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+
+            // Small digital time in lower center of face
+            ctx.fillStyle = 'rgba(0,0,0,0.55)';
+            ctx.fillRect(cx - 58, cy + radius * 0.42, 116, 26);
+            ctx.fillStyle = '#f8f1e3';
+            ctx.font = '600 15px monospace';
+            ctx.textAlign = 'center';
+            const timeStr = `${String(Math.floor(remaining/3600)).padStart(2,'0')}:${String(Math.floor((remaining%3600)/60)).padStart(2,'0')}:${String(remaining%60).padStart(2,'0')}`;
+            ctx.fillText(timeStr, cx, cy + radius * 0.42 + 17);
+        }
+
+        function applyTheme(themeKey) {
+            currentTheme = themeKey;
+            const theme = themes[themeKey];
+            if (!theme) return;
+
+            // Update label
+            document.getElementById('themeName').textContent = theme.name;
+
+            // Room background
+            const room = document.getElementById('roomScene');
+            const wall = document.getElementById('wallLayer');
+            if (wall) wall.style.background = theme.roomBg || '';
+
+            // Clock face color
+            const faceWrap = document.getElementById('clockFace');
+            if (faceWrap) {
+                faceWrap.style.background = theme.faceColor || '#f5f0e6';
+            }
+
+            // Fireplace visibility / intensity
+            const flames = document.getElementById('flamesContainer');
+            if (flames) {
+                flames.style.display = theme.flame ? 'block' : 'none';
+            }
+
+            // Highlight active theme button
+            document.querySelectorAll('#themeGrid button').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.theme === themeKey);
+                btn.classList.toggle('border-amber-400/60', btn.dataset.theme === themeKey);
+                btn.classList.toggle('border-white/10', btn.dataset.theme !== themeKey);
+            });
+
+            // Redraw clock with new colors
+            drawClock();
+        }
+
+        function initThemes() {
+            const grid = document.getElementById('themeGrid');
+            grid.innerHTML = '';
+
+            Object.keys(themes).forEach(key => {
+                const t = themes[key];
+                const btn = document.createElement('button');
+                btn.className = `theme-btn w-full text-left px-3 py-2.5 rounded-2xl border text-xs flex flex-col gap-y-0.5 transition-all ${key === currentTheme ? 'active border-amber-400/60 bg-white/5' : 'border-white/10 hover:border-white/30'}`;
+                btn.dataset.theme = key;
+                btn.innerHTML = `
+                    <div class="font-semibold">${t.name}</div>
+                    <div class="text-[10px] text-white/50 line-clamp-1">${t.desc}</div>
+                `;
+                btn.onclick = () => applyTheme(key);
+                grid.appendChild(btn);
+            });
+        }
+
+        function initParallax() {
+            const scene = document.getElementById('roomScene');
+            if (!scene) return;
+
+            let rafPending = false;
+            function updateParallax(clientX, clientY) {
+                const rect = scene.getBoundingClientRect();
+                const x = ((clientX - rect.left) / rect.width) - 0.5;
+                const y = ((clientY - rect.top) / rect.height) - 0.5;
+
+                // Subtle shifts for depth layers
+                const clock = document.getElementById('clockContainer');
+                if (clock) clock.style.transform = `translate(calc(-50% + ${x * 9}px), calc(-0% + ${y * 5}px))`;
+
+                const win = document.getElementById('windowLayer');
+                if (win) win.style.transform = `translate(${x * -14}px, ${y * -7}px)`;
+
+                const fp = document.getElementById('fireplaceLayer');
+                if (fp) fp.style.transform = `translate(${x * 7}px, ${y * 4}px)`;
+
+                const lamp = scene.querySelector('.absolute.top-\\[26\\%\\]');
+                if (lamp) lamp.style.transform = `translate(${x * -18}px, ${y * -4}px)`;
+            }
+
+            scene.addEventListener('mousemove', (e) => {
+                if (!rafPending) {
+                    rafPending = true;
+                    requestAnimationFrame(() => {
+                        updateParallax(e.clientX, e.clientY);
+                        rafPending = false;
+                    });
+                }
+            });
+
+            scene.addEventListener('mouseleave', () => {
+                const clock = document.getElementById('clockContainer');
+                if (clock) clock.style.transform = 'translate(-50%, -0%)';
+                const win = document.getElementById('windowLayer');
+                if (win) win.style.transform = 'translate(0,0)';
+                const fp = document.getElementById('fireplaceLayer');
+                if (fp) fp.style.transform = 'translate(0,0)';
+                const lamp = scene.querySelector('.absolute.top-\\[26\\%\\]');
+                if (lamp) lamp.style.transform = 'translate(0,0)';
+            });
+
+            // Click clock to toggle pause
+            const clockWrap = document.getElementById('clockContainer');
+            if (clockWrap) {
+                clockWrap.addEventListener('click', (e) => {
+                    e.stopImmediatePropagation();
+                    if (remaining > 0) toggleTimer();
+                });
+            }
+        }
+
+        function initEventListeners() {
+            // Sound toggles
+            const soundToggle = document.getElementById('soundToggle');
+            soundToggle.checked = soundEnabled;
+            soundToggle.onchange = () => { soundEnabled = soundToggle.checked; };
+
+            const tickToggle = document.getElementById('tickToggle');
+            tickToggle.checked = tickEnabled;
+            tickToggle.onchange = () => { tickEnabled = tickToggle.checked; };
+
+            const volSlider = document.getElementById('volumeSlider');
+            volSlider.oninput = updateVolume;
+            // initial volume display
+            document.getElementById('volumeValue').textContent = Math.round(volSlider.value * 100) + '%';
+
+            // Keyboard shortcuts
+            document.addEventListener('keydown', (e) => {
+                if (e.key === ' ' || e.key === 'Spacebar') {
+                    e.preventDefault();
+                    toggleTimer();
+                }
+                if (e.key.toLowerCase() === 'r') {
+                    resetTimer();
+                }
+                if (e.key === 'Escape' && document.getElementById('roadmapModal').classList.contains('hidden') === false) {
+                    closeRoadmap();
+                }
+            });
+
+            // Prevent number input scroll changing value accidentally
+            ['hoursInput','minutesInput','secondsInput'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.addEventListener('wheel', (ev) => ev.preventDefault());
+                }
+            });
+        }
+
+        function showRoadmap() {
+            document.getElementById('roadmapModal').classList.remove('hidden');
+            document.getElementById('roadmapModal').classList.add('flex');
+        }
+
+        function closeRoadmap() {
+            const modal = document.getElementById('roadmapModal');
+            modal.classList.remove('flex');
+            modal.classList.add('hidden');
+        }
+
+        function initClock() {
+            const canvas = document.getElementById('clockCanvas');
+            if (canvas) {
+                // Initial draw
+                drawClock();
+            }
+        }
+
+        function initialize() {
+            initTailwind();
+            
+            // Default time 5 minutes
+            remaining = 300;
+            initialTotal = 300;
+            document.getElementById('hoursInput').value = 0;
+            document.getElementById('minutesInput').value = 5;
+            document.getElementById('secondsInput').value = 0;
+
+            initThemes();
+            applyTheme('cozy'); // default
+            
+            initClock();
+            updateUI();
+            updateStartPauseBtn();
+
+            initParallax();
+            initEventListeners();
+
+            // Boot sound hint (optional, commented to avoid autoplay issues)
+            // setTimeout(() => { if (soundEnabled) { /* subtle welcome tick */ } }, 1200);
+
+            // Make sure flames visible on cozy
+            const flames = document.getElementById('flamesContainer');
+            if (flames) flames.style.display = 'block';
+
+            // Final status
+            document.getElementById('statusText').innerHTML = 'Ready • Set time or choose a preset';
+
+            // Expose some for console/debug if wanted
+            window.ChronoLounge = { applyTheme, setPreset, toggleTimer, resetTimer };
+        }
+
+        window.onload = initialize;
+    </script>
+</body>
+</html>
