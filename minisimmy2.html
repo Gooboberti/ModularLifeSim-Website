@@ -29,7 +29,7 @@
                 </div>
                 <div>
                     <span class="font-display text-xl sm:text-2xl tracking-tighter">MiniSimmy2</span>
-                    <span class="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.75 • Cursor sounds + UI cleanup</span>
+                    <span class="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.76 • Pile bonus + Predator kill bonus</span>
                 </div>
             </div>
             
@@ -48,7 +48,7 @@
                 <div class="flex items-center gap-x-3">
                     <div>
                         <h1 class="font-display text-2xl sm:text-3xl tracking-tighter">MiniSimmy2</h1>
-                        <p class="text-white/60 text-xs sm:text-sm">Cursor Hazard now has nice humming + impact sounds • Cleaner sidebar</p>
+                        <p class="text-white/60 text-xs sm:text-sm">New Vegas bonuses: Creature piles + Predator kills • Humming cursor sounds</p>
                     </div>
                 </div>
                 
@@ -89,6 +89,20 @@
         <!-- Right Sidebar -->
         <div class="w-full lg:w-72 xl:w-80 bg-[#121218] border border-white/10 rounded-3xl p-4 flex flex-col gap-y-3 self-start max-h-[calc(100vh-140px)] lg:max-h-[calc(100vh-120px)] overflow-auto">
             
+            <!-- VEGAS SCORE -->
+            <div class="bg-gradient-to-br from-violet-500/10 to-fuchsia-500/10 border border-violet-500/30 rounded-3xl p-3">
+                <div class="flex justify-between items-center mb-1">
+                    <div class="text-xs font-semibold text-violet-400 tracking-wider">HIGH ROLLER SCORE</div>
+                    <div id="vegas-multiplier" class="text-xs px-2 py-0.5 bg-violet-500/20 text-violet-300 rounded-full font-mono">1.0×</div>
+                </div>
+                <div id="vegas-score" class="text-4xl font-bold text-white tabular-nums tracking-tighter">0</div>
+                
+                <div class="mt-2 text-[10px] text-white/60 flex justify-between">
+                    <div>Pile Bonus: <span id="pile-bonus" class="font-mono text-emerald-400">+0</span></div>
+                    <div>Pred Kills: <span id="pred-kills" class="font-mono text-red-400">0</span></div>
+                </div>
+            </div>
+
             <div>
                 <div class="text-xs font-semibold text-white/70 tracking-wider mb-2">CURRENT STATS</div>
                 
@@ -182,7 +196,6 @@
                         <span id="cursor-hazard-text">Cursor Hazard: OFF</span>
                     </button>
 
-                    <!-- Zoom and Reset moved here -->
                     <div class="flex items-center gap-2 pt-1">
                         <div class="flex-1 flex items-center bg-[#121218] border border-white/10 rounded-2xl p-0.5">
                             <button onclick="adjustZoom(-0.2)" class="flex-1 px-2.5 py-1 text-sm hover:bg-white/10 rounded-xl">−</button>
@@ -355,10 +368,14 @@
         let defaultWaveform = 'triangle';
         let audioCtx;
 
-        // Cursor Hazard humming oscillator
         let cursorHumOsc = null;
         let cursorHumGain = null;
         let cursorHumFilter = null;
+
+        // Vegas Scoring
+        let totalScore = 0;
+        let totalPredatorKills = 0;
+        let lastScoreUpdate = 0;
 
         let timeScale = 1;
         let paused = false;
@@ -396,7 +413,7 @@
 
         function startCursorHum() {
             const ctx = getAudioContext();
-            if (cursorHumOsc) return; // already running
+            if (cursorHumOsc) return;
 
             cursorHumOsc = ctx.createOscillator();
             cursorHumGain = ctx.createGain();
@@ -416,7 +433,6 @@
 
             cursorHumOsc.start();
 
-            // Gentle fade in
             const targetVol = 0.018 * effectsVolume * masterVolume;
             cursorHumGain.gain.linearRampToValueAtTime(targetVol, ctx.currentTime + 0.8);
         }
@@ -425,14 +441,10 @@
             if (!cursorHumOsc || !cursorHumGain) return;
 
             const ctx = getAudioContext();
-            const currentGain = cursorHumGain.gain.value;
-
             cursorHumGain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.6);
 
             setTimeout(() => {
-                try {
-                    if (cursorHumOsc) cursorHumOsc.stop();
-                } catch(e) {}
+                try { if (cursorHumOsc) cursorHumOsc.stop(); } catch(e) {}
                 cursorHumOsc = null;
                 cursorHumGain = null;
                 cursorHumFilter = null;
@@ -442,7 +454,6 @@
         function playCursorDamageSound(creature) {
             const ctx = getAudioContext();
 
-            // Low impact thud
             const osc1 = ctx.createOscillator();
             const gain1 = ctx.createGain();
             const filter1 = ctx.createBiquadFilter();
@@ -461,7 +472,6 @@
             osc1.start();
             setTimeout(() => { try { osc1.stop(); } catch(e){} }, 400);
 
-            // Sharp painful layer
             setTimeout(() => {
                 const osc2 = ctx.createOscillator();
                 const gain2 = ctx.createGain();
@@ -484,7 +494,6 @@
                 setTimeout(() => { try { osc2.stop(); } catch(e){} }, 280);
             }, 25);
 
-            // Small noise burst for "impact"
             const noise = ctx.createBufferSource();
             const noiseGain = ctx.createGain();
             const noiseFilter = ctx.createBiquadFilter();
@@ -627,8 +636,7 @@
         }
 
         function setupSoundSliders() {
-            // Sound controls are hidden in this version
-            // Keeping function for future re-enabling
+            // Hidden for now
         }
 
         function setupSliders() {
@@ -808,16 +816,84 @@
                 btn.classList.add('bg-orange-500/90', 'hover:bg-orange-500');
                 text.innerText = 'Cursor Hazard: ON';
                 container.classList.add('hazard-cursor');
-
                 startCursorHum();
             } else {
                 btn.classList.remove('bg-orange-500/90', 'hover:bg-orange-500');
                 btn.classList.add('bg-gray-500/90', 'hover:bg-gray-500');
                 text.innerText = 'Cursor Hazard: OFF';
                 container.classList.remove('hazard-cursor');
-
                 stopCursorHum();
             }
+        }
+
+        function calculatePileBonus() {
+            if (creatures.length < 3) return 0;
+
+            let totalClosePairs = 0;
+            const radius = 38;
+
+            for (let i = 0; i < creatures.length; i++) {
+                let closeCount = 0;
+                for (let j = 0; j < creatures.length; j++) {
+                    if (i === j) continue;
+                    if (dist(creatures[i].x, creatures[i].y, creatures[j].x, creatures[j].y) < radius) {
+                        closeCount++;
+                    }
+                }
+                if (closeCount >= 2) { // at least 3 creatures together (including self)
+                    totalClosePairs += closeCount;
+                }
+            }
+
+            // Average how "piled up" the population is
+            const avgClustering = totalClosePairs / creatures.length;
+            return Math.floor(avgClustering * 1.8);
+        }
+
+        function updateVegasScore() {
+            if (paused) return;
+
+            const now = Date.now();
+            if (now - lastScoreUpdate < 180) return; // update ~5-6 times per second
+            lastScoreUpdate = now;
+
+            // Base time score
+            const minutes = simTime / 60;
+            let score = Math.floor(minutes * 12);
+
+            // Population multiplier (from previous thresholds)
+            let multiplier = 1.0;
+            const pop = creatures.length;
+
+            if (pop < 10) multiplier = 5.0;
+            else if (pop < 30) multiplier = 3.5;
+            else if (pop < 50) multiplier = 2.6;
+            else if (pop < 80) multiplier = 2.0;
+            else if (pop < 100) multiplier = 1.6;
+            else if (pop < 150) multiplier = 1.3;
+
+            // Pile bonus (creatures stacked together)
+            const pileBonus = calculatePileBonus();
+            score += pileBonus;
+
+            // Predator kill bonus (big reward for causing predator success)
+            const predKillBonus = totalPredatorKills * 28;
+            score += predKillBonus;
+
+            totalScore = Math.floor(score * multiplier);
+
+            // Update UI
+            const scoreEl = document.getElementById('vegas-score');
+            if (scoreEl) scoreEl.innerText = totalScore.toLocaleString();
+
+            const multEl = document.getElementById('vegas-multiplier');
+            if (multEl) multEl.innerText = multiplier.toFixed(1) + '×';
+
+            const pileEl = document.getElementById('pile-bonus');
+            if (pileEl) pileEl.innerText = '+' + pileBonus;
+
+            const killsEl = document.getElementById('pred-kills');
+            if (killsEl) killsEl.innerText = totalPredatorKills;
         }
 
         function updateGraphData() {
@@ -886,7 +962,7 @@
             ctx.stroke();
 
             ctx.strokeStyle = '#a78bfa';
-                ctx.lineWidth = 1.2;
+            ctx.lineWidth = 1.2;
             ctx.beginPath();
             for (let i = 0; i < graphData.modules.length; i++) {
                 const x = padding + (i / (graphData.modules.length - 1)) * plotW;
@@ -973,6 +1049,8 @@
             if (tier5El) tier5El.innerText = tierCounts[5];
 
             if (selectedCreature) updateInspector();
+
+            updateVegasScore();
         }
 
         function selectCreature(creature) {
@@ -1752,7 +1830,6 @@
                         c.energy = max(0, c.energy - damage * timeScale);
                         c.damageFlash = max(c.damageFlash || 0, 32);
 
-                        // Play satisfying damage sound
                         playCursorDamageSound(c);
 
                         if (d > 2) {
@@ -2292,7 +2369,7 @@
                                 lowest = o.energy;
                                 target = o;
                             }
-                    }
+                        }
                     }
                     if (target) {
                         let d = dist(this.x, this.y, target.x, target.y);
@@ -2311,6 +2388,10 @@
                             this.isPredator = false;
                             this.currentThought = "Just fed";
                             playPredatorFeedSound();
+
+                            // BIG Vegas bonus for predator kill
+                            totalPredatorKills++;
+
                             this.updateSpecialization();
                         }
                     }
@@ -2622,6 +2703,18 @@
             document.getElementById('speed-1').classList.add('active', 'bg-emerald-500', 'text-[#0a0a0f]');
             
             deselectCreature();
+
+            totalScore = 0;
+            totalPredatorKills = 0;
+
+            const scoreEl = document.getElementById('vegas-score');
+            if (scoreEl) scoreEl.innerText = '0';
+            const multEl = document.getElementById('vegas-multiplier');
+            if (multEl) multEl.innerText = '1.0×';
+            const pileEl = document.getElementById('pile-bonus');
+            if (pileEl) pileEl.innerText = '+0';
+            const killsEl = document.getElementById('pred-kills');
+            if (killsEl) killsEl.innerText = '0';
 
             const popEl = document.getElementById('stat-pop');
             const predEl = document.getElementById('stat-pred');
