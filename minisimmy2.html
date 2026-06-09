@@ -2209,9 +2209,11 @@
                     for (let c of creatures) {
                         let d = dist(c.x, c.y, explodeX, explodeY);
                         if (d < 85 * sizeMult) {
-                            let damage = 28 * sizeMult + random(5, 12);
+                            let damage = 45 * sizeMult + random(8, 18);
                             c.energy = max(0, c.energy - damage);
-                            c.purpleFlash = max(c.purpleFlash || 0, 95 + sizeMult * 25);
+                            c.purpleFlash = max(c.purpleFlash || 0, 120 + sizeMult * 30);
+                            c.mustEatWhite = true;
+                            c.ateWhiteParticle = false;
                             c.currentThought = "Acid explosion!";
                         }
                     }
@@ -2331,6 +2333,13 @@
                         // Floating points for eating particles
                         addFloatingText(c.x, c.y - 12, `+${Math.floor(settings.particleFoodValue)}`, '#a3e635');
 
+                        // New mechanic: Eating white particle while purple can save them from becoming predator
+                        if (c.mustEatWhite) {
+                            c.ateWhiteParticle = true;
+                            c.purpleFlash = Math.max(0, c.purpleFlash - 40); // significantly reduce purple
+                            c.currentThought = "Cleansed";
+                        }
+
                         p.life = 0;
                     }
                 }
@@ -2364,13 +2373,24 @@
 
                 if (c.purpleFlash > 0) {
                     c.purpleFlash--;
-                    // Severe slow + increased damage while purple
-                    c.vx *= 0.52;
-                    c.vy *= 0.52;
+                    // Severe slow + **much higher** damage while purple
+                    c.vx *= 0.48;
+                    c.vy *= 0.48;
 
-                    if (frameCount % 5 === 0) {
-                        c.energy = max(0, c.energy - 1.35 * timeScale);
+                    if (frameCount % 3 === 0) {
+                        c.energy = max(0, c.energy - 4.2 * timeScale);
                     }
+                } else if (c.mustEatWhite) {
+                    // Purple window ended
+                    if (!c.ateWhiteParticle && !c.isPredator) {
+                        // Failed to eat white particle in time → become predator
+                        c.isPredator = true;
+                        c.currentThought = "Starved for white...";
+                        c.mustEatWhite = false;
+                    } else {
+                        c.mustEatWhite = false;
+                    }
+                    c.ateWhiteParticle = false;
                 }
             }
 
@@ -2977,6 +2997,8 @@
                 this.killCount = 0; this.reproCooldown = 0; this.currentThought = "Exploring...";
                 this.damageFlash = 0;
                 this.purpleFlash = 0;
+                this.mustEatWhite = false;
+                this.ateWhiteParticle = false;
                 this.hazardsAvoided = 0;
                 this.hazardDamageTaken = 0;
                 this.adaptationLevel = 0;
@@ -3585,8 +3607,10 @@
                             this.vy += (dy / len) * 1.1;
 
                             // Turn purple + take damage over time
-                            this.purpleFlash = 65;
-                            this.energy = max(0, this.energy - 2.2 * timeScale);
+                            this.purpleFlash = 90;
+                            this.mustEatWhite = true;
+                            this.ateWhiteParticle = false;
+                            this.energy = max(0, this.energy - 5.5 * timeScale);
 
                             // Degrade the wall faster on creature contact
                             w.life -= 38;
