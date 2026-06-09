@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MiniSimmy2 • Critical Fix</title>
+    <title>MiniSimmy2 • Sound Design</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -27,7 +27,7 @@
                 </div>
                 <div>
                     <span class="font-display text-2xl tracking-tighter">MiniSimmy2</span>
-                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.39 • Critical Global Cooldown Fix</span>
+                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.40 • Sound Design</span>
                 </div>
             </div>
             <div class="flex items-center gap-x-4 text-sm">
@@ -43,7 +43,7 @@
                 <div class="flex items-center gap-x-4">
                     <div>
                         <h1 class="font-display text-3xl tracking-tighter">MiniSimmy2</h1>
-                        <p class="text-white/60 text-sm">Fixed global cooldown never decrementing</p>
+                        <p class="text-white/60 text-sm">Improved sound design — more musical & layered</p>
                     </div>
                     
                     <!-- Elapsed Time -->
@@ -87,7 +87,7 @@
             <div id="canvas-container" class="rounded-3xl overflow-hidden border border-white/10 shadow-2xl"></div>
             
             <div class="mt-2 text-xs text-white/40 text-center">
-                Space = Pause • +/- = Speed • Zoom buttons work • Click creature to inspect • Open DevTools console for repro logs
+                Space = Pause • +/- = Speed • Zoom buttons work • Click creature to inspect
             </div>
         </div>
 
@@ -273,6 +273,7 @@
         let inspectorNeuralCtx;
         let masterVolume = 0.91;
         let lastClickedNode = null;
+        let audioCtx;
 
         let timeScale = 1;
         let paused = false;
@@ -297,6 +298,93 @@
             const prefixes = ['Kael','Vex','Thorne','Zyl','Ryn','Syl','Drak','Nyx','Korr','Vael','Sylas','Myr','Zor'];
             const suffixes = ['-9','-12','ara','ith','on','yx','ar','en','os','ix','ael','or'];
             return prefixes[Math.floor(Math.random()*prefixes.length)] + suffixes[Math.floor(Math.random()*suffixes.length)];
+        }
+
+        function getAudioContext() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            return audioCtx;
+        }
+
+        // === IMPROVED SOUND DESIGN ===
+        function playTone(freq, type = 'sine', duration = 0.25, volume = 0.06, detune = 0, attack = 0.01, release = 0.2) {
+            const ctx = getAudioContext();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            const filter = ctx.createBiquadFilter();
+
+            osc.type = type;
+            osc.frequency.value = freq;
+            if (detune) osc.detune.value = detune;
+
+            filter.type = 'lowpass';
+            filter.frequency.value = 2200;
+
+            gain.gain.value = 0;
+            gain.gain.linearRampToValueAtTime(volume * masterVolume, ctx.currentTime + attack);
+            gain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + duration);
+
+            osc.connect(filter);
+            filter.connect(gain);
+            gain.connect(ctx.destination);
+
+            osc.start();
+            setTimeout(() => {
+                try { osc.stop(); } catch(e){}
+            }, (duration + 0.1) * 1000);
+        }
+
+        function playChord(freqs, type = 'sine', duration = 0.4, volume = 0.04) {
+            freqs.forEach((f, i) => {
+                setTimeout(() => {
+                    playTone(f, type, duration, volume * (1 - i * 0.15), 0, 0.015, 0.25);
+                }, i * 18);
+            });
+        }
+
+        function playBirthSound() {
+            // Gentle, positive, layered birth sound (major-ish feel)
+            playTone(880, 'sine', 0.35, 0.045, 0, 0.02, 0.3);
+            setTimeout(() => playTone(1108, 'sine', 0.28, 0.035, 12, 0.015, 0.25), 60);
+            setTimeout(() => playTone(1320, 'sine', 0.22, 0.028, -8, 0.01, 0.2), 110);
+        }
+
+        function playEatSound(isGreenZone = true) {
+            // Soft, pleasant pluck/chime when absorbing food
+            const base = isGreenZone ? 620 : 780;
+            playTone(base, 'sine', 0.18, 0.035, 0, 0.005, 0.16);
+            setTimeout(() => playTone(base * 1.5, 'sine', 0.12, 0.022, 5, 0.003, 0.1), 25);
+        }
+
+        function playDeathSound() {
+            // Soft descending tone, not harsh
+            playTone(220, 'sawtooth', 0.45, 0.04, 0, 0.02, 0.4);
+            setTimeout(() => playTone(175, 'sine', 0.35, 0.03, -10, 0.01, 0.3), 80);
+        }
+
+        function playDepositSound() {
+            // Warm, rounded deposit sound
+            playTone(540, 'sine', 0.22, 0.03, 0, 0.01, 0.2);
+            setTimeout(() => playTone(680, 'sine', 0.16, 0.025, 8, 0.008, 0.14), 40);
+        }
+
+        function playPredatorFeedSound() {
+            // Slightly more intense but still musical
+            playTone(165, 'sawtooth', 0.2, 0.045, 0, 0.01, 0.18);
+            setTimeout(() => playTone(210, 'sine', 0.15, 0.035, 15, 0.005, 0.12), 30);
+        }
+
+        function playReadyPing() {
+            // Subtle positive ping when a creature becomes ready to reproduce
+            playTone(1240, 'sine', 0.12, 0.025, 0, 0.005, 0.1);
+        }
+
+        function playAmbientPulse(isDay) {
+            // Very subtle background pulse that changes with day/night
+            const freq = isDay ? 48 : 42;
+            const vol = isDay ? 0.008 : 0.012;
+            playTone(freq, 'sine', 1.8, vol, 0, 0.3, 1.4);
         }
 
         function setupSliders() {
@@ -718,23 +806,6 @@
             infoBox.classList.remove('hidden');
         }
 
-        function playSound(freq, type = 'sine', duration = 0.2, vol = 0.06, detune = 0) {
-            if (!window.AudioContext) return;
-            if (!window.audioCtx) window.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            const ctx = window.audioCtx;
-            const o = ctx.createOscillator();
-            const g = ctx.createGain();
-            o.type = type;
-            o.frequency.value = freq;
-            if (detune) o.detune.value = detune;
-            g.gain.value = vol * masterVolume;
-            o.connect(g);
-            g.connect(ctx.destination);
-            o.start();
-            g.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + duration);
-            setTimeout(() => { try { o.stop(); } catch(e){} }, duration * 1000 + 40);
-        }
-
         function draw() {
             background(12, 14, 22);
 
@@ -749,7 +820,6 @@
             const timeEl = document.getElementById('sim-time');
             if (timeEl) timeEl.innerText = formatSimTime(simTime);
 
-            // === CRITICAL FIX: Decrement global cooldown every frame ===
             if (globalReproCooldown > 0) globalReproCooldown--;
 
             timeOfDay = (frameCount * timeScale % dayLength) / dayLength;
@@ -759,6 +829,9 @@
                 if (isDay) greenZone.food = Math.min(greenZone.maxFood, greenZone.food + 160);
                 else blueZone.food = Math.min(blueZone.maxFood, blueZone.food + 160);
                 lastIsDay = isDay;
+
+                // Subtle ambient pulse on day/night change
+                if (Math.random() < 0.6) playAmbientPulse(isDay);
             }
 
             if (isDay) {
@@ -817,6 +890,7 @@
                 for (let c of creatures) {
                     if (dist(p.x, p.y, c.x, c.y) < 9) {
                         c.energy = min(100, c.energy + settings.particleFoodValue * timeScale);
+                        if (Math.random() < 0.12) playEatSound(isDay);
                         p.life = 0;
                     }
                 }
@@ -881,7 +955,7 @@
                 if (distToTarget < 12 || b.life <= 0) {
                     if (b.targetIsGreen) greenZone.food = min(greenZone.maxFood, greenZone.food + 20);
                     else blueZone.food = min(blueZone.maxFood, blueZone.food + 20);
-                    playSound(620, 'sine', 0.35, 0.035);
+                    playDepositSound();
                     foodBlooms.splice(i, 1);
                 }
             }
@@ -908,7 +982,7 @@
                 if (distToTarget < 10 || o.life <= 0) {
                     if (o.targetIsGreen) greenZone.food = min(greenZone.maxFood, greenZone.food + o.energy);
                     else blueZone.food = min(blueZone.maxFood, blueZone.food + o.energy);
-                    playSound(780, 'sine', 0.2, 0.04);
+                    playEatSound(o.targetIsGreen);
                     energyOrbs.splice(i, 1);
                 }
             }
@@ -922,7 +996,7 @@
                 let c = creatures[i];
                 c.update(isDay, vortexDir, vortexStrength, timeScale);
 
-                const energyReady = c.energy > 62;   // Lowered threshold
+                const energyReady = c.energy > 62;
                 const cooldownsReady = c.reproCooldown <= 0 && globalReproCooldown <= 0;
                 const isReady = energyReady && cooldownsReady;
 
@@ -932,7 +1006,7 @@
                     let chance = settings.reproductionChance;
 
                     if (c.energy > 80) {
-                        chance *= 4.5;   // Very strong bonus at high energy
+                        chance *= 4.5;
                     } else if (c.energy > 70) {
                         chance *= 2.5;
                     }
@@ -948,19 +1022,19 @@
                         let offspring = c.reproduce();
                         if (offspring) {
                             creatures.push(offspring);
-                            globalReproCooldown = 2;   // Much shorter global cooldown
+                            globalReproCooldown = 2;
                             c.reproCooldown = 18;
                             c.energy -= 6;
                             c.children.push(offspring.name);
                             c.childrenCount++;
+                            playBirthSound();
                             console.log(`[BIRTH] ${c.name} → ${offspring.name} | New pop: ${creatures.length}`);
-                            playSound(880 + random(-12,12), 'sine', 0.24, 0.038);
                         }
                     }
                 }
 
                 if (c.energy < 25 && random() < 0.01 * timeScale) {
-                    playSound(205 + random(-10,10), 'sawtooth', 0.14, 0.02);
+                    playTone(195, 'sawtooth', 0.14, 0.018);
                     c.currentThought = "Hungry";
                 }
 
@@ -968,7 +1042,7 @@
                     let targetIsGreen = isDay;
                     let releasedEnergy = Math.max(8, Math.floor(c.energy * -0.6) + 12);
                     energyOrbs.push({ x: c.x, y: c.y, radius: 14, life: 220, energy: releasedEnergy, targetIsGreen });
-                    playSound(140, 'sawtooth', 0.25, 0.05);
+                    playDeathSound();
                     creatures.splice(i, 1);
                 } else {
                     c.show();
@@ -1175,7 +1249,8 @@
                             let stolen = Math.min(2, target.modules.length);
                             for (let i = 0; i < stolen; i++) if (target.modules.length > 0) this.modules.push(target.modules.pop());
                             this.energy = 74; target.energy = 0; this.killCount++; this.isPredator = false;
-                            this.currentThought = "Just fed"; playSound(125, 'sawtooth', 0.18, 0.04);
+                            this.currentThought = "Just fed";
+                            playPredatorFeedSound();
                         }
                     }
                 } else {
@@ -1289,7 +1364,7 @@
                             targetIsGreen: targetIsGreen
                         });
                         this.currentThought = "Depositing bloom";
-                        playSound(540, 'sine', 0.12, 0.025);
+                        playDepositSound();
                     }
                 }
 
