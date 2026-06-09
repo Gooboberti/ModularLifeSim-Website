@@ -2716,33 +2716,29 @@
                 }
             }
 
-            // === Draw Energy Walls (with decay + shrink/pop animation) ===
+            // === Draw Energy Walls (with splitting behavior) ===
             for (let i = energyWalls.length - 1; i >= 0; i--) {
                 let w = energyWalls[i];
-                w.life -= 2.8; // faster base decay
+
+                // Check immunity first
+                let isImmune = w.immuneUntil && frameCount < w.immuneUntil;
+
+                if (!isImmune) {
+                    // Only take passive damage if not immune (very slow)
+                    w.life -= 0.6;
+                }
 
                 if (w.life <= 0) {
-                    // Check if wall is currently immune from splitting
-                    if (w.immuneUntil && frameCount < w.immuneUntil) {
-                        // Still immune — just destroy without splitting
-                        let explodeX = (w.x1 + w.x2) / 2;
-                        let explodeY = (w.y1 + w.y2) / 2;
-                        playWallBreakSound(0.4);
-                        explosions.push(new Explosion(explodeX, explodeY));
-                        energyWalls.splice(i, 1);
-                        continue;
-                    }
-
                     let length = w.originalLength || dist(w.x1, w.y1, w.x2, w.y2);
 
-                    // Split into exactly two pieces down the middle (if long enough)
-                    if (length > 45) {
+                    // If long enough and not immune, split into two
+                    if (length > 45 && !isImmune) {
                         let mx = (w.x1 + w.x2) / 2;
                         let my = (w.y1 + w.y2) / 2;
 
-                        let halfLife = Math.max(60, w.life * 0.55 + 60);
+                        let halfLife = Math.max(80, w.life * 0.5 + 80);
 
-                        // Left half
+                        // Left piece - becomes immune for 1 second
                         energyWalls.push({
                             x1: w.x1,
                             y1: w.y1,
@@ -2751,13 +2747,13 @@
                             life: halfLife,
                             maxLife: halfLife,
                             hitFlash: 0,
-                            vx: w.vx - 1.0,
-                            vy: w.vy - 1.0,
+                            vx: w.vx - 1.2,
+                            vy: w.vy - 1.2,
                             originalLength: length * 0.5,
-                            immuneUntil: frameCount + 65   // Immune for ~1 second
+                            immuneUntil: frameCount + 65
                         });
 
-                        // Right half
+                        // Right piece - becomes immune for 1 second
                         energyWalls.push({
                             x1: mx,
                             y1: my,
@@ -2766,33 +2762,32 @@
                             life: halfLife,
                             maxLife: halfLife,
                             hitFlash: 0,
-                            vx: w.vx + 1.0,
-                            vy: w.vy + 1.0,
+                            vx: w.vx + 1.2,
+                            vy: w.vy + 1.2,
                             originalLength: length * 0.5,
-                            immuneUntil: frameCount + 65   // Immune for ~1 second
+                            immuneUntil: frameCount + 65
                         });
 
-                        // Break effect at the split point
                         explosions.push(new Explosion(mx, my));
-                        playWallBreakSound(0.65);
+                        playWallBreakSound(0.6);
 
                         energyWalls.splice(i, 1);
                         continue;
 
                     } else {
-                        // Final small wall break
+                        // Final break (too small or was immune)
                         let explodeX = (w.x1 + w.x2) / 2;
                         let explodeY = (w.y1 + w.y2) / 2;
 
-                        playWallBreakSound(0.45);
+                        playWallBreakSound(0.4);
                         playExplosionSound();
                         explosions.push(new Explosion(explodeX, explodeY));
 
                         for (let c of creatures) {
                             let d = dist(c.x, c.y, explodeX, explodeY);
-                            if (d < 42) {
-                                c.energy = max(0, c.energy - 22);
-                                c.purpleFlash = max(c.purpleFlash || 0, 65);
+                            if (d < 40) {
+                                c.energy = max(0, c.energy - 20);
+                                c.purpleFlash = max(c.purpleFlash || 0, 60);
                             }
                         }
 
@@ -2981,12 +2976,12 @@
 
                 if (c.purpleFlash > 0) {
                     c.purpleFlash--;
-                    // Severe slow + **much higher** damage while purple
-                    c.vx *= 0.48;
-                    c.vy *= 0.48;
+                    // Very strong purple DoT + severe slow
+                    c.vx *= 0.42;
+                    c.vy *= 0.42;
 
                     if (frameCount % 3 === 0) {
-                        c.energy = max(0, c.energy - 4.2 * timeScale);
+                        c.energy = max(0, c.energy - 7.5 * timeScale);
                     }
                 } else if (c.mustEatWhite) {
                     // Purple window ended
