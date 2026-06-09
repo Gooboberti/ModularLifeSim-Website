@@ -3,43 +3,58 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Neural Forager • v0.9</title>
+  <title>Mini Simmy • v0.11</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
   <style>
     body { font-family: 'Inter', system_ui, sans-serif; }
     .font-display { font-family: 'Space Grotesk', 'Inter', system_ui, sans-serif; font-weight: 600; }
+    .neural-svg text { font-family: 'Inter', system_ui, sans-serif; }
   </style>
 </head>
 <body class="bg-slate-950 text-slate-200">
   <nav class="border-b border-slate-800 bg-slate-950/80 backdrop-blur sticky top-0 z-50">
-    <div class="max-w-screen-xl mx-auto px-6 py-4 flex justify-between items-center">
+    <div class="max-w-screen-xl mx-auto px-4 sm:px-6 py-4 flex flex-wrap justify-between items-center gap-y-3">
       <div class="flex items-center gap-x-3">
         <div class="w-9 h-9 bg-violet-500 rounded-xl flex items-center justify-center">
           <i class="fa-solid fa-brain text-white"></i>
         </div>
         <div>
-          <span class="font-display text-2xl">Neural Forager</span>
-          <span class="text-xs ml-2 text-slate-500">v0.9 • 6 Inputs + 6 Outputs</span>
+          <span class="font-display text-2xl">Mini Simmy</span>
+          <span class="text-xs ml-2 text-slate-500">v0.11 • Harmonic Neural Sonification</span>
         </div>
       </div>
-      <div class="flex items-center gap-x-4 text-sm">
-        <a href="index.html" class="hover:text-white">Back</a>
-        <a href="sandbox.html" class="hover:text-white">Life Lab</a>
+
+      <!-- Audio Controls -->
+      <div class="flex items-center gap-x-3 text-sm">
+        <div class="flex items-center gap-x-2 bg-slate-900 border border-slate-700 rounded-2xl px-3 py-1.5">
+          <button id="mute-btn" onclick="toggleMute()" 
+                  class="flex items-center gap-x-2 px-3 py-1 rounded-xl hover:bg-slate-800 transition-colors text-sm font-medium">
+            <i class="fa-solid fa-volume-up text-emerald-400" id="mute-icon"></i>
+            <span id="mute-text" class="hidden sm:inline">Sound On</span>
+          </button>
+          <input type="range" id="volume-slider" min="0" max="100" value="70" 
+                 class="w-20 sm:w-28 accent-violet-500 cursor-pointer"
+                 oninput="updateVolume(this.value)">
+          <span id="volume-value" class="text-xs text-slate-400 w-8 text-right font-mono">70</span>
+        </div>
+
+        <a href="index.html" class="hover:text-white px-2">Back</a>
+        <a href="sandbox.html" class="hover:text-white px-2">Life Lab</a>
         <button onclick="showHowItWorks()" class="px-3 py-1.5 text-xs bg-violet-600 hover:bg-violet-500 rounded-lg flex items-center gap-x-1">
           <i class="fa-solid fa-info-circle"></i>
-          <span>How It Works</span>
+          <span class="hidden sm:inline">How It Works</span>
         </button>
       </div>
     </div>
   </nav>
 
-  <div class="max-w-screen-2xl mx-auto px-6 pt-8">
-    <div class="flex justify-between items-end mb-6">
+  <div class="max-w-screen-2xl mx-auto px-4 sm:px-6 pt-8">
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-6 gap-y-3">
       <div>
-        <h1 class="font-display text-5xl tracking-tighter">Neural Forager</h1>
-        <p class="text-slate-400">1 Prey vs 1 Predator • Both brains visible • Matching main sim architecture</p>
+        <h1 class="font-display text-4xl sm:text-5xl tracking-tighter">Mini Simmy</h1>
+        <p class="text-slate-400 text-sm sm:text-base">Interactive neural toy • Brains that sing while they think</p>
       </div>
       <div class="flex gap-x-3">
         <button onclick="resetSim()" class="px-5 py-2 bg-slate-800 hover:bg-slate-700 rounded-2xl text-sm flex items-center gap-x-2">
@@ -58,7 +73,7 @@
           <div id="world"></div>
         </div>
         <div class="mt-3 text-xs text-slate-500 px-1 flex justify-between">
-          <div><span class="text-emerald-400">●</span> Prey (Forager)</div>
+          <div><span class="text-emerald-400">●</span> Prey</div>
           <div><span class="text-red-400">●</span> Predator</div>
         </div>
       </div>
@@ -66,66 +81,166 @@
       <!-- Neural Networks -->
       <div class="xl:col-span-7">
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <!-- Forager Brain -->
           <div class="bg-slate-900 border border-emerald-800 rounded-3xl p-4">
             <div class="flex justify-between items-center mb-3">
-              <div class="font-semibold text-emerald-400">FORAGER BRAIN (Prey)</div>
+              <div class="font-semibold text-emerald-400">FORAGER BRAIN</div>
               <button onclick="showInfo('forager')" class="text-xs px-2 py-0.5 bg-emerald-900 hover:bg-emerald-800 rounded">Info</button>
             </div>
-            <div id="net-forager" class="min-h-[240px]"></div>
-            <div class="mt-2 text-[10px] text-slate-400">
-              Energy: <span id="energy-forager" class="font-mono text-emerald-400">70</span>
+            <div id="net-forager" class="min-h-[240px] flex items-center justify-center"></div>
+            <div class="mt-2 text-[10px] text-slate-400 flex justify-between">
+              <div>Energy: <span id="energy-forager" class="font-mono text-emerald-400">70</span></div>
+              <div class="text-emerald-500/70 text-[9px]">Harmonic sounds</div>
             </div>
           </div>
 
-          <!-- Predator Brain -->
           <div class="bg-slate-900 border border-red-800 rounded-3xl p-4">
             <div class="flex justify-between items-center mb-3">
-              <div class="font-semibold text-red-400">PREDATOR BRAIN (Enemy)</div>
+              <div class="font-semibold text-red-400">PREDATOR BRAIN</div>
               <button onclick="showInfo('predator')" class="text-xs px-2 py-0.5 bg-red-900 hover:bg-red-800 rounded">Info</button>
             </div>
-            <div id="net-predator" class="min-h-[240px]"></div>
-            <div class="mt-2 text-[10px] text-slate-400">
-              Energy: <span id="energy-predator" class="font-mono text-red-400">70</span>
+            <div id="net-predator" class="min-h-[240px] flex items-center justify-center"></div>
+            <div class="mt-2 text-[10px] text-slate-400 flex justify-between">
+              <div>Energy: <span id="energy-predator" class="font-mono text-red-400">70</span></div>
+              <div class="text-red-500/70 text-[9px]">Harmonic sounds</div>
             </div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Educational Legend -->
+    <!-- Legend -->
     <div class="mt-8 bg-slate-900 border border-slate-800 rounded-3xl p-6">
-      <h3 class="font-semibold mb-4">6 Inputs + 6 Outputs (Matching Main Simulation)</h3>
+      <h3 class="font-semibold mb-4">Mini neural simulation with live harmonic sonification</h3>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 text-sm">
         <div>
           <div class="font-medium text-emerald-400 mb-1">Inputs</div>
           <div class="space-y-1 text-xs text-slate-400">
-            <div>1. Food Angle — Direction to nearest food</div>
-            <div>2. Food Distance — Proximity to food</div>
-            <div>3. Danger Distance — How close the threat is</div>
-            <div>4. Energy — Current stamina level</div>
-            <div>5. Memory — Recurrent internal state</div>
-            <div>6. Bias — Heritable drive (aggression vs caution)</div>
+            <div><span class="font-mono text-emerald-300">1.</span> F.∠ — Food angle</div>
+            <div><span class="font-mono text-emerald-300">2.</span> F.Dist — Food distance</div>
+            <div><span class="font-mono text-emerald-300">3.</span> Danger — Threat proximity</div>
+            <div><span class="font-mono text-emerald-300">4.</span> Energy — Stamina</div>
+            <div><span class="font-mono text-emerald-300">5.</span> Mem — Recurrent memory</div>
+            <div><span class="font-mono text-emerald-300">6.</span> Bias — Drive</div>
           </div>
         </div>
         <div>
           <div class="font-medium text-red-400 mb-1">Outputs</div>
           <div class="space-y-1 text-xs text-slate-400">
-            <div>1. Turn Strength — How sharply to turn</div>
-            <div>2. Forward Speed — Movement speed</div>
-            <div>3. Attack/Eat Intent — Desire to engage</div>
-            <div>4. Flee Strength — Urge to escape danger</div>
-            <div>5. Explore Bias — Tendency to wander</div>
-            <div>6. Energy Conservation — How carefully to move</div>
+            <div><span class="font-mono text-red-300">1.</span> Turn — Turn strength</div>
+            <div><span class="font-mono text-red-300">2.</span> Speed — Forward speed</div>
+            <div><span class="font-mono text-red-300">3.</span> Attack — Engage intent</div>
+            <div><span class="font-mono text-red-300">4.</span> Flee — Escape urge</div>
+            <div><span class="font-mono text-red-300">5.</span> Expl — Explore bias</div>
+            <div><span class="font-mono text-red-300">6.</span> Cons — Energy conservation</div>
           </div>
         </div>
       </div>
+      <div class="mt-4 text-[10px] text-slate-500">Each neuron sings its own voice. Brighter activation = richer harmonic layers. A tiny musical brain toy.</div>
     </div>
   </div>
 
   <script>
     let audioCtx;
-    function initAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+    let neuralSoundEnabled = true;
+    let masterVolume = 0.7;
+
+    function initAudio() {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+
+    function updateVolume(val) {
+      masterVolume = val / 100;
+      document.getElementById('volume-value').innerText = val;
+    }
+
+    function toggleMute() {
+      neuralSoundEnabled = !neuralSoundEnabled;
+      const icon = document.getElementById('mute-icon');
+      const text = document.getElementById('mute-text');
+      
+      if (neuralSoundEnabled) {
+        icon.classList.remove('fa-volume-mute', 'text-red-400');
+        icon.classList.add('fa-volume-up', 'text-emerald-400');
+        text.innerText = 'Sound On';
+      } else {
+        icon.classList.remove('fa-volume-up', 'text-emerald-400');
+        icon.classList.add('fa-volume-mute', 'text-red-400');
+        text.innerText = 'Muted';
+      }
+    }
+
+    function playNeuralTone(baseFreq, intensity, isForager) {
+      if (!audioCtx || !neuralSoundEnabled || masterVolume <= 0.01) return;
+
+      const vol = Math.max(0.02, Math.min(0.6, intensity * masterVolume * 0.85));
+      const duration = 0.18 + intensity * 0.12;
+
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      const filter = audioCtx.createBiquadFilter();
+
+      if (baseFreq > 900) {
+        o.type = 'sine';
+        filter.type = 'lowpass';
+        filter.frequency.value = 2400;
+      } else if (baseFreq > 500) {
+        o.type = 'triangle';
+        filter.type = 'lowpass';
+        filter.frequency.value = 1800;
+      } else {
+        o.type = 'sawtooth';
+        filter.type = 'lowpass';
+        filter.frequency.value = 1200;
+        o.detune.value = (Math.random() - 0.5) * 8;
+      }
+
+      o.frequency.value = baseFreq;
+      g.gain.value = vol;
+
+      o.connect(filter);
+      filter.connect(g);
+      g.connect(audioCtx.destination);
+
+      o.start();
+      g.gain.linearRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+      setTimeout(() => { try { o.stop(); } catch(e){} }, duration * 1000 + 50);
+    }
+
+    const inputFreqs  = [880, 1047, 1175, 1319, 1568, 1760];
+    const hiddenFreqs = [440, 523, 587, 659, 784, 880];
+    const outputFreqs = [330, 392, 440, 523, 587, 659];
+
+    let lastInputAct = [0,0,0,0,0,0];
+    let lastHiddenAct = [0,0,0,0,0,0];
+    let lastOutputAct = [0,0,0,0,0,0];
+
+    function triggerNeuralSounds(creature, isForager, inputs, hiddens, outputs) {
+      if (!neuralSoundEnabled || !audioCtx) return;
+
+      for (let i = 0; i < 6; i++) {
+        const act = inputs[i] || 0;
+        if (act > 0.35 && act > lastInputAct[i] + 0.12) {
+          playNeuralTone(inputFreqs[i], act, isForager);
+        }
+        lastInputAct[i] = act;
+      }
+
+      for (let j = 0; j < 6; j++) {
+        const act = hiddens[j] || 0;
+        if (act > 0.4 && act > lastHiddenAct[j] + 0.1) {
+          playNeuralTone(hiddenFreqs[j], act * 0.9, isForager);
+        }
+        lastHiddenAct[j] = act;
+      }
+
+      for (let k = 0; k < 6; k++) {
+        const act = outputs[k] || 0;
+        if (act > 0.35 && act > lastOutputAct[k] + 0.1) {
+          playNeuralTone(outputFreqs[k], act, isForager);
+        }
+        lastOutputAct[k] = act;
+      }
+    }
 
     let forager, predator;
     let foods = [];
@@ -147,7 +262,7 @@
       background(15, 23, 42);
       stroke(30, 41, 59);
       for (let x = 0; x < width; x += 40) line(x, 0, x, height);
-      for (let y = 0; y < height; y += 40) line(0, y, width, y);
+      for (let y = 0; y < height; y += 40) line(0, y, width, height);
 
       for (let f of foods) f.show();
 
@@ -157,8 +272,8 @@
       predator.update(forager);
       predator.show();
 
-      drawDetailedNet('net-forager', forager, predator);
-      drawDetailedNet('net-predator', predator, forager);
+      drawDetailedNet('net-forager', forager, true);
+      drawDetailedNet('net-predator', predator, false);
 
       document.getElementById('energy-forager').innerText = Math.floor(forager.energy);
       document.getElementById('energy-predator').innerText = Math.floor(predator.energy);
@@ -172,6 +287,9 @@
         this.type = type;
         this.memory = 0;
         this.size = type === 'predator' ? 15 : 12;
+        this.lastInputs = [0,0,0,0,0,0];
+        this.lastHidden = new Array(6).fill(0.5);
+        this.lastOutputs = [0,0,0,0,0,0];
       }
 
       update(other) {
@@ -189,7 +307,6 @@
         while (ad > PI) ad -= TWO_PI;
         while (ad < -PI) ad += TWO_PI;
 
-        // 6 Inputs
         let fa = 0, fdist = 1;
         if (nf) {
           let fax = atan2(nf.y - this.y, nf.x - this.x);
@@ -211,8 +328,8 @@
 
         this.memory = this.memory * 0.78 + (fa * 0.25) + (inputs[2] * (this.type === 'predator' ? 0.5 : -0.55));
 
-        let hidden = new Array(8).fill(0);
-        for (let i = 0; i < 8; i++) {
+        let hidden = new Array(6).fill(0);
+        for (let i = 0; i < 6; i++) {
           let a = 0;
           if (i % 2 === 0) a += inputs[0] * 0.85 + inputs[3] * 0.38;
           else a += inputs[2] * 0.9 + inputs[5] * 0.52;
@@ -220,23 +337,22 @@
           hidden[i] = constrain(a + random(-0.06, 0.06), 0, 1);
         }
 
-        let avgH = hidden.reduce((s, v) => s + v, 0) / 8;
+        let avgH = hidden.reduce((s, v) => s + v, 0) / 6;
 
-        // 6 Outputs
         if (this.type === 'forager') {
-          this.turn       = inputs[0] * 0.6 + avgH * 0.3 + this.memory * 0.3;
-          this.speed      = 0.7 + inputs[3] * 0.25 - inputs[2] * 0.9;
-          this.attack     = inputs[2] * -0.8 + inputs[3] * 0.4;
-          this.flee       = inputs[2] * 1.1 + this.memory * 0.4;
-          this.explore    = 0.3 + inputs[4] * 0.5;
-          this.conserve   = inputs[3] * 0.6 + inputs[2] * -0.3;
+          this.turn = inputs[0] * 0.6 + avgH * 0.3 + this.memory * 0.3;
+          this.speed = 0.7 + inputs[3] * 0.25 - inputs[2] * 0.9;
+          this.attack = inputs[2] * -0.8 + inputs[3] * 0.4;
+          this.flee = inputs[2] * 1.1 + this.memory * 0.4;
+          this.explore = 0.3 + inputs[4] * 0.5;
+          this.conserve = inputs[3] * 0.6 + inputs[2] * -0.3;
         } else {
-          this.turn       = (ad / PI) * 0.75 + avgH * 0.25;
-          this.speed      = 1.0 + avgH * 0.35;
-          this.attack     = 0.8 + avgH * 0.4;
-          this.flee       = inputs[2] * -0.6;
-          this.explore    = 0.4;
-          this.conserve   = inputs[3] * 0.5;
+          this.turn = (ad / PI) * 0.75 + avgH * 0.25;
+          this.speed = 1.0 + avgH * 0.35;
+          this.attack = 0.8 + avgH * 0.4;
+          this.flee = inputs[2] * -0.6;
+          this.explore = 0.4;
+          this.conserve = inputs[3] * 0.5;
         }
 
         this.angle += this.turn * 0.12;
@@ -256,8 +372,12 @@
         if (this.type === 'predator' && distOther < 17) {
           other.energy = max(8, other.energy - 14);
           this.energy = min(100, this.energy + 12);
-          playSound(280, 0.22); // softer attack sound
+          playSound(280, 0.22);
         }
+
+        this.lastInputs = inputs;
+        this.lastHidden = hidden;
+        this.lastOutputs = [this.turn, this.speed, this.attack, this.flee, this.explore, this.conserve];
       }
 
       show() {
@@ -284,111 +404,84 @@
       predator = new Creature(width * 0.7, height * 0.5, 'predator');
       foods = [];
       for (let i = 0; i < 14; i++) foods.push(new Food(random(40, width-40), random(40, height-40)));
+      lastInputAct = [0,0,0,0,0,0];
+      lastHiddenAct = [0,0,0,0,0,0];
+      lastOutputAct = [0,0,0,0,0,0];
     }
 
-    function drawDetailedNet(containerId, self, other) {
-      let container = document.getElementById(containerId);
+    function drawDetailedNet(containerId, creature, isForager) {
+      const container = document.getElementById(containerId);
       container.innerHTML = '';
 
-      let svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-      svg.setAttribute("width", "100%");
-      svg.setAttribute("height", "240");
-      svg.setAttribute("viewBox", "0 0 390 240");
+      const accent = isForager ? '#34d399' : '#f87171';
 
-      const ix = 55, hx = 170, ox = 310;
-      const iy = [50, 85, 120, 155, 190, 225];
-      const hy = [40, 75, 110, 145, 180, 215];
-      const oy = [70, 170];
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('width', '100%');
+      svg.setAttribute('height', '240');
+      svg.setAttribute('viewBox', '0 0 420 240');
+      svg.setAttribute('class', 'neural-svg');
 
-      // Labels
-      let t1 = document.createElementNS("http://www.w3.org/2000/svg", "text");
-      t1.setAttribute("x", 55); t1.setAttribute("y", 18);
-      t1.setAttribute("fill", "#64748b"); t1.setAttribute("font-size", "10");
-      t1.textContent = "Inputs";
-      svg.appendChild(t1);
+      const ix = 78, hx = 210, ox = 342;
+      const iy = [42, 80, 118, 156, 194, 232];
+      const hy = [42, 80, 118, 156, 194, 232];
+      const oy = [42, 80, 118, 156, 194, 232];
 
-      let t2 = document.createElementNS("http://www.w3.org/2000/svg", "text");
-      t2.setAttribute("x", 170); t2.setAttribute("y", 18);
-      t2.setAttribute("fill", "#64748b"); t2.setAttribute("font-size", "10");
-      t2.textContent = "Hidden";
-      svg.appendChild(t2);
+      const inputLabels = ['F.∠', 'F.Dist', 'Danger', 'Energy', 'Mem', 'Bias'];
+      const outputLabels = ['Turn', 'Speed', 'Attack', 'Flee', 'Expl', 'Cons'];
 
-      let t3 = document.createElementNS("http://www.w3.org/2000/svg", "text");
-      t3.setAttribute("x", 310); t3.setAttribute("y", 18);
-      t3.setAttribute("fill", "#64748b"); t3.setAttribute("font-size", "10");
-      t3.textContent = "Outputs";
-      svg.appendChild(t3);
+      const inputs = creature.lastInputs || [0,0,0,0,0,0];
+      const hiddens = creature.lastHidden || new Array(6).fill(0.5);
+      const outputs = creature.lastOutputs || [0,0,0,0,0,0];
 
-      // Connections
+      triggerNeuralSounds(creature, isForager, inputs, hiddens, outputs);
+
+      function activationFill(act) {
+        const t = Math.max(0.15, Math.min(1, act || 0));
+        if (isForager) {
+          const r = Math.floor(16 + t * 120);
+          const g = Math.floor(185 + t * 50);
+          const b = Math.floor(129 + t * 40);
+          return `rgb(${r}, ${g}, ${b})`;
+        } else {
+          const r = Math.floor(239 + t * 20);
+          const g = Math.floor(68 + t * 80);
+          const b = Math.floor(68 + t * 30);
+          return `rgb(${r}, ${g}, ${b})`;
+        }
+      }
+
+      const headerData = [
+        { x: ix, label: 'Inputs' },
+        { x: hx, label: 'Hidden' },
+        { x: ox, label: 'Outputs' }
+      ];
+      headerData.forEach(h => {
+        const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        t.setAttribute('x', h.x);
+        t.setAttribute('y', 18);
+        t.setAttribute('fill', '#64748b');
+        t.setAttribute('font-size', '9.5');
+        t.setAttribute('text-anchor', 'middle');
+        t.setAttribute('font-weight', '500');
+        t.textContent = h.label;
+        svg.appendChild(t);
+      });
+
       for (let i = 0; i < 6; i++) {
         for (let j = 0; j < 6; j++) {
-          let l = document.createElementNS("http://www.w3.org/2000/svg", "line");
-          l.setAttribute("x1", ix); l.setAttribute("y1", iy[i]);
-          l.setAttribute("x2", hx); l.setAttribute("y2", hy[j]);
-          l.setAttribute("stroke", "#475569"); l.setAttribute("stroke-width", "0.7");
-          svg.appendChild(l);
+          const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          line.setAttribute('x1', ix);
+          line.setAttribute('y1', iy[i]);
+          line.setAttribute('x2', hx);
+          line.setAttribute('y2', hy[j]);
+          const intensity = Math.max(0.1, (inputs[i] || 0) * 0.7 + (hiddens[j] || 0) * 0.5);
+          const w = 0.65 + intensity * 2.7;
+          line.setAttribute('stroke', '#475569');
+          line.setAttribute('stroke-width', w.toFixed(2));
+          line.setAttribute('stroke-opacity', (0.32 + intensity * 0.58).toFixed(2));
+          svg.appendChild(line);
         }
       }
 
       for (let j = 0; j < 6; j++) {
-        for (let k = 0; k < 6; k++) {
-          let l = document.createElementNS("http://www.w3.org/2000/svg", "line");
-          l.setAttribute("x1", hx); l.setAttribute("y1", hy[j]);
-          l.setAttribute("x2", ox); l.setAttribute("y2", oy[k]);
-          l.setAttribute("stroke", "#475569"); l.setAttribute("stroke-width", "0.7");
-          svg.appendChild(l);
-        }
-      }
-
-      // Neurons
-      for (let i = 0; i < 6; i++) {
-        let c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-        c.setAttribute("cx", ix); c.setAttribute("cy", iy[i]); c.setAttribute("r", 8);
-        c.setAttribute("fill", "#475569"); c.setAttribute("stroke", "#94a3b8"); c.setAttribute("stroke-width", "1.5");
-        svg.appendChild(c);
-      }
-
-      for (let j = 0; j < 6; j++) {
-        let c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-        c.setAttribute("cx", hx); c.setAttribute("cy", hy[j]); c.setAttribute("r", 7);
-        c.setAttribute("fill", "#475569"); c.setAttribute("stroke", "#94a3b8"); c.setAttribute("stroke-width", "1.5");
-        svg.appendChild(c);
-      }
-
-      for (let k = 0; k < 6; k++) {
-        let c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-        c.setAttribute("cx", ox); c.setAttribute("cy", oy[k]); c.setAttribute("r", 8);
-        c.setAttribute("fill", "#475569"); c.setAttribute("stroke", "#94a3b8"); c.setAttribute("stroke-width", "1.5");
-        svg.appendChild(c);
-      }
-
-      container.appendChild(svg);
-    }
-
-    function showInfo(type) {
-      if (type === 'forager') {
-        alert("Forager: Balances finding food with avoiding the Predator using memory and energy awareness.");
-      } else {
-        alert("Predator: Aggressively pursues the Forager while managing its own energy.");
-      }
-    }
-
-    function showHowItWorks() {
-      alert("This mini-game uses a simplified version of the neural architecture from the main Modular Life Sim:\n\n• 6 Inputs (Food angle/distance, Danger, Energy, Memory, Bias)\n• Parallel Pathways in hidden layer\n• Recurrent Memory\n• 6 Outputs controlling movement and behavior");
-    }
-
-    function playSound(freq, duration) {
-      if (!audioCtx) return;
-      const o = audioCtx.createOscillator();
-      const g = audioCtx.createGain();
-      o.type = 'sawtooth';
-      o.frequency.value = freq;
-      g.gain.value = 0.08;
-      o.connect(g); g.connect(audioCtx.destination);
-      o.start();
-      g.gain.linearRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
-      setTimeout(() => o.stop(), duration * 1000);
-    }
-  </script>
-</body>
-</html>
+       
