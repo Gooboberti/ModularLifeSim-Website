@@ -29,7 +29,7 @@
                 </div>
                 <div>
                     <span class="font-display text-2xl tracking-tighter">MiniSimmy2</span>
-                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.53 • Tier V + Reduced Red Hazards</span>
+                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">v0.54 • Hazard Sensing + Active Avoidance (A+B)</span>
                 </div>
             </div>
             <div class="flex items-center gap-x-4 text-sm">
@@ -45,7 +45,7 @@
                 <div class="flex items-center gap-x-4">
                     <div>
                         <h1 class="font-display text-3xl tracking-tighter">MiniSimmy2</h1>
-                        <p class="text-white/60 text-sm">Tier V modules • Fewer red hazards • Updated defaults</p>
+                        <p class="text-white/60 text-sm">Brains can now sense red hazards + actively dodge them. Sensor modules improve detection.</p>
                     </div>
                     
                     <!-- Elapsed Time -->
@@ -111,7 +111,7 @@
                     <div id="stat-modules" class="stat-value text-3xl font-semibold text-violet-400">1.0</div>
                 </div>
 
-                <!-- Module Tiers Breakdown (now 5 tiers) -->
+                <!-- Module Tiers Breakdown -->
                 <div class="pt-2 border-t border-white/10">
                     <div class="text-xs text-white/50 mb-1.5">Modules by Tier</div>
                     <div class="grid grid-cols-5 gap-1.5 text-center">
@@ -227,10 +227,10 @@
 
                     <div>
                         <div class="inspector-label mb-1 flex justify-between">
-                            <span>Neural Net (6-4-6)</span>
+                            <span>Neural Net (8 inputs)</span>
                             <span class="text-[10px] text-white/40">Click nodes</span>
                         </div>
-                        <canvas id="inspector-neural" width="240" height="115" class="neural-canvas w-full rounded-2xl"></canvas>
+                        <canvas id="inspector-neural" width="240" height="130" class="neural-canvas w-full rounded-2xl"></canvas>
                         <div id="inspector-node-info" class="mt-1.5 text-xs bg-white/5 rounded-xl px-2.5 py-1.5 hidden"></div>
                     </div>
                 </div>
@@ -360,13 +360,18 @@
                 </div>
 
                 <div>
+                    <div class="font-semibold text-emerald-400 mb-1">Hazard Avoidance (New in v0.54)</div>
+                    <div class="text-white/70 text-xs">Creatures now sense nearby red hazards through their neural inputs (Hazard Distance + Direction). High-tier Sensor modules improve detection range and reaction quality. Creatures actively dodge when close.</div>
+                </div>
+
+                <div>
                     <div class="font-semibold text-emerald-400 mb-1">Red Hazard Particles</div>
-                    <div class="text-white/70 text-xs">Constantly spawning passive red entities (now ~9 on screen). On impact they create a visible explosion with AOE damage + push, purple damage flash (DoT), and a special explosion sound.</div>
+                    <div class="text-white/70 text-xs">Constantly spawning passive red entities (~9 on screen). On impact: visible explosion + AOE damage + push + purple damage flash (DoT).</div>
                 </div>
 
                 <div>
                     <div class="font-semibold text-emerald-400 mb-1">Vortex & Day/Night</div>
-                    <div class="text-white/70 text-xs">Vortex pulls toward center and changes direction at dawn/dusk. Green zone is active during day, Blue at night.</div>
+                    <div class="text-white/70 text-xs">Vortex pulls toward center and changes direction at dawn/dusk. Green zone active during day, Blue at night.</div>
                 </div>
             </div>
 
@@ -639,7 +644,6 @@
                 vortexParticles.push(new VortexParticle());
             }
 
-            // Start with ~9 red hazards
             for (let i = 0; i < 9; i++) {
                 redHazards.push(new RedHazard());
             }
@@ -938,18 +942,19 @@
         function drawInspectorNeuralNet(creature) {
             if (!inspectorNeuralCtx) return;
             const ctx = inspectorNeuralCtx;
-            ctx.clearRect(0, 0, 240, 115);
+            ctx.clearRect(0, 0, 240, 130);
 
             const t = frameCount * 0.09;
 
-            const layers = [6, 4, 6];
+            // 8 inputs now (added Hazard Dist + Hazard Dir)
+            const layers = [8, 4, 6];
             const positions = [];
 
             for (let l = 0; l < layers.length; l++) {
-                const x = 35 + l * 58;
+                const x = 28 + l * 58;
                 positions[l] = [];
                 for (let n = 0; n < layers[l]; n++) {
-                    const y = 22 + n * (72 / (layers[l] - 1));
+                    const y = 20 + n * (88 / (layers[l] - 1));
                     positions[l].push({x, y});
                 }
             }
@@ -970,7 +975,7 @@
             }
             ctx.globalAlpha = 1;
 
-            const inputLabels = ['Energy', 'Zone Dist', 'Phero', 'Neighbors', 'Vortex', 'Fitness'];
+            const inputLabels = ['Energy', 'Zone Dist', 'Phero', 'Neighbors', 'Vortex', 'Fitness', 'Hazard Dist', 'Hazard Dir'];
             const outputLabels = ['MoveX', 'MoveY', 'Deposit', 'Signal', 'Energy', 'Social'];
 
             for (let l = 0; l < positions.length; l++) {
@@ -995,22 +1000,22 @@
 
                     if (l === 0 && inputLabels[i]) {
                         ctx.fillStyle = '#64748b';
-                        ctx.font = '8px Inter, system-ui';
-                        ctx.fillText(inputLabels[i], p.x + 9, p.y + 3);
+                        ctx.font = '7.5px Inter, system-ui';
+                        ctx.fillText(inputLabels[i], p.x + 8, p.y + 2.5);
                     }
                     if (l === 2 && outputLabels[i]) {
                         ctx.fillStyle = '#64748b';
-                        ctx.font = '8px Inter, system-ui';
-                        ctx.fillText(outputLabels[i], p.x - 28, p.y + 3);
+                        ctx.font = '7.5px Inter, system-ui';
+                        ctx.fillText(outputLabels[i], p.x - 26, p.y + 2.5);
                     }
                 }
             }
 
             ctx.fillStyle = '#475569';
-            ctx.font = '9px Inter, system-ui';
-            ctx.fillText('Input', 8, 105);
-            ctx.fillText('Hidden', 88, 105);
-            ctx.fillText('Output', 155, 105);
+            ctx.font = '8px Inter, system-ui';
+            ctx.fillText('Input (8)', 6, 120);
+            ctx.fillText('Hidden', 82, 120);
+            ctx.fillText('Output', 148, 120);
         }
 
         function handleInspectorNeuralClick(e) {
@@ -1020,14 +1025,14 @@
             const mouseX = e.clientX - rect.left;
             const mouseY = e.clientY - rect.top;
 
-            const layers = [6, 4, 6];
+            const layers = [8, 4, 6];
             const positions = [];
 
             for (let l = 0; l < layers.length; l++) {
-                const x = 35 + l * 58;
+                const x = 28 + l * 58;
                 positions[l] = [];
                 for (let n = 0; n < layers[l]; n++) {
-                    const y = 22 + n * (72 / (layers[l] - 1));
+                    const y = 20 + n * (88 / (layers[l] - 1));
                     positions[l].push({x, y});
                 }
             }
@@ -1048,10 +1053,10 @@
             let text = '';
 
             if (layer === 0) {
-                const names = ['Energy Level', 'Distance to Zone', 'Local Pheromone', 'Nearby Creatures', 'Vortex Force', 'Neighbor Fitness'];
-                text = `<strong>Input ${index + 1}:</strong> ${names[index] || 'Sensor'}<br><span class="text-white/50 text-xs">Feeds into decision making.</span>`;
+                const names = ['Energy Level', 'Distance to Zone', 'Local Pheromone', 'Nearby Creatures', 'Vortex Force', 'Neighbor Fitness', 'Nearest Hazard Distance', 'Hazard Direction (angle)'];
+                text = `<strong>Input ${index + 1}:</strong> ${names[index] || 'Sensor'}<br><span class="text-white/50 text-xs">Feeds into decision making. Hazard inputs help avoidance.</span>`;
             } else if (layer === 1) {
-                text = `<strong>Hidden Node ${index + 1}</strong><br><span class="text-white/50 text-xs">Internal processing layer.</span>`;
+                text = `<strong>Hidden Node ${index + 1}</strong><br><span class="text-white/50 text-xs">Internal processing layer. Connects sensing to action.</span>`;
             } else {
                 const names = ['Movement X', 'Movement Y', 'Pheromone Deposit', 'Signal Strength', 'Energy Priority', 'Social Tendency'];
                 text = `<strong>Output ${index + 1}:</strong> ${names[index] || 'Action'}<br><span class="text-white/50 text-xs">Controls behavior output.</span>`;
@@ -1398,7 +1403,7 @@
                 }
             }
 
-            // CONSTANT RED HAZARD SPAWNING (now ~9)
+            // CONSTANT RED HAZARD SPAWNING (~9)
             const targetRedCount = 9;
             if (redHazards.length < targetRedCount) {
                 let spawnChance = (targetRedCount - redHazards.length) * 0.12;
@@ -1707,13 +1712,15 @@
                     this.traits = {
                         pheromoneSensitivity: constrain(parentTraits.pheromoneSensitivity + random(-0.08, 0.08), 0.6, 1.6),
                         explorationBias: constrain(parentTraits.explorationBias + random(-0.08, 0.08), 0.6, 1.6),
-                        vortexResistance: constrain(parentTraits.vortexResistance + random(-0.08, 0.08), 0.6, 1.6)
+                        vortexResistance: constrain(parentTraits.vortexResistance + random(-0.08, 0.08), 0.6, 1.6),
+                        hazardAvoidance: constrain(parentTraits.hazardAvoidance + random(-0.08, 0.08), 0.6, 1.6)
                     };
                 } else {
                     this.traits = {
                         pheromoneSensitivity: 1.0 + random(-0.15, 0.15),
                         explorationBias: 1.0 + random(-0.15, 0.15),
-                        vortexResistance: 1.0 + random(-0.15, 0.15)
+                        vortexResistance: 1.0 + random(-0.15, 0.15),
+                        hazardAvoidance: 1.0 + random(-0.15, 0.15)
                     };
                 }
 
@@ -1763,6 +1770,32 @@
                     if (shared >= 1 && dist(this.x, this.y, o.x, o.y) < 55) count++;
                 }
                 return count;
+            }
+
+            // NEW: Get nearest red hazard info for neural sensing
+            getNearestHazardInfo() {
+                let nearestDist = Infinity;
+                let nearestAngle = 0;
+                let nearbyCount = 0;
+                const dangerRadius = 140;
+
+                for (let h of redHazards) {
+                    let d = dist(this.x, this.y, h.x, h.y);
+                    if (d < dangerRadius) nearbyCount++;
+                    if (d < nearestDist) {
+                        nearestDist = d;
+                        nearestAngle = atan2(h.y - this.y, h.x - this.x);
+                    }
+                }
+
+                // Normalize distance (closer = higher value for the brain)
+                let normDist = (nearestDist < Infinity) ? constrain(1 - (nearestDist / dangerRadius), 0, 1) : 0;
+
+                return {
+                    dist: normDist,           // 0 = far, 1 = very close
+                    angle: nearestAngle,      // direction to nearest hazard
+                    count: nearbyCount
+                };
             }
 
             updateSpecialization() {
@@ -1822,6 +1855,35 @@
 
                 let drain = settings.energyDrain - this.getEfficiencyBonus();
                 this.energy -= Math.max(0.005, drain * timeScale);
+
+                // NEW: Hazard sensing + active avoidance (Phases A+B)
+                let hazardInfo = this.getNearestHazardInfo();
+                let sensorLevel = this.getTieredModuleCount('sensor');
+
+                // Sensor modules improve hazard detection quality
+                let detectionQuality = 0.6 + (sensorLevel * 0.12);
+                let effectiveHazardDist = hazardInfo.dist * detectionQuality;
+
+                if (effectiveHazardDist > 0.15) {  // Only react when reasonably close
+                    // Calculate avoidance direction (opposite of hazard)
+                    let avoidAngle = hazardInfo.angle + PI;  // opposite direction
+                    let avoidStrength = effectiveHazardDist * 2.8;
+
+                    // Stronger reaction if very close (emergency dodge)
+                    if (effectiveHazardDist > 0.65) {
+                        avoidStrength *= 1.8;
+                        this.currentThought = "Dodging hazard!";
+                    }
+
+                    // Apply avoidance force to velocity
+                    this.vx += cos(avoidAngle) * avoidStrength * 0.035 * timeScale;
+                    this.vy += sin(avoidAngle) * avoidStrength * 0.035 * timeScale;
+
+                    // Bonus from hazardAvoidance trait (evolutionary)
+                    let traitBonus = (this.traits.hazardAvoidance - 1) * 0.6;
+                    this.vx += cos(avoidAngle) * traitBonus * 0.02 * timeScale;
+                    this.vy += sin(avoidAngle) * traitBonus * 0.02 * timeScale;
+                }
 
                 if (this.isPredator) {
                     let target = null;
