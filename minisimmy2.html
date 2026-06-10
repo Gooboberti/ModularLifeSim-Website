@@ -704,6 +704,42 @@
                 </div>
             </div>
 
+            <div class="mt-6 border-t border-white/10 pt-4">
+                <div class="font-semibold text-emerald-400 mb-2">Hazard Cursor Absorption</div>
+                <div class="text-white/80 text-xs mb-3">
+                    When the <strong>Cursor Hazard</strong> is active, it absorbs nearby <strong>Red Particles</strong> on contact. 
+                    A satisfying absorb sound plays. This is a great way to clear hazards while doing damage.
+                </div>
+
+                <div class="font-semibold text-violet-400 mb-2">Energy Wall Empowerment</div>
+                <div class="text-white/80 text-xs mb-3">
+                    Red Particles that hit an Energy Wall are absorbed. Each hit:
+                    <br>• Causes the wall to <strong>shake</strong> visually
+                    <br>• Slowly <strong>shifts its color</strong> toward red
+                    <br>• Increments the absorption counter
+                    <br><br>
+                    After <strong>exactly 5 hits</strong>, the wall becomes <strong>fully empowered</strong>:
+                    <br>• Moves <strong>much slower</strong> in the vortex (25% speed)
+                    <br>• On contact with creatures: instantly turns them into <strong>Predators</strong>
+                    <br>• Still bounces and applies purple damage, but now has this powerful conversion effect.
+                </div>
+
+                <div class="font-semibold text-sky-400 mb-2">Detailed Mechanics: Brain & Sensing</div>
+                <div class="text-white/80 text-xs">
+                    Every creature has a <strong>"brain"</strong> simulated through its <strong>modules</strong> and simple rules:
+                    <br><br>
+                    <strong>Sensor Module:</strong> Increases detection range and quality for hazards, walls, and bullets. Higher tiers allow predictive dodging from farther away.
+                    <br><br>
+                    <strong>Avoidance Logic:</strong> Creatures constantly scan for nearby dangers (Red Hazards, Energy Walls, spaceship bullets, persistent hazard fields). They calculate an avoidance vector and steer away. The strength of avoidance scales with how close and how many sensors they have.
+                    <br><br>
+                    <strong>Thought System:</strong> Creatures display short thoughts ("Dodging hazard!", "Burning!", "Absorbed by empowered wall", etc.) based on what they're reacting to. This gives insight into their "mental state".
+                    <br><br>
+                    <strong>Learning / Evolution:</strong> Creatures that survive longer (especially by avoiding hazards well) reproduce more successfully. Over time, populations evolve better sensor counts and avoidance behavior. The spaceship and empowered walls act as strong selective pressures.
+                    <br><br>
+                    <strong>Module Synergy:</strong> Harvesters gather more efficiently near food. Sensors help avoid death. Movers escape the vortex better. The combination of modules + environment + hazards creates emergent survival strategies.
+                </div>
+            </div>
+
             <div class="mt-5 text-center">
                 <button onclick="hideLegendModal()" class="px-6 py-1.5 bg-white/10 hover:bg-white/20 rounded-2xl text-sm">Close</button>
             </div>
@@ -1194,6 +1230,35 @@
             setTimeout(() => {
                 try { osc.stop(); } catch(e){}
             }, 280);
+        }
+
+        function playAbsorbSound() {
+            if (activeVoices > MAX_VOICES - 1) return;
+
+            const ctx = getAudioContext();
+
+            // Nice sucking/absorb sound for hazard cursor eating red particles
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            const filter = ctx.createBiquadFilter();
+
+            osc.type = 'sine';
+            osc.frequency.value = 420;
+
+            filter.type = 'lowpass';
+            filter.frequency.value = 900;
+
+            gain.gain.value = 0.16 * effectsVolume;
+            gain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.35);
+
+            osc.connect(filter);
+            filter.connect(gain);
+            gain.connect(masterGain);
+            osc.start();
+
+            setTimeout(() => {
+                try { osc.stop(); } catch(e){}
+            }, 400);
         }
 
         // === FLOATING TEXT ===
@@ -2729,19 +2794,40 @@
                 let isImmune = w.immuneUntil && frameCount < w.immuneUntil;
 
                 if (!isImmune) {
-                    // Only take passive damage if not immune (very slow)
-                    w.life -= 0.6;
+                    // Very slow passive decay only when vulnerable
+                    w.life -= 0.35;
+
+                    // Absorb nearby red particles → empowerment system
+                    for (let j = redHazards.length - 1; j >= 0; j--) {
+                        let r = redHazards[j];
+                        let d = distToLineSegment(r.x, r.y, w.x1, w.y1, w.x2, w.y2);
+                        if (d < 22) {
+                            redHazards.splice(j, 1);
+
+                            if (!w.empowered) {
+                                w.redHits = (w.redHits || 0) + 1;
+                                w.shakeTimer = 18; // visual shake on hit
+
+                                if (w.redHits >= 5) {
+                                    w.empowered = true;
+                                }
+                            }
+
+                            playAbsorbSound();
+                            explosions.push(new Explosion(r.x, r.y));
+                        }
+                    }
                 }
 
                 if (w.life <= 0) {
                     let length = w.originalLength || dist(w.x1, w.y1, w.x2, w.y2);
 
-                    // If long enough and not immune, split into two
-                    if (length > 45 && !isImmune) {
+                    // Split cleanly down the middle if long enough and not immune
+                    if (length > 42 && !isImmune) {
                         let mx = (w.x1 + w.x2) / 2;
                         let my = (w.y1 + w.y2) / 2;
 
-                        let halfLife = Math.max(80, w.life * 0.5 + 80);
+                        let newLife = Math.max(140, length * 2.0);
 
                         // Left piece - becomes immune for 1 second
                         energyWalls.push({
@@ -2749,13 +2835,16 @@
                             y1: w.y1,
                             x2: mx,
                             y2: my,
-                            life: halfLife,
-                            maxLife: halfLife,
+                            life: newLife,
+                            maxLife: newLife,
                             hitFlash: 0,
                             vx: w.vx - 1.2,
                             vy: w.vy - 1.2,
                             originalLength: length * 0.5,
-                            immuneUntil: frameCount + 65
+                            immuneUntil: frameCount + 60,
+                            redHits: 0,
+                            empowered: false,
+                            shakeTimer: 0
                         });
 
                         // Right piece - becomes immune for 1 second
@@ -2764,13 +2853,16 @@
                             y1: my,
                             x2: w.x2,
                             y2: w.y2,
-                            life: halfLife,
-                            maxLife: halfLife,
+                            life: newLife,
+                            maxLife: newLife,
                             hitFlash: 0,
                             vx: w.vx + 1.2,
                             vy: w.vy + 1.2,
                             originalLength: length * 0.5,
-                            immuneUntil: frameCount + 65
+                            immuneUntil: frameCount + 60,
+                            redHits: 0,
+                            empowered: false,
+                            shakeTimer: 0
                         });
 
                         explosions.push(new Explosion(mx, my));
@@ -2801,12 +2893,14 @@
                     }
                 }
 
-                // Vortex influence on walls (they slowly drift and get pulled in)
+                // Vortex influence on walls (much slower if empowered)
                 let mx = (w.x1 + w.x2) / 2;
                 let my = (w.y1 + w.y2) / 2;
                 let dx = mx - centerX;
                 let dy = my - centerY;
                 let distToCenter = sqrt(dx * dx + dy * dy) || 1;
+
+                let vortexSpeedMult = w.empowered ? 0.25 : 1.0; // empowered walls move much slower in vortex
 
                 // Tangential (rotational) force
                 let tangentX = -dy;
@@ -2814,13 +2908,13 @@
                 let tlen = sqrt(tangentX * tangentX + tangentY * tangentY) || 1;
 
                 let vortexDir = cos((timeOfDay + 0.25) * TWO_PI);
-                let rotForce = 0.12 * settings.vortexMultiplier * vortexDir; // much slower
+                let rotForce = 0.12 * settings.vortexMultiplier * vortexDir * vortexSpeedMult;
 
                 w.vx += (tangentX / tlen) * rotForce;
                 w.vy += (tangentY / tlen) * rotForce;
 
-                // Inward pull (very slow)
-                let pull = 0.07 * settings.vortexMultiplier;
+                // Inward pull (very slow if empowered)
+                let pull = 0.07 * settings.vortexMultiplier * vortexSpeedMult;
                 w.vx += (centerX - mx) * pull / (distToCenter + 20);
                 w.vy += (centerY - my) * pull / (distToCenter + 20);
 
@@ -2902,9 +2996,31 @@
                 line(w.x1, w.y1, w.x2, w.y2);
                 pop();
 
-                // Subtle outer glow
+                // Shake effect when absorbing red particles
+                if (w.shakeTimer > 0) {
+                    w.shakeTimer--;
+                    let shake = w.shakeTimer * 0.6;
+                    w.x1 += random(-shake, shake);
+                    w.y1 += random(-shake, shake);
+                    w.x2 += random(-shake, shake);
+                    w.y2 += random(-shake, shake);
+                }
+
+                // Color shift based on red particle absorption / empowerment
+                let redTint = Math.min((w.redHits || 0) * 25, 120);
+                let baseRed = 167 + redTint * 0.6;
+                let baseGreen = 139 - redTint * 0.4;
+                let baseBlue = 250 - redTint * 1.2;
+
+                if (w.empowered) {
+                    baseRed = 255;
+                    baseGreen = 80;
+                    baseBlue = 80;
+                }
+
+                // Subtle outer glow (shifts color when empowered)
                 push();
-                stroke(167, 139, 250, map(lifeRatio, 0, 1, 15, 70));
+                stroke(baseRed, baseGreen, baseBlue, map(lifeRatio, 0, 1, 15, 70));
                 strokeWeight(thickness * 1.7);
                 strokeCap(ROUND);
                 line(w.x1, w.y1, w.x2, w.y2);
@@ -3378,6 +3494,15 @@
                             vortexParticles.splice(i, 1);
                         }
                     }
+
+                    // Hazard Cursor absorbs red particles on contact (with sound)
+                    for (let i = redHazards.length - 1; i >= 0; i--) {
+                        let r = redHazards[i];
+                        if (dist(mx, my, r.x, r.y) < 28) {
+                            redHazards.splice(i, 1);
+                            playAbsorbSound();
+                        }
+                    }
                 }
 
                 // Persistent placed Hazard Cursor (long-term damage field you can leave on the map)
@@ -3704,7 +3829,10 @@
                         vx: 0,
                         vy: 0,
                         originalLength: length,
-                        immuneUntil: frameCount + 30   // brief immunity on creation
+                        immuneUntil: frameCount + 30,
+                        redHits: 0,
+                        empowered: false,
+                        shakeTimer: 0
                     });
                 } else {
                     // Not enough points - flash warning
@@ -4415,6 +4543,12 @@
                             this.mustEatWhite = true;
                             this.ateWhiteParticle = false;
                             this.energy = max(0, this.energy - 5.5 * timeScale);
+
+                            // Empowered wall turns creature into predator on contact
+                            if (w.empowered && !this.isPredator) {
+                                this.isPredator = true;
+                                this.currentThought = "Absorbed by empowered wall";
+                            }
 
                             // Degrade the wall faster on creature contact
                             w.life -= 38;
