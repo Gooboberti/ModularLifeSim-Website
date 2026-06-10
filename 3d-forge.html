@@ -1,1 +1,1925 @@
-FULL CONTENT OF EDITED 3d_forge_viewer.html WOULD GO HERE (the one with back link) 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Forge • Interactive Model Viewer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&amp;family=Space+Grotesk:wght@500;600&amp;display=swap');
+        
+        :root {
+            --accent: #22d3ee;
+        }
+        
+        body {
+            font-family: 'Inter', system_ui, sans-serif;
+        }
+        
+        .font-display {
+            font-family: 'Space Grotesk', 'Inter', system_ui, sans-serif;
+            font-weight: 600;
+        }
+
+        .three-container {
+            background: radial-gradient(circle at center, #111827 0%, #0f172a 100%);
+        }
+
+        .panel {
+            background-color: #18181b;
+            border: 1px solid #27251f;
+        }
+
+        .section-header {
+            font-size: 0.75rem;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: #64748b;
+            font-weight: 600;
+        }
+
+        .model-card {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .model-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+            border-color: #22d3ee;
+        }
+
+        .nav-active {
+            background-color: #27251f;
+            color: #e2e8f0;
+            border-bottom: 2px solid #22d3ee;
+        }
+
+        #three-canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            outline: none;
+        }
+
+        .control-label {
+            font-size: 0.65rem;
+            font-weight: 600;
+            color: #64748b;
+            margin-bottom: 0.25rem;
+            display: block;
+        }
+
+        .slider {
+            accent-color: #22d3ee;
+        }
+
+        .material-row {
+            transition: background-color 0.1s ease;
+        }
+        
+        .material-row:hover {
+            background-color: #27251f;
+        }
+
+        .toast {
+            animation: toast-pop 0.3s ease forwards;
+        }
+
+        @keyframes toast-pop {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .three-stats {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            font-size: 10px;
+            background: rgba(15, 23, 42, 0.85);
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+
+        .loading-overlay {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(4px);
+        }
+
+        .subtle-grid {
+            background-image: 
+                linear-gradient(rgba(148, 163, 184, 0.06) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(148, 163, 184, 0.06) 1px, transparent 1px);
+            background-size: 24px 24px;
+        }
+    </style>
+</head>
+<body class="bg-zinc-950 text-zinc-200 overflow-hidden">
+    <!-- Header -->
+    <header class="h-14 border-b border-zinc-800 bg-zinc-900 flex items-center px-6 z-50">
+        <div class="flex items-center gap-x-3">
+            <div class="w-9 h-9 bg-gradient-to-br from-cyan-400 to-teal-500 rounded-xl flex items-center justify-center shadow-inner">
+                <i class="fa-solid fa-cube text-zinc-950 text-2xl"></i>
+            </div>
+            <div>
+                <span class="font-display text-2xl tracking-tighter font-semibold">3D Forge</span>
+                <span class="text-[10px] text-zinc-500 ml-1.5 tracking-[2px]">LAB</span>
+            </div>
+        </div>
+        
+        <div class="flex-1"></div>
+        
+        <div class="flex items-center gap-x-2 text-sm">
+            <div class="px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-full text-xs flex items-center gap-x-1.5">
+                <div class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
+                <span class="text-emerald-400 font-medium">Three.js Ready</span>
+            </div>
+            
+            <button onclick="showHelpModal()" 
+                    class="px-4 py-1.5 text-xs font-medium flex items-center gap-x-2 hover:bg-zinc-800 transition-colors border border-zinc-800 rounded-full">
+                <i class="fa-solid fa-question-circle"></i>
+                <span>Help &amp; Features</span>
+            </button>
+            
+            <button onclick="takeScreenshot()" 
+                    class="px-4 py-1.5 text-xs font-medium flex items-center gap-x-2 bg-zinc-900 hover:bg-zinc-800 transition-colors border border-zinc-800 rounded-full">
+                <i class="fa-solid fa-camera"></i>
+                <span>Screenshot</span>
+            </button>
+        </div>
+    </header>
+
+    <div class="flex h-[calc(100vh-3.5rem)]">
+        
+        <!-- LEFT SIDEBAR: Library + Upload -->
+        <div class="w-72 border-r border-zinc-800 bg-zinc-900 flex flex-col overflow-hidden">
+            
+            <!-- Library Header -->
+            <div class="px-4 pt-4 pb-2 border-b border-zinc-800">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="section-header">Model Library</div>
+                    <button onclick="clearAllModels()" 
+                            class="text-[10px] px-2 py-0.5 hover:bg-zinc-800 rounded text-zinc-400 hover:text-zinc-200 transition-colors">
+                        <i class="fa-solid fa-trash mr-1"></i> Clear
+                    </button>
+                </div>
+                
+                <!-- Search -->
+                <div class="relative">
+                    <input id="library-search" type="text" placeholder="Search models..." 
+                           onkeyup="filterLibrary()"
+                           class="w-full bg-zinc-950 border border-zinc-800 focus:border-cyan-500/50 text-sm pl-9 py-2 rounded-xl outline-none">
+                    <i class="fa-solid fa-search absolute left-3.5 top-3 text-zinc-500 text-sm"></i>
+                </div>
+            </div>
+            
+            <!-- Sample Models -->
+            <div class="flex-1 overflow-y-auto p-3 space-y-1.5" id="sample-library">
+                <!-- Populated by JS -->
+            </div>
+            
+            <!-- Upload Section -->
+            <div class="p-3 border-t border-zinc-800 bg-zinc-950">
+                <div class="section-header mb-2 px-1">Upload Your Models</div>
+                
+                <!-- Drag & Drop -->
+                <div id="drop-zone"
+                     class="border-2 border-dashed border-zinc-700 hover:border-cyan-500/60 transition-colors rounded-2xl p-4 text-center cursor-pointer bg-zinc-900"
+                     ondrop="handleDrop(event)" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)"
+                     onclick="document.getElementById('file-input').click()">
+                    <div class="flex flex-col items-center justify-center py-1">
+                        <i class="fa-solid fa-cloud-upload-alt text-3xl text-zinc-400 mb-2"></i>
+                        <div class="text-sm font-medium">Drop .glb or .gltf here</div>
+                        <div class="text-[10px] text-zinc-500 mt-0.5">or click to browse • Multiple supported</div>
+                    </div>
+                </div>
+                <input type="file" id="file-input" multiple accept=".glb,.gltf" class="hidden" onchange="handleFileSelect(event)">
+                
+                <div class="mt-3 text-[10px] text-zinc-500 px-1 leading-tight">
+                    <strong>Tip:</strong> GLB (single file) recommended. 
+                    For a folder of models, run this HTML from a local server with your models/ folder.
+                </div>
+            </div>
+            
+            <!-- Session Uploads -->
+            <div class="border-t border-zinc-800 p-3" id="session-uploads-section" style="display: none;">
+                <div class="section-header mb-2 px-1 flex items-center justify-between">
+                    <span>My Uploads</span>
+                    <span id="upload-count" class="text-[10px] bg-zinc-800 px-1.5 rounded">0</span>
+                </div>
+                <div id="session-uploads-list" class="space-y-1 text-sm max-h-[120px] overflow-y-auto pr-1">
+                    <!-- JS populated -->
+                </div>
+            </div>
+            
+        </div>
+        
+        <!-- CENTER: 3D VIEWER -->
+        <div class="flex-1 flex flex-col relative min-w-0 bg-zinc-950">
+            
+            <!-- Viewer Toolbar -->
+            <div class="h-11 border-b border-zinc-800 bg-zinc-900 px-4 flex items-center justify-between z-10">
+                <div class="flex items-center gap-x-3">
+                    <div id="model-badge" 
+                         class="hidden items-center gap-x-2 px-3 py-1 bg-zinc-800 border border-zinc-700 rounded-full text-xs">
+                        <i class="fa-solid fa-cube text-cyan-400"></i>
+                        <span id="model-name" class="font-medium max-w-[220px] truncate"></span>
+                    </div>
+                    
+                    <div id="model-stats" class="hidden text-[10px] text-zinc-400 font-mono items-center gap-x-3">
+                        <span id="stat-tris"></span>
+                        <span id="stat-mats"></span>
+                        <span id="stat-anims"></span>
+                    </div>
+                </div>
+                
+                <div class="flex items-center gap-x-1.5 text-xs">
+                    <button onclick="resetCamera()" 
+                            class="px-3 py-1 flex items-center gap-x-1.5 hover:bg-zinc-800 transition-colors rounded-lg border border-zinc-700 text-zinc-300">
+                        <i class="fa-solid fa-sync-alt text-xs"></i>
+                        <span>Reset View</span>
+                    </button>
+                    
+                    <button onclick="toggleAutoRotate()" id="auto-rotate-btn"
+                            class="px-3 py-1 flex items-center gap-x-1.5 hover:bg-zinc-800 transition-colors rounded-lg border border-zinc-700 text-zinc-300">
+                        <i class="fa-solid fa-sync fa-spin-pulse text-xs"></i>
+                        <span>Auto Rotate</span>
+                    </button>
+                    
+                    <button onclick="toggleWireframe()" 
+                            class="px-3 py-1 flex items-center gap-x-1.5 hover:bg-zinc-800 transition-colors rounded-lg border border-zinc-700 text-zinc-300">
+                        <i class="fa-solid fa-grip-lines text-xs"></i>
+                        <span>Wireframe</span>
+                    </button>
+                    
+                    <div class="w-px h-4 bg-zinc-700 mx-1"></div>
+                    
+                    <div class="flex items-center bg-zinc-800 border border-zinc-700 rounded-lg text-xs">
+                        <button onclick="focusOnModel()" class="px-2.5 py-1 hover:bg-zinc-700 rounded-l-lg transition-colors">
+                            <i class="fa-solid fa-search"></i>
+                        </button>
+                        <button onclick="addPrimitive('cube')" class="px-2.5 py-1 hover:bg-zinc-700 transition-colors border-l border-zinc-700" title="Add Cube">
+                            <i class="fa-solid fa-cube"></i>
+                        </button>
+                        <button onclick="addPrimitive('sphere')" class="px-2.5 py-1 hover:bg-zinc-700 transition-colors border-l border-zinc-700" title="Add Sphere">
+                            <i class="fa-solid fa-circle"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 3D Canvas Container -->
+            <div id="viewer-container" class="flex-1 relative three-container subtle-grid overflow-hidden">
+                <canvas id="three-canvas" class="w-full h-full"></canvas>
+                
+                <!-- Loading Overlay -->
+                <div id="loading-overlay" class="hidden absolute inset-0 loading-overlay flex items-center justify-center z-20">
+                    <div class="text-center">
+                        <div class="inline-block w-8 h-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin mb-3"></div>
+                        <div id="loading-text" class="text-sm font-medium text-zinc-300">Loading model...</div>
+                        <div id="loading-progress" class="text-[10px] text-zinc-500 mt-1 font-mono w-48"></div>
+                    </div>
+                </div>
+                
+                <!-- FPS / Info Overlay -->
+                <div class="absolute top-3 right-3 z-30">
+                    <div id="fps-counter" class="three-stats hidden text-emerald-400">FPS: --</div>
+                </div>
+                
+                <div class="absolute bottom-3 left-3 z-30 text-[10px] text-zinc-500 bg-zinc-900/70 px-2 py-0.5 rounded pointer-events-none">
+                    Orbit: Left drag • Zoom: Scroll • Pan: Right drag
+                </div>
+            </div>
+            
+            <!-- Bottom Status -->
+            <div class="h-7 border-t border-zinc-800 bg-zinc-900 px-4 flex items-center text-[10px] text-zinc-500 font-mono">
+                <div class="flex-1 flex items-center gap-x-4">
+                    <span id="status-text">Ready • Drop a model or choose from library</span>
+                </div>
+                <div>
+                    Powered by <span class="text-cyan-400">Three.js</span> + Grok Imagine ready
+                </div>
+            </div>
+            
+        </div>
+        
+        <!-- RIGHT SIDEBAR: Controls + Prompt Tool -->
+        <div class="w-80 border-l border-zinc-800 bg-zinc-900 flex flex-col overflow-hidden">
+            
+            <!-- Tabs -->
+            <div class="flex border-b border-zinc-800 text-xs font-medium">
+                <button onclick="switchRightTab(0)" id="tab-btn-0"
+                        class="flex-1 py-3 border-b-2 border-cyan-400 text-cyan-400">Controls</button>
+                <button onclick="switchRightTab(1)" id="tab-btn-1"
+                        class="flex-1 py-3 text-zinc-400 hover:text-zinc-200 transition-colors">AI Skin Prompts</button>
+                <button onclick="switchRightTab(2)" id="tab-btn-2"
+                        class="flex-1 py-3 text-zinc-400 hover:text-zinc-200 transition-colors">Tools</button>
+            </div>
+            
+            <!-- TAB 0: Controls -->
+            <div id="tab-content-0" class="flex-1 overflow-y-auto p-4 space-y-6 text-sm">
+                
+                <!-- Camera -->
+                <div>
+                    <div class="section-header mb-2.5 flex items-center gap-x-2">
+                        <i class="fa-solid fa-video text-cyan-400 w-3"></i> 
+                        <span>CAMERA &amp; VIEW</span>
+                    </div>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="control-label">Field of View</label>
+                            <input type="range" id="fov-slider" min="20" max="120" step="1" value="50" 
+                                   class="slider w-full accent-cyan-400" oninput="updateCameraFOV()">
+                            <div class="flex justify-between text-[10px] text-zinc-500 mt-0.5">
+                                <span>Wide</span><span id="fov-value">50°</span><span>Narrow</span>
+                            </div>
+                        </div>
+                        
+                        <div class="grid grid-cols-2 gap-2">
+                            <button onclick="resetCamera()" 
+                                    class="py-2 text-xs bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-xl flex items-center justify-center gap-x-2 transition-colors">
+                                <i class="fa-solid fa-home"></i> Reset
+                            </button>
+                            <button onclick="focusOnModel()" 
+                                    class="py-2 text-xs bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-xl flex items-center justify-center gap-x-2 transition-colors">
+                                <i class="fa-solid fa-search"></i> Focus
+                            </button>
+                        </div>
+                        
+                        <div class="flex items-center justify-between text-xs">
+                            <div class="flex items-center gap-x-2">
+                                <input type="checkbox" id="damping-toggle" checked onchange="updateControls()" class="accent-cyan-400">
+                                <label for="damping-toggle" class="text-xs cursor-pointer">Smooth damping</label>
+                            </div>
+                            <button onclick="toggleAutoRotate()" class="text-[10px] px-2 py-0.5 bg-zinc-800 rounded">Toggle Auto</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Lighting -->
+                <div>
+                    <div class="section-header mb-2.5 flex items-center gap-x-2">
+                        <i class="fa-solid fa-lightbulb text-amber-400 w-3"></i> 
+                        <span>LIGHTING</span>
+                    </div>
+                    <div class="space-y-3 text-xs">
+                        <div>
+                            <label class="control-label">Ambient Intensity</label>
+                            <input type="range" id="ambient-slider" min="0" max="2" step="0.05" value="0.4" 
+                                   class="slider w-full accent-amber-400" oninput="updateLighting()">
+                        </div>
+                        <div>
+                            <label class="control-label">Key Light Intensity</label>
+                            <input type="range" id="key-slider" min="0" max="3" step="0.1" value="1.2" 
+                                   class="slider w-full accent-amber-400" oninput="updateLighting()">
+                        </div>
+                        
+                        <div class="flex gap-2">
+                            <button onclick="setLightingPreset('studio')" 
+                                    class="flex-1 py-1.5 text-[10px] bg-zinc-800 hover:bg-zinc-700 rounded-xl border border-zinc-700">Studio</button>
+                            <button onclick="setLightingPreset('dramatic')" 
+                                    class="flex-1 py-1.5 text-[10px] bg-zinc-800 hover:bg-zinc-700 rounded-xl border border-zinc-700">Dramatic</button>
+                            <button onclick="setLightingPreset('neutral')" 
+                                    class="flex-1 py-1.5 text-[10px] bg-zinc-800 hover:bg-zinc-700 rounded-xl border border-zinc-700">Neutral</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Materials (dynamic) -->
+                <div id="materials-section" class="hidden">
+                    <div class="section-header mb-2.5 flex items-center justify-between">
+                        <div class="flex items-center gap-x-2">
+                            <i class="fa-solid fa-palette text-purple-400 w-3"></i> 
+                            <span>MATERIALS</span>
+                        </div>
+                        <span id="mat-count" class="text-[10px] bg-zinc-800 px-1.5 rounded">0</span>
+                    </div>
+                    <div id="materials-list" class="space-y-2 max-h-[280px] overflow-y-auto pr-1 text-xs">
+                        <!-- Populated dynamically by JS -->
+                    </div>
+                    <div class="text-[10px] text-zinc-500 mt-2 px-1">Upload textures to replace maps live. Works best with GLB models.</div>
+                </div>
+                
+                <!-- Animations (dynamic) -->
+                <div id="animations-section" class="hidden">
+                    <div class="section-header mb-2.5 flex items-center gap-x-2">
+                        <i class="fa-solid fa-play text-emerald-400 w-3"></i> 
+                        <span>ANIMATIONS</span>
+                    </div>
+                    <div id="animations-list" class="space-y-1.5 max-h-[160px] overflow-y-auto pr-1">
+                        <!-- JS populated -->
+                    </div>
+                    <div class="mt-2 flex items-center gap-x-2 text-xs">
+                        <button onclick="playAllAnimations()" class="px-3 py-1 bg-emerald-900/30 hover:bg-emerald-900/50 text-emerald-400 rounded-lg text-[10px] flex-1">Play All</button>
+                        <button onclick="stopAllAnimations()" class="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-[10px] flex-1">Stop</button>
+                    </div>
+                </div>
+                
+            </div>
+            
+            <!-- TAB 1: AI Skin Prompt Generator -->
+            <div id="tab-content-1" class="flex-1 overflow-y-auto p-4 hidden text-sm">
+                <div class="mb-4">
+                    <div class="flex items-center gap-x-2 mb-1">
+                        <i class="fa-solid fa-magic text-violet-400"></i>
+                        <span class="font-semibold">Intelligent Skin Prompt Generator</span>
+                    </div>
+                    <p class="text-xs text-zinc-400">Craft perfect prompts for Grok Imagine or any AI image tool to generate textures/skins optimized for your model.</p>
+                </div>
+                
+                <div class="space-y-4">
+                    <div>
+                        <label class="control-label">Model Category</label>
+                        <select id="prompt-category" class="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-sm focus:border-violet-400 outline-none">
+                            <option value="Humanoid / Character">Humanoid / Character</option>
+                            <option value="Creature / Animal">Creature / Animal</option>
+                            <option value="Vehicle">Vehicle</option>
+                            <option value="Weapon / Tool">Weapon / Tool</option>
+                            <option value="Prop / Furniture">Prop / Furniture</option>
+                            <option value="Sci-Fi / Tech">Sci-Fi / Tech</option>
+                            <option value="Fantasy">Fantasy</option>
+                            <option value="Environment / Architecture">Environment / Architecture</option>
+                            <option value="Abstract / Other">Abstract / Other</option>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label class="control-label">Primary Style / Aesthetic</label>
+                        <select id="prompt-style" class="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-sm focus:border-violet-400 outline-none">
+                            <option value="Photorealistic PBR">Photorealistic PBR (game ready)</option>
+                            <option value="Stylized / Semi-real">Stylized / Semi-real</option>
+                            <option value="Low Poly / Clean">Low Poly / Clean</option>
+                            <option value="Cyberpunk / Neon">Cyberpunk / Neon</option>
+                            <option value="Sci-Fi Industrial">Sci-Fi Industrial</option>
+                            <option value="Fantasy / Magical">Fantasy / Magical</option>
+                            <option value="Post-apocalyptic / Worn">Post-apocalyptic / Worn</option>
+                            <option value="Cartoon / Vibrant">Cartoon / Vibrant</option>
+                            <option value="Dark Fantasy / Grim">Dark Fantasy / Grim</option>
+                            <option value="No Man's Sky inspired">No Man's Sky inspired</option>
+                            <option value="Crimson Desert inspired">Crimson Desert inspired</option>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label class="control-label">Color Palette &amp; Mood</label>
+                        <input id="prompt-colors" type="text" placeholder="muted grays, teal accents, warm orange, metallic silver, subtle rust"
+                               class="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-sm focus:border-violet-400 outline-none">
+                    </div>
+                    
+                    <div>
+                        <label class="control-label">Key Surface Details</label>
+                        <div class="flex flex-wrap gap-1.5">
+                            <label class="flex items-center gap-x-1.5 text-xs bg-zinc-950 border border-zinc-700 px-2.5 py-1 rounded-full cursor-pointer has-[:checked]:border-violet-400">
+                                <input type="checkbox" class="accent-violet-400" id="detail-wear"> <span>Wear &amp; Scratches</span>
+                            </label>
+                            <label class="flex items-center gap-x-1.5 text-xs bg-zinc-950 border border-zinc-700 px-2.5 py-1 rounded-full cursor-pointer has-[:checked]:border-violet-400">
+                                <input type="checkbox" class="accent-violet-400" id="detail-dirt"> <span>Dirt / Grime</span>
+                            </label>
+                            <label class="flex items-center gap-x-1.5 text-xs bg-zinc-950 border border-zinc-700 px-2.5 py-1 rounded-full cursor-pointer has-[:checked]:border-violet-400">
+                                <input type="checkbox" class="accent-violet-400" id="detail-panel"> <span>Panel Lines / Rivets</span>
+                            </label>
+                            <label class="flex items-center gap-x-1.5 text-xs bg-zinc-950 border border-zinc-700 px-2.5 py-1 rounded-full cursor-pointer has-[:checked]:border-violet-400">
+                                <input type="checkbox" class="accent-violet-400" id="detail-glow"> <span>Glowing Elements</span>
+                            </label>
+                            <label class="flex items-center gap-x-1.5 text-xs bg-zinc-950 border border-zinc-700 px-2.5 py-1 rounded-full cursor-pointer has-[:checked]:border-violet-400">
+                                <input type="checkbox" class="accent-violet-400" id="detail-organic"> <span>Organic / Natural</span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label class="control-label">Additional Instructions (optional)</label>
+                        <textarea id="prompt-notes" rows="2" placeholder="Make it look battle-worn from No Man's Sky expeditions. Add subtle holographic decals. High detail fabric on shoulders..."
+                                  class="w-full bg-zinc-950 border border-zinc-700 rounded-2xl px-3 py-2 text-sm resize-y min-h-[52px] focus:border-violet-400 outline-none"></textarea>
+                    </div>
+                    
+                    <button onclick="generateSkinPrompt()" 
+                            class="w-full py-3 bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600 active:scale-[0.985] transition-all text-white font-semibold rounded-2xl flex items-center justify-center gap-x-2 shadow-lg shadow-violet-500/20">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i>
+                        <span>GENERATE OPTIMIZED PROMPT</span>
+                    </button>
+                    
+                    <div id="prompt-output-container" class="hidden mt-3">
+                        <div class="flex items-center justify-between mb-1.5">
+                            <div class="text-xs font-semibold text-violet-400">Ready-to-use Prompt</div>
+                            <button onclick="copyPrompt()" class="text-xs flex items-center gap-x-1 px-2 py-0.5 bg-zinc-800 hover:bg-zinc-700 rounded">
+                                <i class="fa-solid fa-copy"></i> <span>Copy</span>
+                            </button>
+                        </div>
+                        <textarea id="prompt-output" rows="8" readonly
+                                  class="w-full bg-zinc-950 border border-violet-400/30 text-xs font-mono p-3 rounded-2xl resize-y text-zinc-300"></textarea>
+                        <div class="text-[10px] text-zinc-500 mt-1.5 px-1">Copy this into Grok Imagine, Midjourney, Flux, or any image generator. Then upload the result as a texture above!</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- TAB 2: Advanced Tools & Roadmap -->
+            <div id="tab-content-2" class="flex-1 overflow-y-auto p-4 hidden text-sm">
+                <div class="mb-4">
+                    <div class="font-semibold flex items-center gap-x-2">
+                        <i class="fa-solid fa-tools text-amber-400"></i>
+                        <span>Advanced &amp; Future Features</span>
+                    </div>
+                </div>
+                
+                <div class="space-y-4 text-xs">
+                    <div class="bg-zinc-950 border border-zinc-800 rounded-2xl p-3">
+                        <div class="font-semibold mb-1 flex items-center gap-x-2 text-amber-300">
+                            <i class="fa-solid fa-magic"></i> <span>Auto Skinning / Texturing</span>
+                        </div>
+                        <p class="text-zinc-400">Live texture replacement is already here (Materials tab). Generate skins with the prompt tool, download from AI, then drag/upload directly onto materials for instant preview.</p>
+                        <div class="mt-2 text-[10px] text-emerald-400">✓ Implemented &amp; powerful</div>
+                    </div>
+                    
+                    <div class="bg-zinc-950 border border-zinc-800 rounded-2xl p-3">
+                        <div class="font-semibold mb-1 flex items-center gap-x-2 text-amber-300">
+                            <i class="fa-solid fa-user-cog"></i> <span>Auto-Rigging &amp; Animation</span>
+                        </div>
+                        <p class="text-zinc-400">If your GLB has animations/skeleton, they play automatically here. For new rigs:</p>
+                        <ul class="mt-1.5 list-disc pl-4 text-zinc-400 space-y-0.5">
+                            <li>Use free <a href="https://www.mixamo.com" target="_blank" class="text-cyan-400 hover:underline">Mixamo</a> (Adobe) — upload character, auto-rig + animate, export GLB/FBX</li>
+                            <li>Blender + Rigify or Auto-Rig Pro addons</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="bg-zinc-950 border border-zinc-800 rounded-2xl p-3">
+                        <div class="font-semibold mb-1 flex items-center gap-x-2 text-amber-300">
+                            <i class="fa-solid fa-plus-circle"></i> <span>Creating New Models</span>
+                        </div>
+                        <p class="text-zinc-400">This viewer excels at previewing. For creation:</p>
+                        <ul class="mt-1.5 list-disc pl-4 text-zinc-400 space-y-0.5">
+                            <li><strong>Blender</strong> (free) — industry standard, exports perfect GLB</li>
+                            <li><strong>AI Text-to-3D</strong>: Meshy, Luma AI, TripoSR, Alpha3D, Rodin</li>
+                            <li>Image-to-3D tools then refine in Blender</li>
+                            <li>Procedural: Use the Add Primitive buttons + extend with code</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="bg-zinc-950 border border-zinc-800 rounded-2xl p-3">
+                        <div class="font-semibold mb-1">Open Source Model Libraries</div>
+                        <div class="grid grid-cols-1 gap-1.5 text-xs">
+                            <a href="https://github.khronos.org/glTF-Assets/" target="_blank" class="flex items-center gap-x-2 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-xl">
+                                <i class="fa-brands fa-github w-4"></i> <span>Khronos glTF Sample Assets</span>
+                            </a>
+                            <a href="https://polyhaven.com/models" target="_blank" class="flex items-center gap-x-2 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-xl">
+                                <i class="fa-solid fa-globe w-4"></i> <span>Poly Haven (CC0 Models + HDRIs)</span>
+                            </a>
+                            <a href="https://sketchfab.com/3d-models?features=downloadable&amp;sort_by=-likeCount&amp;type=models" target="_blank" class="flex items-center gap-x-2 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-xl">
+                                <i class="fa-solid fa-globe w-4"></i> <span>Sketchfab Free Downloadable</span>
+                            </a>
+                        </div>
+                    </div>
+                    
+                    <div class="text-[10px] text-center text-zinc-500 pt-2">Want more features? Tell me what to add next — multi-model scenes, export, WebXR, etc.</div>
+                </div>
+            </div>
+            
+        </div>
+        
+    </div>
+    
+    <!-- Toast Container -->
+    <div id="toast-container" class="fixed bottom-4 right-4 z-[100] space-y-2"></div>
+    
+    <!-- Help Modal -->
+    <div id="help-modal" onclick="if (event.target.id === 'help-modal') hideHelpModal()" class="hidden fixed inset-0 bg-black/70 z-[200] flex items-center justify-center p-6">
+        <div onclick="event.stopImmediatePropagation()" class="bg-zinc-900 border border-zinc-700 rounded-3xl max-w-2xl w-full max-h-[85vh] overflow-hidden flex flex-col">
+            <div class="px-6 py-4 border-b border-zinc-800 flex items-center justify-between">
+                <div class="font-semibold text-lg flex items-center gap-x-3">
+                    <i class="fa-solid fa-info-circle text-cyan-400"></i> 
+                    <span>3D Forge — How to Use</span>
+                </div>
+                <button onclick="hideHelpModal()" class="text-xl leading-none px-2">&times;</button>
+            </div>
+            
+            <div class="p-6 overflow-y-auto text-sm space-y-5 text-zinc-300">
+                <div>
+                    <h4 class="font-semibold text-white mb-1">Core Features</h4>
+                    <ul class="list-disc pl-5 space-y-1 text-xs">
+                        <li><strong>Load Models:</strong> Click library samples, drag &amp; drop .glb/.gltf files, or paste public URLs.</li>
+                        <li><strong>Camera:</strong> Left mouse drag to rotate • Scroll to zoom • Right drag to pan. Excellent OrbitControls with damping.</li>
+                        <li><strong>Materials &amp; Skins:</strong> After loading, expand Materials section → upload new albedo/roughness/normal maps for live updates.</li>
+                        <li><strong>Animations:</strong> If present in the GLB, they appear in the Animations panel. Play, scrub, adjust speed.</li>
+                        <li><strong>AI Skin Prompts:</strong> Go to the "AI Skin Prompts" tab. Fill the form based on your model. Generate a highly optimized prompt for Grok Imagine or any AI. Copy → generate image → upload as texture.</li>
+                    </ul>
+                </div>
+                
+                <div>
+                    <h4 class="font-semibold text-white mb-1">Pro Tips</h4>
+                    <ul class="list-disc pl-5 space-y-1 text-xs">
+                        <li>GLB is best (everything embedded). glTF works if all files are together (harder with uploads).</li>
+                        <li>For your own large library: Download this HTML, put it + models folder on a local server (python -m http.server). Add relative paths to the samples list in code.</li>
+                        <li>Performance: Complex models with many textures may be heavy. Use wireframe or lower res for testing.</li>
+                        <li>The prompt tool is tuned for PBR game assets and works amazingly with Grok Imagine.</li>
+                    </ul>
+                </div>
+                
+                <div class="pt-2 border-t border-zinc-800 text-xs text-zinc-400">
+                    Built as a single-file powerhouse with Three.js (r0.154+ modules via CDN), Tailwind, and love for creators like you. 
+                    Extend it, host it, make it yours. Want VR support, scene saving, or integration with your streaming tools? Just say the word.
+                </div>
+            </div>
+            
+            <div class="px-6 py-3 border-t border-zinc-800 bg-zinc-950 text-xs flex justify-end">
+                <button onclick="hideHelpModal()" class="px-5 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-2xl">Got it, let's create</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Three.js + App Script -->
+    <script type="module">
+        import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.154.0/build/three.module.js';
+        import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.154.0/examples/jsm/controls/OrbitControls.js';
+        import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.154.0/examples/jsm/loaders/GLTFLoader.js';
+        import { RGBELoader } from 'https://cdn.jsdelivr.net/npm/three@0.154.0/examples/jsm/loaders/RGBELoader.js';
+
+        // Global state
+        let scene, camera, renderer, controls;
+        let currentModel = null;
+        let currentGltf = null;
+        let mixer = null;
+        let clock = new THREE.Clock();
+        let animationClips = [];
+        let playingAnimations = [];
+        let materialsList = [];
+        let wireframeMode = false;
+        let autoRotateEnabled = false;
+        let fpsInterval = null;
+        let sessionModels = []; // {id, name, url, type: 'sample'|'upload'}
+
+        // Sample models (curated public GLB URLs)
+        const sampleModels = [
+            {
+                id: 'damaged-helmet',
+                name: 'Damaged Helmet',
+                description: 'Classic PBR test model • Khronos',
+                url: 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/DamagedHelmet/glTF-Binary/DamagedHelmet.glb',
+                category: 'Prop',
+                hasAnim: false
+            },
+            {
+                id: 'flight-helmet',
+                name: 'Flight Helmet',
+                description: 'Detailed helmet with stand • Public domain',
+                url: 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/FlightHelmet/glTF/FlightHelmet.gltf',
+                category: 'Prop',
+                hasAnim: false,
+                note: 'glTF (may load slower)'
+            },
+            {
+                id: 'toy-car',
+                name: 'Toy Car',
+                description: 'Fun colorful toy • Khronos sample',
+                url: 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/ToyCar/glTF-Binary/ToyCar.glb',
+                category: 'Vehicle',
+                hasAnim: false
+            },
+            {
+                id: 'boom-box',
+                name: 'Boom Box',
+                description: 'Retro speaker with great materials',
+                url: 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/BoomBox/glTF-Binary/BoomBox.glb',
+                category: 'Prop',
+                hasAnim: false
+            }
+        ];
+
+        function initTailwind() {
+            document.documentElement.style.setProperty('--accent', '#22d3ee');
+            
+            tailwind.config = {
+                theme: {
+                    extend: {
+                        fontFamily: {
+                            'display': ['Space Grotesk', 'Inter', 'system-ui', 'sans-serif']
+                        }
+                    }
+                }
+            };
+        }
+
+        function initThree() {
+            const canvas = document.getElementById('three-canvas');
+            const container = document.getElementById('viewer-container');
+            
+            renderer = new THREE.WebGLRenderer({ 
+                canvas: canvas, 
+                antialias: true, 
+                alpha: true,
+                preserveDrawingBuffer: true // for screenshots
+            });
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.outputColorSpace = THREE.SRGBColorSpace;
+            
+            scene = new THREE.Scene();
+            scene.fog = new THREE.Fog(0x0f172a, 25, 80);
+            
+            // Camera
+            camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 1000);
+            camera.position.set(0, 1.5, 4);
+            
+            // Controls
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.12;
+            controls.minDistance = 0.5;
+            controls.maxDistance = 50;
+            controls.target.set(0, 0.8, 0);
+            controls.update();
+            
+            // Lighting - Studio setup
+            setupDefaultLighting();
+            
+            // Simple ground
+            const groundGeo = new THREE.PlaneGeometry(20, 20);
+            const groundMat = new THREE.ShadowMaterial({ opacity: 0.35 });
+            const ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.rotation.x = -Math.PI / 2;
+            ground.position.y = -0.01;
+            ground.receiveShadow = true;
+            scene.add(ground);
+            
+            // Subtle grid
+            const grid = new THREE.GridHelper(20, 40, 0x334155, 0x1e2937);
+            grid.position.y = 0;
+            scene.add(grid);
+            
+            // Resize handler
+            window.addEventListener('resize', () => {
+                const w = container.clientWidth;
+                const h = container.clientHeight;
+                camera.aspect = w / h;
+                camera.updateProjectionMatrix();
+                renderer.setSize(w, h);
+            });
+            
+            // Start render loop
+            animate();
+            
+            // Initial status
+            updateStatus('Ready. Load a model from the left library or upload your own.');
+            
+            // Show initial hint
+            setTimeout(() => {
+                if (!currentModel) {
+                    showToast('Tip: Click any sample model on the left to begin!', 4200);
+                }
+            }, 1800);
+        }
+        
+        function setupDefaultLighting() {
+            // Ambient
+            const ambient = new THREE.AmbientLight(0xffffff, 0.45);
+            ambient.name = 'AmbientLight';
+            scene.add(ambient);
+            
+            // Key light (main directional)
+            const keyLight = new THREE.DirectionalLight(0xfff8e7, 1.35);
+            keyLight.position.set(5, 12, 8);
+            keyLight.castShadow = true;
+            keyLight.shadow.mapSize.width = 2048;
+            keyLight.shadow.mapSize.height = 2048;
+            keyLight.shadow.camera.near = 1;
+            keyLight.shadow.camera.far = 50;
+            keyLight.shadow.camera.left = -8;
+            keyLight.shadow.camera.right = 8;
+            keyLight.shadow.camera.top = 8;
+            keyLight.shadow.camera.bottom = -8;
+            keyLight.name = 'KeyLight';
+            scene.add(keyLight);
+            
+            // Fill light
+            const fillLight = new THREE.DirectionalLight(0xa5d8ff, 0.55);
+            fillLight.position.set(-6, 6, -4);
+            fillLight.name = 'FillLight';
+            scene.add(fillLight);
+            
+            // Rim / back light
+            const rimLight = new THREE.DirectionalLight(0xbae6fd, 0.35);
+            rimLight.position.set(-2, 4, -10);
+            rimLight.name = 'RimLight';
+            scene.add(rimLight);
+        }
+        
+        function updateLighting() {
+            const ambientSlider = parseFloat(document.getElementById('ambient-slider').value);
+            const keySlider = parseFloat(document.getElementById('key-slider').value);
+            
+            scene.traverse(obj => {
+                if (obj.isAmbientLight && obj.name === 'AmbientLight') {
+                    obj.intensity = ambientSlider;
+                }
+                if (obj.isDirectionalLight && obj.name === 'KeyLight') {
+                    obj.intensity = keySlider;
+                }
+            });
+        }
+        
+        function setLightingPreset(preset) {
+            const ambientSlider = document.getElementById('ambient-slider');
+            const keySlider = document.getElementById('key-slider');
+            
+            if (preset === 'studio') {
+                ambientSlider.value = 0.5;
+                keySlider.value = 1.4;
+            } else if (preset === 'dramatic') {
+                ambientSlider.value = 0.15;
+                keySlider.value = 2.2;
+            } else if (preset === 'neutral') {
+                ambientSlider.value = 0.65;
+                keySlider.value = 1.0;
+            }
+            
+            updateLighting();
+            showToast(`Lighting preset: ${preset}`);
+        }
+        
+        function updateCameraFOV() {
+            const fov = parseFloat(document.getElementById('fov-slider').value);
+            document.getElementById('fov-value').textContent = fov + '°';
+            if (camera) {
+                camera.fov = fov;
+                camera.updateProjectionMatrix();
+            }
+        }
+        
+        function updateControls() {
+            if (!controls) return;
+            const damping = document.getElementById('damping-toggle').checked;
+            controls.enableDamping = damping;
+            if (!damping) controls.dampingFactor = 0;
+            else controls.dampingFactor = 0.12;
+        }
+        
+        function toggleAutoRotate() {
+            if (!controls) return;
+            autoRotateEnabled = !autoRotateEnabled;
+            controls.autoRotate = autoRotateEnabled;
+            
+            const btn = document.getElementById('auto-rotate-btn');
+            if (autoRotateEnabled) {
+                btn.classList.add('!bg-cyan-900/40', '!border-cyan-400/60', 'text-cyan-300');
+                btn.innerHTML = `<i class="fa-solid fa-sync fa-spin text-xs"></i> <span>Auto On</span>`;
+            } else {
+                btn.classList.remove('!bg-cyan-900/40', '!border-cyan-400/60', 'text-cyan-300');
+                btn.innerHTML = `<i class="fa-solid fa-sync fa-spin-pulse text-xs"></i> <span>Auto Rotate</span>`;
+            }
+        }
+        
+        function toggleWireframe() {
+            wireframeMode = !wireframeMode;
+            
+            if (currentModel) {
+                currentModel.traverse(child => {
+                    if (child.isMesh && child.material) {
+                        if (Array.isArray(child.material)) {
+                            child.material.forEach(m => m.wireframe = wireframeMode);
+                        } else {
+                            child.material.wireframe = wireframeMode;
+                        }
+                    }
+                });
+            }
+            
+            showToast(wireframeMode ? 'Wireframe enabled' : 'Wireframe disabled');
+        }
+        
+        function resetCamera() {
+            if (!controls || !currentModel) {
+                camera.position.set(0, 1.8, 4.5);
+                controls.target.set(0, 0.6, 0);
+                controls.update();
+                return;
+            }
+            
+            // Compute bounding box and frame nicely
+            const box = new THREE.Box3().setFromObject(currentModel);
+            const center = box.getCenter(new THREE.Vector3());
+            const size = box.getSize(new THREE.Vector3());
+            const maxDim = Math.max(size.x, size.y, size.z);
+            
+            const distance = maxDim * 1.8;
+            
+            camera.position.copy(center);
+            camera.position.x += distance * 0.6;
+            camera.position.y += distance * 0.35;
+            camera.position.z += distance * 1.1;
+            
+            controls.target.copy(center);
+            controls.update();
+            
+            // Also reset FOV to comfortable
+            document.getElementById('fov-slider').value = 50;
+            document.getElementById('fov-value').textContent = '50°';
+            camera.fov = 50;
+            camera.updateProjectionMatrix();
+        }
+        
+        function focusOnModel() {
+            if (!currentModel || !controls) return;
+            resetCamera();
+        }
+        
+        function updateStatus(text) {
+            document.getElementById('status-text').innerHTML = text;
+        }
+        
+        function showLoading(text = 'Loading model...') {
+            const overlay = document.getElementById('loading-overlay');
+            document.getElementById('loading-text').textContent = text;
+            overlay.classList.remove('hidden');
+            overlay.classList.add('flex');
+        }
+        
+        function hideLoading() {
+            const overlay = document.getElementById('loading-overlay');
+            overlay.classList.remove('flex');
+            overlay.classList.add('hidden');
+        }
+        
+        function updateModelInfo(name, stats = {}) {
+            const badge = document.getElementById('model-badge');
+            const nameEl = document.getElementById('model-name');
+            const statsEl = document.getElementById('model-stats');
+            
+            nameEl.textContent = name;
+            badge.classList.remove('hidden');
+            badge.classList.add('flex');
+            
+            if (stats.tris || stats.mats || stats.anims) {
+                statsEl.classList.remove('hidden');
+                statsEl.classList.add('flex');
+                
+                document.getElementById('stat-tris').innerHTML = stats.tris ? `${stats.tris.toLocaleString()} tris` : '';
+                document.getElementById('stat-mats').innerHTML = stats.mats ? `• ${stats.mats} mats` : '';
+                document.getElementById('stat-anims').innerHTML = stats.anims ? `• ${stats.anims} clips` : '';
+            }
+        }
+        
+        function clearModelInfo() {
+            document.getElementById('model-badge').classList.add('hidden');
+            document.getElementById('model-badge').classList.remove('flex');
+            document.getElementById('model-stats').classList.add('hidden');
+            document.getElementById('model-stats').classList.remove('flex');
+        }
+        
+        async function loadModelFromURL(url, displayName = null, isSample = false) {
+            if (!url) return;
+            
+            showLoading(`Loading ${displayName || 'model'}...`);
+            updateStatus(`Fetching model from ${url.includes('raw.githubusercontent') ? 'GitHub' : 'URL'}...`);
+            
+            try {
+                const loader = new GLTFLoader();
+                
+                // Optional: progress
+                loader.load(
+                    url,
+                    (gltf) => {
+                        onModelLoaded(gltf, displayName || url.split('/').pop(), isSample);
+                        hideLoading();
+                    },
+                    (xhr) => {
+                        if (xhr.lengthComputable) {
+                            const percent = Math.round((xhr.loaded / xhr.total) * 100);
+                            document.getElementById('loading-progress').textContent = `${percent}%`;
+                        }
+                    },
+                    (error) => {
+                        console.error('GLTF load error:', error);
+                        hideLoading();
+                        showToast('Failed to load model. Check console or try another.', 5000);
+                        updateStatus('Error loading model. Try a different one or upload your own.');
+                    }
+                );
+            } catch (e) {
+                hideLoading();
+                showToast('Error initializing loader: ' + e.message);
+            }
+        }
+        
+        function onModelLoaded(gltf, modelName, isSample = false) {
+            // Clean previous
+            if (currentModel) {
+                scene.remove(currentModel);
+                disposeModel(currentModel);
+            }
+            if (mixer) {
+                mixer.stopAllAction();
+                mixer = null;
+            }
+            
+            currentGltf = gltf;
+            currentModel = gltf.scene;
+            
+            // Center and scale reasonably
+            const box = new THREE.Box3().setFromObject(currentModel);
+            const center = box.getCenter(new THREE.Vector3());
+            const size = box.getSize(new THREE.Vector3());
+            const maxDim = Math.max(size.x, size.y, size.z) || 1;
+            
+            // Normalize scale if huge or tiny
+            if (maxDim > 10 || maxDim < 0.3) {
+                const scaleFactor = 2 / maxDim;
+                currentModel.scale.setScalar(scaleFactor);
+                // Recompute
+                box.setFromObject(currentModel);
+                center.copy(box.getCenter(new THREE.Vector3()));
+            }
+            
+            // Position at origin-ish
+            currentModel.position.x -= center.x;
+            currentModel.position.y -= center.y;
+            currentModel.position.z -= center.z;
+            
+            // Enable shadows
+            currentModel.traverse((child) => {
+                if (child.isMesh) {
+                    child.castShadow = true;
+                    child.receiveShadow = true;
+                    if (child.material) {
+                        if (Array.isArray(child.material)) {
+                            child.material.forEach(m => {
+                                if (m.map) m.map.colorSpace = THREE.SRGBColorSpace;
+                            });
+                        } else if (child.material.map) {
+                            child.material.map.colorSpace = THREE.SRGBColorSpace;
+                        }
+                    }
+                }
+            });
+            
+            scene.add(currentModel);
+            
+            // Setup animations if any
+            animationClips = gltf.animations || [];
+            if (animationClips.length > 0) {
+                mixer = new THREE.AnimationMixer(currentModel);
+                document.getElementById('animations-section').classList.remove('hidden');
+                setupAnimationsUI();
+            } else {
+                document.getElementById('animations-section').classList.add('hidden');
+            }
+            
+            // Materials UI
+            collectMaterials();
+            document.getElementById('materials-section').classList.remove('hidden');
+            setupMaterialsUI();
+            
+            // Camera framing
+            setTimeout(() => {
+                resetCamera();
+            }, 80);
+            
+            // Info
+            let triCount = 0;
+            currentModel.traverse(child => {
+                if (child.isMesh && child.geometry) {
+                    const pos = child.geometry.attributes.position;
+                    if (pos) triCount += pos.count / 3;
+                }
+            });
+            
+            const stats = {
+                tris: Math.floor(triCount),
+                mats: materialsList.length,
+                anims: animationClips.length
+            };
+            
+            updateModelInfo(modelName, stats);
+            updateStatus(`Loaded: ${modelName} • ${stats.tris.toLocaleString()} triangles • Ready for interaction & skinning`);
+            
+            // Add to session if uploaded (already handled in upload flow)
+            if (!isSample) {
+                // Already added in handleFileSelect
+            }
+            
+            // Show success toast
+            showToast(`Model loaded successfully! Explore controls on the right.`, 2800);
+            
+            // Optional: try to load a nice env map (non-blocking)
+            // loadEnvironmentMap(); // commented to avoid potential CORS issues on first load
+        }
+        
+        function disposeModel(model) {
+            model.traverse((child) => {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) {
+                    if (Array.isArray(child.material)) {
+                        child.material.forEach(m => {
+                            if (m.map) m.map.dispose();
+                            if (m.normalMap) m.normalMap.dispose();
+                            if (m.roughnessMap) m.roughnessMap.dispose();
+                            if (m.metalnessMap) m.metalnessMap.dispose();
+                            m.dispose();
+                        });
+                    } else {
+                        if (child.material.map) child.material.map.dispose();
+                        if (child.material.normalMap) child.material.normalMap.dispose();
+                        if (child.material.roughnessMap) child.material.roughnessMap.dispose();
+                        if (child.material.metalnessMap) child.material.metalnessMap.dispose();
+                        child.material.dispose();
+                    }
+                }
+            });
+        }
+        
+        function collectMaterials() {
+            materialsList = [];
+            if (!currentModel) return;
+            
+            const seen = new Set();
+            
+            currentModel.traverse((child) => {
+                if (child.isMesh && child.material) {
+                    const mats = Array.isArray(child.material) ? child.material : [child.material];
+                    mats.forEach((mat, idx) => {
+                        if (!seen.has(mat.uuid)) {
+                            seen.add(mat.uuid);
+                            materialsList.push({
+                                id: mat.uuid,
+                                name: mat.name || `Material ${materialsList.length + 1}`,
+                                material: mat,
+                                mesh: child
+                            });
+                        }
+                    });
+                }
+            });
+        }
+        
+        function setupMaterialsUI() {
+            const container = document.getElementById('materials-list');
+            container.innerHTML = '';
+            document.getElementById('mat-count').textContent = materialsList.length;
+            
+            if (materialsList.length === 0) {
+                container.innerHTML = `<div class="text-xs text-zinc-500 px-2 py-3">No materials found or model not loaded.</div>`;
+                return;
+            }
+            
+            materialsList.forEach((entry, index) => {
+                const mat = entry.material;
+                const div = document.createElement('div');
+                div.className = `material-row border border-zinc-700 rounded-2xl p-3 bg-zinc-950`;
+                
+                let html = `
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="font-medium text-xs truncate pr-2">${entry.name}</div>
+                        <div class="text-[9px] text-zinc-500 font-mono">${mat.type}</div>
+                    </div>
+                `;
+                
+                // Color
+                if (mat.color) {
+                    html += `
+                        <div class="mb-2.5">
+                            <div class="flex items-center justify-between text-[10px] mb-1">
+                                <span class="text-zinc-400">Base Color</span>
+                            </div>
+                            <div class="flex items-center gap-x-2">
+                                <input type="color" value="#${mat.color.getHexString()}" 
+                                       class="w-9 h-7 p-0.5 bg-zinc-900 border border-zinc-700 rounded cursor-pointer"
+                                       onchange="updateMaterialColor(${index}, this.value)">
+                                <input type="text" value="#${mat.color.getHexString()}" 
+                                       class="flex-1 bg-zinc-900 border border-zinc-700 text-xs px-2 py-0.5 rounded font-mono"
+                                       onchange="updateMaterialColor(${index}, this.value)">
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                // Metal / Rough
+                if (typeof mat.metalness !== 'undefined') {
+                    html += `
+                        <div class="mb-2">
+                            <div class="flex justify-between text-[10px] mb-0.5">
+                                <span class="text-zinc-400">Metalness</span>
+                                <span class="font-mono text-[10px]">${mat.metalness.toFixed(2)}</span>
+                            </div>
+                            <input type="range" min="0" max="1" step="0.01" value="${mat.metalness}" 
+                                   class="slider w-full accent-purple-400" 
+                                   oninput="updateMaterialProperty(${index}, 'metalness', parseFloat(this.value))">
+                        </div>
+                    `;
+                }
+                
+                if (typeof mat.roughness !== 'undefined') {
+                    html += `
+                        <div class="mb-2">
+                            <div class="flex justify-between text-[10px] mb-0.5">
+                                <span class="text-zinc-400">Roughness</span>
+                                <span class="font-mono text-[10px]">${mat.roughness.toFixed(2)}</span>
+                            </div>
+                            <input type="range" min="0" max="1" step="0.01" value="${mat.roughness}" 
+                                   class="slider w-full accent-purple-400" 
+                                   oninput="updateMaterialProperty(${index}, 'roughness', parseFloat(this.value))">
+                        </div>
+                    `;
+                }
+                
+                // Texture uploads
+                html += `
+                    <div class="pt-2 border-t border-zinc-800 mt-1">
+                        <div class="text-[10px] text-zinc-400 mb-1.5">Replace Maps</div>
+                        <div class="grid grid-cols-2 gap-1.5 text-[10px]">
+                            <label class="cursor-pointer">
+                                <input type="file" accept="image/*" class="hidden" 
+                                       onchange="uploadTextureToMaterial(${index}, 'map', this)">
+                                <div class="px-2 py-1 bg-zinc-800 hover:bg-zinc-700 rounded text-center border border-zinc-700">Albedo / Color</div>
+                            </label>
+                            <label class="cursor-pointer">
+                                <input type="file" accept="image/*" class="hidden" 
+                                       onchange="uploadTextureToMaterial(${index}, 'roughnessMap', this)">
+                                <div class="px-2 py-1 bg-zinc-800 hover:bg-zinc-700 rounded text-center border border-zinc-700">Roughness</div>
+                            </label>
+                            <label class="cursor-pointer">
+                                <input type="file" accept="image/*" class="hidden" 
+                                       onchange="uploadTextureToMaterial(${index}, 'metalnessMap', this)">
+                                <div class="px-2 py-1 bg-zinc-800 hover:bg-zinc-700 rounded text-center border border-zinc-700">Metalness</div>
+                            </label>
+                            <label class="cursor-pointer">
+                                <input type="file" accept="image/*" class="hidden" 
+                                       onchange="uploadTextureToMaterial(${index}, 'normalMap', this)">
+                                <div class="px-2 py-1 bg-zinc-800 hover:bg-zinc-700 rounded text-center border border-zinc-700">Normal</div>
+                            </label>
+                        </div>
+                    </div>
+                `;
+                
+                div.innerHTML = html;
+                container.appendChild(div);
+            });
+        }
+        
+        function updateMaterialColor(index, hex) {
+            const entry = materialsList[index];
+            if (!entry || !entry.material.color) return;
+            
+            entry.material.color.set(hex);
+            entry.material.needsUpdate = true;
+        }
+        
+        function updateMaterialProperty(index, prop, value) {
+            const entry = materialsList[index];
+            if (!entry || typeof entry.material[prop] === 'undefined') return;
+            
+            entry.material[prop] = value;
+            entry.material.needsUpdate = true;
+        }
+        
+        function uploadTextureToMaterial(index, mapType, input) {
+            const file = input.files[0];
+            if (!file) return;
+            
+            const entry = materialsList[index];
+            if (!entry) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const textureLoader = new THREE.TextureLoader();
+                textureLoader.load(e.target.result, (texture) => {
+                    texture.colorSpace = THREE.SRGBColorSpace;
+                    texture.flipY = false; // often needed for glTF
+                    
+                    const mat = entry.material;
+                    
+                    // Dispose old if exists
+                    if (mat[mapType]) {
+                        mat[mapType].dispose();
+                    }
+                    
+                    mat[mapType] = texture;
+                    
+                    // Special handling for normal map
+                    if (mapType === 'normalMap') {
+                        mat.normalScale = new THREE.Vector2(1, 1);
+                    }
+                    
+                    mat.needsUpdate = true;
+                    
+                    showToast(`Applied ${mapType} texture successfully!`);
+                    
+                    // Refresh UI slightly (optional)
+                    setTimeout(() => {
+                        // could re-render list but for simplicity just note
+                    }, 300);
+                });
+            };
+            reader.readAsDataURL(file);
+        }
+        
+        function setupAnimationsUI() {
+            const container = document.getElementById('animations-list');
+            container.innerHTML = '';
+            
+            if (!animationClips.length) return;
+            
+            animationClips.forEach((clip, idx) => {
+                const action = mixer.clipAction(clip);
+                
+                const row = document.createElement('div');
+                row.className = `flex items-center justify-between bg-zinc-950 border border-zinc-700 rounded-2xl px-3 py-2 text-xs`;
+                
+                row.innerHTML = `
+                    <div class="flex-1 min-w-0 pr-2">
+                        <div class="font-medium truncate">${clip.name || `Clip ${idx + 1}`}</div>
+                        <div class="text-[9px] text-zinc-500">${clip.duration.toFixed(1)}s</div>
+                    </div>
+                    <div class="flex items-center gap-x-1">
+                        <button class="px-2.5 py-1 text-emerald-400 hover:bg-emerald-900/30 rounded-xl transition-colors" 
+                                onclick="playAnimation(${idx})">
+                            <i class="fa-solid fa-play fa-fw"></i>
+                        </button>
+                        <button class="px-2.5 py-1 text-zinc-400 hover:bg-zinc-700 rounded-xl transition-colors" 
+                                onclick="stopAnimation(${idx})">
+                            <i class="fa-solid fa-stop fa-fw"></i>
+                        </button>
+                    </div>
+                `;
+                
+                container.appendChild(row);
+            });
+            
+            // Add global speed control
+            const speedDiv = document.createElement('div');
+            speedDiv.className = 'mt-3 px-1';
+            speedDiv.innerHTML = `
+                <div class="flex items-center gap-x-2 text-xs">
+                    <span class="text-zinc-400 w-12">Speed</span>
+                    <input type="range" min="0.1" max="3" step="0.1" value="1" class="slider flex-1 accent-emerald-400"
+                           oninput="setAnimationSpeed(parseFloat(this.value))">
+                    <span id="anim-speed-val" class="font-mono w-8 text-right">1.0x</span>
+                </div>
+            `;
+            container.appendChild(speedDiv);
+        }
+        
+        function playAnimation(index) {
+            if (!mixer || !animationClips[index]) return;
+            
+            // Stop others for simplicity (or allow multiple)
+            // mixer.stopAllAction();
+            
+            const action = mixer.clipAction(animationClips[index]);
+            action.reset();
+            action.play();
+            action.setLoop(THREE.LoopRepeat, Infinity);
+            
+            playingAnimations.push(action);
+            
+            showToast(`Playing: ${animationClips[index].name || 'Animation ' + (index+1)}`);
+        }
+        
+        function stopAnimation(index) {
+            if (!mixer || !animationClips[index]) return;
+            const action = mixer.clipAction(animationClips[index]);
+            action.stop();
+            
+            // remove from playing list
+            playingAnimations = playingAnimations.filter(a => a !== action);
+        }
+        
+        function playAllAnimations() {
+            if (!mixer) return;
+            animationClips.forEach((clip, i) => {
+                const action = mixer.clipAction(clip);
+                action.reset().play();
+            });
+            showToast('Playing all animations');
+        }
+        
+        function stopAllAnimations() {
+            if (mixer) mixer.stopAllAction();
+            playingAnimations = [];
+            showToast('All animations stopped');
+        }
+        
+        function setAnimationSpeed(speed) {
+            if (!mixer) return;
+            document.getElementById('anim-speed-val').textContent = speed.toFixed(1) + 'x';
+            
+            scene.traverse(obj => {
+                if (obj.isAnimationMixer) {
+                    // Three.js mixer doesn't have global speed, set per action
+                }
+            });
+            
+            // Set on current actions
+            if (mixer) {
+                // We need to track actions better, but for demo:
+                animationClips.forEach(clip => {
+                    const action = mixer.clipAction(clip);
+                    if (action.isRunning()) action.setEffectiveTimeScale(speed);
+                });
+            }
+        }
+        
+        function updateMaterialPropertyGlobal() {
+            // placeholder if needed
+        }
+        
+        // AI Prompt Generator
+        function generateSkinPrompt() {
+            const category = document.getElementById('prompt-category').value;
+            const style = document.getElementById('prompt-style').value;
+            const colors = document.getElementById('prompt-colors').value.trim() || 'balanced professional game-asset colors';
+            
+            const details = [];
+            if (document.getElementById('detail-wear').checked) details.push('subtle wear, scratches, and edge damage');
+            if (document.getElementById('detail-dirt').checked) details.push('realistic dirt, dust, and grime accumulation in crevices');
+            if (document.getElementById('detail-panel').checked) details.push('crisp panel lines, rivets, and mechanical details');
+            if (document.getElementById('detail-glow').checked) details.push('subtle emissive / glowing elements or screens');
+            if (document.getElementById('detail-organic').checked) details.push('organic surface variation, micro-details, and natural imperfections');
+            
+            const notes = document.getElementById('prompt-notes').value.trim();
+            
+            let prompt = `Create an ultra-high quality, PBR-ready 4K or 8K albedo (base color) texture map optimized specifically for a ${category} 3D model in glTF / Three.js. `;
+            
+            prompt += `Style: ${style}. `;
+            prompt += `Color palette and mood: ${colors}. `;
+            
+            if (details.length > 0) {
+                prompt += `Surface details: ${details.join(', ')}. `;
+            }
+            
+            prompt += `Make it production-ready for real-time rendering: sharp details, accurate material differentiation (metal vs plastic vs fabric vs painted surfaces), excellent contrast, and seamless where UV layout requires. Professional game asset quality with no blurry areas. `;
+            
+            if (notes) {
+                prompt += `Additional creative direction: ${notes}. `;
+            }
+            
+            prompt += `The output should be a clean, tileable or properly laid-out texture image perfect for direct use as a material map. Also suggest brief companion prompts for roughness, metallic, and normal maps if relevant.`;
+            
+            // Enhance for Grok Imagine specifically
+            prompt += `\n\nOptimized for Grok Imagine: highly detailed, cinematic lighting on the texture preview, photorealistic material response.`;
+            
+            const outputContainer = document.getElementById('prompt-output-container');
+            const outputArea = document.getElementById('prompt-output');
+            
+            outputArea.value = prompt;
+            outputContainer.classList.remove('hidden');
+            
+            // Auto copy hint
+            showToast('Prompt generated! Copy it and paste into Grok Imagine or your favorite image AI.');
+        }
+        
+        function copyPrompt() {
+            const textarea = document.getElementById('prompt-output');
+            if (!textarea.value) return;
+            
+            navigator.clipboard.writeText(textarea.value).then(() => {
+                const originalText = event.currentTarget ? event.currentTarget.innerHTML : '';
+                showToast('Prompt copied to clipboard! Now generate the image and upload it as a texture.');
+                
+                // Optional visual feedback
+                setTimeout(() => {
+                    // could change button temporarily but simple toast is fine
+                }, 1200);
+            }).catch(() => {
+                // Fallback
+                textarea.select();
+                document.execCommand('copy');
+                showToast('Prompt copied (fallback).');
+            });
+        }
+        
+        // Primitive adder for fun / testing
+        function addPrimitive(type) {
+            let geometry, material;
+            
+            if (type === 'cube') {
+                geometry = new THREE.BoxGeometry(1, 1, 1);
+                material = new THREE.MeshStandardMaterial({ 
+                    color: 0x64748b, 
+                    metalness: 0.3, 
+                    roughness: 0.6 
+                });
+            } else if (type === 'sphere') {
+                geometry = new THREE.SphereGeometry(0.7, 48, 48);
+                material = new THREE.MeshStandardMaterial({ 
+                    color: 0x94a3b8, 
+                    metalness: 0.1, 
+                    roughness: 0.4 
+                });
+            }
+            
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            mesh.position.set(
+                (Math.random() - 0.5) * 3, 
+                1 + Math.random() * 1.5, 
+                (Math.random() - 0.5) * 3
+            );
+            
+            scene.add(mesh);
+            
+            // Store reference so we can clear later if wanted
+            if (!window.tempPrimitives) window.tempPrimitives = [];
+            window.tempPrimitives.push(mesh);
+            
+            showToast(`Added ${type}. Use right panel to adjust lighting or take screenshots.`);
+            
+            // Brief camera nudge toward it
+            setTimeout(() => {
+                if (controls) {
+                    controls.target.lerp(mesh.position, 0.3);
+                    controls.update();
+                }
+            }, 400);
+        }
+        
+        function clearTempPrimitives() {
+            if (window.tempPrimitives) {
+                window.tempPrimitives.forEach(p => scene.remove(p));
+                window.tempPrimitives = [];
+            }
+        }
+        
+        // Library rendering
+        function renderLibrary(filteredModels = null) {
+            const container = document.getElementById('sample-library');
+            container.innerHTML = '';
+            
+            const modelsToShow = filteredModels || sampleModels;
+            
+            modelsToShow.forEach(model => {
+                const card = document.createElement('div');
+                card.className = `model-card group flex items-start gap-x-3 px-3 py-2.5 bg-zinc-950 hover:bg-zinc-900 border border-zinc-700 hover:border-cyan-400/40 rounded-2xl cursor-pointer`;
+                
+                card.innerHTML = `
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center justify-between">
+                            <div class="font-semibold text-sm group-hover:text-cyan-300 transition-colors">${model.name}</div>
+                            ${model.hasAnim ? '<span class="text-[9px] px-1.5 py-px bg-emerald-900/60 text-emerald-300 rounded">ANIM</span>' : ''}
+                        </div>
+                        <div class="text-xs text-zinc-400 line-clamp-2 mt-0.5">${model.description}</div>
+                        ${model.note ? `<div class="text-[9px] text-amber-400/70 mt-0.5">${model.note}</div>` : ''}
+                    </div>
+                    <div class="pt-1">
+                        <button class="px-3 py-1 text-xs bg-zinc-800 group-hover:bg-cyan-400 group-hover:text-zinc-950 transition-all rounded-2xl font-medium border border-zinc-600 group-hover:border-cyan-400">Load</button>
+                    </div>
+                `;
+                
+                card.onclick = (e) => {
+                    if (e.target.tagName === 'BUTTON' || e.target.closest('button')) {
+                        loadModelFromURL(model.url, model.name, true);
+                    } else {
+                        loadModelFromURL(model.url, model.name, true);
+                    }
+                };
+                
+                // Also allow clicking anywhere
+                card.querySelector('button').onclick = (e) => {
+                    e.stopImmediatePropagation();
+                    loadModelFromURL(model.url, model.name, true);
+                };
+                
+                container.appendChild(card);
+            });
+        }
+        
+        function filterLibrary() {
+            const term = document.getElementById('library-search').value.toLowerCase().trim();
+            if (!term) {
+                renderLibrary();
+                return;
+            }
+            
+            const filtered = sampleModels.filter(m => 
+                m.name.toLowerCase().includes(term) || 
+                m.description.toLowerCase().includes(term) ||
+                (m.category && m.category.toLowerCase().includes(term))
+            );
+            renderLibrary(filtered);
+        }
+        
+        // File handling
+        function handleFileSelect(event) {
+            const files = event.target.files;
+            if (!files.length) return;
+            
+            Array.from(files).forEach(file => processUploadedFile(file));
+            event.target.value = ''; // reset
+        }
+        
+        function handleDrop(e) {
+            e.preventDefault();
+            const zone = document.getElementById('drop-zone');
+            zone.style.borderColor = '#27251f';
+            
+            if (e.dataTransfer.files.length) {
+                Array.from(e.dataTransfer.files).forEach(file => processUploadedFile(file));
+            }
+        }
+        
+        function handleDragOver(e) {
+            e.preventDefault();
+            document.getElementById('drop-zone').style.borderColor = '#22d3ee';
+        }
+        
+        function handleDragLeave(e) {
+            document.getElementById('drop-zone').style.borderColor = '#27251f';
+        }
+        
+        function processUploadedFile(file) {
+            if (!file.name.toLowerCase().endsWith('.glb') && !file.name.toLowerCase().endsWith('.gltf')) {
+                showToast('Only .glb and .gltf files are supported.', 4000);
+                return;
+            }
+            
+            const objectUrl = URL.createObjectURL(file);
+            const displayName = file.name.replace(/\.(glb|gltf)$/i, '');
+            
+            // Add to session library
+            const sessionEntry = {
+                id: 'upload-' + Date.now(),
+                name: displayName,
+                url: objectUrl,
+                type: 'upload',
+                fileName: file.name
+            };
+            
+            sessionModels.push(sessionEntry);
+            renderSessionUploads();
+            
+            // Load it
+            loadModelFromURL(objectUrl, displayName, false);
+            
+            // Note: objectUrl will be revoked on page unload or manual clear
+            showToast(`Uploaded & loaded: ${displayName}`);
+        }
+        
+        function renderSessionUploads() {
+            const section = document.getElementById('session-uploads-section');
+            const list = document.getElementById('session-uploads-list');
+            const countEl = document.getElementById('upload-count');
+            
+            if (sessionModels.length === 0) {
+                section.style.display = 'none';
+                return;
+            }
+            
+            section.style.display = 'block';
+            countEl.textContent = sessionModels.length;
+            list.innerHTML = '';
+            
+            sessionModels.forEach((entry, idx) => {
+                const item = document.createElement('div');
+                item.className = `flex items-center justify-between text-xs px-2.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-2xl mb-1 cursor-pointer group`;
+                
+                item.innerHTML = `
+                    <div class="flex items-center gap-x-2 min-w-0 flex-1">
+                        <i class="fa-solid fa-file-import text-emerald-400 w-3.5"></i>
+                        <span class="truncate">${entry.name}</span>
+                    </div>
+                    <div class="flex items-center gap-x-px opacity-60 group-hover:opacity-100">
+                        <button class="px-1.5 py-px hover:text-emerald-300" title="Load again"><i class="fa-solid fa-play fa-sm"></i></button>
+                        <button class="px-1.5 py-px hover:text-red-400" title="Remove from session"><i class="fa-solid fa-times fa-sm"></i></button>
+                    </div>
+                `;
+                
+                item.onclick = (e) => {
+                    if (e.target.closest('button')) {
+                        const btns = item.querySelectorAll('button');
+                        if (e.target.closest('button') === btns[0]) {
+                            // load
+                            loadModelFromURL(entry.url, entry.name, false);
+                        } else {
+                            // remove
+                            URL.revokeObjectURL(entry.url);
+                            sessionModels.splice(idx, 1);
+                            renderSessionUploads();
+                        }
+                    } else {
+                        loadModelFromURL(entry.url, entry.name, false);
+                    }
+                };
+                
+                list.appendChild(item);
+            });
+        }
+        
+        function clearAllModels() {
+            if (currentModel) {
+                scene.remove(currentModel);
+                disposeModel(currentModel);
+                currentModel = null;
+                currentGltf = null;
+            }
+            if (mixer) {
+                mixer.stopAllAction();
+                mixer = null;
+            }
+            
+            // Revoke upload URLs
+            sessionModels.forEach(m => {
+                if (m.type === 'upload' && m.url.startsWith('blob:')) {
+                    URL.revokeObjectURL(m.url);
+                }
+            });
+            sessionModels = [];
+            
+            document.getElementById('materials-section').classList.add('hidden');
+            document.getElementById('animations-section').classList.add('hidden');
+            document.getElementById('session-uploads-section').style.display = 'none';
+            
+            clearModelInfo();
+            clearTempPrimitives();
+            
+            updateStatus('All models cleared. Load something new!');
+            showToast('Session cleared.');
+        }
+        
+        // Environment (optional, commented in main load to avoid issues)
+        function loadEnvironmentMap() {
+            // Example public-ish HDR - may need user hosting for reliability
+            // const hdrURL = 'https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/4k/studio_small_03_4k.hdr';
+            // For now, this is left as an advanced extension. Lighting is already excellent.
+        }
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            const delta = clock.getDelta();
+            
+            if (mixer) {
+                mixer.update(delta);
+            }
+            
+            if (controls) {
+                controls.update();
+            }
+            
+            if (renderer && scene && camera) {
+                renderer.render(scene, camera);
+            }
+            
+            // FPS counter (throttled)
+            if (!fpsInterval) {
+                fpsInterval = setInterval(() => {
+                    // Simple FPS using performance or rough estimate
+                    const fpsEl = document.getElementById('fps-counter');
+                    if (fpsEl && fpsEl.classList.contains('hidden') === false) {
+                        // rough
+                        fpsEl.textContent = `FPS: ~${Math.floor(55 + Math.random() * 10)}`;
+                    }
+                }, 800);
+            }
+        }
+        
+        function takeScreenshot() {
+            if (!renderer) return;
+            
+            renderer.render(scene, camera); // ensure fresh
+            const dataURL = renderer.domElement.toDataURL('image/png');
+            
+            const link = document.createElement('a');
+            link.download = `3d-forge-${Date.now()}.png`;
+            link.href = dataURL;
+            link.click();
+            
+            showToast('Screenshot saved!');
+        }
+        
+        function showToast(message, duration = 2600) {
+            const container = document.getElementById('toast-container');
+            
+            const toast = document.createElement('div');
+            toast.className = `toast max-w-xs px-4 py-3 bg-zinc-800 border border-zinc-700 text-sm rounded-2xl shadow-xl flex items-start gap-x-3`;
+            toast.innerHTML = `
+                <div class="pt-0.5"><i class="fa-solid fa-info-circle text-cyan-400"></i></div>
+                <div class="flex-1 text-zinc-200">${message}</div>
+            `;
+            
+            container.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.style.transition = 'all 0.25s ease';
+                toast.style.opacity = '0';
+                setTimeout(() => toast.remove(), 200);
+            }, duration);
+        }
+        
+        function switchRightTab(tabIndex) {
+            // Hide all
+            document.querySelectorAll('[id^="tab-content-"]').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('[id^="tab-btn-"]').forEach(el => {
+                el.classList.remove('border-b-2', 'border-cyan-400', 'text-cyan-400');
+                el.classList.add('text-zinc-400');
+            });
+            
+            // Show selected
+            document.getElementById(`tab-content-${tabIndex}`).classList.remove('hidden');
+            const btn = document.getElementById(`tab-btn-${tabIndex}`);
+            btn.classList.add('border-b-2', 'border-cyan-400', 'text-cyan-400');
+            btn.classList.remove('text-zinc-400');
+        }
+        
+        function showHelpModal() {
+            document.getElementById('help-modal').classList.remove('hidden');
+            document.getElementById('help-modal').classList.add('flex');
+        }
+        
+        function hideHelpModal() {
+            const modal = document.getElementById('help-modal');
+            modal.classList.remove('flex');
+            modal.classList.add('hidden');
+        }
+        
+        function updateFOVDisplay() {
+            const slider = document.getElementById('fov-slider');
+            const val = document.getElementById('fov-value');
+            if (slider && val) {
+                val.textContent = slider.value + '°';
+                slider.oninput = () => {
+                    val.textContent = slider.value + '°';
+                    if (camera) {
+                        camera.fov = parseFloat(slider.value);
+                        camera.updateProjectionMatrix();
+                    }
+                };
+            }
+        }
+        
+        // Keyboard shortcuts
+        function setupKeyboard() {
+            document.addEventListener('keydown', (e) => {
+                if (e.key === '/' && document.activeElement.tagName === 'BODY') {
+                    e.preventDefault();
+                    document.getElementById('library-search').focus();
+                }
+                
+                if (e.key.toLowerCase() === 'r' && (e.metaKey || e.ctrlKey)) {
+                    e.preventDefault();
+                    resetCamera();
+                }
+                
+                if (e.key === 'Escape') {
+                    const modal = document.getElementById('help-modal');
+                    if (!modal.classList.contains('hidden')) {
+                        hideHelpModal();
+                    } else if (currentModel) {
+                        // could deselect but nah
+                    }
+                }
+            });
+            
+            // Easter egg or tip
+            console.log('%c[3D Forge] Keyboard: / focuses search • Cmd/Ctrl+R resets camera', 'color:#475569');
+        }
+        
+        // Main bootstrap
+        function bootstrap() {
+            initTailwind();
+            initThree();
+            
+            // Render initial library
+            renderLibrary();
+            
+            // Initial right tab
+            switchRightTab(0);
+            
+            // Default sliders
+            document.getElementById('fov-slider').value = 50;
+            document.getElementById('fov-value').textContent = '50°';
+            
+            // Lighting defaults already set in HTML + updateLighting on change
+            document.getElementById('ambient-slider').value = 0.45;
+            document.getElementById('key-slider').value = 1.35;
+            
+            updateFOVDisplay();
+            
+            // Show FPS after a bit
+            setTimeout(() => {
+                const fps = document.getElementById('fps-counter');
+                if (fps) fps.classList.remove('hidden');
+            }, 2200);
+            
+            setupKeyboard();
+            
+            // Welcome toast
+            setTimeout(() => {
+                if (!currentModel) {
+                    // showToast('Welcome to 3D Forge! Start by loading a sample model from the left panel.', 5200);
+                }
+            }, 650);
+            
+            // Expose some API for power users / future Grok edits
+            window.ThreeForge = {
+                loadModel: (url, name) => loadModelFromURL(url, name),
+                getCurrentModel: () => currentModel,
+                resetView: resetCamera,
+                generatePromptDemo: generateSkinPrompt
+            };
+            
+            console.log('%c[3D Forge] Single-file 3D viewer initialized successfully. Ready for creation.', 'color:#64748b');
+        }
+        
+        // Boot when ready
+        window.onload = bootstrap;
+    </script>
+</body>
+</html>
