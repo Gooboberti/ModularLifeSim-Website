@@ -76,7 +76,7 @@
                     <div class="flex items-center gap-x-3">
                         <div class="flex items-baseline gap-x-2">
                             <h1 class="font-display text-2xl sm:text-3xl tracking-tighter">MiniSimmy2</h1>
-                            <span class="text-emerald-400 text-sm font-mono">v1.20</span>
+                            <span class="text-emerald-400 text-sm font-mono">v1.71</span>
                         </div>
                     </div>
                     
@@ -162,7 +162,7 @@
                     <i class="fa-solid fa-shield-alt text-violet-400"></i>
                     <span>Energy Wall</span>
                 </button>
-                <button onclick="showEnergyNetMenu()" id="energy-net-btn"
+                <button onclick="toggleEnergyNetMode()" id="energy-net-btn"
                     class="px-5 py-2 text-sm font-medium rounded-2xl bg-white/10 hover:bg-white/20 flex items-center gap-x-2 border border-white/10 active:scale-[0.985] transition-transform">
                     <i class="fa-solid fa-fish text-sky-400"></i>
                     <span>Energy Net</span>
@@ -180,7 +180,7 @@
                     <span>Free Mode</span>
                 </button>
 
-                <!-- Aerosol Sprays moved to bottom bar in v1.2 -->
+                <!-- Aerosol Sprays moved to bottom bar -->
                 <button onclick="showAerosolMenu()" id="quick-aerosol-btn"
                     class="px-5 py-2 text-sm font-medium rounded-2xl bg-emerald-500/90 hover:bg-emerald-500 text-white flex items-center gap-x-2 border border-emerald-400/50 active:scale-[0.985] transition-transform">
                     <i class="fa-solid fa-spray-can"></i>
@@ -283,7 +283,7 @@
                         <span>Calibration Menu</span>
                     </button>
 
-                    <!-- Aerosol Sprays moved to bottom action bar in v1.2 -->
+                    <!-- Aerosol Sprays moved to bottom action bar -->
 
                     <button onclick="showMusicModal()" 
                         class="w-full flex items-center justify-center gap-x-2 px-3 py-2.5 rounded-2xl text-sm font-medium transition-all bg-emerald-500/90 hover:bg-emerald-500 text-white">
@@ -858,7 +858,21 @@
         let analyticsModalOpen = false;
 
         // === VERSIONING (for future updates) ===
-        const GAME_VERSION = "v1.20 - Environmental cycle bar + top controls now flush with right edge of the map. Top bar elements aligned tightly. High Roller panel stable. No more popping/resizing on the right side.";
+        const GAME_VERSION = "v1.71 - Energy Net (v1.7 start): Toggleable scooping mode • Visual glowing net + mesh • Drag-to-pull bunching physics • Filter modal now saves state";
+
+        // === ENERGY NET (v1.7) ===
+        let energyNetMode = false;
+        let isNetDragging = false;
+        let netRadius = 95;
+        let energyNetFilters = {
+            all: true,
+            predators: true,
+            whiteParticles: true,
+            redParticles: true,
+            harvesters: true,
+            sensors: true,
+            lowEnergy: true
+        };
 
         // Audio
         let masterVolume = 0.12;
@@ -1811,9 +1825,35 @@
             document.querySelectorAll('.fixed').forEach(el => el.remove());
         }
 
+        function toggleEnergyNetMode() {
+            energyNetMode = !energyNetMode;
+            const btn = document.getElementById('energy-net-btn');
+            
+            if (energyNetMode) {
+                btn.classList.add('!bg-sky-500/90', '!text-white', 'border-sky-400');
+                btn.classList.remove('bg-white/10', 'hover:bg-white/20');
+                
+                // Optional: show a quick hint
+                if (!window.energyNetHintShown) {
+                    window.energyNetHintShown = true;
+                    const hint = document.createElement('div');
+                    hint.className = 'fixed bottom-20 left-1/2 -translate-x-1/2 bg-[#121218] border border-sky-400/50 text-sky-300 text-xs px-4 py-2 rounded-2xl flex items-center gap-x-2 z-[300]';
+                    hint.innerHTML = `<i class="fa-solid fa-info-circle"></i> <span>Energy Net active — Click & drag on the map to scoop creatures</span>`;
+                    document.body.appendChild(hint);
+                    setTimeout(() => hint.remove(), 2800);
+                }
+            } else {
+                btn.classList.remove('!bg-sky-500/90', '!text-white', 'border-sky-400');
+                btn.classList.add('bg-white/10', 'hover:bg-white/20');
+                isNetDragging = false;
+            }
+        }
+
         function showEnergyNetMenu() {
             const modal = document.createElement('div');
             modal.className = 'fixed inset-0 bg-black/80 flex items-center justify-center z-[200]';
+            
+            const f = energyNetFilters;
             modal.innerHTML = `
                 <div class="bg-[#121218] border border-white/10 rounded-3xl w-full max-w-md mx-4 p-6">
                     <div class="flex justify-between items-center mb-5">
@@ -1824,28 +1864,51 @@
                         <button onclick="this.closest('.fixed').remove()" class="text-3xl leading-none text-white/60 hover:text-white">×</button>
                     </div>
                     
-                    <div class="text-sm space-y-1 mb-4">
+                    <div class="text-sm space-y-1 mb-4" id="energy-net-filters">
                         <div class="font-semibold text-white/70 mb-2">Active Filters (toggle):</div>
                         
-                        <label class="flex items-center gap-x-2 py-1"><input type="checkbox" checked class="accent-sky-400"> All Creatures</label>
-                        <label class="flex items-center gap-x-2 py-1"><input type="checkbox" checked class="accent-sky-400"> Predators</label>
-                        <label class="flex items-center gap-x-2 py-1"><input type="checkbox" checked class="accent-sky-400"> White Particles</label>
-                        <label class="flex items-center gap-x-2 py-1"><input type="checkbox" checked class="accent-sky-400"> Red Particles</label>
-                        <label class="flex items-center gap-x-2 py-1"><input type="checkbox" checked class="accent-sky-400"> Harvesters</label>
-                        <label class="flex items-center gap-x-2 py-1"><input type="checkbox" checked class="accent-sky-400"> Sensors / High Module Count</label>
-                        <label class="flex items-center gap-x-2 py-1"><input type="checkbox" checked class="accent-sky-400"> Low Energy Creatures</label>
+                        <label class="flex items-center gap-x-2 py-1"><input type="checkbox" data-filter="all" class="accent-sky-400" ${f.all ? 'checked' : ''}> All Creatures</label>
+                        <label class="flex items-center gap-x-2 py-1"><input type="checkbox" data-filter="predators" class="accent-sky-400" ${f.predators ? 'checked' : ''}> Predators</label>
+                        <label class="flex items-center gap-x-2 py-1"><input type="checkbox" data-filter="whiteParticles" class="accent-sky-400" ${f.whiteParticles ? 'checked' : ''}> White Particles</label>
+                        <label class="flex items-center gap-x-2 py-1"><input type="checkbox" data-filter="redParticles" class="accent-sky-400" ${f.redParticles ? 'checked' : ''}> Red Particles</label>
+                        <label class="flex items-center gap-x-2 py-1"><input type="checkbox" data-filter="harvesters" class="accent-sky-400" ${f.harvesters ? 'checked' : ''}> Harvesters</label>
+                        <label class="flex items-center gap-x-2 py-1"><input type="checkbox" data-filter="sensors" class="accent-sky-400" ${f.sensors ? 'checked' : ''}> Sensors / High Module Count</label>
+                        <label class="flex items-center gap-x-2 py-1"><input type="checkbox" data-filter="lowEnergy" class="accent-sky-400" ${f.lowEnergy ? 'checked' : ''}> Low Energy Creatures</label>
                     </div>
                     
                     <div class="text-xs text-white/50">
-                        Selected filters will determine what the Energy Net can scoop. Click and drag on the map to use.
+                        Selected filters determine what the Energy Net scoops. Click & drag on the map while Net mode is active.
                     </div>
                     
-                    <div class="mt-5 flex justify-end">
-                        <button onclick="this.closest('.fixed').remove()" class="px-5 py-2 bg-sky-500 hover:bg-sky-600 rounded-2xl text-sm font-medium">Done</button>
+                    <div class="mt-5 flex justify-end gap-x-3">
+                        <button onclick="this.closest('.fixed').remove()" class="px-5 py-2 bg-white/10 hover:bg-white/20 rounded-2xl text-sm">Cancel</button>
+                        <button onclick="saveEnergyNetFilters(this)" class="px-5 py-2 bg-sky-500 hover:bg-sky-600 rounded-2xl text-sm font-medium">Save &amp; Close</button>
                     </div>
                 </div>
             `;
             document.body.appendChild(modal);
+        }
+
+        function saveEnergyNetFilters(btn) {
+            const modal = btn.closest('.fixed');
+            const container = modal.querySelector('#energy-net-filters');
+            const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+            
+            checkboxes.forEach(cb => {
+                const key = cb.dataset.filter;
+                if (key && energyNetFilters.hasOwnProperty(key)) {
+                    energyNetFilters[key] = cb.checked;
+                }
+            });
+            
+            modal.remove();
+            
+            // Optional feedback
+            const toast = document.createElement('div');
+            toast.className = 'fixed bottom-6 right-6 bg-sky-500/90 text-white text-xs px-4 py-2 rounded-2xl flex items-center gap-x-2 z-[300]';
+            toast.innerHTML = `<i class="fa-solid fa-check"></i> <span>Energy Net filters updated</span>`;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 1400);
         }
 
         // ==================== MUSIC SYSTEM ====================
@@ -2932,6 +2995,8 @@
 
             if (paused) {
                 drawWorld();
+                // Still show net visual even when paused if mode is active
+                if (energyNetMode) drawEnergyNetVisual();
                 updateMainStats();
                 if (miniChartCtx) drawMiniChart();
                 return;
@@ -2944,6 +3009,11 @@
             // Music analysis (runs every frame when enabled)
             if (musicEnabled) {
                 updateMusicAnalysis();
+            }
+
+            // === Energy Net v1.7 - Scooping Physics ===
+            if (energyNetMode && mouseIsPressed) {
+                applyEnergyNetForces();
             }
 
             // FPS calculation
@@ -4320,6 +4390,13 @@
 
         // === Energy Wall Drawing (click + drag) ===
         function mousePressed() {
+            // Energy Net scooping (v1.7)
+            if (energyNetMode) {
+                isNetDragging = true;
+                // We don't need a start position for continuous pull — we pull toward current mouse every frame
+                return;
+            }
+
             if (!energyWallMode) return;
 
             // Only start drawing if not clicking on a creature
@@ -4334,11 +4411,19 @@
         }
 
         function mouseDragged() {
+            if (energyNetMode) {
+                // Net is continuously active while dragging — force application happens in draw loop
+                return;
+            }
             if (!energyWallMode || !isDrawingWall) return;
             currentWallPreview = { x1: wallStartX, y1: wallStartY, x2: mouseX, y2: mouseY };
         }
 
         function mouseReleased() {
+            if (energyNetMode) {
+                isNetDragging = false;
+                return;
+            }
             if (!energyWallMode || !isDrawingWall) return;
 
             const dx = mouseX - wallStartX;
@@ -4381,6 +4466,103 @@
 
             isDrawingWall = false;
             currentWallPreview = null;
+        }
+
+        // === Energy Net v1.7 Scooping ===
+        function applyEnergyNetForces() {
+            if (!creatures || creatures.length === 0) return;
+
+            const mx = mouseX;
+            const my = mouseY;
+            const r = netRadius;
+
+            for (let c of creatures) {
+                // Check if creature passes current filters
+                if (!creaturePassesNetFilter(c)) continue;
+
+                const d = dist(c.x, c.y, mx, my);
+                if (d < r && d > 2) {
+                    // Pull toward mouse with nice bunching feel
+                    const force = map(d, 0, r, 0.85, 0.25); // stronger when closer to edge? or adjust
+                    const dx = (mx - c.x) / d;
+                    const dy = (my - c.y) / d;
+
+                    // Apply velocity change (bunching effect is stronger with higher force)
+                    c.vx = c.vx * 0.7 + dx * force * 2.2;
+                    c.vy = c.vy * 0.7 + dy * force * 2.2;
+
+                    // Slight energy drain while being netted (optional flavor)
+                    if (c.energy !== undefined) {
+                        c.energy = Math.max(8, c.energy - 0.035);
+                    }
+                }
+            }
+        }
+
+        function creaturePassesNetFilter(creature) {
+            const f = energyNetFilters;
+            if (f.all) return true;
+
+            // Basic type detection (extend as creature properties grow)
+            const isPredator = creature.isPredator === true || (creature.modules && creature.modules > 12);
+            const isHarvester = creature.type === 'harvester' || (creature.modules && creature.modules >= 6 && creature.modules < 12);
+            const isSensor = creature.type === 'sensor' || (creature.modules && creature.modules >= 10);
+            const isLowEnergy = creature.energy !== undefined && creature.energy < 35;
+            const isRed = creature.color && creature.color[0] > 180 && creature.color[2] < 100;
+            const isWhite = creature.color && creature.color[0] > 220 && creature.color[1] > 220 && creature.color[2] > 220;
+
+            if (f.predators && isPredator) return true;
+            if (f.harvesters && isHarvester) return true;
+            if (f.sensors && isSensor) return true;
+            if (f.lowEnergy && isLowEnergy) return true;
+            if (f.redParticles && isRed) return true;
+            if (f.whiteParticles && isWhite) return true;
+
+            return false;
+        }
+
+        function drawEnergyNetVisual() {
+            if (!energyNetMode) return;
+
+            push();
+            // Screen space drawing for the net
+            const mx = mouseX;
+            const my = mouseY;
+            const r = netRadius;
+
+            // Outer glow
+            noFill();
+            stroke(56, 189, 248, 35);
+            strokeWeight(18);
+            circle(mx, my, r * 2);
+
+            // Main net ring
+            stroke(103, 232, 249, 180);
+            strokeWeight(3);
+            circle(mx, my, r * 2);
+
+            // Inner highlight
+            stroke(224, 242, 255, 120);
+            strokeWeight(1.5);
+            circle(mx, my, r * 1.6);
+
+            // Subtle mesh lines (net feel)
+            stroke(103, 232, 249, 60);
+            strokeWeight(1);
+            for (let angle = 0; angle < TWO_PI; angle += PI / 6) {
+                const x1 = mx + cos(angle) * (r * 0.3);
+                const y1 = my + sin(angle) * (r * 0.3);
+                const x2 = mx + cos(angle) * r;
+                const y2 = my + sin(angle) * r;
+                line(x1, y1, x2, y2);
+            }
+
+            // Center dot
+            fill(103, 232, 249, 200);
+            noStroke();
+            circle(mx, my, 6);
+
+            pop();
         }
 
         class VortexParticle {
