@@ -705,6 +705,11 @@
             </div>
 
             <div class="mt-6 border-t border-white/10 pt-4">
+                <div class="font-semibold text-purple-400 mb-2">Current Version: v0.96</div>
+                <div class="text-white/70 text-xs mb-4">
+                    This version introduces the Energy Beam Hazard Chain system, improved wall splitting with immunity, stronger purple DoT, and red particle absorption mechanics. Future updates will continue to be versioned here.
+                </div>
+
                 <div class="font-semibold text-emerald-400 mb-2">Hazard Cursor Absorption</div>
                 <div class="text-white/80 text-xs mb-3">
                     When the <strong>Cursor Hazard</strong> is active, it absorbs nearby <strong>Red Particles</strong> on contact. 
@@ -768,6 +773,9 @@
         let centerX, centerY;
         let selectedCreature = null;
 
+        // === VERSIONING (for future updates) ===
+        const GAME_VERSION = "v0.96"; // Energy Beam Hazard Chain + Wall Splitting + Purple DoT + Absorption Mechanics
+
         // Audio
         let masterVolume = 0.12;
         let effectsVolume = 0.65;
@@ -793,6 +801,9 @@
         let redHazardsUnlocked = false;
         let cursorHazardUnlocked = false;
         let persistentHazard = { x: 0, y: 0, active: false };
+        let placedHazards = []; // {x, y, timer: 420 (~7s), shakeTimer: 0, exploding: false}
+        let beamCharge = 0;
+        let maxPlacedHazards = 3;
 
         let timeScale = 1;
         let paused = false;
@@ -2806,7 +2817,10 @@
 
                             if (!w.empowered) {
                                 w.redHits = (w.redHits || 0) + 1;
-                                w.shakeTimer = 18; // visual shake on hit
+
+                                // Stronger shake as it builds up (more obvious visual feedback)
+                                let shakeIntensity = 12 + (w.redHits * 4);
+                                w.shakeTimer = shakeIntensity;
 
                                 if (w.redHits >= 5) {
                                     w.empowered = true;
@@ -2814,7 +2828,14 @@
                             }
 
                             playAbsorbSound();
+
+                            // More obvious visual effect on hit - multiple small explosions along the impact point
                             explosions.push(new Explosion(r.x, r.y));
+                            // Extra sparks for build-up feel
+                            for (let k = 0; k < 3; k++) {
+                                let offset = random(-15, 15);
+                                explosions.push(new Explosion(r.x + offset, r.y));
+                            }
                         }
                     }
                 }
@@ -3006,25 +3027,35 @@
                     w.y2 += random(-shake, shake);
                 }
 
-                // Color shift based on red particle absorption / empowerment
-                let redTint = Math.min((w.redHits || 0) * 25, 120);
-                let baseRed = 167 + redTint * 0.6;
-                let baseGreen = 139 - redTint * 0.4;
-                let baseBlue = 250 - redTint * 1.2;
+                // Color shift based on red particle absorption / empowerment (more obvious build-up)
+                let redTint = Math.min((w.redHits || 0) * 38, 180); // Stronger and faster color shift
+                let baseRed = 167 + redTint * 0.75;
+                let baseGreen = 139 - redTint * 0.55;
+                let baseBlue = 250 - redTint * 1.35;
 
                 if (w.empowered) {
                     baseRed = 255;
-                    baseGreen = 80;
-                    baseBlue = 80;
+                    baseGreen = 60;
+                    baseBlue = 60;
                 }
 
-                // Subtle outer glow (shifts color when empowered)
+                // Enhanced outer glow that gets brighter as it absorbs more
+                let glowAlpha = map(lifeRatio, 0, 1, 15, 70) + (w.redHits || 0) * 8;
                 push();
-                stroke(baseRed, baseGreen, baseBlue, map(lifeRatio, 0, 1, 15, 70));
-                strokeWeight(thickness * 1.7);
+                stroke(baseRed, baseGreen, baseBlue, glowAlpha);
+                strokeWeight(thickness * 1.9);
                 strokeCap(ROUND);
                 line(w.x1, w.y1, w.x2, w.y2);
                 pop();
+
+                // Extra bright core when building up empowerment
+                if ((w.redHits || 0) > 0 && !w.empowered) {
+                    push();
+                    stroke(255, 120, 80, (w.redHits || 0) * 12);
+                    strokeWeight(thickness * 0.8);
+                    line(w.x1, w.y1, w.x2, w.y2);
+                    pop();
+                }
             }
 
             // Preview line while drawing
@@ -3041,7 +3072,14 @@
                 p.show();
 
                 if (dist(p.x, p.y, centerX, centerY) < 4) {
-                    spawnCreatureFromVortexCenter(p.x, p.y, vortexDir, vortexStrength);
+                    if (p.isPurple) {
+                        // Purple particle reaching center spawns as predator
+                        let predator = new Creature(p.x, p.y);
+                        predator.isPredator = true;
+                        creatures.push(predator);
+                    } else {
+                        spawnCreatureFromVortexCenter(p.x, p.y, vortexDir, vortexStrength);
+                    }
                     vortexParticles.splice(i, 1);
                     continue;
                 }
@@ -3536,6 +3574,44 @@
                     circle(0, 0, 28);
                     pop();
                 }
+
+                // === ENERGY BEAM SYSTEM (connects placed hazard to cursor only) ===
+                if (cursorHazardActive && placedHazards.length > 0) {
+                    let cx = mouseX;
+                    let cy = mouseY;
+
+                    // Draw energy beam ONLY between cursor and each placed hazard (no triangle between hazards)
+                    stroke(255, 80, 80, 200);
+                    strokeWeight(3);
+                    noFill();
+
+                    for (let h of placedHazards) {
+                        line(cx, cy, h.x, h.y);
+                    }
+
+                    // Update timers and explosions for placed hazards
+                    for (let i = placedHazards.length - 1; i >= 0; i--) {
+                        let h = placedHazards[i];
+                        if (!h.exploding) {
+                            h.timer--;
+                            if (h.timer < 120) h.shakeTimer = max(h.shakeTimer || 0, 8);
+
+                            if (h.timer <= 0) {
+                                h.exploding = true;
+                                // Explode: turn nearby creatures purple
+                                for (let c of creatures) {
+                                    if (dist(c.x, c.y, h.x, h.y) < 65) {
+                                        c.purpleFlash = max(c.purpleFlash || 0, 140);
+                                        c.energy = max(0, c.energy - 25);
+                                    }
+                                }
+                                explosions.push(new Explosion(h.x, h.y));
+                                playExplosionSound();
+                                placedHazards.splice(i, 1);
+                            }
+                        }
+                    }
+                }
             }
 
             // ==================== SPACESHIP + BULLETS ====================
@@ -3639,6 +3715,11 @@
             } else {
                 text('NIGHT', 16, 24);
             }
+
+            // Version display (for future updates)
+            fill(180, 180, 255, 160);
+            textSize(10);
+            text(GAME_VERSION, width - 55, 20);
 
             // Live Music Debug - Improved frequency bands
             if (musicEnabled) {
@@ -3761,9 +3842,8 @@
                 }
             }
 
-            // Click to place / move persistent Hazard Cursor on the map
+            // Click to place / move Hazard spots (new chain system)
             if (cursorHazardActive) {
-                // Don't place if clicking near a creature (to avoid conflict with inspector)
                 let nearCreature = false;
                 for (let c of creatures) {
                     if (dist(mouseX, mouseY, c.x, c.y) < 18) {
@@ -3772,9 +3852,29 @@
                     }
                 }
                 if (!nearCreature) {
-                    persistentHazard.x = mouseX;
-                    persistentHazard.y = mouseY;
-                    persistentHazard.active = true;
+                    if (beamCharge > 0 || placedHazards.length === 0) {
+                        // Place new hazard spot
+                        placedHazards.push({
+                            x: mouseX,
+                            y: mouseY,
+                            timer: 420, // 7 seconds
+                            shakeTimer: 0,
+                            exploding: false
+                        });
+                        if (beamCharge > 0) beamCharge--;
+                        if (placedHazards.length > maxPlacedHazards) {
+                            placedHazards.shift(); // Keep only max
+                        }
+                    } else {
+                        // Move the first one if no charge
+                        if (placedHazards.length > 0) {
+                            placedHazards[0].x = mouseX;
+                            placedHazards[0].y = mouseY;
+                            placedHazards[0].timer = 420;
+                            placedHazards[0].shakeTimer = 0;
+                            placedHazards[0].exploding = false;
+                        }
+                    }
                 }
             }
         }
