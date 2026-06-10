@@ -3607,6 +3607,41 @@
                         pop();
                     }
 
+                    // Blue beam absorbs red particles (with traveling visual + sound + timer reset)
+                    for (let i = redHazards.length - 1; i >= 0; i--) {
+                        let r = redHazards[i];
+                        let hitBeam = false;
+
+                        for (let h of placedHazards) {
+                            if (distToLineSegment(r.x, r.y, cx, cy, h.x, h.y) < 12) {
+                                hitBeam = true;
+                                break;
+                            }
+                        }
+
+                        if (hitBeam) {
+                            redHazards.splice(i, 1);
+
+                            // Visual traveling down the beam toward cursor
+                            for (let k = 0; k < 6; k++) {
+                                let t = k / 5;
+                                let px = lerp(r.x, cx, t);
+                                let py = lerp(r.y, cy, t);
+                                explosions.push(new Explosion(px, py));
+                            }
+
+                            playAbsorbSound();
+                            beamCharge = min(beamCharge + 1, 5);
+
+                            // Reset timer on all placed hazards
+                            for (let h of placedHazards) {
+                                h.timer = 420;
+                                h.shakeTimer = 0;
+                                h.exploding = false;
+                            }
+                        }
+                    }
+
                     // Creatures touching the blue beam get purple DoT
                     for (let c of creatures) {
                         for (let h of placedHazards) {
@@ -3886,8 +3921,9 @@
                     }
                 }
                 if (!nearCreature) {
-                    if (beamCharge > 0 || placedHazards.length === 0) {
-                        // Place new hazard spot
+                    // Always allow placing up to maxPlacedHazards (3 total)
+                    if (placedHazards.length < maxPlacedHazards) {
+                        // Place new hazard orb
                         placedHazards.push({
                             x: mouseX,
                             y: mouseY,
@@ -3896,17 +3932,18 @@
                             exploding: false
                         });
                         if (beamCharge > 0) beamCharge--;
-                        if (placedHazards.length > maxPlacedHazards) {
-                            placedHazards.shift(); // Keep only max
-                        }
                     } else {
-                        // Move the first one if no charge
+                        // Move the oldest one if already at max
                         if (placedHazards.length > 0) {
-                            placedHazards[0].x = mouseX;
-                            placedHazards[0].y = mouseY;
-                            placedHazards[0].timer = 420;
-                            placedHazards[0].shakeTimer = 0;
-                            placedHazards[0].exploding = false;
+                            let oldest = placedHazards.shift();
+                            placedHazards.push({
+                                x: mouseX,
+                                y: mouseY,
+                                timer: 420,
+                                shakeTimer: 0,
+                                exploding: false
+                            });
+                            if (beamCharge > 0) beamCharge--;
                         }
                     }
                 }
