@@ -76,7 +76,7 @@
                     <div class="flex items-center gap-x-3">
                         <div class="flex items-baseline gap-x-2">
                             <h1 class="font-display text-2xl sm:text-3xl tracking-tighter">MiniSimmy2</h1>
-                            <span class="text-emerald-400 text-sm font-mono">v1.73</span>
+                            <span class="text-emerald-400 text-sm font-mono">v1.75</span>
                         </div>
                     </div>
                     
@@ -157,7 +157,7 @@
                     <i class="fa-solid fa-hand-pointer text-orange-400"></i>
                     <span>Cursor Hazard</span>
                 </button>
-                <button onclick="toggleEnergyWallMode()" id="quick-wall-btn"
+                <button onclick="showEnergyWallPlacementMenu()" id="quick-wall-btn"
                     class="px-5 py-2 text-sm font-medium rounded-2xl bg-white/10 hover:bg-white/20 flex items-center gap-x-2 border border-white/10 active:scale-[0.985] transition-transform">
                     <i class="fa-solid fa-shield-alt text-violet-400"></i>
                     <span>Energy Wall</span>
@@ -853,7 +853,7 @@
         let analyticsModalOpen = false;
 
         // === VERSIONING (for future updates) ===
-        const GAME_VERSION = "v1.73 - Energy Wall + Filter foundation: Vulnerable walls now visually distinct • Basic per-wall filter data structure • Improved wall state feedback";
+        const GAME_VERSION = "v1.75 - Energy Wall Redesign: Button opens placement menu • Filter/Pusher walls with sub-menu selection • Damage is now opt-in";
 
         // Audio
         let masterVolume = 0.12;
@@ -1460,6 +1460,9 @@
             canvas.parent('canvas-container');
             canvas.mousePressed(handleMousePress);
 
+            // Prevent browser context menu on right-click inside the sim
+            canvas.elt.addEventListener('contextmenu', e => e.preventDefault());
+
             centerX = width / 2;
             centerY = height / 2;
 
@@ -1661,6 +1664,9 @@
         let wallStartY = 0;
         let currentWallPreview = null; // for temporary drawing line
 
+        // v1.74: Currently selected filter mode for new walls you draw
+        let currentWallFilterMode = "repel_all";
+
         // Music System
         let musicEnabled = false;
         let audioContext = null;
@@ -1710,6 +1716,144 @@
                 btn.classList.remove('bg-violet-500/80', 'text-white');
                 btn.classList.add('bg-white/10');
             }
+        }
+
+        // ==================== v1.75: Energy Wall Placement Menu ====================
+        function showEnergyWallPlacementMenu() {
+            // Close any existing menus
+            document.querySelectorAll('.fixed').forEach(el => el.remove());
+
+            const modal = document.createElement('div');
+            modal.className = 'fixed inset-0 bg-black/80 flex items-center justify-center z-[250]';
+            modal.innerHTML = `
+                <div class="bg-[#121218] border border-white/10 rounded-3xl w-full max-w-lg mx-4 p-6">
+                    <div class="flex justify-between items-center mb-5">
+                        <h3 class="text-xl font-semibold flex items-center gap-x-2">
+                            <i class="fa-solid fa-shield-alt text-violet-400"></i>
+                            <span>Place Energy Wall</span>
+                        </h3>
+                        <button onclick="this.closest('.fixed').remove()" class="text-3xl leading-none text-white/60 hover:text-white">×</button>
+                    </div>
+
+                    <div class="grid grid-cols-1 gap-3">
+                        
+                        <!-- Solid Barrier -->
+                        <button onclick="selectWallType('solid')" 
+                                class="w-full text-left p-4 bg-white/5 hover:bg-white/10 rounded-2xl border border-white/10 flex items-center gap-x-4 transition-colors">
+                            <div class="w-10 h-10 rounded-xl bg-violet-500/20 flex items-center justify-center flex-shrink-0">
+                                <i class="fa-solid fa-square text-violet-400 text-xl"></i>
+                            </div>
+                            <div>
+                                <div class="font-semibold">Solid Barrier</div>
+                                <div class="text-xs text-white/60">Blocks most creatures. Classic wall behavior.</div>
+                            </div>
+                        </button>
+
+                        <!-- Filter / Pusher Wall -->
+                        <button onclick="showFilterWallSubMenu()" 
+                                class="w-full text-left p-4 bg-white/5 hover:bg-white/10 rounded-2xl border border-white/10 flex items-center gap-x-4 transition-colors">
+                            <div class="w-10 h-10 rounded-xl bg-sky-500/20 flex items-center justify-center flex-shrink-0">
+                                <i class="fa-solid fa-filter text-sky-400 text-xl"></i>
+                            </div>
+                            <div>
+                                <div class="font-semibold">Selective Filter Wall</div>
+                                <div class="text-xs text-white/60">Only affects chosen creature types. Unaffected creatures pass through.</div>
+                            </div>
+                        </button>
+
+                    </div>
+
+                    <div class="mt-5 text-xs text-white/50 text-center">
+                        Damage and breaking mechanics are now opt-in features.
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+
+        function selectWallType(type) {
+            // Close current menu
+            document.querySelectorAll('.fixed').forEach(el => el.remove());
+
+            if (type === 'solid') {
+                currentWallFilterMode = "repel_all"; // solid = repel everything
+                toggleEnergyWallMode(); // enter drawing mode
+            }
+        }
+
+        function showFilterWallSubMenu() {
+            // Close previous menu
+            document.querySelectorAll('.fixed').forEach(el => el.remove());
+
+            const modal = document.createElement('div');
+            modal.className = 'fixed inset-0 bg-black/80 flex items-center justify-center z-[260]';
+            modal.innerHTML = `
+                <div class="bg-[#121218] border border-white/10 rounded-3xl w-full max-w-md mx-4 p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-semibold flex items-center gap-x-2">
+                            <i class="fa-solid fa-filter text-sky-400"></i>
+                            <span>Selective Filter Wall</span>
+                        </h3>
+                        <button onclick="this.closest('.fixed').remove()" class="text-3xl leading-none text-white/60 hover:text-white">×</button>
+                    </div>
+
+                    <div class="text-sm text-white/70 mb-3">Choose which creatures this wall will affect:</div>
+
+                    <div class="grid grid-cols-2 gap-2 text-sm mb-5" id="filter-options">
+                        <label class="flex items-center gap-x-2 p-2 bg-white/5 rounded-xl"><input type="checkbox" data-type="predator" class="accent-sky-400"> Predators</label>
+                        <label class="flex items-center gap-x-2 p-2 bg-white/5 rounded-xl"><input type="checkbox" data-type="harvester" class="accent-sky-400"> Harvesters</label>
+                        <label class="flex items-center gap-x-2 p-2 bg-white/5 rounded-xl"><input type="checkbox" data-type="white" class="accent-sky-400"> White Particles</label>
+                        <label class="flex items-center gap-x-2 p-2 bg-white/5 rounded-xl"><input type="checkbox" data-type="red" class="accent-sky-400"> Red Particles</label>
+                        <label class="flex items-center gap-x-2 p-2 bg-white/5 rounded-xl"><input type="checkbox" data-type="high_module" class="accent-sky-400"> Top 10% Modules</label>
+                        <label class="flex items-center gap-x-2 p-2 bg-white/5 rounded-xl"><input type="checkbox" data-type="low_energy" class="accent-sky-400"> Low Energy Creatures</label>
+                    </div>
+
+                    <div class="text-sm text-white/70 mb-2">Behavior when affected:</div>
+                    <div class="flex gap-2 mb-5">
+                        <button onclick="setFilterBehavior(this, 'repel')" class="flex-1 py-2 text-sm rounded-2xl bg-white/10 hover:bg-white/20 active:bg-sky-500/70">Repel / Push Back</button>
+                        <button onclick="setFilterBehavior(this, 'capture')" class="flex-1 py-2 text-sm rounded-2xl bg-white/10 hover:bg-white/20 active:bg-sky-500/70">Capture / Pull</button>
+                    </div>
+
+                    <div class="flex justify-end gap-x-3">
+                        <button onclick="this.closest('.fixed').remove()" class="px-5 py-2 text-sm rounded-2xl bg-white/10 hover:bg-white/20">Cancel</button>
+                        <button onclick="confirmFilterWall(this)" class="px-5 py-2 text-sm rounded-2xl bg-sky-500 hover:bg-sky-600 font-medium">Start Drawing</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+
+        let selectedFilterTypes = [];
+        let selectedFilterBehavior = 'repel';
+
+        function setFilterBehavior(btn, behavior) {
+            // Deselect all behavior buttons in this modal
+            btn.parentElement.querySelectorAll('button').forEach(b => b.classList.remove('bg-sky-500/70', 'text-white'));
+            btn.classList.add('bg-sky-500/70', 'text-white');
+            selectedFilterBehavior = behavior;
+        }
+
+        function confirmFilterWall(btn) {
+            const modal = btn.closest('.fixed');
+            const container = modal.querySelector('#filter-options');
+            const checked = container.querySelectorAll('input[type="checkbox"]:checked');
+
+            selectedFilterTypes = [];
+            checked.forEach(cb => {
+                selectedFilterTypes.push(cb.dataset.type);
+            });
+
+            // Store current selection globally for wall creation
+            window.currentFilterWallSettings = {
+                types: selectedFilterTypes,
+                behavior: selectedFilterBehavior
+            };
+
+            modal.remove();
+
+            // Enter drawing mode with filter wall settings
+            currentWallFilterMode = "custom_filter"; // special mode
+            toggleEnergyWallMode();
         }
 
         function toggleCursorPush() {
@@ -4239,8 +4383,8 @@
             }
             if (selectedCreature) deselectCreature();
 
-            // Click on Energy Wall to delete it
-            if (energyWalls.length > 0) {
+            // Click on Energy Wall to delete it (only on left click)
+            if (mouseButton === LEFT && energyWalls.length > 0) {
                 let closestDist = 18;
                 let closestIndex = -1;
 
@@ -4300,6 +4444,23 @@
 
         // === Energy Wall Drawing (click + drag) ===
         function mousePressed() {
+            // v1.74: Right-click on a wall to cycle its filter mode
+            if (mouseButton === RIGHT) {
+                for (let w of energyWalls) {
+                    let d = distToLineSegment(mouseX, mouseY, w.x1, w.y1, w.x2, w.y2);
+                    if (d < 18) {
+                        // Cycle filter modes
+                        const modes = ["repel_all", "allow_harvesters", "allow_low_energy", "allow_predators"];
+                        let currentIndex = modes.indexOf(w.filterMode || "repel_all");
+                        w.filterMode = modes[(currentIndex + 1) % modes.length];
+
+                        addFloatingText(mouseX, mouseY - 20, w.filterMode.replace("_", " "), '#a5b4fc');
+                        return; // consume the click
+                    }
+                }
+                return;
+            }
+
             if (!energyWallMode) return;
 
             // Only start drawing if not clicking on a creature
@@ -4350,6 +4511,7 @@
                         originalLength: length,
                         immuneUntil: frameCount + 30,
                         redHits: 0,
+                        filterMode: currentWallFilterMode,   // v1.74: Uses the pre-selected mode
                         empowered: false,
                         shakeTimer: 0,
                         vortexImmune: true,           // New in v1.72: walls are vortex-immune by default
@@ -4363,6 +4525,25 @@
 
             isDrawingWall = false;
             currentWallPreview = null;
+        }
+
+        // v1.74: Quick filter mode selection with number keys (when Energy Wall mode is active)
+        function keyPressed() {
+            if (!energyWallMode) return;
+
+            if (key === '1') {
+                currentWallFilterMode = "repel_all";
+                addFloatingText(mouseX || width/2, mouseY || 100, "Filter: Repel All", '#f87171');
+            } else if (key === '2') {
+                currentWallFilterMode = "allow_harvesters";
+                addFloatingText(mouseX || width/2, mouseY || 100, "Filter: Allow Harvesters", '#34d399');
+            } else if (key === '3') {
+                currentWallFilterMode = "allow_low_energy";
+                addFloatingText(mouseX || width/2, mouseY || 100, "Filter: Allow Low Energy", '#fbbf24');
+            } else if (key === '4') {
+                currentWallFilterMode = "allow_predators";
+                addFloatingText(mouseX || width/2, mouseY || 100, "Filter: Allow Predators", '#c026ff');
+            }
         }
 
         class VortexParticle {
@@ -4408,6 +4589,26 @@
                 noStroke();
                 circle(this.x, this.y, this.size);
             }
+        }
+
+        // === v1.74: Wall Filter Helper ===
+        function creatureMatchesWallFilter(creature, wall) {
+            if (!wall.filterMode || wall.filterMode === "repel_all") {
+                return false; // repel everything by default
+            }
+
+            const mode = wall.filterMode;
+
+            // Basic matching logic (can be expanded greatly)
+            const isPredator = creature.isPredator === true || (creature.modules && creature.modules.length > 12);
+            const isLowEnergy = creature.energy < 30;
+            const isHarvester = creature.modules && creature.modules.length >= 5 && creature.modules.length <= 11;
+
+            if (mode === "allow_predators" && isPredator) return true;
+            if (mode === "allow_low_energy" && isLowEnergy) return true;
+            if (mode === "allow_harvesters" && isHarvester) return true;
+
+            return false;
         }
 
         class Creature {
@@ -5039,31 +5240,39 @@
                     }
                 }
 
-                // === Energy Wall Collision, Bounce, Purple + DoT ===
+                // === Energy Wall Collision + Filtering (v1.74) ===
                 if (energyWalls.length > 0) {
                     for (let w of energyWalls) {
                         let d = distToLineSegment(this.x, this.y, w.x1, w.y1, w.x2, w.y2);
                         if (d < 13) {
-                            // Stronger bounce to reduce clipping
+                            const matchesFilter = creatureMatchesWallFilter(this, w);
+
                             let mx = (w.x1 + w.x2) / 2;
                             let my = (w.y1 + w.y2) / 2;
                             let dx = this.x - mx;
                             let dy = this.y - my;
                             let len = sqrt(dx*dx + dy*dy) || 1;
 
-                            let bounceForce = 3.2; // even stronger bounce
-                            this.vx += (dx / len) * bounceForce;
-                            this.vy += (dy / len) * bounceForce;
+                            if (matchesFilter) {
+                                // Creature is allowed through this wall's filter
+                                // Much weaker interaction (can mostly pass)
+                                let passForce = 0.6;
+                                this.vx += (dx / len) * passForce;
+                                this.vy += (dy / len) * passForce;
+                                this.energy = Math.max(5, this.energy - 0.8 * timeScale); // small cost to pass
+                            } else {
+                                // Default repel behavior (strong bounce + purple damage)
+                                let bounceForce = 3.4;
+                                this.vx += (dx / len) * bounceForce;
+                                this.vy += (dy / len) * bounceForce;
+                                this.vx += (dx / len) * 1.2;
+                                this.vy += (dy / len) * 1.2;
 
-                            // Extra push away from wall to prevent clipping
-                            this.vx += (dx / len) * 1.1;
-                            this.vy += (dy / len) * 1.1;
-
-                            // Turn purple + take damage over time
-                            this.purpleFlash = 90;
-                            this.mustEatWhite = true;
-                            this.ateWhiteParticle = false;
-                            this.energy = max(0, this.energy - 5.5 * timeScale);
+                                this.purpleFlash = 90;
+                                this.mustEatWhite = true;
+                                this.ateWhiteParticle = false;
+                                this.energy = Math.max(0, this.energy - 5.8 * timeScale);
+                            }
 
                             // Empowered wall turns creature into predator on contact
                             if (w.empowered && !this.isPredator) {
