@@ -2834,7 +2834,7 @@ function updateInspector() {
     const energyText = document.getElementById('inspect-energy-text');
     if (energyText) energyText.innerText = Math.floor(c.energy) + '%';
 
-    // Modules list
+        // Modules list
     const modulesList = document.getElementById('inspect-modules-list');
     if (modulesList) {
         modulesList.innerHTML = '';
@@ -2859,7 +2859,34 @@ function updateInspector() {
         }
     }
 
-// ==================== v2.11.1: Neural Net Visualization (Glowing + Better Labels) ====================
+    // ==================== Neural Net Visualization ====================
+    let netContainer = document.getElementById('neural-net-container');
+    if (!netContainer) {
+        netContainer = document.createElement('div');
+        netContainer.id = 'neural-net-container';
+        netContainer.className = 'mt-4 pt-3 border-t border-white/10';
+        netContainer.innerHTML = `
+            <div class="text-[10px] text-slate-400 mb-1 flex items-center gap-x-2">
+                <span>NEURAL NET</span>
+                <span class="text-[9px] text-amber-400/60">(v2.11.1)</span>
+            </div>
+            <canvas id="neural-net-canvas" width="260" height="130"
+                    class="bg-[#0a0a0f] border border-white/10 rounded-xl w-full"></canvas>
+        `;
+        if (modulesList && modulesList.parentNode) {
+            modulesList.parentNode.appendChild(netContainer);
+        }
+    }
+
+    // Draw neural net
+    setTimeout(() => {
+        if (selectedCreature && typeof drawCreatureNeuralNet === 'function') {
+            drawCreatureNeuralNet(selectedCreature);
+        }
+    }, 30);
+}
+        
+// ==================== Neural Net Visualization ====================
 function drawCreatureNeuralNet(creature) {
     const canvas = document.getElementById('neural-net-canvas');
     if (!canvas || !creature) return;
@@ -2877,13 +2904,12 @@ function drawCreatureNeuralNet(creature) {
     const layerX = [58, 138, 218];
     const nodeRadius = 9;
     const time = Date.now() / 320;
-
-    // Stronger activity signal
     const activity = Math.min(1, (creature.energy / 70) + (creature.modules.length * 0.1));
 
-    // === GLOWING CONNECTION LINES ===
+    // Base connections (dark)
     ctx.strokeStyle = '#1e3a5f';
     ctx.lineWidth = 2.8;
+
     for (let i = 0; i < inputCount; i++) {
         for (let j = 0; j < hiddenCount; j++) {
             const y1 = 30 + (i * ((h - 60) / (inputCount - 1 || 1)));
@@ -2894,6 +2920,7 @@ function drawCreatureNeuralNet(creature) {
             ctx.stroke();
         }
     }
+
     for (let j = 0; j < hiddenCount; j++) {
         for (let k = 0; k < outputCount; k++) {
             const y1 = 24 + (j * ((h - 48) / (hiddenCount - 1 || 1)));
@@ -2905,9 +2932,10 @@ function drawCreatureNeuralNet(creature) {
         }
     }
 
-    // Brighter core lines
-    ctx.strokeStyle = '#334155';
-    ctx.lineWidth = 1.3;
+    // Active pulsing lines (green)
+    ctx.strokeStyle = `rgba(52, 211, 153, ${0.6 + activity * 0.4})`;
+    ctx.lineWidth = 1.8;
+
     for (let i = 0; i < inputCount; i++) {
         for (let j = 0; j < hiddenCount; j++) {
             const y1 = 30 + (i * ((h - 60) / (inputCount - 1 || 1)));
@@ -2918,63 +2946,40 @@ function drawCreatureNeuralNet(creature) {
             ctx.stroke();
         }
     }
-    for (let j = 0; j < hiddenCount; j++) {
-        for (let k = 0; k < outputCount; k++) {
-            const y1 = 24 + (j * ((h - 48) / (hiddenCount - 1 || 1)));
-            const y2 = 40 + (k * ((h - 80) / (outputCount - 1 || 1)));
-            ctx.beginPath();
-            ctx.moveTo(layerX[1], y1);
-            ctx.lineTo(layerX[2], y2);
-            ctx.stroke();
-        }
-    }
 
-    // === Draw Nodes with Stronger Pulse ===
-    const drawLayer = (x, count, labels, offset, isOutput = false) => {
+    // Draw nodes with pulsing activity
+    const drawLayer = (count, x, labelPrefix, isOutput = false) => {
         for (let i = 0; i < count; i++) {
-            const y = 30 + (i * ((h - 60) / (count - 1 || 1)));
-            const pulse = Math.sin(time + i * 0.9 + offset) * 0.5 + 0.5;
-            const alpha = 0.5 + pulse * 0.5 * activity;
+            const y = (isOutput ? 40 : 24) + (i * ((h - (isOutput ? 80 : 48)) / (count - 1 || 1)));
 
-            // Strong glow
-            ctx.fillStyle = `rgba(52, 211, 153, ${alpha * 0.4})`;
-            ctx.beginPath();
-            ctx.arc(x, y, nodeRadius + 7, 0, Math.PI * 2);
-            ctx.fill();
-
-            // Core
-            ctx.fillStyle = isOutput ? '#fbbf24' : '#34d399';
+            // Node background
+            ctx.fillStyle = '#0a0a0f';
+            ctx.strokeStyle = '#64748b';
+            ctx.lineWidth = 1.5;
             ctx.beginPath();
             ctx.arc(x, y, nodeRadius, 0, Math.PI * 2);
             ctx.fill();
+            ctx.stroke();
 
-            // Label positioning
-            ctx.fillStyle = '#e2e8f0';
-            ctx.font = '10.5px Inter, system-ui';
-            ctx.textAlign = x < 100 ? 'right' : 'left';
-            const labelX = x < 100 ? x - 15 : x + 15;
-            ctx.fillText(labels[i] || '?', labelX, y + 3.5);
+            // Pulsing activity dot
+            const pulse = Math.sin(time + i) * 0.5 + 0.5;
+            ctx.fillStyle = `rgba(52, 211, 153, ${pulse * activity})`;
+            ctx.beginPath();
+            ctx.arc(x, y, nodeRadius * 0.6, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Labels (I1, H2, O3, etc.)
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '9px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText(labelPrefix + (i + 1), x, y + 3);
         }
     };
 
-    const inputLabels  = ['Energy', 'Sensor', 'Mover', 'Resist'];
-    const hiddenLabels = ['H1', 'H2', 'H3', 'H4', 'H5'];
-    const outputLabels = ['Move', 'Eat', 'Avoid'];
-
-    drawLayer(layerX[0], inputCount, inputLabels, 0);
-    drawLayer(layerX[1], hiddenCount, hiddenLabels, 2.1);
-    drawLayer(layerX[2], outputCount, outputLabels, 4.0, true);
-
-    // === Explanation below the network ===
-    ctx.fillStyle = '#64748b';
-    ctx.font = '9.5px Inter, system-ui';
-    ctx.textAlign = 'left';
-    ctx.fillText('Inputs → Hidden Layer → Outputs   •   Pulses with energy + modules', 14, h - 9);
+    drawLayer(inputCount, layerX[0], 'I');
+    drawLayer(hiddenCount, layerX[1], 'H');
+    drawLayer(outputCount, layerX[2], 'O', true);
 }
-
-}
-        
-
         
 
         function showLegendModal() {
