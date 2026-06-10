@@ -76,7 +76,7 @@
                     <div class="flex items-center gap-x-3">
                         <div class="flex items-baseline gap-x-2">
                             <h1 class="font-display text-2xl sm:text-3xl tracking-tighter">MiniSimmy2</h1>
-                            <span class="text-emerald-400 text-sm font-mono">v1.79</span>
+                            <span class="text-emerald-400 text-sm font-mono">v1.84</span>
                         </div>
                     </div>
                     
@@ -147,10 +147,10 @@
 
             <!-- Quick Tool Toggles at bottom of map -->
             <div class="mt-3 flex flex-wrap gap-3 justify-center">
-                <button onclick="toggleRedHazardsQuick()" id="quick-red-btn"
+                <button onclick="showRedHazardsMenu()" id="quick-red-btn"
                     class="px-5 py-2 text-sm font-medium rounded-2xl bg-white/10 hover:bg-white/20 flex items-center gap-x-2 border border-white/10 active:scale-[0.985] transition-transform">
                     <i class="fa-solid fa-bomb text-red-400"></i>
-                    <span>Red Hazards</span>
+                    <span>Hazard Fields</span>
                 </button>
                 <button onclick="toggleCursorHazardQuick()" id="quick-cursor-btn"
                     class="px-5 py-2 text-sm font-medium rounded-2xl bg-white/10 hover:bg-white/20 flex items-center gap-x-2 border border-white/10 active:scale-[0.985] transition-transform">
@@ -853,7 +853,7 @@
         let analyticsModalOpen = false;
 
         // === VERSIONING (for future updates) ===
-        const GAME_VERSION = "v1.79 - Refined filters + visuals: Predators / White / Red / High Modules / Low Modules • Color-coded walls per filter type • Filters now fully functional";
+        const GAME_VERSION = "v1.84 - Fixed duplicate placedHazards declaration • Cleaned up hazard system";
 
         // Audio
         let masterVolume = 0.12;
@@ -1805,7 +1805,7 @@
             const modal = document.createElement('div');
             modal.className = 'fixed inset-0 bg-black/80 flex items-center justify-center z-[260]';
             
-            // Build checkbox HTML with previous selections restored
+            // Build radio button HTML (only one filter type per wall)
             const types = ['predator', 'white', 'red', 'high_module', 'low_module'];
             const labels = {
                 predator: 'Predators',
@@ -1815,12 +1815,13 @@
                 low_module: 'Bottom 10% Lowest Modules'
             };
 
-            let checkboxesHTML = '';
+            let radioHTML = '';
             types.forEach(type => {
-                const checked = selectedFilterTypes.includes(type) ? 'checked' : '';
-                checkboxesHTML += `
-                    <label class="flex items-center gap-x-2 p-2 bg-white/5 rounded-xl">
-                        <input type="checkbox" data-type="${type}" ${checked} class="accent-sky-400"> ${labels[type]}
+                const checked = (selectedFilterTypes.length > 0 && selectedFilterTypes[0] === type) ? 'checked' : '';
+                radioHTML += `
+                    <label class="flex items-center gap-x-3 p-3 bg-white/5 hover:bg-white/10 rounded-2xl cursor-pointer">
+                        <input type="radio" name="filter-type" data-type="${type}" ${checked} class="accent-sky-400">
+                        <span>${labels[type]}</span>
                     </label>
                 `;
             });
@@ -1835,10 +1836,10 @@
                         <button onclick="this.closest('.fixed').remove()" class="text-3xl leading-none text-white/60 hover:text-white">×</button>
                     </div>
 
-                    <div class="text-sm text-white/70 mb-3">Choose which creatures this wall will push back:</div>
+                    <div class="text-sm text-white/70 mb-3">Choose which type this wall will strongly push back (only one):</div>
 
-                    <div class="grid grid-cols-1 gap-1.5 text-sm mb-5" id="filter-options">
-                        ${checkboxesHTML}
+                    <div class="flex flex-col gap-1.5 text-sm mb-5" id="filter-options">
+                        ${radioHTML}
                     </div>
 
                     <div class="flex justify-end gap-x-3">
@@ -1855,18 +1856,18 @@
         function confirmFilterWall(btn) {
             const modal = btn.closest('.fixed');
             const container = modal.querySelector('#filter-options');
-            const checked = container.querySelectorAll('input[type="checkbox"]:checked');
+            const selectedRadio = container.querySelector('input[type="radio"]:checked');
 
             selectedFilterTypes = [];
-            checked.forEach(cb => {
-                selectedFilterTypes.push(cb.dataset.type);
-            });
+            if (selectedRadio) {
+                selectedFilterTypes.push(selectedRadio.dataset.type);
+            }
 
             // Prefer main menu toggle if it exists
             const mainToggle = document.getElementById('main-offensive-toggle');
             const isOffensive = mainToggle ? mainToggle.checked : (window.selectedOffensive === true);
 
-            // Store current selection globally for wall creation (push only)
+            // Store current selection (single filter type)
             window.currentFilterWallSettings = {
                 types: selectedFilterTypes,
                 offensive: isOffensive
@@ -1874,7 +1875,7 @@
 
             modal.remove();
 
-            // Enter drawing mode with filter wall settings
+            // Enter drawing mode
             currentWallFilterMode = "custom_filter";
             toggleEnergyWallMode();
         }
@@ -3407,6 +3408,50 @@
                     }
                 }
 
+                // === v1.80: Solid Barriers block white & red particles (piling / bounce effect) ===
+                if (!w.filterMode || w.filterMode === "repel_all") {
+                    // This is a Solid Barrier - interact with particles
+
+                    const wallMidX = (w.x1 + w.x2) / 2;
+                    const wallMidY = (w.y1 + w.y2) / 2;
+
+                    // White particles (vortexParticles)
+                    for (let p of vortexParticles) {
+                        let d = distToLineSegment(p.x, p.y, w.x1, w.y1, w.x2, w.y2);
+                        if (d < 28) {
+                            let mx = (w.x1 + w.x2) / 2;
+                            let my = (w.y1 + w.y2) / 2;
+                            let dx = p.x - mx;
+                            let dy = p.y - my;
+                            let len = sqrt(dx*dx + dy*dy) || 1;
+
+                            // Bounce away + slow down (piling effect)
+                            p.x += (dx / len) * 2.2;
+                            p.y += (dy / len) * 2.2;
+                            p.vx = (p.vx || 0) * 0.4;
+                            p.vy = (p.vy || 0) * 0.4;
+                        }
+                    }
+
+                    // Red particles
+                    for (let r of redHazards) {
+                        let d = distToLineSegment(r.x, r.y, w.x1, w.y1, w.x2, w.y2);
+                        if (d < 26) {
+                            let mx = (w.x1 + w.x2) / 2;
+                            let my = (w.y1 + w.y2) / 2;
+                            let dx = r.x - mx;
+                            let dy = r.y - my;
+                            let len = sqrt(dx*dx + dy*dy) || 1;
+
+                            // Bounce + slow
+                            r.x += (dx / len) * 2.8;
+                            r.y += (dy / len) * 2.8;
+                            r.vx = (r.vx || 0) * 0.35;
+                            r.vy = (r.vy || 0) * 0.35;
+                        }
+                    }
+                }
+
                 // Vortex influence on walls (v1.72: immune by default, temporarily vulnerable after damage)
                 const isVulnerable = w.vortexVulnerableUntil && frameCount <= w.vortexVulnerableUntil;
                 const shouldApplyVortex = !w.vortexImmune || isVulnerable;
@@ -4464,7 +4509,7 @@
                         placedHazards.push({
                             x: mouseX,
                             y: mouseY,
-                            timer: 420, // 7 seconds
+                            timer: 99999, // Permanent until manually removed
                             shakeTimer: 0,
                             exploding: false
                         });
@@ -4476,7 +4521,7 @@
                             placedHazards.push({
                                 x: mouseX,
                                 y: mouseY,
-                                timer: 420,
+                                timer: 99999,
                                 shakeTimer: 0,
                                 exploding: false
                             });
@@ -4489,18 +4534,27 @@
 
         // === Energy Wall Drawing (click + drag) ===
         function mousePressed() {
-            // v1.74: Right-click on a wall to cycle its filter mode
+            // Right-click handling
             if (mouseButton === RIGHT) {
+                // Remove placed hazard if clicking near one
+                for (let i = placedHazards.length - 1; i >= 0; i--) {
+                    let h = placedHazards[i];
+                    if (dist(mouseX, mouseY, h.x, h.y) < 25) {
+                        placedHazards.splice(i, 1);
+                        addFloatingText(mouseX, mouseY, "Hazard removed", '#f87171');
+                        return;
+                    }
+                }
+
+                // Right-click on a wall to cycle its filter mode (existing)
                 for (let w of energyWalls) {
                     let d = distToLineSegment(mouseX, mouseY, w.x1, w.y1, w.x2, w.y2);
                     if (d < 18) {
-                        // Cycle filter modes
                         const modes = ["repel_all", "allow_harvesters", "allow_low_energy", "allow_predators"];
                         let currentIndex = modes.indexOf(w.filterMode || "repel_all");
                         w.filterMode = modes[(currentIndex + 1) % modes.length];
-
                         addFloatingText(mouseX, mouseY - 20, w.filterMode.replace("_", " "), '#a5b4fc');
-                        return; // consume the click
+                        return;
                     }
                 }
                 return;
@@ -5321,10 +5375,14 @@
                             let len = sqrt(dx*dx + dy*dy) || 1;
 
                             if (matchesFilter && isCustomFilter) {
-                                // Push back (default behavior)
-                                let force = 2.8;
+                                // Strong push for filter walls - prevent passing through
+                                let force = 5.5;
                                 this.vx += (dx / len) * force;
                                 this.vy += (dy / len) * force;
+
+                                // Extra repulsion to reduce clipping
+                                this.vx += (dx / len) * 2.0;
+                                this.vy += (dy / len) * 2.0;
                             } else if (!isCustomFilter) {
                                 // Solid Barrier - stronger physical blocking
                                 let force = 3.5;
@@ -5348,11 +5406,11 @@
                                     this.energy = Math.max(0, this.energy - 4.2 * timeScale);
                                 }
 
-                                // Faster wall degradation on offensive walls
-                                w.life -= isCustomFilter ? 18 : 35;
+                                // Filter walls take very little damage even when offensive
+                                w.life -= isCustomFilter ? 4 : 28;
                             } else {
-                                // Peaceful walls degrade very slowly
-                                w.life -= isCustomFilter ? 6 : 15;
+                                // Peaceful walls (especially filters) degrade extremely slowly
+                                w.life -= isCustomFilter ? 2 : 12;
                             }
 
                             w.hitFlash = 12;
