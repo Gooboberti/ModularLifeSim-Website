@@ -74,7 +74,7 @@
                 <div class="flex items-center gap-x-3">
                     <div class="flex items-baseline gap-x-2">
                         <h1 class="font-display text-2xl sm:text-3xl tracking-tighter">MiniSimmy2</h1>
-                        <span class="text-emerald-400 text-sm font-mono">v1.12</span>
+                        <span class="text-emerald-400 text-sm font-mono">v1.13</span>
                     </div>
                 </div>
                 
@@ -853,12 +853,13 @@
         let centerX, centerY;
         let selectedCreature = null;
 
-        // High Roller Points (main currency)
+        // High Roller Points (main currency) - exposed on window for reliable access from modal/chart functions
         let highRollerPoints = 0;
+        if (typeof window !== 'undefined') window.highRollerPoints = highRollerPoints;
         let analyticsModalOpen = false;
 
         // === VERSIONING (for future updates) ===
-        const GAME_VERSION = "v1.6.1 - Fixed predators ReferenceError in Analytics Modal";
+        const GAME_VERSION = "v1.13 - High Roller now correctly tracked in Analytics modal & Trends chart";
 
         // Audio
         let masterVolume = 0.12;
@@ -2324,7 +2325,7 @@
             graphData.predators.push(predators);
             graphData.greenFood.push(greenZone ? greenZone.food : 0);
             graphData.blueFood.push(blueZone ? blueZone.food : 0);
-            graphData.hr.push(typeof highRollerPoints !== 'undefined' ? highRollerPoints : 0);
+            graphData.hr.push(getHighRollerPoints());
 
             if (graphData.pop.length > 160) {
                 graphData.pop.shift();
@@ -2589,6 +2590,17 @@
             if (miniChartCtx) drawMiniChart();
         }
 
+        // Robust getter for High Roller Points (fixes scope issues between main UI and Analytics modal)
+        function getHighRollerPoints() {
+            if (typeof window !== 'undefined' && typeof window.highRollerPoints === 'number') {
+                return window.highRollerPoints;
+            }
+            if (typeof highRollerPoints === 'number') {
+                return highRollerPoints;
+            }
+            return 0;
+        }
+
         function updateAnalyticsStats() {
             const popEl = document.getElementById('modal-pop');
             const predEl = document.getElementById('modal-pred');
@@ -2599,7 +2611,7 @@
 
             if (popEl) popEl.textContent = creatures.length;
             if (predEl) predEl.textContent = (typeof predators !== 'undefined') ? predators.length : 0;
-            if (hrEl) hrEl.textContent = (typeof highRollerPoints !== 'undefined') ? highRollerPoints.toLocaleString() : '0';
+            if (hrEl) hrEl.textContent = getHighRollerPoints().toLocaleString();
 
             // Calculate current values locally (robust against scope issues)
             let totalModules = 0;
