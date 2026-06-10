@@ -2735,149 +2735,122 @@ const GAME_VERSION = "v2.01 - Fixed crash: isFilterMode scope error during wall 
             updateVegasScore();
             updateEnvironmentalUI();
 
-        // Update floating texts
-        for (let i = floatingTexts.length - 1; i >= 0; i--) {
-            floatingTexts[i].update();
-            if (floatingTexts[i].life <= 0) floatingTexts.splice(i, 1);
+            // Update floating texts
+            for (let i = floatingTexts.length - 1; i >= 0; i--) {
+                floatingTexts[i].update();
+                if (floatingTexts[i].life <= 0) floatingTexts.splice(i, 1);
+            }
         }
-    }
 
-    function selectCreature(creature) {
-        selectedCreature = creature;
-        const panel = document.getElementById('inspector-panel');
-        panel.classList.remove('hidden');
-        panel.classList.add('block');
-        updateInspector();
-    }
+        function selectCreature(creature) {
+            selectedCreature = creature;
+            const panel = document.getElementById('inspector-panel');
+            panel.classList.remove('hidden');
+            panel.classList.add('block');
+            updateInspector();
+        }
 
-    function deselectCreature() {
-        selectedCreature = null;
-        const panel = document.getElementById('inspector-panel');
-        panel.classList.remove('block');
-        panel.classList.add('hidden');
-    }
+        function deselectCreature() {
+            selectedCreature = null;
+            const panel = document.getElementById('inspector-panel');
+            panel.classList.remove('block');
+            panel.classList.add('hidden');
+        }
 
-    function drawCreaturePreview(creature, canvas) {
-        if (!creature || !canvas) return;
-        const ctx = canvas.getContext('2d');
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        function updateInspector() {
+    if (!selectedCreature) return;
+    const c = selectedCreature;
 
-        const cx = canvas.width / 2;
-        const cy = canvas.height / 2;
-        const scale = 2.8;
+    document.getElementById('inspect-name').innerText = c.name;
 
-        // Background circle
-        ctx.fillStyle = 'rgba(255,255,255,0.03)';
+function drawCreaturePreview(creature, canvas) {
+    if (!creature || !canvas) return;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
+    const scale = 2.8;
+
+    // Background circle
+    ctx.fillStyle = 'rgba(255,255,255,0.03)';
+    ctx.beginPath();
+    ctx.arc(cx, cy, 38, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Core color based on specialization / predator state
+    let coreColor = creature.isPredator ? '#f87171' : '#facc15';
+    if (creature.specialization === 'harvester') coreColor = '#34d399';
+    if (creature.specialization === 'sensor') coreColor = '#38bdf8';
+    if (creature.specialization === 'mover') coreColor = '#a78bfa';
+    if (creature.specialization === 'resistant') coreColor = '#f472b6';
+    if (creature.specialization === 'explorer') coreColor = '#fbbf24';
+    if (creature.specialization === 'communicator') coreColor = '#c084fc';
+
+    ctx.fillStyle = coreColor;
+    ctx.strokeStyle = creature.isPredator ? '#fecaca' : '#fef08c';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 11, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Draw modules with proper offsets and tiers
+    for (let m of creature.modules) {
+        const x = cx + (m.offsetX || 0) * scale;
+        const y = cy + (m.offsetY || 0) * scale;
+        const tier = m.tier || 1;
+        const size = 5.5 + (tier - 1) * 1.1;
+
+        ctx.fillStyle = m.color;
+        ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+        ctx.lineWidth = 0.8;
         ctx.beginPath();
-        ctx.arc(cx, cy, 38, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Core color
-        let coreColor = creature.isPredator ? '#f87171' : '#facc15';
-        if (creature.specialization === 'harvester') coreColor = '#34d399';
-        if (creature.specialization === 'sensor') coreColor = '#38bdf8';
-        if (creature.specialization === 'mover') coreColor = '#a78bfa';
-        if (creature.specialization === 'resistant') coreColor = '#f472b6';
-        if (creature.specialization === 'explorer') coreColor = '#fbbf24';
-        if (creature.specialization === 'communicator') coreColor = '#c084fc';
-
-        ctx.fillStyle = coreColor;
-        ctx.strokeStyle = creature.isPredator ? '#fecaca' : '#fef08c';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.arc(cx, cy, 11, 0, Math.PI * 2);
+        ctx.arc(x, y, size, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
 
-        // Modules
-        for (let m of creature.modules) {
-            const x = cx + (m.offsetX || 0) * scale;
-            const y = cy + (m.offsetY || 0) * scale;
-            const tier = m.tier || 1;
-            const size = 5.5 + (tier - 1) * 1.1;
-
-            ctx.fillStyle = m.color;
-            ctx.strokeStyle = 'rgba(255,255,255,0.15)';
-            ctx.lineWidth = 0.8;
+        if (tier > 1) {
+            ctx.strokeStyle = tier === 5 ? '#fde047' : '#fbbf24';
+            ctx.lineWidth = tier === 2 ? 1.2 : tier === 3 ? 1.6 : 2.0;
             ctx.beginPath();
-            ctx.arc(x, y, size, 0, Math.PI * 2);
-            ctx.fill();
+            ctx.arc(x, y, size + 2.2, 0, Math.PI * 2);
             ctx.stroke();
+        }
+    }
+}
+            
+    // === NEW: Alpha badge + yellow name (v2.11.1) ===
+    updateInspectorAlphaBadge(c);
 
-            if (tier > 1) {
-                ctx.strokeStyle = tier === 5 ? '#fde047' : '#fbbf24';
-                ctx.lineWidth = tier === 2 ? 1.2 : tier === 3 ? 1.6 : 2.0;
-                ctx.beginPath();
-                ctx.arc(x, y, size + 2.2, 0, Math.PI * 2);
-                ctx.stroke();
-            }
+    document.getElementById('inspect-gen').innerText = c.generation;
+    document.getElementById('inspect-kids').innerText = c.childrenCount;
+    document.getElementById('inspect-kills').innerText = c.killCount;
+    document.getElementById('inspect-thought').innerText = (c.currentThought || '–') + (c.role ? ' • ' + c.role : '');
+            document.getElementById('inspect-kids').innerText = c.childrenCount;
+            document.getElementById('inspect-kills').innerText = c.killCount;
+            document.getElementById('inspect-thought').innerText = (c.currentThought || '—') + (c.role ? ' • ' + c.role : '');
+
+            const energyPct = Math.max(0, Math.min(100, c.energy));
+            const energyBar = document.getElementById('inspect-energy-bar');
+            if (energyBar) energyBar.style.width = energyPct + '%';
+
+            const modulesList = document.getElementById('inspect-modules-list');
+            if (modulesList) {
+                if (c.modules.length === 0) {
+                    modulesList.innerHTML = '<span class="text-white/40">No modules yet</span>';
+                } else {
+                    let html = '';
+                    c.modules.forEach((m, i) => {
+                        const tierLabel = m.tier > 1 ? ` <span class="text-amber-400">T${m.tier}</span>` : '';
+                        html += `<div class="flex justify-between items-center py-px">
+                            <span class="font-mono text-[10px]">${m.type}${tierLabel}</span>
+                        </div>`;
+                    });
+                               modulesList.innerHTML = html;
         }
     }
 
-    function updateInspector() {
-        if (!selectedCreature) return;
-        const c = selectedCreature;
-
-        // === Draw creature preview ===
-        const previewCanvas = document.getElementById('inspect-creature-preview');
-        if (previewCanvas) {
-            drawCreaturePreview(c, previewCanvas);
-        }
-
-        // Name + Alpha badge
-        const nameEl = document.getElementById('inspect-name');
-        if (nameEl) nameEl.innerText = c.name;
-        updateInspectorAlphaBadge(c);
-
-        // Stats
-        const genEl = document.getElementById('inspect-gen');
-        if (genEl) genEl.innerText = c.generation;
-
-        const kidsEl = document.getElementById('inspect-kids');
-        if (kidsEl) kidsEl.innerText = c.childrenCount;
-
-        const killsEl = document.getElementById('inspect-kills');
-        if (killsEl) killsEl.innerText = c.killCount;
-
-        // Thought / Role
-        const thoughtEl = document.getElementById('inspect-thought');
-        if (thoughtEl) {
-            thoughtEl.innerText = (c.currentThought || '–') + (c.role ? ' • ' + c.role : '');
-        }
-
-        // Energy bar
-        const energyPct = Math.max(0, Math.min(100, c.energy));
-        const energyBar = document.getElementById('inspect-energy-bar');
-        if (energyBar) energyBar.style.width = energyPct + '%';
-
-        const energyText = document.getElementById('inspect-energy-text');
-        if (energyText) energyText.innerText = Math.floor(c.energy) + '%';
-
-        // Modules list
-        const modulesList = document.getElementById('inspect-modules-list');
-        if (modulesList) {
-            modulesList.innerHTML = '';
-
-            if (c.modules.length === 0) {
-                const empty = document.createElement('div');
-                empty.className = 'text-white/40 text-xs italic';
-                empty.innerText = 'No modules yet';
-                modulesList.appendChild(empty);
-            } else {
-                for (let m of c.modules) {
-                    const tier = m.tier || 1;
-                    const div = document.createElement('div');
-                    div.className = 'flex items-center gap-x-2 text-xs';
-                    div.innerHTML = `
-                        <div class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background-color: ${m.color}"></div>
-                        <div class="flex-1 truncate">${m.type}</div>
-                        <div class="font-mono text-white/50">T${tier}</div>
-                    `;
-                    modulesList.appendChild(div);
-                }
-            }
-        }
-    }
     // === v2.11.1: Neural Net Visualization ===
     let netContainer = document.getElementById('neural-net-container');
     if (!netContainer) {
