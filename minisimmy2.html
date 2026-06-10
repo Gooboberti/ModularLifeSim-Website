@@ -126,7 +126,7 @@
                     <div class="flex items-center gap-x-3">
                         <div class="flex items-baseline gap-x-2">
                             <h1 class="font-display text-2xl sm:text-3xl tracking-tighter">MiniSimmy2</h1>
-                            <span class="text-emerald-400 text-sm font-mono">v1.93</span>
+                            <span class="text-emerald-400 text-sm font-mono">v2.01</span>
                         </div>
                     </div>
                     
@@ -879,6 +879,7 @@
         let explosions = [];
         let spawnEffects = [];
         let floatingTexts = [];
+        let vortexProjectiles = []; // Bullets deflected by Energy Walls that spiral in the vortex
         let showDamageNumbers = false; // Hidden by default at startup
         let evolutionHistory = [];
 
@@ -903,7 +904,7 @@
         let analyticsModalOpen = false;
 
         // === VERSIONING (for future updates) ===
-        const GAME_VERSION = "v1.93 - Full filter system rebuilt from scratch with explicit separation • All filters now only affect intended targets • Hazard button fixed";
+const GAME_VERSION = "v2.01 - Fixed crash: isFilterMode scope error during wall drawing";
 
         // Audio
         let masterVolume = 0.12;
@@ -3624,30 +3625,27 @@
                 let alpha = map(lifeRatio, 0, 1, 45, 220);
                 let thickness = map(lifeRatio, 0, 1, 3, 9);
 
-                // === v1.79: Color-code walls based on active filter ===
-                let wallColor = { r: 200, g: 230, b: 255 }; // default glassy blue
+                // === v1.96: Strong visual distinction by wall type + filter ===
+                let wallColor;
 
-                if (w.filterMode === "custom_filter" && w.filterSettings && w.filterSettings.types) {
-                    const types = w.filterSettings.types;
+                const isFilter = w.wallType === "filter" || w.filterMode === "custom_filter";
+                const types = (w.filterSettings && w.filterSettings.types) || [];
 
-                    if (types.includes('predator')) {
-                        wallColor = { r: 239, g: 68, b: 68 };      // Red for predators
-                    } else if (types.includes('high_module')) {
-                        wallColor = { r: 163, g: 163, b: 172 };    // Silver/gray for high modules
-                    } else if (types.includes('low_module')) {
-                        wallColor = { r: 163, g: 163, b: 172 };    // Same silver for low (can differentiate later)
-                    } else if (types.includes('white')) {
-                        wallColor = { r: 245, g: 245, b: 245 };    // Bright white
-                    } else if (types.includes('red')) {
-                        wallColor = { r: 249, g: 115, b: 22 };     // Orange for red particles
-                    }
-
-                    // If multiple filters, slightly desaturate
-                    if (types.length > 1) {
-                        wallColor.r = Math.floor(wallColor.r * 0.85);
-                        wallColor.g = Math.floor(wallColor.g * 0.85);
-                        wallColor.b = Math.floor(wallColor.b * 0.85);
-                    }
+                if (!isFilter) {
+                    // Solid Barrier - classic glassy blue
+                    wallColor = { r: 180, g: 210, b: 255 };
+                } else if (types.includes('predator')) {
+                    wallColor = { r: 239, g: 68, b: 68 };      // Strong red
+                } else if (types.includes('white')) {
+                    wallColor = { r: 245, g: 245, b: 255 };    // Bright white / light blue-white
+                } else if (types.includes('red')) {
+                    wallColor = { r: 249, g: 115, b: 22 };     // Orange
+                } else if (types.includes('high_module')) {
+                    wallColor = { r: 192, g: 192, b: 210 };    // Light silver / cool gray
+                } else if (types.includes('low_module')) {
+                    wallColor = { r: 120, g: 120, b: 140 };    // Darker silver / steel
+                } else {
+                    wallColor = { r: 140, g: 200, b: 255 };    // Default filter blue
                 }
 
                 // v1.73: Visual indicator for vortex-vulnerable state
@@ -4430,6 +4428,33 @@
                         continue;
                     }
 
+                    // === v1.97: Bullet deflects off Energy Walls into vortex projectiles ===
+                    let hitWall = false;
+                    for (let w of energyWalls) {
+                        if (distToLineSegment(b.x, b.y, w.x1, w.y1, w.x2, w.y2) < 14) {
+                            hitWall = true;
+
+                            // Spawn a vortex projectile that spirals in
+                            vortexProjectiles.push({
+                                x: b.x,
+                                y: b.y,
+                                vx: random(-1.5, 1.5),
+                                vy: random(-1.5, 1.5),
+                                life: 220 + random(40),
+                                damage: 6.5,
+                                size: 5
+                            });
+
+                            // Small impact effect
+                            explosions.push(new Explosion(b.x, b.y));
+                            playBulletImpactSound();
+
+                            bullets.splice(i, 1);
+                            break;
+                        }
+                    }
+                    if (hitWall) continue;
+
                     // Bullet collision with creatures - high damage + strong purple DoT
                     for (let j = creatures.length - 1; j >= 0; j--) {
                         let c = creatures[j];
@@ -4451,6 +4476,57 @@
                         }
                     }
                 }
+            }
+
+            // === v1.97: Update & Draw Vortex Projectiles (deflected bullets spiraling in) ===
+            for (let i = vortexProjectiles.length - 1; i >= 0; i--) {
+                let p = vortexProjectiles[i];
+                p.life--;
+
+                if (p.life <= 0) {
+                    vortexProjectiles.splice(i, 1);
+                    continue;
+                }
+
+                // Apply vortex forces (spiral in)
+                let dx = p.x - centerX;
+                let dy = p.y - centerY;
+                let distToCenter = sqrt(dx * dx + dy * dy) || 1;
+
+                if (distToCenter > 5) {
+                    // Tangential force
+                    let tangentX = -dy;
+                    let tangentY = dx;
+                    let tlen = sqrt(tangentX * tangentX + tangentY * tangentY) || 1;
+
+                    let rotForce = 0.95 * vortexStrength * vortexDir;
+                    p.x += (tangentX / tlen) * rotForce;
+                    p.y += (tangentY / tlen) * rotForce;
+
+                    // Inward pull
+                    let pull = 0.65 * vortexStrength;
+                    p.x += (centerX - p.x) * pull / (distToCenter + 12);
+                    p.y += (centerY - p.y) * pull / (distToCenter + 12);
+                }
+
+                // Damage creatures it passes near
+                for (let c of creatures) {
+                    if (dist(p.x, p.y, c.x, c.y) < 11) {
+                        c.energy = max(0, c.energy - p.damage * timeScale);
+                        c.damageFlash = max(c.damageFlash || 0, 35);
+                        c.purpleFlash = max(c.purpleFlash || 0, 40);
+                    }
+                }
+
+                // Visual - glowing spiraling projectile
+                let alpha = map(p.life, 0, 220, 40, 220);
+                fill(180, 255, 220, alpha);
+                noStroke();
+                circle(p.x, p.y, p.size);
+
+                // Inner bright core
+                fill(255, 255, 255, alpha * 0.7);
+                circle(p.x, p.y, p.size * 0.5);
             }
 
             // Draw floating texts again on top (screen space for better visibility)
@@ -4696,6 +4772,8 @@
                     addFloatingText(wallStartX, wallStartY - 15, `-${totalCost}`, '#c026ff');
 
                     const length = sqrt((mouseX - wallStartX)**2 + (mouseY - wallStartY)**2);
+                    // v1.95 Clean creation
+                    const isFilter = currentWallFilterMode === "custom_filter";
                     energyWalls.push({
                         x1: wallStartX,
                         y1: wallStartY,
@@ -4709,11 +4787,11 @@
                         originalLength: length,
                         immuneUntil: frameCount + 30,
                         redHits: 0,
-                        filterMode: currentWallFilterMode,
-                        filterSettings: (currentWallFilterMode === "custom_filter" && window.currentFilterWallSettings) 
+                        wallType: isFilter ? "filter" : "solid",
+                        filterSettings: isFilter && window.currentFilterWallSettings 
                             ? JSON.parse(JSON.stringify(window.currentFilterWallSettings)) 
                             : null,
-                        offensive: (currentWallFilterMode === "custom_filter" && window.currentFilterWallSettings) 
+                        offensive: isFilter && window.currentFilterWallSettings 
                             ? !!window.currentFilterWallSettings.offensive 
                             : false,
                         empowered: false,
@@ -4721,6 +4799,13 @@
                         vortexImmune: true,
                         vortexVulnerableUntil: 0
                     });
+
+                    // Debug feedback - shows exactly what was placed
+                    let debugText = isFilter 
+                        ? `Filter: ${window.currentFilterWallSettings?.types?.[0] || 'Unknown'}`
+                        : "Solid Barrier";
+                    if (window.currentFilterWallSettings?.offensive) debugText += " (Offensive)";
+                    addFloatingText(wallStartX, wallStartY - 25, debugText, isFilter ? '#60a5fa' : '#a78bfa');
                 } else {
                     // Not enough points - flash warning
                     addFloatingText(wallStartX, wallStartY - 15, "Not enough points!", '#f87171');
@@ -4800,27 +4885,34 @@
         // CLEAN FILTER SYSTEM - REBUILT FROM SCRATCH (v1.93)
         // =====================================================
 
+        // =====================================================
+        // CLEAN WALL ARCHITECTURE v1.95
+        // Solid Barrier = affects everything
+        // Selective Filter = ONLY affects chosen type, transparent to everything else
+        // =====================================================
+
         function creatureMatchesWallFilter(creature, wall) {
-            if (!wall.filterMode || wall.filterMode !== "custom_filter" || !wall.filterSettings) {
+            // Fallback support for old walls
+            const isFilterWall = wall.wallType === "filter" || wall.filterMode === "custom_filter";
+            if (!isFilterWall || !wall.filterSettings) {
                 return false;
             }
 
             const types = wall.filterSettings.types || [];
             if (types.length === 0) return false;
 
-            // === PARTICLE FILTERS (White / Red) ===
-            // These should NEVER affect creatures. They only interact with floating particles.
+            // White and Red particle filters NEVER affect creatures
             if (types.includes('white') || types.includes('red')) {
-                return false; // Creatures pass through completely unaffected
+                return false;
             }
 
-            // === CREATURE FILTERS ONLY ===
+            // Creature filters - Predator filter is now stricter
             const moduleCount = creature.modules ? creature.modules.length : 0;
-            const isPredator = creature.isPredator === true;
-            const isHighModule = moduleCount >= 15;   // Top 1%
-            const isLowModule = moduleCount <= 2;     // Bottom 1%
+            const isActualPredator = creature.isPredator === true;   // Only real predators
+            const isHighModule = moduleCount >= 15;
+            const isLowModule = moduleCount <= 2;
 
-            if (types.includes('predator') && isPredator) return true;
+            if (types.includes('predator') && isActualPredator) return true;
             if (types.includes('high_module') && isHighModule) return true;
             if (types.includes('low_module') && isLowModule) return true;
 
@@ -5435,22 +5527,97 @@
                 this.vy *= 0.81;
                 this.x = constrain(this.x, 7, width - 7);
 
-                // v1.89: Strong live deflection while drawing walls (sweep effect)
+                // v1.98: Live sweep now respects current filter selection
                 if (isDrawingWall && typeof wallStartX === 'number') {
-                    let d = distToLineSegment(this.x, this.y, wallStartX, wallStartY, mouseX, mouseY);
-                    if (d < 28) {
-                        let mx = (wallStartX + mouseX) / 2;
-                        let my = (wallStartY + mouseY) / 2;
-                        let dx = this.x - mx;
-                        let dy = this.y - my;
-                        let len = sqrt(dx*dx + dy*dy) || 1;
-                        let push = 4.5; // Strong push while sweeping
-                        this.vx += (dx / len) * push;
-                        this.vy += (dy / len) * push;
-                        this.vx += (dx / len) * 2.0; // Extra repulsion
-                        this.vy += (dy / len) * 2.0;
+                    const settings = window.currentFilterWallSettings;
+                    const isFilterMode = currentWallFilterMode === "custom_filter" && settings && settings.types && settings.types.length > 0;
+                    const targetTypes = isFilterMode ? settings.types : null;
+
+                    // For White/Red particle filters, do not push creatures during sweep
+                    if (isFilterMode && (targetTypes.includes('white') || targetTypes.includes('red'))) {
+                        // Skip creature deflection for particle-only filters
+                    } else {
+                        let d = distToLineSegment(this.x, this.y, wallStartX, wallStartY, mouseX, mouseY);
+                        if (d < 28) {
+                            // Check if this creature should be affected by current filter
+                            let shouldAffect = true;
+
+                            if (isFilterMode) {
+                                const moduleCount = this.modules ? this.modules.length : 0;
+                                const isActualPred = this.isPredator === true;   // Strict predator check
+                                const isHigh = moduleCount >= 15;
+                                const isLow = moduleCount <= 2;
+
+                                shouldAffect = false;
+                                if (targetTypes.includes('predator') && isActualPred) shouldAffect = true;
+                                if (targetTypes.includes('high_module') && isHigh) shouldAffect = true;
+                                if (targetTypes.includes('low_module') && isLow) shouldAffect = true;
+                            }
+
+                            if (shouldAffect) {
+                                let mx = (wallStartX + mouseX) / 2;
+                                let my = (wallStartY + mouseY) / 2;
+                                let dx = this.x - mx;
+                                let dy = this.y - my;
+                                let len = sqrt(dx*dx + dy*dy) || 1;
+                                let push = 5.2;
+                                this.vx += (dx / len) * push;
+                                this.vy += (dy / len) * push;
+                                this.vx += (dx / len) * 2.2;
+                                this.vy += (dy / len) * 2.2;
+                            }
+                        }
                     }
                 }
+
+                // === v1.99: Live particle sweep for White/Red filters ===
+                if (isDrawingWall && typeof wallStartX === 'number') {
+                    const sweepSettings = window.currentFilterWallSettings;
+                    const isSweepFilter = currentWallFilterMode === "custom_filter" && sweepSettings && sweepSettings.types && sweepSettings.types.length > 0;
+
+                    if (isSweepFilter) {
+                        const targetTypes = sweepSettings.types;
+
+                        if (targetTypes.includes('white')) {
+                            // Strongly deflect white vortex particles during sweep
+                            for (let p of vortexParticles) {
+                                let d = distToLineSegment(p.x, p.y, wallStartX, wallStartY, mouseX, mouseY);
+                                if (d < 32) {
+                                    let mx = (wallStartX + mouseX) / 2;
+                                    let my = (wallStartY + mouseY) / 2;
+                                    let dx = p.x - mx;
+                                    let dy = p.y - my;
+                                    let len = sqrt(dx*dx + dy*dy) || 1;
+
+                                    p.x += (dx / len) * 6.5;
+                                    p.y += (dy / len) * 6.5;
+                                    p.vx = (p.vx || 0) * 0.25;
+                                    p.vy = (p.vy || 0) * 0.25;
+                                }
+                            }
+                        }
+
+                        if (targetTypes.includes('red')) {
+                            // Strongly deflect red hazards during sweep
+                            for (let r of redHazards) {
+                                let d = distToLineSegment(r.x, r.y, wallStartX, wallStartY, mouseX, mouseY);
+                                if (d < 32) {
+                                    let mx = (wallStartX + mouseX) / 2;
+                                    let my = (wallStartY + mouseY) / 2;
+                                    let dx = r.x - mx;
+                                    let dy = r.y - my;
+                                    let len = sqrt(dx*dx + dy*dy) || 1;
+
+                                    r.x += (dx / len) * 7.0;
+                                    r.y += (dy / len) * 7.0;
+                                    r.vx = (r.vx || 0) * 0.2;
+                                    r.vy = (r.vy || 0) * 0.2;
+                                }
+                            }
+                        }
+                    }
+                }
+
                 this.y = constrain(this.y, 7, height - 7);
 
                 // === Proactive Energy Wall Avoidance (like red hazards) ===
@@ -5473,68 +5640,74 @@
                     }
                 }
 
-                // === Energy Wall Collision (v1.75 - Filter aware) ===
+                // === Energy Wall Collision v1.95 - Clean Architecture ===
                 if (energyWalls.length > 0) {
                     for (let w of energyWalls) {
                         let d = distToLineSegment(this.x, this.y, w.x1, w.y1, w.x2, w.y2);
                         if (d < 14) {
-                            const matchesFilter = creatureMatchesWallFilter(this, w);
-                            const isCustomFilter = w.filterMode === "custom_filter" && w.filterSettings;
 
-                            let mx = (w.x1 + w.x2) / 2;
-                            let my = (w.y1 + w.y2) / 2;
-                            let dx = this.x - mx;
-                            let dy = this.y - my;
-                            let len = sqrt(dx*dx + dy*dy) || 1;
+                            // Fallback for old walls created before v1.95
+                            const effectiveWallType = w.wallType || (w.filterMode === "custom_filter" ? "filter" : "solid");
 
-                            if (matchesFilter && isCustomFilter) {
-                                // Strong push for filter walls - prevent passing through
-                                let force = 5.5;
+                            // === SOLID BARRIER ===
+                            if (effectiveWallType === "solid") {
+                                let mx = (w.x1 + w.x2) / 2;
+                                let my = (w.y1 + w.y2) / 2;
+                                let dx = this.x - mx;
+                                let dy = this.y - my;
+                                let len = sqrt(dx*dx + dy*dy) || 1;
+
+                                let force = 4.2;
                                 this.vx += (dx / len) * force;
                                 this.vy += (dy / len) * force;
 
-                                // Extra repulsion to reduce clipping
-                                this.vx += (dx / len) * 2.0;
-                                this.vy += (dy / len) * 2.0;
-                            } else if (!isCustomFilter) {
-                                // Solid Barrier - stronger physical blocking
-                                let force = 3.5;
-                                this.vx += (dx / len) * force;
-                                this.vy += (dy / len) * force;
-                            } else {
-                                // Filter wall but creature doesn't match → very gentle
-                                let light = 0.3;
-                                this.vx += (dx / len) * light;
-                                this.vy += (dy / len) * light;
-                            }
-
-                            // === Offensive features only apply if offensive === true ===
-                            const isOffensive = w.offensive === true;
-
-                            if (isOffensive) {
-                                // Purple damage + must eat white only on offensive walls
-                                if (matchesFilter || !isCustomFilter) {
-                                    this.purpleFlash = 65;
+                                // Offensive effects on solid barriers
+                                if (w.offensive) {
+                                    this.purpleFlash = 55;
                                     this.mustEatWhite = true;
-                                    this.energy = Math.max(0, this.energy - 4.2 * timeScale);
+                                    this.energy = Math.max(0, this.energy - 5.5 * timeScale);
+                                    w.life -= 22;
+                                } else {
+                                    w.life -= 9;
                                 }
-
-                                // Filter walls take very little damage even when offensive
-                                w.life -= isCustomFilter ? 4 : 28;
-                            } else {
-                                // Peaceful walls (especially filters) degrade extremely slowly
-                                w.life -= isCustomFilter ? 2 : 12;
+                                w.hitFlash = 12;
                             }
 
-                            w.hitFlash = 12;
+                            // === SELECTIVE FILTER WALL ===
+                            else if (effectiveWallType === "filter") {
+                                const matches = creatureMatchesWallFilter(this, w);
 
-                            // Empowered conversion only on offensive walls
-                            if (isOffensive && w.empowered && !this.isPredator) {
-                                this.isPredator = true;
+                                if (matches) {
+                                    // Only matching creatures are affected
+                                    let mx = (w.x1 + w.x2) / 2;
+                                    let my = (w.y1 + w.y2) / 2;
+                                    let dx = this.x - mx;
+                                    let dy = this.y - my;
+                                    let len = sqrt(dx*dx + dy*dy) || 1;
+
+                                    let force = 5.8;
+                                    this.vx += (dx / len) * force;
+                                    this.vy += (dy / len) * force;
+
+                                    if (w.offensive) {
+                                        this.purpleFlash = 65;
+                                        this.mustEatWhite = true;
+                                        this.energy = Math.max(0, this.energy - 4.8 * timeScale);
+                                        w.life -= 5; // filters degrade slowly even when offensive
+                                    } else {
+                                        w.life -= 2;
+                                    }
+                                    w.hitFlash = 12;
+
+                                    if (w.empowered && !this.isPredator) {
+                                        this.isPredator = true;
+                                    }
+                                }
+                                // If !matches → do NOTHING. Creature passes through completely unaffected.
                             }
 
                             if (this.energy > 8) {
-                                this.currentThought = isCustomFilter ? "Filtered by wall" : "Hit energy wall";
+                                this.currentThought = (effectiveWallType === "filter") ? "Filtered by wall" : "Hit energy wall";
                             }
                             break;
                         }
