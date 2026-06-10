@@ -934,6 +934,7 @@
         
     <script>
         let creatures = [];
+        let eggs = [];
         let predators = [];
         let vortexParticles = [];
         let pheromones = [];
@@ -6445,6 +6446,86 @@ function updateInspectorAlphaBadge(c) {
             // Extra explosion sound
             playExplosionSound();
         }
+        // ==================== v2.11.2: Extract to Egg System ====================
+function showExtractEggModal() {
+    const modal = document.getElementById('extract-egg-modal');
+    const listContainer = document.getElementById('extract-egg-list');
+    if (!modal || !listContainer) {
+        console.warn("Extract Egg modal not found in HTML yet.");
+        return;
+    }
+    listContainer.innerHTML = '';
+
+    // Get top 10 creatures
+    let sorted = [...creatures].sort((a, b) => {
+        let scoreA = a.modules.length * 3 + (a.killCount || 0) * 2 + (a.childrenCount || 0);
+        let scoreB = b.modules.length * 3 + (b.killCount || 0) * 2 + (b.childrenCount || 0);
+        return scoreB - scoreA;
+    }).slice(0, 10);
+
+    if (sorted.length === 0) {
+        listContainer.innerHTML = `<div class="text-center text-white/60 py-8">No creatures available yet.</div>`;
+    } else {
+        sorted.forEach(creature => {
+            const div = document.createElement('div');
+            div.className = 'flex items-center justify-between bg-white/5 hover:bg-white/10 rounded-2xl px-4 py-3 cursor-pointer transition-colors';
+            div.innerHTML = `
+                <div>
+                    <div class="font-semibold text-emerald-400">${creature.name}</div>
+                    <div class="text-xs text-white/60">Gen ${creature.generation} • ${creature.modules.length} modules • ${creature.killCount || 0} kills</div>
+                </div>
+                <button class="px-4 py-1.5 text-sm rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-medium">Extract</button>
+            `;
+            div.onclick = () => extractCreatureToEgg(creature);
+            listContainer.appendChild(div);
+        });
+    }
+
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+function hideExtractEggModal() {
+    const modal = document.getElementById('extract-egg-modal');
+    if (modal) {
+        modal.classList.remove('flex');
+        modal.classList.add('hidden');
+    }
+}
+
+function extractCreatureToEgg(creature) {
+    if (totalScore < 250000) {
+        alert("You need 250,000 High Roller Points to extract a creature.");
+        return;
+    }
+
+    totalScore -= 250000;
+    addFloatingText(creature.x, creature.y - 20, "-250,000", '#fbbf24');
+
+    // Deep copy brain data
+    const eggData = {
+        name: creature.name,
+        generation: creature.generation,
+        modules: JSON.parse(JSON.stringify(creature.modules)),
+        killCount: creature.killCount || 0,
+        childrenCount: creature.childrenCount || 0,
+        traits: JSON.parse(JSON.stringify(creature.traits || {}))
+    };
+
+    eggs.push(eggData);
+
+    // Remove from simulation
+    const index = creatures.indexOf(creature);
+    if (index > -1) creatures.splice(index, 1);
+
+    if (selectedCreature === creature) {
+        deselectCreature();
+    }
+
+    hideExtractEggModal();
+    updateMainStats();
+    addFloatingText(width/2, 80, "Egg extracted!", '#fbbf24');
+}
     </script>
 </body>
 </html>
