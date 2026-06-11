@@ -1,5 +1,14 @@
 <!--
 ================================================================================
+CHUNK 1 of 3 — HTML STRUCTURE + MODALS (Phase A Applied)
+================================================================================
+Changes in this version:
+- Environmental Cycle moved to bottom of map area
+- Prestige button moved to top-right of map area
+================================================================================
+-->
+<!--
+================================================================================
 CHUNK 1 of 3  —  HTML STRUCTURE + MODALS
 ================================================================================
 Start of Chunk 1
@@ -1097,13 +1106,6 @@ Start of Chunk 1
                 <div id="inv-dust" class="font-mono text-2xl text-orange-400">0</div>
             </div>
         </div>
-
-        <div class="mt-6 text-center text-xs text-white/50">
-            Dust gives x100 points per oz when burned in the Furnace
-        </div>
-    </div>
-</div>
-
         
 <!-- ========== CHUNK 1 END ========== -->
 
@@ -1856,28 +1858,82 @@ setInterval(() => {
             });
         }
 
-        function setupCheatSliders() {
-            const mappings = [
-                ['cheat-slider-drain', 'cheat-val-drain', 'energyDrain', 3],
-                ['cheat-slider-particle', 'cheat-val-particle', 'particleFoodValue', 1],
-                ['cheat-slider-repro', 'cheat-val-repro', 'reproductionChance', 4],
-                ['cheat-slider-vortex', 'cheat-val-vortex', 'vortexMultiplier', 1]
-            ];
+/* ============================================================
+   PHASE B ADDITIONS (Dust <-> Crystals + Live Extract Menu)
+   ============================================================ */
 
-            mappings.forEach(([sliderId, valId, key, decimals]) => {
-                const slider = document.getElementById(sliderId);
-                const val = document.getElementById(valId);
-                if (slider && val) {
-                    slider.value = settings[key];
-                    val.innerText = settings[key].toFixed(decimals);
-                    slider.oninput = () => {
-                        settings[key] = parseFloat(slider.value);
-                        val.innerText = settings[key].toFixed(decimals);
-                    };
-                }
-            });
-        }
-//
+// Improved Dust <-> Crystals conversion with feedback
+function convertDustToCrystals() {
+    if (aetheriumDust < 1) {
+        addFloatingText(width/2, 100, "Not enough dust!", '#f87171');
+        return;
+    }
+    const amount = Math.floor(aetheriumDust);
+    aetheriumCrystals += amount;
+    aetheriumDust = 0;
+    
+    playTone(880, 'sine', 0.2, 0.5);
+    addFloatingText(width/2, 90, `+${amount} Crystals`, '#f472b6');
+    updateAetheriumUI();
+    showInventory();
+}
+
+function convertCrystalsToDust() {
+    if (aetheriumCrystals <= 0) return;
+    aetheriumDust += aetheriumCrystals;
+    aetheriumCrystals = 0;
+    
+    playTone(620, 'sine', 0.18, 0.5);
+    addFloatingText(width/2, 90, `Crushed to Dust`, '#f59e0b');
+    updateAetheriumUI();
+    showInventory();
+}
+
+// Enhanced Extract to Egg modal with live balance + top 10
+function showExtractEggModal() {
+    const modal = document.getElementById('extract-egg-modal');
+    const listContainer = document.getElementById('extract-egg-list');
+    if (!modal || !listContainer) return;
+
+    listContainer.innerHTML = '';
+
+    // Live balance header
+    const balanceDiv = document.createElement('div');
+    balanceDiv.className = 'mb-4 px-1 flex justify-between items-center text-sm border-b border-white/10 pb-3';
+    balanceDiv.innerHTML = `
+        <span class="text-white/60">Your Balance</span> 
+        <span class="font-mono text-2xl text-violet-400 font-semibold">${totalScore.toLocaleString()}</span>
+    `;
+    listContainer.appendChild(balanceDiv);
+
+    // Get current top 10
+    let sorted = [...creatures].sort((a, b) => {
+        let scoreA = (a.modules?.length || 0) * 3 + (a.killCount || 0) * 2 + (a.childrenCount || 0);
+        let scoreB = (b.modules?.length || 0) * 3 + (b.killCount || 0) * 2 + (b.childrenCount || 0);
+        return scoreB - scoreA;
+    }).slice(0, 10);
+
+    if (sorted.length === 0) {
+        listContainer.innerHTML += `<div class="text-center text-white/60 py-8">No creatures available yet.</div>`;
+    } else {
+        sorted.forEach(creature => {
+            const div = document.createElement('div');
+            div.className = 'flex items-center justify-between bg-white/5 hover:bg-white/10 rounded-2xl px-4 py-3 cursor-pointer transition-colors mb-1';
+            div.innerHTML = `
+                <div>
+                    <div class="font-semibold text-emerald-400">${creature.name}</div>
+                    <div class="text-xs text-white/60">Gen ${creature.generation} • ${creature.modules?.length || 0} modules • ${creature.killCount || 0} kills</div>
+                </div>
+                <button class="px-4 py-1.5 text-sm rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-medium">Extract</button>
+            `;
+            div.onclick = () => extractCreatureToEgg(creature);
+            listContainer.appendChild(div);
+        });
+    }
+
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
 //<!-- ========== CHUNK 2 END ========== -->
 //<!-- ========== CHUNK 3 START ========== -->
 //
