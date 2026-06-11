@@ -1163,18 +1163,101 @@ const GAME_VERSION = "v2.01 - Fixed crash: isFilterMode scope error during wall 
         let maxPlacedHazards = 3;
         let freeMode = false;
 
-     let aetheriumCrystals = 0;
-let aetheriumDust = 0;           // Dust in inventory (oz)
-          // Dust currently burning in furnace
-let burningDust = 0;
-let furnaceEndTime = 0;
-let inventoryCrystals = 0;       // Separate from prestige crystals for clarity (we can merge later)
+// ==================== AETHERIUM RESOURCES + FURNACE ====================
+let aetheriumCrystals = 0;     // Stackable crystals in inventory (max 999)
+let aetheriumDust = 0;         // Dust in oz (max 999)
 
-        let timeScale = 1;
-        let paused = false;
-        let simTime = 0;
-        let zoomLevel = 1.0;
+// Furnace system
+let burningCrystals = 0;       // Number of crystals currently burning in furnace
+let furnaceEndTime = 0;        // Timestamp when current burn ends
 
+let timeScale = 1;
+let paused = false;
+let simTime = 0;
+let zoomLevel = 1.0;
+
+// ==================== FURNACE SYSTEM (Crystals Only) ====================
+function showFurnaceModal() {
+    const modal = document.getElementById('furnace-modal');
+    if (!modal) return;
+    updateFurnaceUI();
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+function hideFurnaceModal() {
+    const modal = document.getElementById('furnace-modal');
+    if (modal) {
+        modal.classList.remove('flex');
+        modal.classList.add('hidden');
+    }
+}
+
+function updateFurnaceUI() {
+    const burningEl = document.getElementById('furnace-burning');
+    const timeEl = document.getElementById('furnace-time');
+    const multEl = document.getElementById('furnace-multiplier');
+
+    if (burningEl) {
+        burningEl.innerText = `${burningCrystals} crystals`;
+    }
+
+    if (timeEl) {
+        if (burningCrystals > 0 && furnaceEndTime > Date.now()) {
+            const remaining = Math.max(0, Math.floor((furnaceEndTime - Date.now()) / 1000));
+            const min = Math.floor(remaining / 60);
+            const sec = remaining % 60;
+            timeEl.innerText = `${min}:${sec.toString().padStart(2, '0')}`;
+        } else {
+            timeEl.innerText = "--:--";
+        }
+    }
+
+    if (multEl) {
+        const mult = getBurningMultiplier();
+        multEl.innerText = mult > 1 ? `x${mult}` : "x1";
+    }
+}
+
+function addCrystalsToFurnace(amount) {
+    if (aetheriumCrystals < amount) {
+        addFloatingText(width/2, 100, "Not enough crystals!", '#f87171');
+        return;
+    }
+
+    aetheriumCrystals -= amount;
+    burningCrystals += amount;
+
+    // Reset timer to full 5 minutes every time you add crystals
+    furnaceEndTime = Date.now() + (5 * 60 * 1000);
+
+    updateFurnaceUI();
+    updateAetheriumUI();
+    showInventory();
+}
+
+function getBurningMultiplier() {
+    if (burningCrystals > 0 && furnaceEndTime > Date.now()) {
+        return burningCrystals * 100;
+    }
+    return 1;
+}
+
+// Auto stop burning when timer runs out
+setInterval(() => {
+    if (burningCrystals > 0 && furnaceEndTime <= Date.now()) {
+        burningCrystals = 0;
+        furnaceEndTime = 0;
+        updateFurnaceUI();
+    }
+}, 1000);
+
+function updateAetheriumUI() {
+    const el = document.getElementById('aetherium-crystals');
+    if (el) el.innerText = aetheriumCrystals;
+}
+
+  
         // Performance monitoring
         let frameCountForFPS = 0;
         let lastFPSUpdate = 0;
