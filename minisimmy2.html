@@ -1063,7 +1063,6 @@ Start of Chunk 1
                 <div class="text-sm font-semibold">Dust in Inventory</div>
                 <div id="furnace-inv-dust" class="font-mono text-orange-400 text-xl">0.00</div>
             </div>
-            <div class="text-xs text-white/60">1 oz dust = 1 crystal when crushed • Burns for 5 minutes</div>
         </div>
 
         <div class="flex gap-3 mb-4">
@@ -1277,7 +1276,15 @@ function updateFurnaceUI() {
     const timeEl = document.getElementById('furnace-time');
 
     if (dustEl) dustEl.innerText = aetheriumDust.toFixed(2);
-    if (burningEl) burningEl.innerText = burningCrystals + " crystals";
+
+    // Updated text: show it's dust, not crystals
+    if (burningEl) {
+        if (burningCrystals > 0) {
+            burningEl.innerText = `${burningCrystals} oz dust`;
+        } else {
+            burningEl.innerText = `0 oz dust`;
+        }
+    }
 
     if (timeEl) {
         if (burningCrystals > 0 && furnaceEndTime > Date.now()) {
@@ -1289,8 +1296,11 @@ function updateFurnaceUI() {
             timeEl.innerText = "--:--";
         }
     }
-    if (typeof updateTopFurnaceUI === 'function') updateTopFurnaceUI();
 
+    // Update top bar UI
+    if (typeof updateTopFurnaceUI === 'function') {
+        updateTopFurnaceUI();
+    }
 }
 
 function addCrystalsToFurnace(amount) {
@@ -7208,10 +7218,17 @@ function hideInventory() {
 }
 
 function prestige() {
-    // === NEW: Warning if furnace is burning ===
+    // === Furnace handling when prestiging ===
     if (burningCrystals > 0) {
-        showPrestigeWarningModal();
-        return;
+        // Apply 15% loss on the dust that was burning
+        const loss = burningCrystals * 0.15;
+        aetheriumDust += Math.floor(burningCrystals - loss);
+
+        // Stop the furnace completely
+        burningCrystals = 0;
+        furnaceEndTime = 0;
+
+        addFloatingText(width/2, 90, `Furnace stopped (-15% Dust)`, '#f87171');
     }
 
     if (totalScore < 1000) {
@@ -7244,6 +7261,7 @@ function prestige() {
     totalScore = 0;
     updateMainStats();
     updateAetheriumUI();
+    updateFurnaceUI();
 }
 
 
