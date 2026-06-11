@@ -1886,7 +1886,7 @@ Start of Chunk 2
       //CHUNK 3 of 3  —  RUNTIME LOOP + DRAW + HANDLERS
       //===============================================================================
 
-      function setupCheatSliders() {
+            function setupCheatSliders() {
           // Energy Drain
           const drainSlider = document.getElementById('cheat-slider-drain');
           const drainVal = document.getElementById('cheat-val-drain');
@@ -1902,8 +1902,8 @@ Start of Chunk 2
           const particleVal = document.getElementById('cheat-val-particle');
           if (particleSlider && particleVal) {
               particleSlider.oninput = () => {
-                  settings.foodPerParticle = parseFloat(particleSlider.value);
-                  particleVal.innerText = settings.foodPerParticle.toFixed(1);
+                  settings.particleFoodValue = parseFloat(particleSlider.value);
+                  particleVal.innerText = settings.particleFoodValue.toFixed(1);
               };
           }
 
@@ -1928,128 +1928,136 @@ Start of Chunk 2
           }
       }
 
-              function setup() {
-                  let canvas = createCanvas(820, 580);
-                  canvas.parent('canvas-container');
-                  canvas.mousePressed(handleMousePress);
+      function setup() {
+          let canvas = createCanvas(820, 580);
+          canvas.parent('canvas-container');
+          canvas.mousePressed(handleMousePress);
 
-                  // Prevent browser context menu on right-click inside the sim
-                  canvas.elt.addEventListener('contextmenu', e => e.preventDefault());
+          // Prevent browser context menu on right-click inside the sim
+          canvas.elt.addEventListener('contextmenu', e => e.preventDefault());
 
-                  centerX = width / 2;
-                  centerY = height / 2;
+          centerX = width / 2;
+          centerY = height / 2;
 
-                  greenZone = { x: 200, y: 290, baseR: 105, minR: 36, food: 320, maxFood: 420 };
-                  blueZone  = { x: 620, y: 290, baseR: 105, minR: 36, food: 320, maxFood: 420 };
+          greenZone = { x: 200, y: 290, baseR: 105, minR: 36, food: 320, maxFood: 420 };
+          blueZone  = { x: 620, y: 290, baseR: 105, minR: 36, food: 320, maxFood: 420 };
 
-                  for (let i = 0; i < 9; i++) {
-                      creatures.push(new Creature(random(width), random(height)));
-                  }
+          for (let i = 0; i < 9; i++) {
+              creatures.push(new Creature(random(width), random(height)));
+          }
 
-                  for (let i = 0; i < 110; i++) {
-                      vortexParticles.push(new VortexParticle());
-                  }
+          for (let i = 0; i < 110; i++) {
+              vortexParticles.push(new VortexParticle());
+          }
 
-                  setupSliders();
-                  //setupCheatSliders();
+          setupSliders();
+          setupCheatSliders();   // ← Now active
 
-                  const miniCanvas = document.getElementById('mini-chart');
-                  if (miniCanvas) miniChartCtx = miniCanvas.getContext('2d');
+          const miniCanvas = document.getElementById('mini-chart');
+          if (miniCanvas) miniChartCtx = miniCanvas.getContext('2d');
 
-                  evolutionHistory = [];
-                  document.addEventListener('keydown', handleKeyPress);
-                  document.getElementById('speed-1').classList.add('active', 'bg-emerald-500', 'text-[#0a0a0f]');
+          evolutionHistory = [];
+          document.addEventListener('keydown', handleKeyPress);
+          document.getElementById('speed-1').classList.add('active', 'bg-emerald-500', 'text-[#0a0a0f]');
 
-                  createEnvLabel();
-                  updateMainStats();
-                  updateTopFurnaceUI();
+          createEnvLabel();
+          updateMainStats();
+          updateTopFurnaceUI();
+
+          // === Auto-select a creature so the inspector is never empty on startup ===
+          if (creatures.length > 0) {
+              const alpha = getCurrentAlpha();
+              if (alpha) {
+                  selectCreature(alpha);
+              } else {
+                  selectCreature(creatures[0]);
               }
+          }
+      }
 
-              function createEnvLabel() {
-                  const container = document.getElementById('canvas-container');
-                  if (!container) return;
+      function createEnvLabel() {
+          const container = document.getElementById('canvas-container');
+          if (!container) return;
 
-                  envLabelElement = document.createElement('div');
-                  envLabelElement.className = 'env-label hidden';
-                  envLabelElement.style.color = '#34d399';
-                  container.appendChild(envLabelElement);
-              }
+          envLabelElement = document.createElement('div');
+          envLabelElement.className = 'env-label hidden';
+          envLabelElement.style.color = '#34d399';
+          container.appendChild(envLabelElement);
+      }
 
-              function updateEnvLabel(phase) {
-                  if (!envLabelElement) return;
+      function updateEnvLabel(phase) {
+          if (!envLabelElement) return;
 
-                  let text = '';
-                  let color = '#34d399';
+          let text = '';
+          let color = '#34d399';
 
-                  if (phase === 0) {
-                      text = 'FERTILE SEASON';
-                      color = '#34d399';
-                  } else if (phase === 1) {
-                      text = 'NORMAL CONDITIONS';
-                      color = '#a3a3a3';
-                  } else if (phase === 2) {
-                      text = 'DROUGHT';
-                      color = '#f59e0b';
+          if (phase === 0) {
+              text = 'FERTILE SEASON';
+              color = '#34d399';
+          } else if (phase === 1) {
+              text = 'NORMAL CONDITIONS';
+              color = '#a3a3a3';
+          } else if (phase === 2) {
+              text = 'DROUGHT';
+              color = '#f59e0b';
+          }
+
+          envLabelElement.innerText = text;
+          envLabelElement.style.color = color;
+          envLabelElement.classList.remove('hidden');
+
+          setTimeout(() => {
+              if (envLabelElement) envLabelElement.style.transition = 'opacity 1.2s ease';
+              if (envLabelElement) envLabelElement.style.opacity = '0';
+
+              setTimeout(() => {
+                  if (envLabelElement) {
+                      envLabelElement.style.transition = '';
+                      envLabelElement.style.opacity = '1';
+                      envLabelElement.classList.add('hidden');
                   }
+              }, 1300);
+          }, 2800);
+      }
 
-                  envLabelElement.innerText = text;
-                  envLabelElement.style.color = color;
-                  envLabelElement.classList.remove('hidden');
+      function updateEnvironmentalUI() {
+          const phaseText = document.getElementById('env-phase-text');
+          const progressBar = document.getElementById('env-progress-bar');
 
-                  setTimeout(() => {
-                      if (envLabelElement) envLabelElement.style.transition = 'opacity 1.2s ease';
-                      if (envLabelElement) envLabelElement.style.opacity = '0';
+          let label = 'FERTILE';
+          let progress = 0;
+          let barColor = 'from-emerald-400 via-amber-400 to-orange-500';
 
-                      setTimeout(() => {
-                          if (envLabelElement) {
-                              envLabelElement.style.transition = '';
-                              envLabelElement.style.opacity = '1';
-                              envLabelElement.classList.add('hidden');
-                          }
-                      }, 1300);
-                  }, 2800);
-              }
+          if (environmentPhase === 0) {
+              label = 'FERTILE';
+              progress = (envPhaseProgress / envCycleLength) * 100;
+              barColor = 'from-emerald-400 to-emerald-500';
+          } else if (environmentPhase === 1) {
+              label = 'NORMAL';
+              progress = (envPhaseProgress / envCycleLength) * 100;
+              barColor = 'from-amber-400 to-yellow-500';
+          } else if (environmentPhase === 2) {
+              label = 'DROUGHT';
+              progress = (envPhaseProgress / envCycleLength) * 100;
+              barColor = 'from-orange-500 to-red-500';
+          }
 
-              function updateEnvironmentalUI() {
-                  const phaseText = document.getElementById('env-phase-text');
-                  const progressBar = document.getElementById('env-progress-bar');
+          if (phaseText) phaseText.innerText = label;
+          if (progressBar) {
+              progressBar.style.width = Math.min(100, Math.max(0, progress)) + '%';
+              progressBar.className = `h-full bg-gradient-to-r ${barColor} transition-all`;
+          }
+      }
 
-                  let label = 'FERTILE';
-                  let progress = 0;
-                  let barColor = 'from-emerald-400 via-amber-400 to-orange-500';
-
-                  if (environmentPhase === 0) {
-                      label = 'FERTILE';
-                      progress = (envPhaseProgress / envCycleLength) * 100;
-                      barColor = 'from-emerald-400 to-emerald-500';
-                  } else if (environmentPhase === 1) {
-                      label = 'NORMAL';
-                      progress = (envPhaseProgress / envCycleLength) * 100;
-                      barColor = 'from-amber-400 to-yellow-500';
-                  } else if (environmentPhase === 2) {
-                      label = 'DROUGHT';
-                      progress = (envPhaseProgress / envCycleLength) * 100;
-                      barColor = 'from-orange-500 to-red-500';
-                  }
-
-                  if (phaseText) phaseText.innerText = label;
-                  if (progressBar) {
-                      progressBar.style.width = Math.min(100, Math.max(0, progress)) + '%';
-                      progressBar.className = `h-full bg-gradient-to-r ${barColor} transition-all`;
-                  }
-              }
-
-              function getEnvironmentModifiers() {
-                  if (environmentPhase === 0) {
-                      // Fertile - very generous
-                      return { energyGainMult: 1.85, drainMult: 0.65, reproMult: 2.4, vortexMult: 0.75 };
-                  } else if (environmentPhase === 1) {
-                      return { energyGainMult: 1.0, drainMult: 1.0, reproMult: 1.0, vortexMult: 1.0 };
-                  } else {
-                      // Drought - harsh
-                      return { energyGainMult: 0.55, drainMult: 1.85, reproMult: 0.35, vortexMult: 1.45 };
-                  }
-              }
+      function getEnvironmentModifiers() {
+          if (environmentPhase === 0) {
+              return { energyGainMult: 1.85, drainMult: 0.65, reproMult: 2.4, vortexMult: 0.75 };
+          } else if (environmentPhase === 1) {
+              return { energyGainMult: 1.0, drainMult: 1.0, reproMult: 1.0, vortexMult: 1.0 };
+          } else {
+              return { energyGainMult: 0.55, drainMult: 1.85, reproMult: 0.35, vortexMult: 1.45 };
+          }
+      }
 
               function handleKeyPress(e) {
                   if (e.key === ' ') { e.preventDefault(); togglePause(); }
