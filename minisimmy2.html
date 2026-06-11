@@ -2613,8 +2613,8 @@ const GAME_VERSION = "v2.01 - Fixed crash: isFilterMode scope error during wall 
             if (killsEl) killsEl.innerText = totalPredatorKills;
         }
 
-        function updateGraphData() {
-    // Strong defensive guard
+    function updateGraphData() {
+    // === Strong safety guard ===
     if (!graphData) return;
     if (!graphData.pop || !graphData.modules || !graphData.predators || 
         !graphData.greenFood || !graphData.blueFood) {
@@ -2622,33 +2622,35 @@ const GAME_VERSION = "v2.01 - Fixed crash: isFilterMode scope error during wall 
     }
     if (creatures.length === 0) return;
 
-    let totalModules = 0, predators = 0;
-    // ... rest of the function stays the same
-            for (let c of creatures) {
-                totalModules += c.modules.length;
-                if (c.isPredator) predators++;
-            }
-            const avgModules = totalModules / creatures.length;
+    try {
+        let totalModules = 0, predators = 0;
 
-            graphData.pop.push(creatures.length);
-            graphData.modules.push(avgModules);
-            graphData.predators.push(predators);
-            graphData.greenFood.push(greenZone ? greenZone.food : 0);
-            graphData.blueFood.push(blueZone ? blueZone.food : 0);
-            graphData.hr.push(getHighRollerPoints());
-
-            if (graphData.pop.length > 160) {
-                graphData.pop.shift();
-                graphData.modules.shift();
-                graphData.predators.shift();
-                graphData.greenFood.shift();
-                graphData.blueFood.shift();
-                graphData.hr.shift();
-            }
-
-           // if (miniChartCtx) drawMiniChart();
-            updateMainStats();
+        for (let c of creatures) {
+            totalModules += c.modules.length;
+            if (c.isPredator) predators++;
         }
+
+        const avgModules = creatures.length > 0 ? totalModules / creatures.length : 0;
+
+        graphData.pop.push(creatures.length);
+        graphData.modules.push(avgModules);
+        graphData.predators.push(predators);
+        graphData.greenFood.push(greenZone.food);
+        graphData.blueFood.push(blueZone.food);
+
+        // Keep graph data from getting too long
+        const maxPoints = 180;
+        if (graphData.pop.length > maxPoints) {
+            graphData.pop.shift();
+            graphData.modules.shift();
+            graphData.predators.shift();
+            graphData.greenFood.shift();
+            graphData.blueFood.shift();
+        }
+    } catch (e) {
+        console.warn("Graph update skipped due to error:", e);
+    }
+}
 
         function drawMiniChart() {
             if (!miniChartCtx || graphData.pop.length < 2) return;
