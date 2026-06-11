@@ -6484,13 +6484,20 @@ function updateInspectorAlphaBadge(c) {
 function showExtractEggModal() {
     const modal = document.getElementById('extract-egg-modal');
     const listContainer = document.getElementById('extract-egg-list');
-    if (!modal || !listContainer) {
-        console.warn("Extract Egg modal not found in HTML yet.");
-        return;
-    }
+    if (!modal || !listContainer) return;
+
     listContainer.innerHTML = '';
 
-    // Get top 10 creatures
+    // === Show current balance at the top ===
+    const balanceHTML = `
+        <div class="mb-4 px-1 flex justify-between items-center">
+            <div class="text-sm text-white/60">Your Balance</div>
+            <div class="font-mono text-xl text-violet-400 font-semibold">${totalScore.toLocaleString()}</div>
+        </div>
+    `;
+    listContainer.innerHTML = balanceHTML;
+
+    // Get top 10 creatures (live sort every time modal opens)
     let sorted = [...creatures].sort((a, b) => {
         let scoreA = a.modules.length * 3 + (a.killCount || 0) * 2 + (a.childrenCount || 0);
         let scoreB = b.modules.length * 3 + (b.killCount || 0) * 2 + (b.childrenCount || 0);
@@ -6498,7 +6505,7 @@ function showExtractEggModal() {
     }).slice(0, 10);
 
     if (sorted.length === 0) {
-        listContainer.innerHTML = `<div class="text-center text-white/60 py-8">No creatures available yet.</div>`;
+        listContainer.innerHTML += `<div class="text-center text-white/60 py-8">No creatures available yet.</div>`;
     } else {
         sorted.forEach(creature => {
             const div = document.createElement('div');
@@ -6528,7 +6535,6 @@ function hideExtractEggModal() {
 }
 
 function extractCreatureToEgg(creature) {
-    // === NEW: Inventory full check ===
     if (eggs.length >= MAX_EGGS) {
         alert(`Your Egg Inventory is full (${MAX_EGGS} max). Delete or use some eggs before extracting more.`);
         return;
@@ -6539,9 +6545,19 @@ function extractCreatureToEgg(creature) {
         return;
     }
 
+    // === Spend points + visual confirmation ===
     totalScore -= 250000;
-    addFloatingText(creature.x, creature.y - 20, "-250,000", '#fbbf24');
+    updateMainStats();
 
+    // Floating text confirmation
+    addFloatingText(creature.x, creature.y - 25, "-250,000", '#fbbf24');
+    addFloatingText(width / 2, 90, "Egg Extracted!", '#fbbf24');
+
+    // Sound effect (using existing tone system)
+    playTone(620, 'sine', 0.18, 0.6);
+    setTimeout(() => playTone(880, 'sine', 0.12, 0.4), 120);
+
+    // Create egg data
     const eggData = {
         name: creature.name,
         generation: creature.generation,
@@ -6554,6 +6570,7 @@ function extractCreatureToEgg(creature) {
     eggs.push(eggData);
     updateEggCountBadge();
 
+    // Remove creature from world
     const index = creatures.indexOf(creature);
     if (index > -1) creatures.splice(index, 1);
 
@@ -6563,7 +6580,6 @@ function extractCreatureToEgg(creature) {
 
     hideExtractEggModal();
     updateMainStats();
-    addFloatingText(width/2, 80, "Egg extracted to Inventory!", '#fbbf24');
 }
         // ==================== v2.11.2+: Egg Inventory System ====================
 function updateEggCountBadge() {
