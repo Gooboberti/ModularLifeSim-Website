@@ -204,18 +204,29 @@ Start of Chunk 1
     <span id="top-crystals">0</span>
 </button>
 
-<!-- Furnace Button -->
-<button onclick="showFurnaceModal()" id="top-furnace-btn"
-        class="px-3 py-1.5 bg-orange-600 hover:bg-orange-700 rounded-2xl text-xs font-semibold text-white flex items-center gap-x-1.5">
-    <i class="fa-solid fa-fire"></i>
-    <span>Furnace</span>
-</button>
+<!-- Furnace Button + Timer on the outside -->
+<div class="relative">
+    <button onclick="showFurnaceModal()" id="top-furnace-btn"
+            class="px-3 py-1.5 bg-orange-600 hover:bg-orange-700 rounded-2xl text-xs font-semibold text-white flex items-center gap-x-1.5">
+        <i class="fa-solid fa-fire"></i>
+        <span>Furnace</span>
+    </button>
+    <!-- Timer badge OUTSIDE the button -->
+    <div id="top-furnace-timer" 
+         class="absolute -top-1 -right-1 px-1.5 py-px text-[9px] font-mono bg-black/80 text-orange-400 rounded-full border border-orange-500/50 hidden items-center justify-center">
+        --:--
+    </div>
+</div>
 
-<!-- High Roller Points - Top Bar Version -->
-<div class="px-3 py-1.5 bg-white/5 border border-white/10 rounded-2xl text-xs flex items-center gap-x-1.5 ml-1">
+<!-- Furnace Bonus (between Furnace and Points) -->
+<span id="top-furnace-bonus" 
+      class="px-2 py-1 text-xs font-mono text-orange-400 hidden items-center font-semibold">x1</span>
+
+<!-- High Roller Points (this one will glow when furnace is on) -->
+<div class="px-3 py-1.5 bg-white/5 border border-white/10 rounded-2xl text-xs flex items-center gap-x-1.5 ml-1 transition-all" id="top-points-wrapper">
     <span class="text-white/50">Points</span>
     <span id="top-score" class="font-mono text-emerald-400 font-semibold">0</span>
-</div>                        
+</div>                    
                         
                     </div>
                 </div>
@@ -1300,6 +1311,8 @@ function updateFurnaceUI() {
             timeEl.innerText = "--:--";
         }
     }
+    if (typeof updateTopFurnaceUI === 'function') updateTopFurnaceUI();
+
 }
 
 function addCrystalsToFurnace(amount) {
@@ -2061,6 +2074,7 @@ function setupCheatSliders() {
 
             createEnvLabel();
             updateMainStats();
+            updateTopFurnaceUI();
         }
 
         function createEnvLabel() {
@@ -3178,8 +3192,15 @@ function setupCheatSliders() {
             const predEl = document.getElementById('stat-pred');
             const modEl = document.getElementById('stat-modules');
 
-            const topScoreEl = document.getElementById('top-score');
-            if (topScoreEl) topScoreEl.innerText = Math.floor(totalScore).toLocaleString();
+                const topScoreEl = document.getElementById('top-score');
+    if (topScoreEl) topScoreEl.innerText = formatScore(totalScore);
+
+    const mainScoreEl = document.getElementById('vegas-score');
+    if (mainScoreEl) mainScoreEl.innerText = formatScore(totalScore);
+
+    if (typeof updateTopFurnaceUI === 'function') updateTopFurnaceUI();
+
+            
             const greenFoodEl = document.getElementById('stat-green-food');
             const blueFoodEl = document.getElementById('stat-blue-food');
 
@@ -6701,6 +6722,42 @@ function updateInspectorAlphaBadge(c) {
             }
         }
 
+function showPrestigeWarningModal() {
+    const modal = document.createElement('div');
+    modal.className = 'fixed inset-0 bg-black/80 flex items-center justify-center z-[200]';
+    modal.innerHTML = `
+        <div class="bg-[#121218] border border-white/10 rounded-3xl max-w-sm w-full mx-4 p-6 text-center">
+            <div class="text-xl font-semibold mb-3 text-orange-400">Furnace is Active</div>
+            <p class="text-white/80 mb-6">Prestiging now will stop the furnace early.<br>You may lose up to <span class="text-red-400 font-semibold">15% of your Aetherium Dust</span>.</p>
+            
+            <div class="flex gap-3">
+                <button onclick="this.closest('.fixed').remove()" 
+                        class="flex-1 px-4 py-2.5 bg-white/10 hover:bg-white/20 rounded-2xl text-sm">
+                    Cancel
+                </button>
+                <button onclick="forcePrestige(); this.closest('.fixed').remove()" 
+                        class="flex-1 px-4 py-2.5 bg-red-500/90 hover:bg-red-500 rounded-2xl text-sm font-medium">
+                    Prestige Anyway
+                </button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+}
+
+function forcePrestige() {
+    const dustGained = totalScore / 100000;
+    aetheriumDust += dustGained * 0.85; // 15% loss
+
+    addFloatingText(width/2, 90, `Forced Prestige (-15% Dust)`, '#f87171');
+
+    resetSim();
+    totalScore = 0;
+    updateMainStats();
+    updateAetheriumUI();
+}
+
+        
  function resetSim() {
     // Clear all simulation arrays
     creatures = [];
@@ -7172,10 +7229,12 @@ function hideInventory() {
 }
 
 function prestige() {
+    // === NEW: Warning if furnace is burning ===
     if (burningCrystals > 0) {
-        addFloatingText(width/2, height/2 - 40, "Cannot prestige while furnace is burning", '#f87171');
+        showPrestigeWarningModal();
         return;
     }
+
     if (totalScore < 1000) {
         addFloatingText(width/2, height/2 - 40, "Need at least 1,000 points to prestige", '#f87171');
         return;
@@ -7184,18 +7243,16 @@ function prestige() {
     const dustGained = totalScore / 100000;
     aetheriumDust += dustGained;
 
-    // Nice prestige sound
     playTone(660, 'sine', 0.18, 0.6);
     setTimeout(() => playTone(880, 'sine', 0.22, 0.55), 90);
     setTimeout(() => playTone(1100, 'sine', 0.28, 0.5), 200);
 
-    // === Trigger glow + wiggle on Dust button ===
+    // Glow + wiggle on Dust button
     const dustBtn = document.getElementById('top-dust-btn');
     if (dustBtn) {
         dustBtn.style.transition = 'all 0.1s ease';
         dustBtn.style.transform = 'scale(1.2)';
         dustBtn.style.boxShadow = '0 0 20px #fb923c, 0 0 35px #f59e0b';
-
         setTimeout(() => {
             if (dustBtn) {
                 dustBtn.style.transform = 'scale(1)';
@@ -7207,9 +7264,11 @@ function prestige() {
     resetSim();
     totalScore = 0;
     updateMainStats();
-    updateAetheriumUI();           // This will update the new top buttons
+    updateAetheriumUI();
 }
 
+
+        
 function updateAetheriumUI() {
     const crystalEl = document.getElementById('aetherium-crystals');
     const dustEl = document.getElementById('aetherium-dust');
@@ -7226,6 +7285,75 @@ function updateAetheriumUI() {
 }
 
         
+// ==================== FURNACE TOP BAR + EXPONENTIAL POINTS ====================
+
+function updateTopFurnaceUI() {
+    const timerEl = document.getElementById('top-furnace-timer');
+    const bonusEl = document.getElementById('top-furnace-bonus');
+    const pointsWrapper = document.getElementById('top-points-wrapper');
+
+    const isBurning = burningCrystals > 0 && furnaceEndTime > Date.now();
+    const mult = getBurningMultiplier();
+
+    // Timer on the outside of Furnace button
+    if (timerEl) {
+        if (isBurning) {
+            const remaining = Math.max(0, Math.floor((furnaceEndTime - Date.now()) / 1000));
+            const min = Math.floor(remaining / 60);
+            const sec = remaining % 60;
+            timerEl.innerText = `${min}:${sec.toString().padStart(2, '0')}`;
+            timerEl.classList.remove('hidden');
+            timerEl.classList.add('flex');
+        } else {
+            timerEl.classList.add('hidden');
+            timerEl.classList.remove('flex');
+        }
+    }
+
+    // Current bonus between Furnace and Points
+    if (bonusEl) {
+        if (isBurning && mult > 1) {
+            bonusEl.innerText = `x${mult}`;
+            bonusEl.classList.remove('hidden');
+            bonusEl.classList.add('flex');
+        } else {
+            bonusEl.classList.add('hidden');
+            bonusEl.classList.remove('flex');
+        }
+    }
+
+    // Glowing pulsing effect on Points when furnace is active
+    if (pointsWrapper) {
+        if (isBurning) {
+            pointsWrapper.style.boxShadow = '0 0 18px #f59e0b, 0 0 32px #fb923c';
+            pointsWrapper.style.animation = 'pulse-orange 1.6s infinite ease-in-out';
+        } else {
+            pointsWrapper.style.boxShadow = '';
+            pointsWrapper.style.animation = '';
+        }
+    }
+}
+
+function formatScore(n) {
+    if (n >= 100000000) {
+        return n.toExponential(2);
+    }
+    return Math.floor(n).toLocaleString();
+}
+
+// Add the pulsing animation
+if (!document.getElementById('pulse-orange-style')) {
+    const style = document.createElement('style');
+    style.id = 'pulse-orange-style';
+    style.innerHTML = `
+        @keyframes pulse-orange {
+            0%, 100% { box-shadow: 0 0 18px #f59e0b, 0 0 32px #fb923c; }
+            50% { box-shadow: 0 0 28px #fb923c, 0 0 48px #f59e0b; }
+        }
+    `;
+    document.head.appendChild(style);
+}
+
         
     </script>
 </body>
