@@ -1923,52 +1923,84 @@ Start of Chunk 2
       }
 
 function showTopCreaturesModal() {
-    console.log("Top 10 button clicked - DIAGNOSTIC");
-
     const modal = document.getElementById('top-creatures-modal');
-    if (!modal) {
-        console.error("Modal element not found in DOM!");
-        return;
-    }
+    if (!modal) return;
 
-    console.log("Modal element found. Current classes:", modal.className);
-
-    // Force it hard
+    // Force show reliably
     modal.style.cssText = `
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
         position: fixed !important;
         inset: 0 !important;
-        background-color: rgba(0, 0, 0, 0.85) !important;
-        z-index: 999999 !important;
+        background-color: rgba(0, 0, 0, 0.8) !important;
+        z-index: 99999 !important;
     `;
 
-    // Extra safety - move it to body if needed
-    if (modal.parentElement !== document.body) {
-        document.body.appendChild(modal);
-        console.log("Moved modal to body");
-    }
-
     const listContainer = document.getElementById('top-creatures-list');
-    if (!listContainer) {
-        console.error("List container not found!");
-        return;
+    if (!listContainer) return;
+
+    listContainer.innerHTML = '';
+
+    // Sort creatures (same logic as before)
+    let sorted = [...creatures].sort((a, b) => {
+        let scoreA = (a.modules?.length || 0) * 2.5 + 
+                     (a.killCount || 0) * 4 + 
+                     (a.childrenCount || 0) * 3 + 
+                     (a.energy || 0) * 0.6;
+
+        let scoreB = (b.modules?.length || 0) * 2.5 + 
+                     (b.killCount || 0) * 4 + 
+                     (b.childrenCount || 0) * 3 + 
+                     (b.energy || 0) * 0.6;
+
+        let tierA = a.modules.reduce((sum, m) => sum + (m.tier || 1), 0);
+        let tierB = b.modules.reduce((sum, m) => sum + (m.tier || 1), 0);
+        scoreA += tierA * 1.2;
+        scoreB += tierB * 1.2;
+
+        return scoreB - scoreA;
+    }).slice(0, 10);
+
+    if (sorted.length === 0) {
+        listContainer.innerHTML = `<div class="text-center text-white/60 py-8">No creatures available yet.</div>`;
+    } else {
+        sorted.forEach(creature => {
+            const div = document.createElement('div');
+            div.className = 'flex items-center justify-between bg-white/5 hover:bg-white/10 rounded-2xl px-4 py-3 cursor-pointer transition-colors';
+
+            const tierTotal = creature.modules.reduce((sum, m) => sum + (m.tier || 1), 0);
+
+            div.innerHTML = `
+                <div>
+                    <div class="font-semibold text-emerald-400">${creature.name}</div>
+                    <div class="text-xs text-white/60">
+                        Gen ${creature.generation} • ${creature.modules.length} modules (T${tierTotal}) • ${creature.killCount || 0} kills
+                    </div>
+                </div>
+                <div class="text-xs px-3 py-1 bg-white/10 rounded-xl text-white/70">Inspect</div>
+            `;
+
+            div.onclick = () => {
+                selectCreature(creature);
+                trackAlpha = false;
+                isInspectorLocked = true;
+                hideTopCreaturesModal();
+            };
+
+            listContainer.appendChild(div);
+        });
     }
-
-    listContainer.innerHTML = `<div style="color: white; padding: 20px;">TEST - If you see this, modal works</div>`;
-
-    console.log("Modal should now be visible. If you still don't see it, tell me what the console says next.");
 }
 
 function hideTopCreaturesModal() {
     const modal = document.getElementById('top-creatures-modal');
     if (modal) {
+        modal.style.cssText = '';           // Clear forced styles
         modal.classList.remove('flex');
         modal.classList.add('hidden');
     }
 }
-      
 
       //================================================================================
       //CHUNK 3 of 3  —  RUNTIME LOOP + DRAW + HANDLERS
