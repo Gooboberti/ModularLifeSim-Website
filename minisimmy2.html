@@ -1006,6 +1006,56 @@
             <button onclick="hideInventory()" class="text-white/60 hover:text-white text-3xl leading-none">&times;</button>
         </div>
 
+<!-- Furnace Modal -->
+<div id="furnace-modal" onclick="hideFurnaceModal()" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center z-[100]">
+    <div onclick="event.stopImmediatePropagation()" class="modal bg-[#121218] border border-white/10 rounded-3xl max-w-md w-full mx-4 p-6">
+        <div class="flex justify-between items-center mb-5">
+            <h3 class="text-xl font-semibold flex items-center gap-x-2">
+                <i class="fa-solid fa-fire text-orange-400"></i>
+                <span>Aetherium Furnace</span>
+            </h3>
+            <button onclick="hideFurnaceModal()" class="text-white/60 hover:text-white text-3xl leading-none">&times;</button>
+        </div>
+
+        <div class="bg-white/5 border border-white/10 rounded-2xl p-4 mb-4">
+            <div class="flex justify-between items-center mb-2">
+                <div class="text-sm font-semibold">Dust in Inventory</div>
+                <div id="furnace-inv-dust" class="font-mono text-orange-400 text-xl">0.00</div>
+            </div>
+            <div class="text-xs text-white/60">1 oz dust = 1 crystal when crushed • Burns for 5 minutes</div>
+        </div>
+
+        <div class="flex gap-3 mb-4">
+            <button onclick="addDustToFurnace(1)" class="flex-1 px-4 py-2.5 bg-orange-500/90 hover:bg-orange-500 rounded-2xl text-sm font-medium">Add 1 oz</button>
+            <button onclick="addDustToFurnace(5)" class="flex-1 px-4 py-2.5 bg-orange-500/90 hover:bg-orange-500 rounded-2xl text-sm font-medium">Add 5 oz</button>
+            <button onclick="addDustToFurnace(10)" class="flex-1 px-4 py-2.5 bg-orange-500/90 hover:bg-orange-500 rounded-2xl text-sm font-medium">Add 10 oz</button>
+        </div>
+
+        <div class="bg-white/5 border border-white/10 rounded-2xl p-4 mb-4">
+            <div class="flex justify-between items-center">
+                <div>
+                    <div class="text-sm font-semibold">Currently Burning</div>
+                    <div id="furnace-burning" class="font-mono text-xl text-orange-400">0 oz</div>
+                </div>
+                <div class="text-right">
+                    <div class="text-xs text-white/60">Time Left</div>
+                    <div id="furnace-time" class="font-mono text-lg text-emerald-400">--:--</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="text-xs text-white/60 text-center mb-4">
+            While burning: <span class="text-orange-400 font-semibold">x100</span> point multiplier
+        </div>
+
+        <div class="flex gap-3">
+            <button onclick="extractDustEarly()" class="flex-1 px-4 py-2 bg-red-500/80 hover:bg-red-500 rounded-2xl text-sm">Extract Early (High Loss)</button>
+            <button onclick="hideFurnaceModal()" class="flex-1 px-4 py-2 bg-white/10 hover:bg-white/20 rounded-2xl text-sm">Close</button>
+        </div>
+    </div>
+</div>
+        
+        
         <!-- Crystals -->
         <div onclick="convertCrystalsToDust()" class="bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-4 mb-3 cursor-pointer transition-colors">
             <div class="flex justify-between items-center">
@@ -2669,6 +2719,7 @@ let inventoryCrystals = 0;       // Separate from prestige crystals for clarity 
             score += predKillBonus;
 
             totalScore = Math.floor(score * multiplier);
+            totalScore = Math.floor(score * multiplier * getBurningMultiplier());
 
             const scoreEl = document.getElementById('vegas-score');
             if (scoreEl) scoreEl.innerText = totalScore.toLocaleString();
@@ -6843,34 +6894,28 @@ function deleteEgg(index) {
 }
 
 function prestige() {
-    if (burningCrystals > 0) {
-        addFloatingText(width/2, height/2, "Cannot prestige while burning crystals", '#f87171');
+    if (burningDust > 0) {
+        addFloatingText(width/2, height/2, "Cannot prestige while furnace is burning", '#f87171');
         return;
     }
-
-    
 
     if (totalScore < 1000) {
         addFloatingText(width/2, height/2, "Need at least 1,000 points to prestige", '#f87171');
         return;
     }
 
-    const crystalsGained = Math.floor(totalScore / 1000);
+    // 1000 points = 0.01 oz dust
+    const dustGained = totalScore / 100000;
 
-    // Convert to Aetherium
-    aetheriumCrystals += crystalsGained;
+    aetheriumDust += dustGained;
 
-    // Reset the simulation
     resetSim();
-
-    // Clear points after conversion
     totalScore = 0;
     updateMainStats();
     updateAetheriumUI();
 
-    // Nice visual feedback instead of alert
-    addFloatingText(width/2, 120, `+${crystalsGained} Aetherium Crystals`, '#c084fc');
-    playTone(880, 'sine', 0.25, 0.8);
+    addFloatingText(width/2, 120, `+${dustGained.toFixed(2)} oz Dust`, '#f59e0b');
+    playTone(720, 'sine', 0.3, 0.7);
 }
 
         function updateAetheriumUI() {
@@ -6911,6 +6956,100 @@ function convertCrystalsToDust() {
     addFloatingText(width/2, 100, `+${dustGained} Dust`, '#f59e0b');
 }
 
+        // ==================== FURNACE SYSTEM ====================
+let burningDust = 0;
+let furnaceEndTime = 0;
+
+function showFurnaceModal() {
+    const modal = document.getElementById('furnace-modal');
+    if (!modal) return;
+
+    updateFurnaceUI();
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+function hideFurnaceModal() {
+    const modal = document.getElementById('furnace-modal');
+    if (modal) {
+        modal.classList.remove('flex');
+        modal.classList.add('hidden');
+    }
+}
+
+function updateFurnaceUI() {
+    const invDustEl = document.getElementById('furnace-inv-dust');
+    const burningEl = document.getElementById('furnace-burning');
+    const timeEl = document.getElementById('furnace-time');
+
+    if (invDustEl) invDustEl.innerText = aetheriumDust.toFixed(2);
+
+    if (burningEl) burningEl.innerText = burningDust.toFixed(2) + " oz";
+
+    if (timeEl) {
+        if (burningDust > 0 && furnaceEndTime > Date.now()) {
+            const remaining = Math.max(0, Math.floor((furnaceEndTime - Date.now()) / 1000));
+            const min = Math.floor(remaining / 60);
+            const sec = remaining % 60;
+            timeEl.innerText = `${min}:${sec.toString().padStart(2, '0')}`;
+        } else {
+            timeEl.innerText = "--:--";
+        }
+    }
+}
+
+function addDustToFurnace(amount) {
+    if (aetheriumDust < amount) {
+        addFloatingText(width/2, 100, "Not enough dust!", '#f87171');
+        return;
+    }
+
+    aetheriumDust -= amount;
+    burningDust += amount;
+
+    // 5 minutes per oz (you can change this)
+    const burnTimePerOz = 5 * 60 * 1000;
+    furnaceEndTime = Date.now() + (burningDust * burnTimePerOz);
+
+    updateFurnaceUI();
+    showInventory();
+}
+
+function extractDustEarly() {
+    if (burningDust <= 0) return;
+
+    const loss = 0.65; // 65% loss if extracted early
+    const recovered = Math.floor(burningDust * (1 - loss));
+
+    aetheriumDust += recovered;
+    burningDust = 0;
+    furnaceEndTime = 0;
+
+    updateFurnaceUI();
+    showInventory();
+    addFloatingText(width/2, 100, `Recovered ${recovered} oz (heavy loss)`, '#f59e0b');
+}
+
+function getBurningMultiplier() {
+    if (burningDust > 0 && furnaceEndTime > Date.now()) {
+        return 100; // x100 while burning
+    }
+    return 1;
+}
+
+// Update furnace UI every second while open
+setInterval(() => {
+    const modal = document.getElementById('furnace-modal');
+    if (modal && !modal.classList.contains('hidden')) {
+        updateFurnaceUI();
+    }
+
+    // Auto stop burning when time runs out
+    if (burningDust > 0 && furnaceEndTime <= Date.now()) {
+        burningDust = 0;
+        furnaceEndTime = 0;
+    }
+}, 1000);
 
 function updateAetheriumUI() {
     const el = document.getElementById('aetherium-crystals');
