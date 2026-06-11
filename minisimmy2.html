@@ -3148,10 +3148,11 @@ function setupCheatSliders() {
             }
         }
 
-   function updateMainStats() {
+function updateMainStats() {
     if (!greenZone || !blueZone) return;
 
-    let totalModules = 0, predators = 0;
+    let totalModules = 0;
+    let predators = 0;
     let tierCounts = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0};
 
     for (let c of creatures) {
@@ -3164,48 +3165,34 @@ function setupCheatSliders() {
         }
     }
 
-    const avgModules = (totalModules / creatures.length).toFixed(1);
+    const avgModules = creatures.length > 0 
+        ? (totalModules / creatures.length).toFixed(1) 
+        : "0.0";
 
-    const popEl = document.getElementById('stat-pop');
-    const predEl = document.getElementById('stat-pred');
-    const modEl = document.getElementById('stat-modules');
-
-    // === FIXED: Consistent exponential formatting ===
+    // === Score Display (Safe + Exponential) ===
     const topScoreEl = document.getElementById('top-score');
     if (topScoreEl) topScoreEl.innerText = formatScore(totalScore);
 
     const mainScoreEl = document.getElementById('vegas-score');
     if (mainScoreEl) mainScoreEl.innerText = formatScore(totalScore);
 
-    // Extra safety for any other score displays
-    document.querySelectorAll('#vegas-score').forEach(el => {
-        el.innerText = formatScore(totalScore);
-    });
-
-    const greenFoodEl = document.getElementById('stat-green-food');
-    const blueFoodEl = document.getElementById('stat-blue-food');
-
-    const tier1El = document.getElementById('stat-tier1');
-    const tier2El = document.getElementById('stat-tier2');
-    const tier3El = document.getElementById('stat-tier3');
-    const tier4El = document.getElementById('stat-tier4');
-    const tier5El = document.getElementById('stat-tier5');
+    // Update other stats
+    const popEl = document.getElementById('stat-pop');
+    const predEl = document.getElementById('stat-pred');
+    const modEl = document.getElementById('stat-modules');
 
     if (popEl) popEl.innerText = creatures.length;
     if (predEl) predEl.innerText = predators;
     if (modEl) modEl.innerText = avgModules;
 
-    // Green and Blue Food are being removed, so these lines are commented out for now
-    // if (greenFoodEl) greenFoodEl.innerText = Math.floor(greenZone.food);
-    // if (blueFoodEl) blueFoodEl.innerText = Math.floor(blueZone.food);
+    // Tier counts
+    if (document.getElementById('stat-tier1')) document.getElementById('stat-tier1').innerText = tierCounts[1];
+    if (document.getElementById('stat-tier2')) document.getElementById('stat-tier2').innerText = tierCounts[2];
+    if (document.getElementById('stat-tier3')) document.getElementById('stat-tier3').innerText = tierCounts[3];
+    if (document.getElementById('stat-tier4')) document.getElementById('stat-tier4').innerText = tierCounts[4];
+    if (document.getElementById('stat-tier5')) document.getElementById('stat-tier5').innerText = tierCounts[5];
 
-    if (tier1El) tier1El.innerText = tierCounts[1];
-    if (tier2El) tier2El.innerText = tierCounts[2];
-    if (tier3El) tier3El.innerText = tierCounts[3];
-    if (tier4El) tier4El.innerText = tierCounts[4];
-    if (tier5El) tier5El.innerText = tierCounts[5];
-
-    // Update top bar furnace UI
+    // Update top bar (timer, bonus, glow)
     if (typeof updateTopFurnaceUI === 'function') {
         updateTopFurnaceUI();
     }
@@ -5359,7 +5346,12 @@ function drawCreatureNeuralNet(creature) {
                 text(`Sub: ${(musicData.subBass*100).toFixed(0)}  Bass: ${(musicData.bass*100).toFixed(0)}  LowM: ${(musicData.lowMids*100).toFixed(0)}  Mids: ${(musicData.mids*100).toFixed(0)}  HiM: ${(musicData.highMids*100).toFixed(0)}  High: ${(musicData.highs*100).toFixed(0)}  |  Vol: ${(musicData.volume*100).toFixed(0)}`, 16, height - 10);
             }
 
-            updateMainStats();
+                // Make sure score keeps updating
+    if (typeof updateVegasScore === 'function') {
+        updateVegasScore();
+    }
+    updateMainStats();
+            
         }
 
         function spawnCreatureFromVortexCenter(x, y, vortexDir, vortexStrength) {
@@ -6941,14 +6933,14 @@ function forcePrestige() {
             playExplosionSound();
         }
 
-        function showExtractEggModal() {
+function showExtractEggModal() {
     const modal = document.getElementById('extract-egg-modal');
     const listContainer = document.getElementById('extract-egg-list');
     if (!modal || !listContainer) return;
 
     listContainer.innerHTML = '';
 
-    // Live balance at the top
+    // Live balance
     const balanceDiv = document.createElement('div');
     balanceDiv.className = 'mb-4 px-1 flex justify-between items-center text-sm border-b border-white/10 pb-3';
     balanceDiv.innerHTML = `
@@ -6957,7 +6949,7 @@ function forcePrestige() {
     `;
     listContainer.appendChild(balanceDiv);
 
-    // Fresh top 10 list every time the menu opens
+    // Fresh top 10
     let sorted = [...creatures].sort((a, b) => {
         let scoreA = (a.modules?.length || 0) * 3 + (a.killCount || 0) * 2 + (a.childrenCount || 0);
         let scoreB = (b.modules?.length || 0) * 3 + (b.killCount || 0) * 2 + (b.childrenCount || 0);
