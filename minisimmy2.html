@@ -1065,11 +1065,15 @@ Start of Chunk 1
             </div>
         </div>
 
-        <div class="flex gap-3 mb-4">
-            <button onclick="addDustToFurnace(1)" class="flex-1 px-4 py-2.5 bg-orange-500/90 hover:bg-orange-500 rounded-2xl text-sm font-medium">Add 1 oz</button>
-            <button onclick="addDustToFurnace(5)" class="flex-1 px-4 py-2.5 bg-orange-500/90 hover:bg-orange-500 rounded-2xl text-sm font-medium">Add 5 oz</button>
-            <button onclick="addDustToFurnace(10)" class="flex-1 px-4 py-2.5 bg-orange-500/90 hover:bg-orange-500 rounded-2xl text-sm font-medium">Add 10 oz</button>
-        </div>
+        <div class="grid grid-cols-3 gap-2 mb-4">
+    <button onclick="addDustToFurnace(1)" class="px-3 py-2 bg-orange-500/90 hover:bg-orange-500 rounded-2xl text-xs font-medium">+1 mg</button>
+    <button onclick="addDustToFurnace(100)" class="px-3 py-2 bg-orange-500/90 hover:bg-orange-500 rounded-2xl text-xs font-medium">+100 mg</button>
+    <button onclick="addDustToFurnace(1000)" class="px-3 py-2 bg-orange-500/90 hover:bg-orange-500 rounded-2xl text-xs font-medium">+1 g</button>
+    
+    <button onclick="addDustToFurnace(10000)" class="px-3 py-2 bg-orange-500/90 hover:bg-orange-500 rounded-2xl text-xs font-medium">+10 g</button>
+    <button onclick="addDustToFurnace(100000)" class="px-3 py-2 bg-orange-500/90 hover:bg-orange-500 rounded-2xl text-xs font-medium">+100 g</button>
+    <button onclick="addDustToFurnace(1000000)" class="px-3 py-2 bg-orange-500/90 hover:bg-orange-500 rounded-2xl text-xs font-medium">+1 kg</button>
+</div>
 
         <div class="bg-white/5 border border-white/10 rounded-2xl p-4 mb-4">
             <div class="flex justify-between items-center">
@@ -1117,24 +1121,21 @@ Start of Chunk 1
                     <i class="fa-solid fa-flask text-orange-400 text-2xl"></i>
                     <div>
                         <div class="font-semibold">Aetherium Dust</div>
-                        <div class="text-xs text-white/60">Used in Furnace (oz)</div>
+                        <div class="text-xs text-white/60">Used in Furnace</div>
                     </div>
                 </div>
                 <div id="inv-dust" class="font-mono text-2xl text-orange-400">0</div>
             </div>
         </div>
 
-<!--
-================================================================================
-CHUNK 2 of 3 — CORE SYSTEMS + CLASSES (Phase B Applied)
-================================================================================
-Changes in this version:
-- Dust ↔ Crystals conversion with sound + floating text feedback
-- Enhanced showExtractEggModal() with live balance and top 10 creatures
-================================================================================
--->
+        <!-- NEW: Convert Dust to Crystals button -->
+        <button onclick="convertDustToCrystals()" 
+                class="mt-3 w-full px-4 py-2 bg-pink-500/90 hover:bg-pink-500 rounded-2xl text-sm font-medium">
+            Convert Dust to Crystals (1 kg = 1 Crystal)
+        </button>
+
         <div class="mt-6 text-center text-xs text-white/50">
-            Dust gives x100 points per oz when burned in the Furnace
+            Dust gives x100 points per mg when burned in the Furnace
         </div>
     </div>
 </div>
@@ -1244,6 +1245,18 @@ let aetheriumDust = 0;         // Dust in oz (max 999)
 let burningCrystals = 0;       // Number of crystals currently burning in furnace
 let furnaceEndTime = 0;        // Timestamp when current burn ends
 
+function formatDust(mg) {
+    if (mg >= 1000000) {
+        return (mg / 1000000).toFixed(2) + " kg";
+    } else if (mg >= 1000) {
+        return (mg / 1000).toFixed(2) + " g";
+    } else if (mg >= 1) {
+        return mg.toFixed(2) + " mg";
+    } else {
+        return (mg * 1000).toFixed(0) + " µg";
+    }
+}        
+
 let timeScale = 1;
 let paused = false;
 let simTime = 0;
@@ -1280,11 +1293,9 @@ function updateFurnaceUI() {
     if (dustEl) dustEl.innerText = formatDust(aetheriumDust);
 
     if (burningEl) {
-        if (burningCrystals > 0) {
-            burningEl.innerText = `${formatDust(burningCrystals)} dust`;
-        } else {
-            burningEl.innerText = `0 mg dust`;
-        }
+        burningEl.innerText = burningCrystals > 0 
+            ? `${formatDust(burningCrystals)} dust` 
+            : `0 mg dust`;
     }
 
     if (timeEl) {
@@ -1325,13 +1336,13 @@ function addCrystalsToFurnace(amount) {
     updateAetheriumUI();
 }
 
-function addDustToFurnace(amount) {
-    if (aetheriumDust < amount) {
+function addDustToFurnace(amountMg) {
+    if (aetheriumDust < amountMg) {
         addFloatingText(width/2, 100, "Not enough dust!", '#f87171');
         return;
     }
-    aetheriumDust -= amount;
-    burningCrystals += amount;
+    aetheriumDust -= amountMg;
+    burningCrystals += amountMg;
     furnaceEndTime = Date.now() + (5 * 60 * 1000);
     updateFurnaceUI();
     updateAetheriumUI();
@@ -1344,6 +1355,22 @@ function convertCrystalsToDust() {
     updateAetheriumUI();
     showInventory();
 }
+
+function convertDustToCrystals() {
+    const kg = Math.floor(aetheriumDust / 1000000); // 1 kg = 1,000,000 mg
+    if (kg < 1) {
+        addFloatingText(width/2, 100, "Need at least 1 kg of dust!", '#f87171');
+        return;
+    }
+    aetheriumCrystals += kg;
+    aetheriumDust -= kg * 1000000;
+
+    playTone(720, 'sine', 0.22, 0.5);
+    addFloatingText(width/2, 90, `+${kg} Crystal${kg > 1 ? 's' : ''}`, '#f472b6');
+    updateAetheriumUI();
+    showInventory();
+}        
+        
 
 function extractDustEarly() {
     if (burningCrystals <= 0) return;
@@ -6769,15 +6796,26 @@ function handlePrestigeWarningConfirm(button) {
 }
 
 function forcePrestige() {
-    const dustGained = totalScore / 100000;
-    aetheriumDust += dustGained * 0.85; // 15% loss
+    // Properly shut down furnace with 15% loss
+    if (burningCrystals > 0) {
+        const loss = burningCrystals * 0.15;
+        aetheriumDust += Math.floor(burningCrystals - loss);
+        burningCrystals = 0;
+        furnaceEndTime = 0;
+        addFloatingText(width/2, 90, `Furnace stopped (-15% Dust)`, '#f87171');
+    }
 
-    addFloatingText(width/2, 90, `Forced Prestige (-15% Dust)`, '#f87171');
+    // Convert points → dust (100,000 points = 1 mg)
+    const dustGained = totalScore / 100000;
+    aetheriumDust += dustGained;
+
+    addFloatingText(width/2, 70, `+${formatDust(dustGained)} from Prestige`, '#34d399');
 
     resetSim();
     totalScore = 0;
     updateMainStats();
     updateAetheriumUI();
+    updateFurnaceUI();
 }
 
         
