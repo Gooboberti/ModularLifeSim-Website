@@ -1,0 +1,2096 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SYNTHO-LAB • Creature GeneWeave Framework v0.1</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&amp;family=Space+Grotesk:wght@500;600&amp;display=swap');
+        
+        :root {
+            --accent-cyan: #67e8f9;
+            --accent-violet: #a78bfa;
+        }
+        
+        body {
+            font-family: 'Inter', system_ui, sans-serif;
+        }
+        
+        .font-display {
+            font-family: 'Space Grotesk', 'Inter', system_ui, sans-serif;
+            font-weight: 600;
+        }
+
+        .lab-bg {
+            background: 
+                radial-gradient(circle at 20% 30%, rgba(103, 232, 249, 0.06) 0%, transparent 50%),
+                radial-gradient(circle at 80% 70%, rgba(167, 139, 250, 0.06) 0%, transparent 50%),
+                #0a0f1e;
+        }
+
+        .section-header {
+            font-size: 1.35rem;
+            letter-spacing: -0.025em;
+        }
+
+        .thought-node {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .thought-node:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+        }
+
+        .stat-bar {
+            transition: width 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.3s ease;
+        }
+
+        .lab-card {
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(103, 232, 249, 0.1);
+        }
+
+        .neon-text {
+            text-shadow: 0 0 10px rgb(103 232 249 / 0.5);
+        }
+
+        .creature-frame {
+            background: linear-gradient(145deg, #1e2937 0%, #0f172a 100%);
+            box-shadow: 
+                0 0 0 1px rgba(103, 232, 249, 0.2),
+                inset 0 0 60px rgba(0, 0, 0, 0.6),
+                0 25px 50px -12px rgb(0 0 0 / 0.4);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .creature-frame::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: 
+                linear-gradient(rgba(103,232,249,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(103,232,249,0.03) 1px, transparent 1px);
+            background-size: 24px 24px;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .action-btn {
+            transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .action-btn:active {
+            transform: scale(0.96);
+        }
+
+        .action-btn::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(to right, transparent, rgba(255,255,255,0.15), transparent);
+            transform: translateX(-100%);
+            transition: transform 0.6s;
+        }
+        
+        .action-btn:hover::after {
+            transform: translateX(200%);
+        }
+
+        .mini-stat {
+            font-size: 0.65rem;
+            letter-spacing: 0.5px;
+        }
+
+        .mood-badge {
+            animation: pulse-gentle 2s infinite ease-in-out;
+        }
+
+        .genome-chip {
+            font-size: 0.65rem;
+            padding: 1px 7px;
+            background: rgba(103, 232, 249, 0.1);
+            border: 1px solid rgba(103, 232, 249, 0.3);
+        }
+
+        .inventory-item {
+            transition: transform 0.1s ease, box-shadow 0.1s ease;
+        }
+        
+        .inventory-item:active {
+            transform: scale(0.95);
+        }
+
+        .lab-grid {
+            background-image: 
+                linear-gradient(rgba(103, 232, 249, 0.07) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(103, 232, 249, 0.07) 1px, transparent 1px);
+            background-size: 32px 32px;
+        }
+
+        .toast {
+            animation: slideUpToast 0.3s ease forwards;
+        }
+
+        @keyframes pulse-gentle {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.85; }
+        }
+
+        .creature-canvas {
+            image-rendering: crisp-edges;
+            touch-action: none;
+        }
+
+        .stat-label {
+            font-size: 0.7rem;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+        }
+
+        .dense-list li {
+            margin-bottom: 0.35rem;
+        }
+
+        .thought-connector {
+            position: relative;
+        }
+        
+        .thought-connector::before {
+            content: '';
+            position: absolute;
+            left: 1.25rem;
+            top: 2.25rem;
+            bottom: -0.5rem;
+            width: 2px;
+            background: linear-gradient(to bottom, rgba(103,232,249,0.3), transparent);
+        }
+
+        .nav-link {
+            transition: all 0.1s ease;
+        }
+        
+        .nav-link:hover {
+            color: #67e8f9;
+            transform: translateX(2px);
+        }
+
+        .sci-fi-border {
+            box-shadow: 0 0 0 1px rgba(103, 232, 249, 0.15);
+        }
+    </style>
+</head>
+<body class="bg-[#0a0f1e] text-slate-200 lab-bg min-h-screen">
+    <!-- Top Navigation / Header -->
+    <div class="border-b border-slate-800 bg-slate-950/80 backdrop-blur-lg sticky top-0 z-50">
+        <div class="max-w-screen-2xl mx-auto">
+            <div class="px-6 py-4 flex items-center justify-between">
+                <div class="flex items-center gap-x-4">
+                    <!-- Logo -->
+                    <div class="flex items-center gap-x-3">
+                        <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-cyan-400 via-violet-400 to-fuchsia-400 flex items-center justify-center shadow-lg shadow-cyan-500/20">
+                            <i class="fa-solid fa-flask text-slate-950 text-2xl"></i>
+                        </div>
+                        <div>
+                            <div class="font-display text-2xl tracking-tighter font-semibold">SYNTHO-LAB</div>
+                            <div class="text-[10px] text-cyan-400 -mt-1 tracking-[2px]">GENEWEAVE INCUBATOR v0.1</div>
+                        </div>
+                    </div>
+                    
+                    <div class="hidden md:flex items-center gap-x-2 text-xs px-3 py-1.5 rounded-2xl bg-slate-900 border border-slate-800">
+                        <div class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
+                        <span class="text-emerald-400 font-medium">LIVE SIM • REAL-TIME DECAY</span>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-x-3">
+                    <div class="hidden sm:flex items-center gap-x-2 text-xs bg-slate-900 px-3 py-1.5 rounded-2xl border border-slate-800">
+                        <i class="fa-solid fa-microchip text-cyan-400"></i>
+                        <span class="font-mono text-cyan-400">MINISIMMY SYNC READY</span>
+                    </div>
+                    
+                    <button onclick="showPromptGenerator()" 
+                            class="flex items-center gap-x-2 px-4 py-2 text-sm font-medium bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/30 text-violet-300 rounded-2xl transition-colors">
+                        <i class="fa-solid fa-magic"></i>
+                        <span class="hidden sm:inline">Asset Forge</span>
+                    </button>
+                    
+                    <button onclick="resetDemo()" 
+                            class="px-4 py-2 text-sm font-medium bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-2xl transition-colors flex items-center gap-x-2">
+                        <i class="fa-solid fa-redo"></i>
+                        <span class="hidden md:inline">Reset Lab</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hero / Vision -->
+    <div class="max-w-screen-2xl mx-auto px-6 pt-8 pb-6">
+        <div class="max-w-4xl">
+            <div class="inline-flex items-center gap-x-2 px-4 py-1 rounded-3xl bg-slate-900 border border-slate-800 text-xs tracking-widest mb-4">
+                <span class="text-cyan-400">RESEARCHED</span> 
+                <span class="text-slate-500">•</span> 
+                <span>TAMAGOTCHI + NICHE + SPORE DNA</span>
+            </div>
+            
+            <h1 class="font-display text-6xl md:text-7xl tracking-tighter leading-none mb-3">
+                A living lab for<br>raising <span class="bg-gradient-to-r from-cyan-400 to-violet-400 bg-clip-text text-transparent">evolving creatures</span>.
+            </h1>
+            <p class="max-w-2xl text-xl text-slate-400">
+                Basic Tamagotchi-style framework. Mobile-first. Graphics-ready. Built for massive expansion into gene refinement, brain import/export loops with MiniSimmy, and bidirectional avatar-brain evolution.
+            </p>
+            
+            <div class="flex flex-wrap gap-3 mt-6">
+                <button onclick="document.getElementById('prototype-section').scrollIntoView({ behavior: 'smooth' })" 
+                        class="px-8 py-3.5 bg-white text-slate-950 hover:bg-slate-100 font-semibold rounded-3xl flex items-center gap-x-3 text-sm tracking-wide transition-all active:scale-[0.985]">
+                    <span>JUMP TO LIVE PROTOTYPE</span>
+                    <i class="fa-solid fa-arrow-right"></i>
+                </button>
+                <button onclick="document.getElementById('vision-section').scrollIntoView({ behavior: 'smooth' })" 
+                        class="px-6 py-3.5 border border-slate-700 hover:bg-slate-900 font-medium rounded-3xl text-sm flex items-center gap-x-2 transition-all">
+                    <span>EXPLORE THE FULL VISION</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== INTERACTIVE PROTOTYPE ==================== -->
+    <div id="prototype-section" class="max-w-screen-2xl mx-auto px-6 pb-16">
+        <div class="flex items-end justify-between mb-4 px-1">
+            <div>
+                <div class="flex items-center gap-x-3">
+                    <div class="px-4 py-1 bg-emerald-500/10 text-emerald-400 text-xs font-mono tracking-widest rounded-2xl border border-emerald-500/20">LIVE FRAMEWORK</div>
+                    <h2 class="font-display text-4xl tracking-tight">Creature Interaction Lab</h2>
+                </div>
+                <p class="text-slate-400 mt-1 text-sm">Real-time needs • Canvas creature • Inventory • Prompt-ready graphics pipeline • Expansion hooks</p>
+            </div>
+            <div class="hidden lg:flex items-center gap-x-2 text-xs">
+                <div class="px-3 py-1 bg-slate-900 rounded-2xl border border-slate-800 flex items-center gap-x-1.5">
+                    <i class="fa-solid fa-clock text-amber-400"></i>
+                    <span id="sim-time" class="font-mono text-amber-400">00:00</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Lab Interface -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+            
+            <!-- Creature Viewport -->
+            <div class="lg:col-span-7 lab-card rounded-3xl p-5 sci-fi-border">
+                <div class="flex items-center justify-between mb-4 px-1">
+                    <div class="flex items-center gap-x-3">
+                        <!-- Name & Type -->
+                        <div>
+                            <div class="flex items-center gap-x-2">
+                                <input id="creature-name" type="text" value="Zorblax" 
+                                       class="bg-transparent font-display text-2xl tracking-tight border-b border-transparent hover:border-slate-700 focus:border-cyan-400/50 outline-none w-40"
+                                       onchange="updateCreatureName()">
+                                <button onclick="randomizeName()" class="text-slate-500 hover:text-cyan-400 transition-colors">
+                                    <i class="fa-solid fa-dice text-xs"></i>
+                                </button>
+                            </div>
+                            <div class="flex items-center gap-x-2 mt-0.5">
+                                <div id="type-badge" 
+                                     class="px-2.5 py-px text-[10px] font-mono tracking-widest bg-violet-500/10 text-violet-300 border border-violet-500/30 rounded-xl cursor-pointer"
+                                     onclick="cycleCreatureType()">
+                                    AETHERFLOOF • STAGE <span id="stage">01</span>
+                                </div>
+                                <div id="mood-badge" 
+                                     class="mood-badge px-3 py-px text-[10px] font-medium tracking-wider rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-x-1">
+                                    <i class="fa-solid fa-face-smile text-xs"></i>
+                                    <span id="mood-text">CONTENT</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="text-right">
+                        <div class="text-[10px] text-slate-500 tracking-widest">WELLBEING</div>
+                        <div id="wellbeing-score" class="font-mono text-3xl font-semibold text-emerald-400 tabular-nums">87</div>
+                    </div>
+                </div>
+
+                <!-- Creature Canvas Container -->
+                <div class="creature-frame rounded-3xl p-4 mx-auto" style="max-width: 340px; box-shadow: 0 0 0 1px rgba(103,232,249,0.15), inset 0 1px 0 rgba(255,255,255,0.05);">
+                    <div class="relative">
+                        <canvas id="creature-canvas" width="320" height="320" class="creature-canvas w-full max-w-[320px] mx-auto rounded-2xl bg-[#0a0f1e] cursor-pointer"></canvas>
+                        
+                        <!-- Overlay HUD on canvas -->
+                        <div class="absolute top-3 right-3 bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-2xl text-[10px] font-mono flex items-center gap-x-1.5 border border-white/10">
+                            <div class="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse"></div>
+                            <span id="canvas-status" class="text-emerald-400">STABLE</span>
+                        </div>
+                        
+                        <div class="absolute bottom-3 left-3 text-[9px] font-mono bg-black/50 px-2 py-0.5 rounded-xl border border-white/10 flex items-center gap-x-1">
+                            <span class="text-slate-400">GENE</span> 
+                            <span id="genome-seed" class="font-mono text-cyan-400 tracking-[1px]"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Stats Row -->
+                <div class="mt-4 grid grid-cols-5 gap-2 px-1">
+                    <div class="text-center">
+                        <div class="mini-stat text-slate-400 mb-1 flex items-center justify-center gap-x-1"><i class="fa-solid fa-drumstick-bite text-orange-400"></i> <span>HUNGER</span></div>
+                        <div class="h-2 bg-slate-800 rounded-full overflow-hidden">
+                            <div id="bar-hunger" class="stat-bar h-2 bg-gradient-to-r from-orange-400 to-amber-300 rounded-full" style="width: 45%"></div>
+                        </div>
+                        <div id="val-hunger" class="font-mono text-xs mt-0.5 text-orange-300">45</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="mini-stat text-slate-400 mb-1 flex items-center justify-center gap-x-1"><i class="fa-solid fa-battery-full text-emerald-400"></i> <span>ENERGY</span></div>
+                        <div class="h-2 bg-slate-800 rounded-full overflow-hidden">
+                            <div id="bar-energy" class="stat-bar h-2 bg-gradient-to-r from-emerald-400 to-teal-300 rounded-full" style="width: 65%"></div>
+                        </div>
+                        <div id="val-energy" class="font-mono text-xs mt-0.5 text-emerald-300">65</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="mini-stat text-slate-400 mb-1 flex items-center justify-center gap-x-1"><i class="fa-solid fa-heart text-pink-400"></i> <span>HAPPY</span></div>
+                        <div class="h-2 bg-slate-800 rounded-full overflow-hidden">
+                            <div id="bar-happiness" class="stat-bar h-2 bg-gradient-to-r from-pink-400 to-rose-300 rounded-full" style="width: 75%"></div>
+                        </div>
+                        <div id="val-happiness" class="font-mono text-xs mt-0.5 text-pink-300">75</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="mini-stat text-slate-400 mb-1 flex items-center justify-center gap-x-1"><i class="fa-solid fa-shower text-sky-400"></i> <span>HYGIENE</span></div>
+                        <div class="h-2 bg-slate-800 rounded-full overflow-hidden">
+                            <div id="bar-hygiene" class="stat-bar h-2 bg-gradient-to-r from-sky-400 to-cyan-300 rounded-full" style="width: 80%"></div>
+                        </div>
+                        <div id="val-hygiene" class="font-mono text-xs mt-0.5 text-sky-300">80</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="mini-stat text-slate-400 mb-1 flex items-center justify-center gap-x-1"><i class="fa-solid fa-heart-pulse text-red-400"></i> <span>HEALTH</span></div>
+                        <div class="h-2 bg-slate-800 rounded-full overflow-hidden">
+                            <div id="bar-health" class="stat-bar h-2 bg-gradient-to-r from-red-400 to-rose-300 rounded-full" style="width: 90%"></div>
+                        </div>
+                        <div id="val-health" class="font-mono text-xs mt-0.5 text-red-300">90</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Actions + Bond/XP -->
+            <div class="lg:col-span-5 space-y-4">
+                <!-- Primary Actions -->
+                <div class="lab-card rounded-3xl p-5 sci-fi-border">
+                    <div class="text-xs tracking-[1.5px] text-slate-400 mb-3 px-1 flex items-center justify-between">
+                        <span>INTERACTIONS</span>
+                        <span class="font-mono text-[10px] text-cyan-400/70">TOUCH FRIENDLY</span>
+                    </div>
+                    
+                    <div class="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                        <button onclick="performAction('feed')" class="action-btn col-span-1 flex flex-col items-center justify-center gap-y-1.5 py-3 px-2 bg-orange-500/10 hover:bg-orange-500/15 border border-orange-500/30 rounded-2xl text-orange-300 active:bg-orange-500/25">
+                            <i class="fa-solid fa-drumstick-bite text-xl"></i>
+                            <div class="text-xs font-medium tracking-wider">FEED</div>
+                        </button>
+                        
+                        <button onclick="performAction('play')" class="action-btn col-span-1 flex flex-col items-center justify-center gap-y-1.5 py-3 px-2 bg-emerald-500/10 hover:bg-emerald-500/15 border border-emerald-500/30 rounded-2xl text-emerald-300 active:bg-emerald-500/25">
+                            <i class="fa-solid fa-gamepad text-xl"></i>
+                            <div class="text-xs font-medium tracking-wider">PLAY</div>
+                        </button>
+                        
+                        <button onclick="performAction('pet')" class="action-btn col-span-1 flex flex-col items-center justify-center gap-y-1.5 py-3 px-2 bg-pink-500/10 hover:bg-pink-500/15 border border-pink-500/30 rounded-2xl text-pink-300 active:bg-pink-500/25">
+                            <i class="fa-solid fa-hand-holding-heart text-xl"></i>
+                            <div class="text-xs font-medium tracking-wider">PET</div>
+                        </button>
+                        
+                        <button onclick="performAction('clean')" class="action-btn col-span-1 flex flex-col items-center justify-center gap-y-1.5 py-3 px-2 bg-sky-500/10 hover:bg-sky-500/15 border border-sky-500/30 rounded-2xl text-sky-300 active:bg-sky-500/25">
+                            <i class="fa-solid fa-broom text-xl"></i>
+                            <div class="text-xs font-medium tracking-wider">CLEAN</div>
+                        </button>
+                        
+                        <button onclick="toggleSleep()" id="sleep-btn"
+                                class="action-btn col-span-1 flex flex-col items-center justify-center gap-y-1.5 py-3 px-2 bg-indigo-500/10 hover:bg-indigo-500/15 border border-indigo-500/30 rounded-2xl text-indigo-300 active:bg-indigo-500/25">
+                            <i class="fa-solid fa-bed text-xl"></i>
+                            <div class="text-xs font-medium tracking-wider" id="sleep-text">SLEEP</div>
+                        </button>
+                        
+                        <button onclick="performAction('scan')" class="action-btn col-span-1 flex flex-col items-center justify-center gap-y-1.5 py-3 px-2 bg-violet-500/10 hover:bg-violet-500/15 border border-violet-500/30 rounded-2xl text-violet-300 active:bg-violet-500/25">
+                            <i class="fa-solid fa-search text-xl"></i>
+                            <div class="text-xs font-medium tracking-wider">SCAN</div>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Bond & Growth -->
+                <div class="lab-card rounded-3xl p-5 sci-fi-border">
+                    <div class="flex justify-between items-baseline mb-3 px-1">
+                        <div>
+                            <span class="text-xs tracking-widest text-slate-400">BOND LEVEL</span>
+                            <div class="flex items-baseline gap-x-2">
+                                <span id="bond-value" class="font-mono text-3xl font-semibold text-violet-300">55</span>
+                                <span class="text-xs text-violet-400/70">/ 100</span>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <span class="text-xs tracking-widest text-slate-400">GROWTH XP</span>
+                            <div class="font-mono text-xl text-amber-300"><span id="xp-value">200</span> <span class="text-xs text-amber-400/60">/ 500</span></div>
+                        </div>
+                    </div>
+                    
+                    <div class="h-2.5 bg-slate-800 rounded-full overflow-hidden mb-1">
+                        <div id="bar-bond" class="stat-bar h-2.5 bg-gradient-to-r from-violet-400 to-fuchsia-300 rounded-full transition-all" style="width: 55%"></div>
+                    </div>
+                    <div class="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                        <div id="bar-xp" class="stat-bar h-1.5 bg-gradient-to-r from-amber-300 to-yellow-300 rounded-full" style="width: 40%"></div>
+                    </div>
+                    
+                    <div class="flex justify-between text-[10px] mt-2 px-1 text-slate-500">
+                        <div>Consistent care strengthens the link</div>
+                        <button onclick="evolveCreature()" id="evolve-btn"
+                                class="hidden px-3 py-px text-[10px] bg-amber-400/10 text-amber-300 border border-amber-400/30 rounded-xl hover:bg-amber-400/20 transition-colors font-medium">
+                            EVOLVE
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Inventory -->
+            <div class="lg:col-span-12 lab-card rounded-3xl p-5 sci-fi-border">
+                <div class="flex items-center justify-between mb-3 px-1">
+                    <div class="flex items-center gap-x-2">
+                        <span class="font-medium tracking-wider text-sm">INVENTORY</span>
+                        <span class="text-[10px] px-2 py-px bg-slate-800 rounded-xl text-slate-400 font-mono">LAB STORAGE</span>
+                    </div>
+                    <button onclick="hatchEgg()" class="text-xs flex items-center gap-x-1.5 px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 rounded-2xl transition-colors">
+                        <i class="fa-solid fa-egg"></i>
+                        <span>HATCH EGG</span>
+                    </button>
+                </div>
+                
+                <div id="inventory-grid" class="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-2">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+        </div>
+        
+        <div class="mt-3 text-center">
+            <p class="text-[10px] text-slate-500">Click creature canvas to pet • Real-time decay continues even when tab is closed (catch-up on reload) • Fully self-contained • Ready for Grok Imagine assets</p>
+        </div>
+    </div>
+
+    <!-- ==================== DENSE THOUGHTMAP / BRAINSTORM ==================== -->
+    <div class="max-w-screen-2xl mx-auto px-6 pb-20">
+        
+        <!-- Navigation for sections -->
+        <div class="flex flex-wrap gap-x-2 gap-y-1 mb-8 border-b border-slate-800 pb-4">
+            <a href="#vision-section" class="nav-link text-xs px-4 py-2 rounded-2xl hover:bg-slate-900 text-slate-400 hover:text-cyan-400">01 • VISION</a>
+            <a href="#mechanics-section" class="nav-link text-xs px-4 py-2 rounded-2xl hover:bg-slate-900 text-slate-400 hover:text-cyan-400">02 • CORE MECHANICS</a>
+            <a href="#types-section" class="nav-link text-xs px-4 py-2 rounded-2xl hover:bg-slate-900 text-slate-400 hover:text-cyan-400">03 • CREATURE TYPES</a>
+            <a href="#graphics-section" class="nav-link text-xs px-4 py-2 rounded-2xl hover:bg-slate-900 text-slate-400 hover:text-cyan-400">04 • GRAPHICS &amp; PROMPTS</a>
+            <a href="#minisimmy-section" class="nav-link text-xs px-4 py-2 rounded-2xl hover:bg-slate-900 text-slate-400 hover:text-cyan-400">05 • MINISIMMY + GENE LOOP</a>
+            <a href="#roadmap-section" class="nav-link text-xs px-4 py-2 rounded-2xl hover:bg-slate-900 text-slate-400 hover:text-cyan-400">06 • ROADMAP &amp; EXPANSION</a>
+        </div>
+
+        <!-- 01 VISION -->
+        <div id="vision-section" class="mb-16">
+            <div class="flex items-center gap-x-3 mb-4">
+                <div class="w-8 h-px bg-gradient-to-r from-cyan-400 to-transparent"></div>
+                <span class="font-mono text-xs tracking-[3px] text-cyan-400">01</span>
+                <h3 class="section-header font-display tracking-tighter">Vision &amp; Emotional Core</h3>
+            </div>
+            
+            <div class="grid md:grid-cols-12 gap-6">
+                <div class="md:col-span-7 space-y-5 text-[15px] leading-relaxed text-slate-300">
+                    <p>This is not just another virtual pet. It is the <strong class="text-white">foundational minigame layer</strong> of a larger bidirectional ecosystem between two simulations:</p>
+                    
+                    <ul class="dense-list pl-5 space-y-1.5 text-sm">
+                        <li><strong>Here (SYNTHO-LAB)</strong>: Direct, intimate, emotional raising of individual creatures in a tech-bio lab/ranch setting. Tamagotchi-style real-time needs, rich interactions, visual personality, and gradual gene refinement through lived experience.</li>
+                        <li><strong>MiniSimmy (connected repo)</strong>: The larger modular p5.js ecosystem simulation — swarms, evolution, social dynamics, economy, predators, environmental cycles. Brains/genes are produced, tested, and iterated there at scale.</li>
+                    </ul>
+                    
+                    <p class="pt-2">The magic is the <strong class="text-cyan-300">closed loop</strong>:</p>
+                    <div class="pl-5 border-l-2 border-cyan-400/30 text-sm space-y-2">
+                        <div>1. Import a brain/gene package from MiniSimmy as an <strong>egg</strong> → drops into this lab.</div>
+                        <div>2. Choose or generate a <strong>body/avatar</strong> (different forms have innate temperaments, movement styles, sensory preferences, metabolic rates).</div>
+                        <div>3. Raise it with love, discipline, play, and care. The <strong>body phenotype expresses and refines the brain</strong> through thousands of micro-interactions and outcome feedback.</div>
+                        <div>4. At key thresholds (evolution, high bond, specific achievements), <strong>export a refined egg</strong> containing updated genes + neural/behavioral data back to MiniSimmy or other bodies.</div>
+                    </div>
+                    
+                    <p class="text-sm text-slate-400 pt-1">Different bodies "train" brains differently. A sturdy Guardian body might stabilize volatile high-creativity brains. A nimble Scout body amplifies exploration and risk-taking traits. The body is not just a vessel — it is an active shaper of the mind it carries.</p>
+                </div>
+                
+                <div class="md:col-span-5">
+                    <div class="lab-card p-5 rounded-3xl text-sm h-full">
+                        <div class="uppercase tracking-[1px] text-xs text-violet-400 mb-3">Design Pillars from Research</div>
+                        <div class="space-y-4 text-xs">
+                            <div class="flex gap-3">
+                                <div class="font-mono text-violet-400 w-5">01</div>
+                                <div><strong>Tamagotchi Effect</strong><br>Real-time obligation creates moral weight and attachment. Neglect has consequences. Care feels meaningful.</div>
+                            </div>
+                            <div class="flex gap-3">
+                                <div class="font-mono text-violet-400 w-5">02</div>
+                                <div><strong>Projection &amp; Playstyle</strong><br>Players imprint their personality. Some nurture gently, others optimize or experiment. Room for both.</div>
+                            </div>
+                            <div class="flex gap-3">
+                                <div class="font-mono text-violet-400 w-5">03</div>
+                                <div><strong>Gene + Phenotype Loop</strong><br>Inspired by Niche &amp; Spore. Bodies have base genetics/temperaments. Brains add learned/refined layers. Bidirectional evolution.</div>
+                            </div>
+                            <div class="flex gap-3">
+                                <div class="font-mono text-violet-400 w-5">04</div>
+                                <div><strong>Emotional Feedback</strong><br>Clear visual state (mood via face/animation/particles). Immediate, satisfying responses to every interaction.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 02 CORE MECHANICS -->
+        <div id="mechanics-section" class="mb-16">
+            <div class="flex items-center gap-x-3 mb-4">
+                <div class="w-8 h-px bg-gradient-to-r from-cyan-400 to-transparent"></div>
+                <span class="font-mono text-xs tracking-[3px] text-cyan-400">02</span>
+                <h3 class="section-header font-display tracking-tighter">Core Mechanics &amp; Data Model</h3>
+            </div>
+            
+            <div class="grid md:grid-cols-2 gap-6">
+                <div>
+                    <h4 class="font-semibold mb-3 flex items-center gap-x-2 text-cyan-300"><i class="fa-solid fa-chart-line w-4"></i> Stats &amp; Decay</h4>
+                    <div class="text-sm space-y-3 text-slate-300">
+                        <p>Real-time decay using elapsed time on load (catch-up). Rates modified by creature type, current mood, sleep state, and future environment/habitat factors.</p>
+                        
+                        <div class="bg-slate-900/70 rounded-2xl p-4 text-xs font-mono grid grid-cols-2 gap-x-4 gap-y-1 border border-slate-800">
+                            <div>HUNGER → Feed</div>
+                            <div class="text-orange-400">Decay: 1.5–3.0 /min (type dependent)</div>
+                            <div>ENERGY → Sleep / low activity</div>
+                            <div class="text-emerald-400">Decay: 0.8–2.0 /min • Regen on sleep</div>
+                            <div>HAPPINESS → Play, Pet, good food</div>
+                            <div class="text-pink-400">Decay: 0.6–1.8 /min • Faster if neglected</div>
+                            <div>HYGIENE → Clean</div>
+                            <div class="text-sky-400">Decay: 0.4–1.2 /min</div>
+                            <div>HEALTH (composite)</div>
+                            <div class="text-red-400">Decays only on prolonged critical needs</div>
+                            <div>BOND / AFFECTION</div>
+                            <div class="text-violet-400">Grows slowly with positive interactions</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div>
+                    <h4 class="font-semibold mb-3 flex items-center gap-x-2 text-cyan-300"><i class="fa-solid fa-database w-4"></i> Data Model (JSON ready)</h4>
+                    <pre class="text-[10px] bg-slate-950 p-4 rounded-2xl overflow-auto border border-slate-800 font-mono text-emerald-300/90 leading-tight"><code>{
+  "id": "c_1738a9f2",
+  "name": "Zorblax",
+  "type": "floof",
+  "stage": 2,
+  "hunger": 38,
+  "energy": 71,
+  "happiness": 82,
+  "hygiene": 64,
+  "health": 88,
+  "bond": 67,
+  "xp": 1240,
+  "isSleeping": false,
+  "lastUpdate": 1749632100000,
+  "genomeSeed": "aether-7f2e",
+  "genome": {
+    "metabolism": 0.72,
+    "curiosity": 0.81,
+    "affectionNeed": 0.65,
+    "playDrive": 0.88
+  },
+  "brainRef": null,          // future: imported MiniSimmy brain ID or JSON
+  "temperament": "playful",  // base from type + genome
+  "inventoryLog": [...]
+}</code></pre>
+                </div>
+            </div>
+            
+            <div class="mt-6 text-xs bg-slate-900/60 border border-slate-800 p-4 rounded-3xl">
+                <strong class="text-amber-300">Expansion hooks already in prototype:</strong> 
+                <span class="text-slate-400">genome object • brainRef field • type-specific multipliers in decay/affinity • stage evolution trigger • particle feedback system • canvas draw params ready for procedural gene expression (color, features, size)</span>
+            </div>
+        </div>
+
+        <!-- 03 CREATURE TYPES -->
+        <div id="types-section" class="mb-16">
+            <div class="flex items-center gap-x-3 mb-4">
+                <div class="w-8 h-px bg-gradient-to-r from-cyan-400 to-transparent"></div>
+                <span class="font-mono text-xs tracking-[3px] text-cyan-400">03</span>
+                <h3 class="section-header font-display tracking-tighter">Creature Types, Temperaments &amp; Base Personalities</h3>
+            </div>
+            
+            <p class="max-w-3xl text-sm text-slate-400 mb-6">Each base body has innate preferences, decay rates, visual language, and future movement/behavior styles. These exist independently of any imported brain. The brain modulates and is modulated by them.</p>
+            
+            <div class="grid md:grid-cols-3 gap-4">
+                <!-- Type Cards -->
+                <div class="lab-card p-5 rounded-3xl border border-violet-500/20">
+                    <div class="flex items-center gap-x-3 mb-4">
+                        <div class="w-9 h-9 rounded-2xl bg-violet-400/10 flex items-center justify-center"><i class="fa-solid fa-paw text-violet-400 text-xl"></i></div>
+                        <div>
+                            <div class="font-semibold">Aetherfloof</div>
+                            <div class="text-xs text-violet-400">Playful • Affectionate • Social</div>
+                        </div>
+                    </div>
+                    <div class="text-xs space-y-2 text-slate-300">
+                        <div><span class="text-violet-300">Visual:</span> Round fluffy body, big expressive eyes, ear tufts, stubby tail. Gentle bobbing idle.</div>
+                        <div><span class="text-violet-300">Preferences:</span> Sweet foods, petting/cuddling, group play (future).</div>
+                        <div><span class="text-violet-300">Decay bias:</span> Higher happiness decay if lonely. Slower hunger.</div>
+                        <div><span class="text-violet-300">Brain interaction:</span> Amplifies social/cooperative traits in imported brains. Stabilizes high-anxiety brains.</div>
+                    </div>
+                </div>
+                
+                <div class="lab-card p-5 rounded-3xl border border-emerald-500/20">
+                    <div class="flex items-center gap-x-3 mb-4">
+                        <div class="w-9 h-9 rounded-2xl bg-emerald-400/10 flex items-center justify-center"><i class="fa-solid fa-dragon text-emerald-400 text-xl"></i></div>
+                        <div>
+                            <div class="font-semibold">Drakeling</div>
+                            <div class="text-xs text-emerald-400">Curious • Independent • Bold</div>
+                        </div>
+                    </div>
+                    <div class="text-xs space-y-2 text-slate-300">
+                        <div><span class="text-emerald-300">Visual:</span> Sleeker elongated form, wing stubs or fins, sharper features, tail. More dynamic idle animation.</div>
+                        <div><span class="text-emerald-300">Preferences:</span> Protein-rich foods, active play/chase, exploration toys.</div>
+                        <div><span class="text-emerald-300">Decay bias:</span> Faster energy drain during play. Enjoys variety.</div>
+                        <div><span class="text-emerald-300">Brain interaction:</span> Boosts novelty-seeking and risk/reward traits. Good for high-creativity or explorer brains. Can make cautious brains bolder.</div>
+                    </div>
+                </div>
+                
+                <div class="lab-card p-5 rounded-3xl border border-sky-500/20">
+                    <div class="flex items-center gap-x-3 mb-4">
+                        <div class="w-9 h-9 rounded-2xl bg-sky-400/10 flex items-center justify-center"><i class="fa-solid fa-bug text-sky-400 text-xl"></i></div>
+                        <div>
+                            <div class="font-semibold">Lumibug</div>
+                            <div class="text-xs text-sky-400">Calm • Observant • Energy-based</div>
+                        </div>
+                    </div>
+                    <div class="text-xs space-y-2 text-slate-300">
+                        <div><span class="text-sky-300">Visual:</span> Orb or segmented glowing form, soft bioluminescent pulses synced to mood/energy. Gentle hover/bob.</div>
+                        <div><span class="text-sky-300">Preferences:</span> Light/energy items, quiet observation, cleaning/grooming rituals.</div>
+                        <div><span class="text-sky-300">Decay bias:</span> Very slow hunger. Happiness tied to light/hygiene. Sensitive to "dark" periods (future day/night).</div>
+                        <div><span class="text-sky-300">Brain interaction:</span> Excellent for meditative or pattern-recognition brains. Slows down hyperactive brains. Enhances sensory processing traits.</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="mt-4 text-xs text-center text-slate-500">Prototype currently cycles between these three. Full version will have many more + hybrid/mutant forms unlocked via genes + evolution.</div>
+        </div>
+
+        <!-- 04 GRAPHICS & PROMPTS -->
+        <div id="graphics-section" class="mb-16">
+            <div class="flex items-center gap-x-3 mb-4">
+                <div class="w-8 h-px bg-gradient-to-r from-cyan-400 to-transparent"></div>
+                <span class="font-mono text-xs tracking-[3px] text-cyan-400">04</span>
+                <h3 class="section-header font-display tracking-tighter">Graphics Pipeline &amp; Grok Imagine Consistency</h3>
+            </div>
+            
+            <div class="grid md:grid-cols-5 gap-6">
+                <div class="md:col-span-3">
+                    <div class="prose prose-invert text-sm max-w-none">
+                        <p>The prototype uses a dynamic canvas creature for immediate playability and procedural gene expression (color, proportions, features driven by genomeSeed + type + stage + mood).</p>
+                        
+                        <p><strong>Ready for real assets:</strong> The entire system is designed so you can swap or layer Grok Imagine generated images/sprites at any time.</p>
+                        
+                        <h5 class="font-semibold text-cyan-300 mt-4">Built-in Asset Forge (click button in header)</h5>
+                        <p class="text-xs">Generates a highly contextual, consistency-optimized prompt including:</p>
+                        <ul class="text-xs pl-5 mt-1 space-y-0.5">
+                            <li>Fixed Character Bible (editable in future versions)</li>
+                            <li>Current mood, stage, action pose</li>
+                            <li>Lab habitat context + holographic UI elements</li>
+                            <li>Art style directives for coherence across generations</li>
+                            <li>Gene-influenced details (color palette hints, feature emphasis)</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="md:col-span-2 lab-card p-5 rounded-3xl text-xs">
+                    <div class="font-mono text-violet-400 text-[10px] mb-2 tracking-widest">EXAMPLE PROMPT OUTPUT</div>
+                    <div class="bg-slate-950 p-3 rounded-2xl text-[10px] leading-snug border border-slate-800 font-light">
+                        "Create a consistent digital illustration of Zorblax the Aetherfloof, small cute sci-fi creature with round fluffy body, oversized expressive eyes with soft gradients, small stubby antennae, gentle mischievous expression, soft violet-to-cyan fur with subtle lab-tech glowing collar tag. Currently in CONTENT state, gentle idle bob pose inside transparent cylindrical lab habitat pod with faint holographic data overlays and soft cyan rim lighting. Same proportions, color palette, and feature set as previous images of this exact character. Cute yet slightly cyberpunk aesthetic, soft cel-shading, high detail on face and textures, transparent background preferred or clean lab interior, Studio Ghibli creature meets modern Tamagotchi with biotech accents, 3/4 view, adorable and huggable."
+                    </div>
+                    <div class="mt-3 text-[10px] text-slate-400">Maintain a living "Character Bible" text block in the app. Every new generation includes it + current state delta. This is how you get pixel-perfect consistency across dozens of images for animations, music videos, or viral shorts.</div>
+                </div>
+            </div>
+            
+            <div class="mt-4 flex flex-wrap gap-2 text-xs">
+                <div class="px-3 py-1 bg-slate-800 rounded-2xl border border-slate-700">Future: Upload generated images → auto-assign to mood/state slots</div>
+                <div class="px-3 py-1 bg-slate-800 rounded-2xl border border-slate-700">Future: Procedural + AI hybrid (canvas base + sprite overlays)</div>
+                <div class="px-3 py-1 bg-slate-800 rounded-2xl border border-slate-700">Future: Bitmap/pixel art mode toggle (perfect for retro Tamagotchi feel)</div>
+            </div>
+        </div>
+
+        <!-- 05 MINISIMMY + GENE/BRAIN LOOP -->
+        <div id="minisimmy-section" class="mb-16">
+            <div class="flex items-center gap-x-3 mb-4">
+                <div class="w-8 h-px bg-gradient-to-r from-cyan-400 to-transparent"></div>
+                <span class="font-mono text-xs tracking-[3px] text-cyan-400">05</span>
+                <h3 class="section-header font-display tracking-tighter">MiniSimmy Integration &amp; Bidirectional Brain/Gene Refinement</h3>
+            </div>
+            
+            <div class="lab-card p-6 rounded-3xl">
+                <div class="grid md:grid-cols-2 gap-x-8 gap-y-6 text-sm">
+                    <div>
+                        <h5 class="font-semibold text-emerald-300 mb-3 flex items-center gap-x-2"><i class="fa-solid fa-exchange-alt"></i> THE LOOP</h5>
+                        <div class="space-y-4 text-xs">
+                            <div class="pl-4 border-l border-emerald-400/40">
+                                <strong class="text-emerald-400">Step 1 — Import</strong><br>
+                                MiniSimmy produces a brain/gene package (simple trait vector or serialized behavior params). Exported as special "Egg" item. Drag or hatch into SYNTHO-LAB.
+                            </div>
+                            <div class="pl-4 border-l border-emerald-400/40">
+                                <strong class="text-emerald-400">Step 2 — Embody</strong><br>
+                                Choose body type (or procedural from genome). Body provides base temperament, metabolism, sensory biases, movement style. Brain is "installed" and begins modulating behavior.
+                            </div>
+                            <div class="pl-4 border-l border-emerald-400/40">
+                                <strong class="text-emerald-400">Step 3 — Refine</strong><br>
+                                Thousands of interactions + care outcomes provide training signal. Positive care in aligned body strengthens desired traits. Misalignment or neglect creates interesting "stress adaptations".
+                            </div>
+                            <div class="pl-4 border-l border-emerald-400/40">
+                                <strong class="text-emerald-400">Step 4 — Export</strong><br>
+                                At evolution, high bond milestones, or manual "Refine &amp; Export", the lab packages updated genome + experience-modified brain data into a new egg. Ready for MiniSimmy or another body.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="text-xs space-y-4">
+                        <div>
+                            <strong class="text-cyan-300">Body as Phenotype Trainer</strong><br>
+                            The avatar is not passive. It actively shapes the brain it hosts through its built-in preferences and interaction physics. This is the "body refines brain" direction.
+                        </div>
+                        <div>
+                            <strong class="text-cyan-300">Brain as Behavioral Overlay</strong><br>
+                            Imported brain adds nuance: occasional "decisions", unique idle animations or movement quirks, preference shifts, even new interaction outcomes. Brain refines body expression.
+                        </div>
+                        <div class="pt-2 border-t border-slate-700">
+                            <strong>Example mapping (future implementation):</strong><br>
+                            <span class="font-mono text-[10px] text-emerald-300">MiniSimmy brain.curiosity = 0.9 → Drakeling body amplifies exploration actions + higher play drive. Floof body might dampen it slightly toward social curiosity instead.</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 06 ROADMAP -->
+        <div id="roadmap-section">
+            <div class="flex items-center gap-x-3 mb-4">
+                <div class="w-8 h-px bg-gradient-to-r from-cyan-400 to-transparent"></div>
+                <span class="font-mono text-xs tracking-[3px] text-cyan-400">06</span>
+                <h3 class="section-header font-display tracking-tighter">Roadmap &amp; Massive Expansion Hooks</h3>
+            </div>
+            
+            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
+                <div class="lab-card p-5 rounded-3xl">
+                    <div class="font-semibold text-amber-300 mb-2">NEAR TERM (v0.2–v0.5)</div>
+                    <ul class="space-y-1.5 pl-1 text-slate-300">
+                        <li>• Multiple creatures in Ranch view (grid of habitats)</li>
+                        <li>• Deeper inventory + crafting (combine items into better food/toys)</li>
+                        <li>• Habitat customization (temp, lighting, decor) affecting decay rates</li>
+                        <li>• Simple canvas minigames for "Play" (catch, memory, rhythm)</li>
+                        <li>• Evolution trees per type with visual changes + new abilities</li>
+                        <li>• Full prompt generator with editable Character Bible</li>
+                        <li>• Day/night cycle + environmental events</li>
+                    </ul>
+                </div>
+                
+                <div class="lab-card p-5 rounded-3xl">
+                    <div class="font-semibold text-violet-300 mb-2">MID TERM (v0.6–1.0)</div>
+                    <ul class="space-y-1.5 pl-1 text-slate-300">
+                        <li>• Breeding: Select two creatures → gene splicing UI → new egg</li>
+                        <li>• Real brain import: JSON upload or paste from MiniSimmy. Applies trait modifiers + occasional autonomous actions</li>
+                        <li>• Export refined eggs with updated genome + experience vector</li>
+                        <li>• Procedural visual gene expression (color, pattern, feature toggles from genome)</li>
+                        <li>• p5.js or advanced canvas modules for richer creature behaviors</li>
+                        <li>• Economy: Lab points from good care, used for eggs, items, habitat upgrades</li>
+                        <li>• First music/video integration hooks (export creature state for Suno/Grok Imagine pipelines)</li>
+                    </ul>
+                </div>
+                
+                <div class="lab-card p-5 rounded-3xl">
+                    <div class="font-semibold text-emerald-300 mb-2">LONG TERM &amp; BIG PLANS</div>
+                    <ul class="space-y-1.5 pl-1 text-slate-300">
+                        <li>• Full bidirectional loop with live MiniSimmy sync (or exported egg files)</li>
+                        <li>• Different bodies dramatically change brain expression (visual + behavioral)</li>
+                        <li>• Social ranch features (visit friends' labs, trade eggs, co-care events)</li>
+                        <li>• Deep narrative/metaphysical layer (creatures as "vessels", loosh-like energy from care? identity questions)</li>
+                        <li>• VR/AR or 3D creature viewer mode</li>
+                        <li>• AI director mode: Creature occasionally proposes its own needs or tells stories</li>
+                        <li>• Massive multiplayer "gene commons" where refined eggs circulate</li>
+                        <li>• Ties into your broader content creation (music anthems per creature lineage, viral shorts of evolutions)</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="mt-8 text-center">
+                <div class="inline-block px-6 py-3 bg-slate-900 border border-slate-700 rounded-3xl text-xs">
+                    This prototype is deliberately minimal yet architected for everything above.<br>
+                    <span class="text-cyan-400">Every major system has clear extension points in the code.</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="border-t border-slate-800 py-8 text-center text-[10px] text-slate-500 max-w-screen-2xl mx-auto px-6">
+        Built as a dense, self-contained HTML thoughtmap + working prototype for your Creature Lab vision.<br>
+        Save this file locally. Open in any browser. Fully offline capable. Extend the JS as needed.<br>
+        <span class="text-cyan-400/70">Ready for Grok Imagine assets • MiniSimmy brain eggs • massive future scope.</span>
+    </footer>
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="fixed bottom-4 right-4 z-[100] flex flex-col gap-2"></div>
+
+    <script>
+        // ==================== TAILWIND CONFIG ====================
+        function initTailwind() {
+            document.documentElement.style.setProperty('--accent-cyan', '#67e8f9');
+            document.documentElement.style.setProperty('--accent-violet', '#a78bfa');
+        }
+
+        // ==================== GLOBAL STATE ====================
+        let creature = {
+            id: 'c_' + Date.now().toString(36),
+            name: 'Zorblax',
+            type: 'floof',
+            stage: 1,
+            hunger: 45,
+            energy: 65,
+            happiness: 75,
+            hygiene: 80,
+            health: 90,
+            bond: 55,
+            xp: 200,
+            lastUpdate: Date.now(),
+            isSleeping: false,
+            genomeSeed: 'aether-7f2e'
+        };
+
+        let inventory = {
+            'pellet': 12,
+            'berry': 5,
+            'protein': 7,
+            'groomkit': 3,
+            'mystery_egg': 2
+        };
+
+        const itemDefs = {
+            'pellet': { name: "Nutri-Pellet", icon: "🍖", effects: { hunger: -28 }, category: "food", desc: "Basic balanced sustenance." },
+            'berry': { name: "Lumina Berry", icon: "🫐", effects: { hunger: -18, happiness: +18 }, category: "food", desc: "Sweet mood booster." },
+            'protein': { name: "Synth-Protein", icon: "🥩", effects: { hunger: -32, energy: +14 }, category: "food", desc: "High-energy fuel." },
+            'groomkit': { name: "Grooming Kit", icon: "🪮", effects: { hygiene: +45, happiness: +8 }, category: "tool", desc: "Restores cleanliness & comfort." },
+            'mystery_egg': { name: "Mystery Egg", icon: "🥚", effects: {}, category: "egg", desc: "Hatch into a new form." }
+        };
+
+        const typeDefs = {
+            'floof': { 
+                display: "AETHERFLOOF", 
+                hue: 265, 
+                decayMult: { hunger: 0.9, happiness: 1.15, energy: 1.0, hygiene: 1.0 },
+                affinity: { pet: 1.35, berry: 1.25 },
+                visual: { bodyShape: 'round', earSize: 1.1, hasTail: true, hasEars: true, glow: false }
+            },
+            'drakeling': { 
+                display: "DRAKELING", 
+                hue: 145, 
+                decayMult: { hunger: 1.25, happiness: 0.95, energy: 1.35, hygiene: 0.9 },
+                affinity: { play: 1.3, protein: 1.2 },
+                visual: { bodyShape: 'elongated', earSize: 0.6, hasTail: true, hasEars: false, glow: false }
+            },
+            'lumibug': { 
+                display: "LUMIBUG", 
+                hue: 195, 
+                decayMult: { hunger: 0.6, happiness: 1.05, energy: 0.85, hygiene: 1.25 },
+                affinity: { clean: 1.4, groomkit: 1.15 },
+                visual: { bodyShape: 'orb', earSize: 0.3, hasTail: false, hasEars: false, glow: true }
+            }
+        };
+
+        let particles = [];
+        let mouseX = 160, mouseY = 160;
+        let lastDecayCheck = Date.now();
+        let animTime = 0;
+        let blinkTimer = 0;
+        let isBlinking = false;
+
+        // ==================== CANVAS & CREATURE DRAWING ====================
+        let canvas, ctx;
+
+        function initCanvas() {
+            canvas = document.getElementById('creature-canvas');
+            ctx = canvas.getContext('2d', { alpha: true });
+
+            // Mouse tracking for living eyes
+            canvas.addEventListener('mousemove', (e) => {
+                const rect = canvas.getBoundingClientRect();
+                mouseX = (e.clientX - rect.left) * (canvas.width / rect.width);
+                mouseY = (e.clientY - rect.top) * (canvas.height / rect.height);
+            });
+
+            canvas.addEventListener('mouseleave', () => {
+                mouseX = canvas.width / 2;
+                mouseY = canvas.height / 2 + 20;
+            });
+
+            // Click to pet
+            canvas.addEventListener('click', (e) => {
+                const rect = canvas.getBoundingClientRect();
+                const clickX = (e.clientX - rect.left) * (canvas.width / rect.width);
+                const clickY = (e.clientY - rect.top) * (canvas.height / rect.height);
+                
+                // Only if click is reasonably on creature
+                if (Math.hypot(clickX - 160, clickY - 175) < 110) {
+                    performAction('pet', true); // silent = true to avoid double toast sometimes
+                    spawnHearts(clickX, clickY - 30, 7);
+                }
+            });
+
+            // Initial draw
+            drawCreature();
+            
+            // Animation loop
+            function animate() {
+                animTime += 16;
+                drawCreature();
+                updateParticles();
+                requestAnimationFrame(animate);
+            }
+            animate();
+        }
+
+        function getCreatureColor() {
+            const type = typeDefs[creature.type] || typeDefs['floof'];
+            let hue = type.hue;
+            // Slight variation from genomeSeed
+            const seedMod = parseInt(creature.genomeSeed.slice(-2), 16) % 20 - 10;
+            hue = (hue + seedMod) % 360;
+            
+            // Health & happiness influence
+            const healthMod = (creature.health - 70) * 0.4;
+            const happyMod = (creature.happiness - 60) * 0.25;
+            const lightness = Math.max(42, Math.min(68, 55 + healthMod + happyMod));
+            const saturation = Math.max(55, Math.min(88, 72 + (creature.happiness - 50) * 0.3));
+            
+            return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+        }
+
+        function drawCreature() {
+            if (!ctx) return;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            const cx = 160, cy = 175;
+            const typeData = typeDefs[creature.type] || typeDefs['floof'];
+            const visual = typeData.visual;
+            const mood = computeMood();
+            const color = getCreatureColor();
+            const bobY = Math.sin(animTime / 420) * (creature.isSleeping ? 1.5 : 4.5);
+            
+            // === LAB POD BACKGROUND ===
+            ctx.save();
+            ctx.strokeStyle = 'rgba(103,232,249,0.15)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.roundRect(25, 25, 270, 270, 40);
+            ctx.stroke();
+            
+            // Subtle inner glow
+            const grad = ctx.createRadialGradient(cx, cy - 20, 40, cx, cy, 145);
+            grad.addColorStop(0, 'rgba(103,232,249,0.06)');
+            grad.addColorStop(1, 'rgba(15,23,42,0)');
+            ctx.fillStyle = grad;
+            ctx.fillRect(30, 30, 260, 260);
+            ctx.restore();
+
+            // === BODY ===
+            ctx.save();
+            ctx.translate(cx, cy + bobY);
+            
+            const bodyScale = 0.95 + (creature.stage - 1) * 0.08;
+            const healthFactor = creature.health / 100;
+            
+            ctx.fillStyle = color;
+            ctx.strokeStyle = 'rgba(15,23,42,0.7)';
+            ctx.lineWidth = 3.5;
+            
+            if (visual.bodyShape === 'round' || visual.bodyShape === 'orb') {
+                // Fluffy / Orb body
+                ctx.beginPath();
+                ctx.ellipse(0, 8, 78 * bodyScale, 68 * bodyScale, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+                
+                // Fluff texture / highlight
+                ctx.fillStyle = 'rgba(255,255,255,0.12)';
+                ctx.beginPath();
+                ctx.ellipse(-18, -5, 42, 32, -0.6, 0, Math.PI * 2);
+                ctx.fill();
+            } else {
+                // Elongated Drakeling
+                ctx.beginPath();
+                ctx.ellipse(8, 12, 92 * bodyScale, 52 * bodyScale, -0.15, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+                
+                // Back ridge
+                ctx.strokeStyle = 'rgba(15,23,42,0.5)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(-55, 5);
+                ctx.quadraticCurveTo(0, -18, 65, 8);
+                ctx.stroke();
+            }
+            
+            // === EARS / FEATURES ===
+            if (visual.hasEars) {
+                const earSize = visual.earSize * (0.9 + creature.happiness / 220);
+                ctx.fillStyle = color;
+                ctx.strokeStyle = 'rgba(15,23,42,0.6)';
+                ctx.lineWidth = 2.5;
+                
+                // Left ear
+                ctx.save();
+                ctx.translate(-42, -38);
+                ctx.rotate(-0.6);
+                ctx.beginPath();
+                ctx.ellipse(0, 0, 18 * earSize, 32 * earSize, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+                ctx.restore();
+                
+                // Right ear
+                ctx.save();
+                ctx.translate(42, -38);
+                ctx.rotate(0.6);
+                ctx.beginPath();
+                ctx.ellipse(0, 0, 18 * earSize, 32 * earSize, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+                ctx.restore();
+            }
+            
+            // Tail for some types
+            if (visual.hasTail) {
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 11;
+                ctx.lineCap = 'round';
+                ctx.beginPath();
+                ctx.moveTo(visual.bodyShape === 'elongated' ? 78 : 52, 28);
+                ctx.quadraticCurveTo(visual.bodyShape === 'elongated' ? 105 : 78, 55 + bobY * 0.6, visual.bodyShape === 'elongated' ? 88 : 62, 72);
+                ctx.stroke();
+                
+                // Tail tip fluff
+                if (visual.bodyShape === 'round') {
+                    ctx.fillStyle = color;
+                    ctx.beginPath();
+                    ctx.arc(62, 72, 14, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+            
+            // Glow rings for Lumibug
+            if (visual.glow) {
+                ctx.strokeStyle = `hsla(${typeData.hue}, 90%, 75%, 0.35)`;
+                ctx.lineWidth = 4;
+                ctx.beginPath();
+                ctx.arc(0, 5, 55 + Math.sin(animTime / 300) * 4, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(0, 5, 72 + Math.sin(animTime / 420) * 5, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+            
+            // === HEAD / FACE ===
+            const headY = visual.bodyShape === 'elongated' ? -8 : -12;
+            
+            // Head base (slightly separate for round types)
+            if (visual.bodyShape !== 'elongated') {
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.ellipse(0, headY, 52, 46, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(15,23,42,0.6)';
+                ctx.lineWidth = 3;
+                ctx.stroke();
+            }
+            
+            // === EYES (expressive & alive) ===
+            const eyeY = headY - 2;
+            const eyeSpacing = visual.bodyShape === 'elongated' ? 28 : 32;
+            const eyeSize = visual.bodyShape === 'elongated' ? 13 : 15.5;
+            const pupilSize = eyeSize * 0.48;
+            
+            // Eye whites
+            ctx.fillStyle = '#f8fafc';
+            ctx.beginPath();
+            ctx.ellipse(-eyeSpacing, eyeY, eyeSize, eyeSize * 0.92, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(eyeSpacing, eyeY, eyeSize, eyeSize * 0.92, 0, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Pupils with mouse tracking
+            const lookX = (mouseX - cx) * 0.18;
+            const lookY = (mouseY - (cy + bobY + eyeY)) * 0.18;
+            const maxLook = 5.5;
+            
+            ctx.fillStyle = '#0f172a';
+            
+            // Left pupil
+            let px1 = -eyeSpacing + Math.max(-maxLook, Math.min(maxLook, lookX * 0.9));
+            let py1 = eyeY + Math.max(-maxLook * 0.6, Math.min(maxLook * 0.6, lookY * 0.7));
+            ctx.beginPath();
+            ctx.arc(px1, py1, pupilSize, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Right pupil
+            let px2 = eyeSpacing + Math.max(-maxLook, Math.min(maxLook, lookX * 0.9));
+            let py2 = eyeY + Math.max(-maxLook * 0.6, Math.min(maxLook * 0.6, lookY * 0.7));
+            ctx.beginPath();
+            ctx.arc(px2, py2, pupilSize, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Eye shine
+            ctx.fillStyle = 'rgba(255,255,255,0.9)';
+            ctx.beginPath();
+            ctx.arc(px1 - 3.5, py1 - 4, 3.2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(px2 - 3.5, py2 - 4, 3.2, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // === EYEBROWS / EXPRESSION LINES (mood) ===
+            ctx.strokeStyle = 'rgba(15,23,42,0.65)';
+            ctx.lineWidth = 2.2;
+            ctx.lineCap = 'round';
+            
+            if (mood === 'happy' || mood === 'content') {
+                // Happy brows / relaxed
+                ctx.beginPath();
+                ctx.moveTo(-eyeSpacing - 11, eyeY - 18);
+                ctx.quadraticCurveTo(-eyeSpacing, eyeY - 23, -eyeSpacing + 11, eyeY - 18);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(eyeSpacing - 11, eyeY - 18);
+                ctx.quadraticCurveTo(eyeSpacing, eyeY - 23, eyeSpacing + 11, eyeY - 18);
+                ctx.stroke();
+            } else if (mood === 'sad' || mood === 'hungry') {
+                // Sad / concerned
+                ctx.beginPath();
+                ctx.moveTo(-eyeSpacing - 10, eyeY - 20);
+                ctx.quadraticCurveTo(-eyeSpacing, eyeY - 15, -eyeSpacing + 10, eyeY - 20);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(eyeSpacing - 10, eyeY - 20);
+                ctx.quadraticCurveTo(eyeSpacing, eyeY - 15, eyeSpacing + 10, eyeY - 20);
+                ctx.stroke();
+            } else if (mood === 'tired' || creature.isSleeping) {
+                // Tired / sleepy
+                ctx.beginPath();
+                ctx.moveTo(-eyeSpacing - 9, eyeY - 17);
+                ctx.lineTo(-eyeSpacing + 9, eyeY - 17);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(eyeSpacing - 9, eyeY - 17);
+                ctx.lineTo(eyeSpacing + 9, eyeY - 17);
+                ctx.stroke();
+            }
+            
+            // === MOUTH ===
+            ctx.strokeStyle = 'rgba(15,23,42,0.75)';
+            ctx.lineWidth = 2.5;
+            ctx.lineCap = 'round';
+            
+            const mouthY = eyeY + 22;
+            ctx.beginPath();
+            
+            if (creature.isSleeping) {
+                // Zzz indicator instead of mouth or very small
+                ctx.fillStyle = 'rgba(103,232,249,0.6)';
+                ctx.font = 'bold 11px monospace';
+                ctx.fillText('z', 8, mouthY + 8);
+                ctx.fillText('z', 16, mouthY + 2);
+            } else if (mood === 'happy' || mood === 'content') {
+                ctx.arc(0, mouthY - 2, 9, 0.15 * Math.PI, 0.85 * Math.PI);
+                ctx.stroke();
+            } else if (mood === 'sad' || mood === 'hungry') {
+                ctx.arc(0, mouthY + 6, 8, 1.15 * Math.PI, 1.85 * Math.PI);
+                ctx.stroke();
+            } else {
+                // Neutral / tired
+                ctx.moveTo(-7, mouthY + 2);
+                ctx.lineTo(7, mouthY + 2);
+                ctx.stroke();
+            }
+            
+            // Hungry drool hint
+            if (mood === 'hungry' && !creature.isSleeping) {
+                ctx.strokeStyle = 'rgba(103,232,249,0.4)';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(4, mouthY + 8);
+                ctx.quadraticCurveTo(7, mouthY + 18, 3, mouthY + 24);
+                ctx.stroke();
+            }
+            
+            // === TECH COLLAR / GENE TAG ===
+            ctx.fillStyle = 'rgba(15,23,42,0.85)';
+            ctx.strokeStyle = '#67e8f9';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.roundRect(-22, 38, 44, 11, 4);
+            ctx.fill();
+            ctx.stroke();
+            
+            // Glowing gene indicator
+            ctx.fillStyle = `hsla(${typeData.hue}, 95%, 70%, ${0.6 + Math.sin(animTime / 280) * 0.25})`;
+            ctx.beginPath();
+            ctx.arc(0, 43.5, 2.8, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.restore(); // end main transform
+            
+            // === SLEEP ZZZ or STATUS OVERLAYS ===
+            if (creature.isSleeping) {
+                ctx.fillStyle = 'rgba(103,232,249,0.5)';
+                ctx.font = '600 13px monospace';
+                ctx.fillText('zzz', cx + 55, cy - 35 + bobY * 0.5);
+            }
+            
+            // Stage indicator subtle
+            if (creature.stage > 1) {
+                ctx.fillStyle = 'rgba(251,191,36,0.25)';
+                ctx.font = '700 9px monospace';
+                ctx.fillText('EV' + creature.stage, cx + 95, cy + 95);
+            }
+        }
+
+        function updateParticles() {
+            if (!ctx) return;
+            
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += 0.08; // gravity
+                p.life -= 1;
+                p.vx *= 0.985;
+                
+                if (p.life <= 0) {
+                    particles.splice(i, 1);
+                    continue;
+                }
+                
+                ctx.save();
+                ctx.globalAlpha = Math.max(0.1, p.life / p.maxLife);
+                ctx.fillStyle = p.color || '#f472b6';
+                
+                if (p.type === 'heart') {
+                    ctx.font = `${p.size}px serif`;
+                    ctx.fillText('♥', p.x, p.y);
+                } else {
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.size * 0.5, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.restore();
+            }
+        }
+
+        function spawnHearts(x, y, count = 6) {
+            for (let i = 0; i < count; i++) {
+                particles.push({
+                    x: x + (Math.random() - 0.5) * 25,
+                    y: y + (Math.random() - 0.5) * 15,
+                    vx: (Math.random() - 0.5) * 1.8,
+                    vy: -1.6 - Math.random() * 1.3,
+                    life: 38 + Math.random() * 22,
+                    maxLife: 55,
+                    size: 11 + Math.random() * 7,
+                    type: 'heart',
+                    color: '#f472b6'
+                });
+            }
+        }
+
+        function spawnSparkles(x, y, count = 5, color = '#67e8f9') {
+            for (let i = 0; i < count; i++) {
+                particles.push({
+                    x: x + (Math.random() - 0.5) * 30,
+                    y: y + (Math.random() - 0.5) * 20,
+                    vx: (Math.random() - 0.5) * 2.2,
+                    vy: -0.8 - Math.random() * 1.5,
+                    life: 22 + Math.random() * 18,
+                    maxLife: 35,
+                    size: 3 + Math.random() * 3.5,
+                    type: 'sparkle',
+                    color: color
+                });
+            }
+        }
+
+        // ==================== STATE & LOGIC ====================
+        function computeMood() {
+            if (creature.isSleeping) return 'sleeping';
+            if (creature.hunger > 78) return 'hungry';
+            if (creature.happiness < 35) return 'sad';
+            if (creature.energy < 28) return 'tired';
+            if (creature.happiness > 82 && creature.bond > 65) return 'happy';
+            return 'content';
+        }
+
+        function updateMoodUI() {
+            const mood = computeMood();
+            const badge = document.getElementById('mood-badge');
+            const text = document.getElementById('mood-text');
+            
+            let icon = 'fa-face-smile', colorClass = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
+            
+            if (mood === 'hungry') { icon = 'fa-face-tired'; colorClass = 'bg-orange-500/10 text-orange-400 border-orange-500/30'; }
+            else if (mood === 'sad') { icon = 'fa-face-sad-tear'; colorClass = 'bg-rose-500/10 text-rose-400 border-rose-500/30'; }
+            else if (mood === 'tired' || mood === 'sleeping') { icon = 'fa-face-tired'; colorClass = 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30'; }
+            else if (mood === 'happy') { icon = 'fa-face-grin-beam'; colorClass = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'; }
+            
+            badge.className = `mood-badge px-3 py-px text-[10px] font-medium tracking-wider rounded-xl flex items-center gap-x-1.5 border ${colorClass}`;
+            text.innerHTML = `<i class="fa-solid ${icon} text-xs mr-1"></i> ${mood.toUpperCase()}`;
+        }
+
+        function updateUI() {
+            // Values
+            document.getElementById('val-hunger').textContent = Math.round(creature.hunger);
+            document.getElementById('val-energy').textContent = Math.round(creature.energy);
+            document.getElementById('val-happiness').textContent = Math.round(creature.happiness);
+            document.getElementById('val-hygiene').textContent = Math.round(creature.hygiene);
+            document.getElementById('val-health').textContent = Math.round(creature.health);
+            
+            // Bars
+            const setBar = (id, val) => {
+                const el = document.getElementById(id);
+                if (el) el.style.width = Math.max(4, Math.min(100, val)) + '%';
+            };
+            
+            setBar('bar-hunger', creature.hunger);
+            setBar('bar-energy', creature.energy);
+            setBar('bar-happiness', creature.happiness);
+            setBar('bar-hygiene', creature.hygiene);
+            setBar('bar-health', creature.health);
+            setBar('bar-bond', creature.bond);
+            setBar('bar-xp', Math.min(100, (creature.xp % 500) / 5));
+            
+            // Bond & XP text
+            document.getElementById('bond-value').textContent = Math.round(creature.bond);
+            document.getElementById('xp-value').textContent = creature.xp;
+            
+            // Wellbeing score (simple weighted)
+            const wellbeing = Math.round(
+                (creature.health * 0.25) + 
+                (creature.happiness * 0.22) + 
+                (creature.energy * 0.18) + 
+                (creature.hygiene * 0.15) + 
+                (creature.bond * 0.2)
+            );
+            document.getElementById('wellbeing-score').textContent = wellbeing;
+            document.getElementById('wellbeing-score').className = 
+                wellbeing > 75 ? 'font-mono text-3xl font-semibold text-emerald-400 tabular-nums' :
+                wellbeing > 55 ? 'font-mono text-3xl font-semibold text-amber-400 tabular-nums' :
+                'font-mono text-3xl font-semibold text-rose-400 tabular-nums';
+            
+            // Type & Stage
+            const typeData = typeDefs[creature.type] || typeDefs['floof'];
+            document.getElementById('type-badge').innerHTML = `${typeData.display} • STAGE <span id="stage">${String(creature.stage).padStart(2, '0')}</span>`;
+            document.getElementById('genome-seed').textContent = creature.genomeSeed;
+            
+            // Sleep button state
+            const sleepBtn = document.getElementById('sleep-btn');
+            const sleepText = document.getElementById('sleep-text');
+            if (creature.isSleeping) {
+                sleepBtn.classList.add('!bg-indigo-500/30', '!border-indigo-400/60');
+                sleepText.textContent = 'WAKE';
+            } else {
+                sleepBtn.classList.remove('!bg-indigo-500/30', '!border-indigo-400/60');
+                sleepText.textContent = 'SLEEP';
+            }
+            
+            updateMoodUI();
+            updateInventoryUI();
+            
+            // Evolve button visibility
+            const evolveBtn = document.getElementById('evolve-btn');
+            if (creature.xp >= 500 && creature.stage < 3 && wellbeing > 70) {
+                evolveBtn.classList.remove('hidden');
+            } else {
+                evolveBtn.classList.add('hidden');
+            }
+            
+            // Canvas status
+            const statusEl = document.getElementById('canvas-status');
+            if (creature.health < 35) {
+                statusEl.textContent = 'CRITICAL';
+                statusEl.className = 'text-rose-400';
+            } else if (creature.hunger > 75 || creature.happiness < 30) {
+                statusEl.textContent = 'NEEDS CARE';
+                statusEl.className = 'text-orange-400';
+            } else {
+                statusEl.textContent = 'STABLE';
+                statusEl.className = 'text-emerald-400';
+            }
+        }
+
+        function updateCreatureName() {
+            const input = document.getElementById('creature-name');
+            if (input.value.trim()) {
+                creature.name = input.value.trim();
+                saveState();
+            }
+        }
+
+        function randomizeName() {
+            const names = ['Zorblax', 'Lumina', 'Krynn', 'Vesper', 'Nyxie', 'Quill', 'Sylph', 'Riven', 'Echo', 'Thimble', 'Pebble', 'Glimmer'];
+            creature.name = names[Math.floor(Math.random() * names.length)];
+            document.getElementById('creature-name').value = creature.name;
+            saveState();
+            showToast(`Creature renamed to ${creature.name}`, 'info');
+        }
+
+        function cycleCreatureType() {
+            const types = Object.keys(typeDefs);
+            const currentIndex = types.indexOf(creature.type);
+            const nextIndex = (currentIndex + 1) % types.length;
+            creature.type = types[nextIndex];
+            
+            // Slight visual feedback
+            spawnSparkles(160, 160, 12, '#a78bfa');
+            
+            saveState();
+            updateUI();
+            drawCreature();
+            showToast(`Form shifted to ${typeDefs[creature.type].display}`, 'info');
+        }
+
+        function applyEffects(effects, source = '') {
+            let changed = false;
+            const before = { ...creature };
+            
+            Object.keys(effects).forEach(stat => {
+                if (creature.hasOwnProperty(stat)) {
+                    const typeData = typeDefs[creature.type];
+                    let mult = 1;
+                    
+                    // Affinity bonus
+                    if (typeData && typeData.affinity && source) {
+                        const affinityKey = source.toLowerCase();
+                        if (typeData.affinity[affinityKey]) mult = typeData.affinity[affinityKey];
+                    }
+                    
+                    const delta = effects[stat] * mult;
+                    creature[stat] = Math.max(0, Math.min(100, creature[stat] + delta));
+                    changed = true;
+                }
+            });
+            
+            if (changed) {
+                // Small XP and bond from any positive interaction
+                if (Object.values(effects).some(v => v > 0)) {
+                    creature.xp = Math.min(9999, creature.xp + 4);
+                    creature.bond = Math.min(100, creature.bond + 0.8);
+                }
+                
+                // Health check
+                checkHealth();
+                
+                updateUI();
+                drawCreature();
+                saveState();
+            }
+            
+            return changed;
+        }
+
+        function checkHealth() {
+            let healthDelta = 0;
+            
+            if (creature.hunger > 85) healthDelta -= 1.2;
+            if (creature.happiness < 20) healthDelta -= 1.0;
+            if (creature.energy < 15) healthDelta -= 0.7;
+            if (creature.hygiene < 15) healthDelta -= 0.5;
+            
+            if (healthDelta !== 0) {
+                creature.health = Math.max(0, Math.min(100, creature.health + healthDelta));
+            }
+            
+            // Auto recovery if all needs decent
+            if (creature.hunger < 55 && creature.happiness > 55 && creature.energy > 45 && creature.hygiene > 50) {
+                creature.health = Math.min(100, creature.health + 0.3);
+            }
+        }
+
+        function performAction(action, silent = false) {
+            const typeData = typeDefs[creature.type] || typeDefs['floof'];
+            let effects = {};
+            let feedback = '';
+            let particleColor = '#67e8f9';
+            
+            switch(action) {
+                case 'feed':
+                    // Open quick feed or use default pellet
+                    const pelletCount = inventory['pellet'] || 0;
+                    if (pelletCount > 0) {
+                        inventory['pellet']--;
+                        effects = { hunger: -26, happiness: +4 };
+                        feedback = 'Fed with Nutri-Pellet';
+                        particleColor = '#fb923c';
+                    } else {
+                        showToast('No pellets left! Try hatching an egg or other items.', 'warn');
+                        return;
+                    }
+                    break;
+                    
+                case 'play':
+                    effects = { happiness: +22, energy: -14, xp: +8 };
+                    feedback = 'Play session complete!';
+                    particleColor = '#4ade80';
+                    spawnSparkles(160, 140, 9, particleColor);
+                    break;
+                    
+                case 'pet':
+                    const petMult = typeData.affinity?.pet || 1.0;
+                    effects = { happiness: +14 * petMult, bond: +3.5, xp: +3 };
+                    feedback = 'Bond strengthened';
+                    particleColor = '#f472b6';
+                    if (!silent) spawnHearts(160, 120, 5);
+                    break;
+                    
+                case 'clean':
+                    const cleanMult = typeData.affinity?.clean || 1.0;
+                    effects = { hygiene: +38 * cleanMult, happiness: +7 };
+                    feedback = 'All cleaned up';
+                    particleColor = '#38bdf8';
+                    break;
+                    
+                case 'scan':
+                    const mood = computeMood();
+                    feedback = `${creature.name} is feeling ${mood}. Health: ${Math.round(creature.health)}`;
+                    showDetailedScan();
+                    return; // special case
+            }
+            
+            if (Object.keys(effects).length > 0) {
+                const applied = applyEffects(effects, action);
+                if (applied && feedback && !silent) {
+                    showToast(feedback, 'success');
+                    
+                    // Extra particles for good actions
+                    if (['play', 'pet', 'clean'].includes(action)) {
+                        spawnSparkles(160, 155, 6, particleColor);
+                    }
+                }
+            }
+            
+            updateInventoryUI();
+        }
+
+        function toggleSleep() {
+            creature.isSleeping = !creature.isSleeping;
+            
+            if (creature.isSleeping) {
+                showToast(`${creature.name} is now resting...`, 'info');
+                // Bonus recovery tick
+                setTimeout(() => {
+                    if (creature.isSleeping) {
+                        creature.energy = Math.min(100, creature.energy + 12);
+                        creature.health = Math.min(100, creature.health + 3);
+                        updateUI();
+                        drawCreature();
+                    }
+                }, 800);
+            } else {
+                showToast(`${creature.name} woke up feeling refreshed.`, 'success');
+            }
+            
+            updateUI();
+            drawCreature();
+            saveState();
+        }
+
+        function showDetailedScan() {
+            const mood = computeMood();
+            const typeData = typeDefs[creature.type];
+            
+            let html = `
+                <div class="fixed inset-0 bg-black/70 backdrop-blur-sm z-[200] flex items-center justify-center p-4" onclick="this.remove()">
+                    <div onclick="event.stopImmediatePropagation()" class="lab-card max-w-md w-full rounded-3xl p-6 border border-cyan-400/20">
+                        <div class="flex justify-between items-start mb-4">
+                            <div>
+                                <div class="font-display text-2xl">${creature.name}</div>
+                                <div class="text-cyan-400 text-sm">${typeData.display} • Stage ${creature.stage}</div>
+                            </div>
+                            <button onclick="event.target.closest('.fixed').remove()" class="text-slate-400 hover:text-white text-xl leading-none">×</button>
+                        </div>
+                        
+                        <div class="grid grid-cols-2 gap-4 text-sm mb-5">
+                            <div><span class="text-slate-400">Mood:</span> <span class="font-medium capitalize">${mood}</span></div>
+                            <div><span class="text-slate-400">Wellbeing:</span> <span class="font-mono">${document.getElementById('wellbeing-score').textContent}</span></div>
+                            <div><span class="text-slate-400">Bond:</span> <span class="font-mono">${Math.round(creature.bond)}/100</span></div>
+                            <div><span class="text-slate-400">Growth:</span> <span class="font-mono">${creature.xp} XP</span></div>
+                        </div>
+                        
+                        <div class="text-xs bg-slate-950/70 p-4 rounded-2xl border border-slate-800 mb-4">
+                            <div class="font-mono text-[10px] text-cyan-400 mb-1 tracking-widest">GENOME SEED</div>
+                            <div class="font-mono text-emerald-300">${creature.genomeSeed}</div>
+                            <div class="mt-3 text-[10px] text-slate-400">This seed influences color, subtle feature variation, and future procedural traits. Exportable in refined eggs.</div>
+                        </div>
+                        
+                        <div class="text-xs text-slate-400">In a full version this would show detailed gene expression, brain modifiers (if imported), and suggested actions based on current needs.</div>
+                        
+                        <div class="mt-5 flex gap-2">
+                            <button onclick="event.target.closest('.fixed').remove(); showPromptGenerator()" 
+                                    class="flex-1 py-2.5 text-xs bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/40 rounded-2xl text-violet-300 transition-colors">
+                                GENERATE IMAGE PROMPT
+                            </button>
+                            <button onclick="event.target.closest('.fixed').remove()" 
+                                    class="flex-1 py-2.5 text-xs bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-2xl transition-colors">
+                                CLOSE
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', html);
+        }
+
+        function updateInventoryUI() {
+            const grid = document.getElementById('inventory-grid');
+            grid.innerHTML = '';
+            
+            Object.keys(inventory).forEach(key => {
+                const count = inventory[key];
+                if (count <= 0) return;
+                
+                const def = itemDefs[key];
+                if (!def) return;
+                
+                const div = document.createElement('div');
+                div.className = `inventory-item lab-card border border-slate-700 hover:border-cyan-400/40 rounded-2xl p-3 flex flex-col items-center text-center cursor-pointer active:scale-[0.97] transition-all`;
+                
+                div.innerHTML = `
+                    <div class="text-2xl mb-1">${def.icon}</div>
+                    <div class="text-xs font-medium leading-tight">${def.name}</div>
+                    <div class="text-[10px] text-emerald-400 font-mono mt-0.5">${count}×</div>
+                `;
+                
+                div.onclick = () => useInventoryItem(key, div);
+                grid.appendChild(div);
+            });
+            
+            // Empty state hint
+            if (grid.children.length === 0) {
+                grid.innerHTML = `<div class="col-span-full text-center py-4 text-xs text-slate-500">Inventory empty. Hatch eggs to get started.</div>`;
+            }
+        }
+
+        function useInventoryItem(key, element) {
+            const def = itemDefs[key];
+            if (!def || inventory[key] <= 0) return;
+            
+            if (def.category === 'egg') {
+                hatchEgg(key);
+                return;
+            }
+            
+            // Apply effects
+            const applied = applyEffects(def.effects, key);
+            
+            if (applied) {
+                inventory[key]--;
+                showToast(`Used ${def.name}`, 'success');
+                
+                // Nice feedback
+                if (def.category === 'food') {
+                    spawnSparkles(160, 200, 5, '#fb923c');
+                } else if (key === 'groomkit') {
+                    spawnSparkles(160, 160, 8, '#38bdf8');
+                }
+                
+                updateInventoryUI();
+                updateUI();
+                drawCreature();
+                saveState();
+            }
+        }
+
+        function hatchEgg(specificKey = null) {
+            const eggKey = specificKey || 'mystery_egg';
+            
+            if (!inventory[eggKey] || inventory[eggKey] <= 0) {
+                showToast('No eggs available!', 'warn');
+                return;
+            }
+            
+            inventory[eggKey]--;
+            
+            // Determine new type
+            const types = Object.keys(typeDefs);
+            const newType = types[Math.floor(Math.random() * types.length)];
+            
+            // Gentle inheritance: keep some progress but reset needs
+            const inheritanceBonus = Math.floor(creature.bond * 0.15) + Math.floor(creature.xp / 25);
+            
+            creature.type = newType;
+            creature.stage = 1;
+            creature.hunger = 35 + Math.random() * 15;
+            creature.energy = 70 + Math.random() * 15;
+            creature.happiness = 60 + Math.random() * 20;
+            creature.hygiene = 75;
+            creature.health = 85 + Math.random() * 10;
+            creature.bond = Math.max(20, Math.min(55, creature.bond * 0.6 + inheritanceBonus * 0.3));
+            creature.xp = Math.floor(creature.xp * 0.3) + inheritanceBonus;
+            creature.genomeSeed = newType.slice(0,4) + '-' + Math.random().toString(36).slice(2,6);
+            creature.isSleeping = false;
+            
+            // Visual celebration
+            for (let i = 0; i < 3; i++) {
+                setTimeout(() => {
+                    spawnHearts(160, 140 + i * 15, 4);
+                    spawnSparkles(160, 160, 10, '#a78bfa');
+                }, i * 180);
+            }
+            
+            updateUI();
+            drawCreature();
+            updateInventoryUI();
+            saveState();
+            
+            const typeName = typeDefs[newType].display;
+            showToast(`Egg hatched! New form: ${typeName}`, 'success');
+            
+            // Optional prompt hint
+            setTimeout(() => {
+                if (confirm('Would you like to generate a fresh image prompt for this new form?')) {
+                    showPromptGenerator();
+                }
+            }, 1200);
+        }
+
+        function evolveCreature() {
+            if (creature.xp < 500 || creature.stage >= 3) return;
+            
+            creature.stage++;
+            creature.xp = Math.max(0, creature.xp - 500);
+            
+            // Stat boosts on evolution
+            creature.health = Math.min(100, creature.health + 12);
+            creature.bond = Math.min(100, creature.bond + 8);
+            creature.happiness = Math.min(100, creature.happiness + 10);
+            
+            // Visual + particles
+            spawnSparkles(160, 130, 18, '#fbbf24');
+            setTimeout(() => spawnHearts(160, 110, 8), 200);
+            
+            showToast(`Evolution! Now Stage ${creature.stage}`, 'success');
+            
+            updateUI();
+            drawCreature();
+            saveState();
+            
+            // Future: more dramatic visual change or new type options
+        }
+
+        // ==================== DECAY & TIME ====================
+        function applyDecay() {
+            const now = Date.now();
+            const elapsedMin = Math.max(0, (now - lastDecayCheck) / 60000);
+            
+            if (elapsedMin < 0.05) return; // too small
+            
+            const typeData = typeDefs[creature.type] || typeDefs['floof'];
+            const mult = typeData.decayMult || {};
+            const sleepMult = creature.isSleeping ? 0.28 : 1.0;
+            
+            // Apply proportional decay
+            creature.hunger = Math.min(100, creature.hunger + (mult.hunger || 1.1) * elapsedMin * sleepMult * 1.8);
+            creature.energy = Math.max(0, creature.energy - (mult.energy || 1.0) * elapsedMin * sleepMult * 1.1);
+            creature.happiness = Math.max(0, creature.happiness - (mult.happiness || 1.0) * elapsedMin * sleepMult * 0.9);
+            creature.hygiene = Math.max(0, creature.hygiene - (mult.hygiene || 1.0) * elapsedMin * sleepMult * 0.6);
+            
+            // Health from extremes
+            checkHealth();
+            
+            // Slow bond decay if very neglected
+            if (creature.happiness < 25 && creature.hunger > 70) {
+                creature.bond = Math.max(10, creature.bond - elapsedMin * 0.4);
+            }
+            
+            // Tiny passive XP for time survived (very slow)
+            if (!creature.isSleeping) {
+                creature.xp = Math.min(9999, creature.xp + elapsedMin * 0.6);
+            }
+            
+            lastDecayCheck = now;
+            creature.lastUpdate = now;
+            
+            updateUI();
+            drawCreature();
+            saveState();
+        }
+
+        function startDecayLoop() {
+            // Initial catch-up on load
+            const saved = localStorage.getItem('synthoLabCreature');
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    if (parsed.lastUpdate) {
+                        const elapsedMin = Math.max(0, (Date.now() - parsed.lastUpdate) / 60000);
+                        // Cap catch-up at 8 hours to avoid total death on long absence
+                        const capped = Math.min(elapsedMin, 480);
+                        if (capped > 1) {
+                            // Apply a portion of decay
+                            const factor = capped / 60; // rough hours
+                            parsed.hunger = Math.min(100, (parsed.hunger || 50) + factor * 18);
+                            parsed.energy = Math.max(0, (parsed.energy || 60) - factor * 9);
+                            parsed.happiness = Math.max(0, (parsed.happiness || 70) - factor * 7);
+                            parsed.hygiene = Math.max(0, (parsed.hygiene || 75) - factor * 5);
+                            showToast(`Welcome back! Time passed: ~${Math.round(capped)} min. Needs updated.`, 'info');
+                        }
+                    }
+                    Object.assign(creature, parsed);
+                } catch(e) {}
+            }
+            
+            // Update lastDecayCheck
+            lastDecayCheck = Date.now();
+            
+            // Periodic decay check
+            setInterval(() => {
+                applyDecay();
+            }, 8000); // every 8 seconds check
+            
+            // Update sim time display occasionally
+            setInterval(() => {
+                const el = document.getElementById('sim-time');
+                if (el) {
+                    const d = new Date();
+                    el.textContent = d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+                }
+            }, 30000);
+            
+            // Initial UI
+            updateUI();
+            drawCreature();
+        }
+
+        // ==================== PERSISTENCE ====================
+        function saveState() {
+            try {
+                localStorage.setItem('synthoLabCreature', JSON.stringify(creature));
+                localStorage.setItem('synthoLabInventory', JSON.stringify(inventory));
+            } catch(e) {}
+        }
+
+        function loadState() {
+            try {
+                const savedCreature = localStorage.getItem('synthoLabCreature');
+                if (savedCreature) {
+                    const parsed = JSON.parse(savedCreature);
+                    // Merge safely
+                    Object.keys(parsed).forEach(k => {
+                        if (creature.hasOwnProperty(k)) creature[k] = parsed[k];
+                    });
+                }
+                
+                const savedInv = localStorage.getItem('synthoLabInventory');
+                if (savedInv) {
+                    const parsedInv = JSON.parse(savedInv);
+                    Object.keys(parsedInv).forEach(k => {
+                        if (inventory.hasOwnProperty(k)) inventory[k] = parsedInv[k];
+                    });
+                }
+            } catch(e) {
+                console.warn('Could not load saved state');
+            }
+            
+            // Set initial name in input
+            document.getElementById('creature-name').value = creature.name;
+        }
+
+        function resetDemo() {
+            if (!confirm('Reset the entire lab demo? This clears saved progress.')) return;
+            
+            localStorage.removeItem('synthoLabCreature');
+            localStorage.removeItem('synthoLabInventory');
+            
+            // Reset to fresh state
+            creature = {
+                id: 'c_' + Date.now().toString(36),
+                name: 'Zorblax',
+                type: 'floof',
+                stage: 1,
+                hunger: 45,
+                energy: 65,
+                happiness: 75,
+                hygiene: 80,
+                health: 90,
+                bond: 55,
+                xp: 200,
+                lastUpdate: Date.now(),
+                isSleeping: false,
+                genomeSeed: 'aether-7f2e'
+            };
+            
+            inventory = {
+                'pellet': 12,
+                'berry': 5,
+                'protein': 7,
+                'groomkit': 3,
+                'mystery_egg': 2
+            };
+            
+            document.getElementById('creature-name').value = creature.name;
+            updateUI();
+            updateInventoryUI();
+            drawCreature();
+            showToast('Lab reset to fresh state.', 'info');
+        }
+
+        // ==================== PROMPT GENERATOR ====================
+        function showPromptGenerator() {
+            const mood = computeMood();
+            const typeData = typeDefs[creature.type] || typeDefs['floof'];
+            const wellbeing = document.getElementById('wellbeing-score').textContent;
+            
+            const characterBible = `Zorblax (or current name) is a small cute sci-fi creature of ${typeData.display} type. Features: round or sleek body depending on form, oversized expressive eyes with soft gradients and highlights, small stubby antennae or ear tufts, gentle mischievous base expression, soft gradient fur or chitin in ${typeData.display.toLowerCase()} palette with subtle glowing lab-tech collar tag or accents. Proportions are compact and huggable. Art style reference: vibrant digital illustration with soft cel-shading, cute yet slightly cyberpunk biotech aesthetic (mix of modern Tamagotchi charm and Studio Ghibli creature design), high detail on face, eyes, and textures. Always consistent character design across all images.`;
+            
+            const currentState = `Currently in ${mood.toUpperCase()} emotional state, Stage ${creature.stage} form. ${creature.isSleeping ? 'Curled peacefully sleeping inside habitat pod.' : 'Gentle idle pose with soft bobbing animation suggestion.'} Wellbeing score: ${wellbeing}. Genome influence visible in subtle color and feature variation.`;
+            
+            const fullPrompt = `${characterBible}\n\n${currentState}\n\nSetting: Inside a clean transparent cylindrical lab habitat pod with faint holographic UI data overlays, soft cyan and violet rim lighting, subtle grid floor, high-tech yet warm and nurturing atmosphere. Clean composition, focus on the creature, high quality, adorable and emotionally engaging, 3/4 or front three-quarter view preferred.`;
+            
+            const modalHTML = `
+                <div class="fixed inset-0 bg-black/80 backdrop-blur-md z-[300] flex items-center justify-center p-4" onclick="this.remove()">
+                    <div onclick="event.stopImmediatePropagation()" class="lab-card max-w-2xl w-full rounded-3xl p-7 border border-violet-400/20 max-h-[92vh] overflow-auto">
+                        <div class="flex items-start justify-between mb-5">
+                            <div>
+                                <div class="font-display text-2xl tracking-tight">Asset Forge</div>
+                                <div class="text-xs text-violet-400">GROK IMAGINE CONSISTENCY PROMPT</div>
+                            </div>
+                            <button onclick="event.target.closest('.fixed').remove()" class="text-3xl leading-none text-slate-400 hover:text-white">×</button>
+                        </div>
+                        
+                        <div class="mb-4">
+                            <div class="text-xs uppercase tracking-widest text-slate-400 mb-1.5">CHARACTER BIBLE (copy &amp; maintain this)</div>
+                            <textarea class="w-full h-24 text-xs bg-slate-950 border border-slate-700 rounded-2xl p-3 font-light resize-y" id="bible-text">${characterBible}</textarea>
+                        </div>
+                        
+                        <div class="mb-4">
+                            <div class="text-xs uppercase tracking-widest text-slate-400 mb-1.5">CURRENT STATE + FULL PROMPT</div>
+                            <textarea class="w-full h-48 text-xs bg-slate-950 border border-slate-700 rounded-2xl p-3 font-light resize-y" id="full-prompt">${fullPrompt}</textarea>
+                        </div>
+                        
+                        <div class="flex flex-wrap gap-3">
+                            <button onclick="copyPromptToClipboard()" 
+                                    class="flex-1 py-3 bg-violet-500 hover:bg-violet-600 text-white rounded-2xl font-medium flex items-center justify-center gap-x-2 transition-colors text-sm">
+                                <i class="fa-solid fa-copy"></i> 
+                                <span>COPY FULL PROMPT</span>
+                            </button>
+                            
+                            <button onclick="event.target.closest('.fixed').remove()" 
+                                    class="flex-1 py-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-2xl text-sm transition-colors">
+                                CLOSE
+                            </button>
+                        </div>
+                        
+                        <div class="mt-5 text-[10px] text-center text-slate-500">
+                            Paste into Grok Imagine (or your preferred image service). Update the Bible as you generate more images of this creature for perfect consistency across moods, stages, and actions.
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.body.insertAdjacentHTML('beforeend', modalHTML);
+        }
+        
+        function copyPromptToClipboard() {
+            const textarea = document.getElementById('full-prompt');
+            if (!textarea) return;
+            
+            navigator.clipboard.writeText(textarea.value).then(() => {
+                const origText = event.currentTarget ? event.currentTarget.innerHTML : '';
+                showToast('Prompt copied to clipboard!', 'success');
+                
+                // Close modal after short delay
+                setTimeout(() => {
+                    const modal = document.querySelector('.fixed[style*="z-index: 300"]');
+                    if (modal) modal.remove();
+                }, 650);
+            }).catch(() => {
+                // Fallback
+                textarea.select();
+                document.execCommand('copy');
+                showToast('Prompt copied (fallback)', 'success');
+            });
+        }
+
+        // ==================== TOASTS ====================
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            
+            const colors = {
+                success: 'bg-emerald-500/90 border-emerald-400 text-white',
+                info: 'bg-cyan-500/90 border-cyan-400 text-white',
+                warn: 'bg-amber-500/90 border-amber-400 text-slate-950'
+            };
+            
+            const toast = document.createElement('div');
+            toast.className = `toast max-w-xs px-5 py-3 rounded-2xl shadow-xl border flex items-start gap-x-3 text-sm ${colors[type] || colors.success}`;
+            toast.innerHTML = `
+                <div class="flex-1 pt-0.5">${message}</div>
+                <button class="text-lg leading-none opacity-70 hover:opacity-100 mt-px">×</button>
+            `;
+            
+            toast.querySelector('button').onclick = () => toast.remove();
+            
+            container.appendChild(toast);
+            
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    toast.style.transition = 'all 0.25s ease';
+                    toast.style.opacity = '0';
+                    setTimeout(() => toast.remove(), 220);
+                }
+            }, 4200);
+        }
+
+        // ==================== INIT EVERYTHING ====================
+        function initEverything() {
+            initTailwind();
+            loadState();
+            initCanvas();
+            updateInventoryUI();
+            startDecayLoop();
+            
+            // Initial toast / welcome
+            setTimeout(() => {
+                const hasSave = localStorage.getItem('synthoLabCreature');
+                if (!hasSave) {
+                    showToast('Welcome to SYNTHO-LAB v0.1. Interact with the creature!', 'info');
+                }
+            }, 1400);
+            
+            // Keyboard shortcuts hint (dev)
+            document.addEventListener('keydown', (e) => {
+                if (e.key === '?' && document.activeElement.tagName === 'BODY') {
+                    e.preventDefault();
+                    showToast('Shortcuts: Click canvas to pet • Cycle type badge • Hatch from inventory', 'info');
+                }
+            });
+            
+            // Make sure initial draw happens
+            setTimeout(() => {
+                if (ctx) drawCreature();
+            }, 50);
+            
+            // Expose some globals for easy console debugging / future extension
+            window.SYNTHO_LAB = {
+                creature, inventory, typeDefs, itemDefs,
+                performAction, hatchEgg, evolveCreature, showPromptGenerator, resetDemo
+            };
+            
+            console.log('%c[SYNTHO-LAB] Framework initialized. window.SYNTHO_LAB exposed for extension.', 'color:#64748b');
+        }
+
+        // Boot
+        window.onload = initEverything;
+    </script>
+</body>
+</html>
