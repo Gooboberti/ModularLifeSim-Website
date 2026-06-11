@@ -6488,6 +6488,15 @@ function showExtractEggModal() {
 
     listContainer.innerHTML = '';
 
+// Force refresh balance every time modal is shown/refreshed
+const currentBalance = document.createElement('div');
+currentBalance.className = 'mb-3 px-1 flex justify-between items-center text-sm';
+currentBalance.innerHTML = `
+    <span class="text-white/60">Your Balance</span> 
+    <span class="font-mono text-xl text-violet-400 font-semibold">${totalScore.toLocaleString()}</span>
+`;
+listContainer.appendChild(currentBalance);
+    
     // === Show current balance at the top ===
     const balanceHTML = `
         <div class="mb-4 px-1 flex justify-between items-center">
@@ -6536,28 +6545,26 @@ function hideExtractEggModal() {
 
 function extractCreatureToEgg(creature) {
     if (eggs.length >= MAX_EGGS) {
-        alert(`Your Egg Inventory is full (${MAX_EGGS} max). Delete or use some eggs before extracting more.`);
+        alert(`Your Egg Inventory is full (${MAX_EGGS} max).`);
         return;
     }
 
     if (totalScore < 250000) {
-        alert("You need 250,000 High Roller Points to extract a creature.");
+        alert("You need 250,000 High Roller Points.");
         return;
     }
 
-    // === Spend points + visual confirmation ===
+    // Deduct points
     totalScore -= 250000;
     updateMainStats();
+    updateEggCountBadge();
 
-    // Floating text confirmation
-    addFloatingText(creature.x, creature.y - 25, "-250,000", '#fbbf24');
-    addFloatingText(width / 2, 90, "Egg Extracted!", '#fbbf24');
-
-    // Sound effect (using existing tone system)
+    // Visual + audio feedback
+    addFloatingText(creature.x, creature.y - 30, "-250,000", '#fbbf24');
     playTone(620, 'sine', 0.18, 0.6);
-    setTimeout(() => playTone(880, 'sine', 0.12, 0.4), 120);
+    setTimeout(() => playTone(880, 'sine', 0.12, 0.4), 110);
 
-    // Create egg data
+    // Create egg
     const eggData = {
         name: creature.name,
         generation: creature.generation,
@@ -6566,9 +6573,7 @@ function extractCreatureToEgg(creature) {
         childrenCount: creature.childrenCount || 0,
         traits: JSON.parse(JSON.stringify(creature.traits || {}))
     };
-
     eggs.push(eggData);
-    updateEggCountBadge();
 
     // Remove creature from world
     const index = creatures.indexOf(creature);
@@ -6578,8 +6583,8 @@ function extractCreatureToEgg(creature) {
         deselectCreature();
     }
 
-    hideExtractEggModal();
-    updateMainStats();
+    // === KEY CHANGE: Refresh the modal instead of closing it ===
+    showExtractEggModal(); // Re-opens and refreshes the list + balance
 }
         // ==================== v2.11.2+: Egg Inventory System ====================
 function updateEggCountBadge() {
