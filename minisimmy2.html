@@ -2849,67 +2849,75 @@ function togglePause() {
                   updateQuickButtons();
               }
 
-              let energyWallMode = false;
-              let cursorPushActive = false;
-              let energyWalls = [];
-              let isDrawingWall = false;
-              let wallStartX = 0;
-              let wallStartY = 0;
-              let currentWallPreview = null; // for temporary drawing line
+// =====================================================
+// ENERGY WALLS
+// =====================================================
+let energyWallMode = false;
+let isDrawingWall = false;
+let wallStartX = 0;
+let wallStartY = 0;
+let currentWallPreview = null;           // Temporary line while drawing
+let currentWallFilterMode = "repel_all"; // v1.74+ Filter mode for new walls
+let energyWalls = [];
+let cursorPushActive = false;
 
-              // v1.74: Currently selected filter mode for new walls you draw
-              let currentWallFilterMode = "repel_all";
+// =====================================================
+// MUSIC SYSTEM (Generative + Reactive)
+// =====================================================
+let musicEnabled = false;
+let currentMusicMode = null;             // 'prune' | 'replicate' | 'evolve' | null
 
-              // Music System
-              let musicEnabled = false;
-              let audioContext = null;
-              let audioElement = null;
-              let analyser = null;
-              let musicData = {
-                  volume: 0,
-                  subBass: 0,
-                  bass: 0,
-                  lowMids: 0,
-                  mids: 0,
-                  highMids: 0,
-                  highs: 0
-              };
+// Simple reactive values used by the simulation
+let musicData = {
+    bass: 0,
+    energy: 0,
+    tension: 0,
+    pulse: 0
+};
 
-              // Spaceship Power-up (Space Invaders style)
-              let spaceshipActive = false;
-              let shipX = 400;
-              let shipY = 0;
-              let bullets = [];
-              let lastShotTime = 0;
-              let showMobileControls = false;
+let musicInterval = null;
+let musicOscillators = [];
+let musicGain = null;
 
-              // Flexible mapping: each parameter has a chosen audio feature + strength
-              // Significantly boosted for obvious reactivity
-              let musicMappings = {
-                  vortexStrength:   { feature: 'bass',    amount: 3.5 }, // Very strong for testing
-                  foodPulse:        { feature: 'mids',    amount: 1.6 },
-                  redHazardRate:    { feature: 'highs',   amount: 3.0 }, // Very strong for testing
-                  energyWallPulse:  { feature: 'bass',    amount: 1.8 },
-                  vortexFallSpeed:  { feature: 'volume',  amount: 1.3 },
-                  reproductionRate: { feature: 'mids',    amount: 1.5 },
-                  socialPressure:   { feature: 'highs',   amount: 1.7 },
-                  particleSpawn:    { feature: 'highs',   amount: 1.8 }
-              };
+// (Optional) Mapping system if you want to expand reactivity later
+let musicMappings = {
+    vortexStrength:   { feature: 'bass',    amount: 3.5 },
+    foodPulse:        { feature: 'energy',  amount: 1.6 },
+    redHazardRate:    { feature: 'tension', amount: 2.8 },
+    energyWallPulse:  { feature: 'bass',    amount: 1.8 },
+    reproductionRate: { feature: 'energy',  amount: 1.5 },
+    socialPressure:   { feature: 'tension', amount: 1.7 }
+};
 
-              function toggleEnergyWallMode() {
-                  energyWallMode = !energyWallMode;
-                  isDrawingWall = false;
-                  currentWallPreview = null;
+// =====================================================
+// SPACESHIP (Space Invaders style power-up)
+// =====================================================
+let spaceshipActive = false;
+let shipX = 400;
+let shipY = 0;
+let bullets = [];
+let lastShotTime = 0;
+let showMobileControls = false;
 
-                  const btn = document.getElementById('quick-wall-btn');
-                  if (energyWallMode) {
-                      btn.classList.add('bg-violet-500/80', 'text-white');
-                      btn.classList.remove('bg-white/10');
-                  } else {
-                      btn.classList.remove('bg-violet-500/80', 'text-white');
-                      btn.classList.add('bg-white/10');
-                  }
-              }
+// =====================================================
+// ENERGY WALL TOGGLE
+// =====================================================
+function toggleEnergyWallMode() {
+    energyWallMode = !energyWallMode;
+    isDrawingWall = false;
+    currentWallPreview = null;
+
+    const btn = document.getElementById('quick-wall-btn');
+    if (!btn) return;
+
+    if (energyWallMode) {
+        btn.classList.add('bg-violet-500/80', 'text-white');
+        btn.classList.remove('bg-white/10');
+    } else {
+        btn.classList.remove('bg-violet-500/80', 'text-white');
+        btn.classList.add('bg-white/10');
+    }
+}
 
               // ==================== v1.75: Energy Wall Placement Menu ====================
               function showEnergyWallPlacementMenu() {
@@ -3180,225 +3188,231 @@ function togglePause() {
                   // Close modal
                   closeDynamicModals();
               }
+// =====================================================
+// MUSIC SYSTEM (File-based + Reactivity)
+// =====================================================
 
-              // ==================== MUSIC SYSTEM ====================
+function showMusicModal() {
+    const modal = document.getElementById('music-modal');
+    if (!modal) return;
 
-              function showMusicModal() {
-                  const modal = document.getElementById('music-modal');
-                  modal.classList.remove('hidden');
-                  modal.classList.add('flex');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
 
-                  // Sync toggle state
-                  const toggle = document.getElementById('music-toggle');
-                  if (toggle) toggle.checked = musicEnabled;
+    // Sync toggle state
+    const toggle = document.getElementById('music-toggle');
+    if (toggle) toggle.checked = musicEnabled;
 
-                  // Sync sliders
-                  syncMusicSliders();
-              }
+    // Sync sliders
+    syncMusicSliders();
+}
 
-              function hideMusicModal() {
-                  const modal = document.getElementById('music-modal');
-                  modal.classList.remove('flex');
-                  modal.classList.add('hidden');
-              }
+function hideMusicModal() {
+    const modal = document.getElementById('music-modal');
+    if (modal) {
+        modal.classList.remove('flex');
+        modal.classList.add('hidden');
+    }
+}
 
-              function toggleMusicReactivity() {
-                  const toggle = document.getElementById('music-toggle');
-                  musicEnabled = toggle ? toggle.checked : false;
+function toggleMusicReactivity() {
+    const toggle = document.getElementById('music-toggle');
+    musicEnabled = toggle ? toggle.checked : false;
 
-                  if (!musicEnabled && audioElement) {
-                      pauseMusic();
-                  }
-              }
+    if (!musicEnabled && audioElement) {
+        pauseMusic();
+    }
+}
 
-              function updateMusicMapping(key, value) {
-                  musicMappings[key] = parseFloat(value);
+function updateMusicMapping(key, value) {
+    if (!musicMappings[key]) return;
 
-                  // Update display
-                  const displayMap = {
-                      vortexStrength: 'map-vortex',
-                      foodPulse: 'map-food',
-                      redHazardRate: 'map-red',
-                      energyWallPulse: 'map-wall',
-                      vortexFallSpeed: 'map-fall',
-                      reproductionRate: 'map-repro'
-                  };
+    musicMappings[key] = parseFloat(value);
 
-                  const el = document.getElementById(displayMap[key]);
-                  if (el) el.innerText = Math.round(value * 100) + '%';
-              }
+    // Update display labels
+    const displayMap = {
+        vortexStrength: 'map-vortex',
+        foodPulse: 'map-food',
+        redHazardRate: 'map-red',
+        energyWallPulse: 'map-wall',
+        vortexFallSpeed: 'map-fall',
+        reproductionRate: 'map-repro'
+    };
 
-              function syncMusicSliders() {
-                  const mapping = {
-                      'slider-vortex': musicMappings.vortexStrength?.amount || musicMappings.vortexStrength,
-                      'slider-food': musicMappings.foodPulse?.amount || musicMappings.foodPulse,
-                      'slider-red': musicMappings.redHazardRate?.amount || musicMappings.redHazardRate,
-                      'slider-wall': musicMappings.energyWallPulse?.amount || musicMappings.energyWallPulse,
-                      'slider-fall': musicMappings.vortexFallSpeed?.amount || musicMappings.vortexFallSpeed,
-                      'slider-repro': musicMappings.reproductionRate?.amount || musicMappings.reproductionRate
-                  };
+    const el = document.getElementById(displayMap[key]);
+    if (el) el.innerText = Math.round(value * 100) + '%';
+}
 
-                  for (let id in mapping) {
-                      const slider = document.getElementById(id);
-                      if (slider) slider.value = mapping[id];
-                  }
-              }
+function syncMusicSliders() {
+    const mapping = {
+        'slider-vortex': musicMappings.vortexStrength?.amount ?? musicMappings.vortexStrength,
+        'slider-food': musicMappings.foodPulse?.amount ?? musicMappings.foodPulse,
+        'slider-red': musicMappings.redHazardRate?.amount ?? musicMappings.redHazardRate,
+        'slider-wall': musicMappings.energyWallPulse?.amount ?? musicMappings.energyWallPulse,
+        'slider-fall': musicMappings.vortexFallSpeed?.amount ?? musicMappings.vortexFallSpeed,
+        'slider-repro': musicMappings.reproductionRate?.amount ?? musicMappings.reproductionRate
+    };
 
-              function applyMusicPreset(preset) {
-                  if (preset === 'aggressive') {
-                      musicMappings = {
-                          vortexStrength:   { feature: 'bass',    amount: 3.8 },
-                          foodPulse:        { feature: 'highMids', amount: 1.4 },
-                          redHazardRate:    { feature: 'highs',   amount: 3.5 },
-                          energyWallPulse:  { feature: 'bass',    amount: 2.8 },
-                          vortexFallSpeed:  { feature: 'volume',  amount: 1.6 },
-                          reproductionRate: { feature: 'mids',    amount: 1.2 },
-                          socialPressure:   { feature: 'highs',   amount: 2.5 },
-                          particleSpawn:    { feature: 'highs',   amount: 2.8 }
-                      };
-                  }
-                  else if (preset === 'atmospheric') {
-                      musicMappings = {
-                          vortexStrength:   { feature: 'mids',    amount: 1.8 },
-                          foodPulse:        { feature: 'mids',    amount: 2.8 },
-                          redHazardRate:    { feature: 'lowMids', amount: 0.8 },
-                          energyWallPulse:  { feature: 'volume',  amount: 2.2 },
-                          vortexFallSpeed:  { feature: 'volume',  amount: 2.5 },
-                          reproductionRate: { feature: 'mids',    amount: 2.4 },
-                          socialPressure:   { feature: 'lowMids', amount: 1.0 },
-                          particleSpawn:    { feature: 'highMids', amount: 1.5 }
-                      };
-                  }
-                  else if (preset === 'rhythmic') {
-                      musicMappings = {
-                          vortexStrength:   { feature: 'bass',    amount: 2.8 },
-                          foodPulse:        { feature: 'lowMids', amount: 1.6 },
-                          redHazardRate:    { feature: 'highs',   amount: 2.2 },
-                          energyWallPulse:  { feature: 'bass',    amount: 3.2 },
-                          vortexFallSpeed:  { feature: 'bass',    amount: 2.0 },
-                          reproductionRate: { feature: 'mids',    amount: 1.8 },
-                          socialPressure:   { feature: 'highMids', amount: 2.0 },
-                          particleSpawn:    { feature: 'highs',   amount: 3.5 }
-                      };
-                  }
-                  else { // default
-                      musicMappings = {
-                          vortexStrength:   { feature: 'bass',    amount: 2.2 },
-                          foodPulse:        { feature: 'mids',    amount: 1.6 },
-                          redHazardRate:    { feature: 'highs',   amount: 2.0 },
-                          energyWallPulse:  { feature: 'bass',    amount: 1.8 },
-                          vortexFallSpeed:  { feature: 'volume',  amount: 1.3 },
-                          reproductionRate: { feature: 'mids',    amount: 1.5 },
-                          socialPressure:   { feature: 'highs',   amount: 1.7 },
-                          particleSpawn:    { feature: 'highs',   amount: 1.8 }
-                      };
-                  }
+    for (let id in mapping) {
+        const slider = document.getElementById(id);
+        if (slider) slider.value = mapping[id];
+    }
+}
 
-                  // Refresh sliders in modal
-                  syncMusicSliders();
-              }
+function applyMusicPreset(preset) {
+    if (preset === 'aggressive') {
+        musicMappings = {
+            vortexStrength:   { feature: 'bass',    amount: 3.8 },
+            foodPulse:        { feature: 'highMids', amount: 1.4 },
+            redHazardRate:    { feature: 'highs',   amount: 3.5 },
+            energyWallPulse:  { feature: 'bass',    amount: 2.8 },
+            vortexFallSpeed:  { feature: 'volume',  amount: 1.6 },
+            reproductionRate: { feature: 'mids',    amount: 1.2 },
+            socialPressure:   { feature: 'highs',   amount: 2.5 },
+            particleSpawn:    { feature: 'highs',   amount: 2.8 }
+        };
+    } 
+    else if (preset === 'atmospheric') {
+        musicMappings = {
+            vortexStrength:   { feature: 'mids',     amount: 1.8 },
+            foodPulse:        { feature: 'mids',     amount: 2.8 },
+            redHazardRate:    { feature: 'lowMids',  amount: 0.8 },
+            energyWallPulse:  { feature: 'volume',   amount: 2.2 },
+            vortexFallSpeed:  { feature: 'volume',   amount: 2.5 },
+            reproductionRate: { feature: 'mids',     amount: 2.4 },
+            socialPressure:   { feature: 'lowMids',  amount: 1.0 },
+            particleSpawn:    { feature: 'highMids', amount: 1.5 }
+        };
+    } 
+    else if (preset === 'rhythmic') {
+        musicMappings = {
+            vortexStrength:   { feature: 'bass',     amount: 2.8 },
+            foodPulse:        { feature: 'lowMids',  amount: 1.6 },
+            redHazardRate:    { feature: 'highs',    amount: 2.2 },
+            energyWallPulse:  { feature: 'bass',     amount: 3.2 },
+            vortexFallSpeed:  { feature: 'bass',     amount: 2.0 },
+            reproductionRate: { feature: 'mids',     amount: 1.8 },
+            socialPressure:   { feature: 'highMids', amount: 2.0 },
+            particleSpawn:    { feature: 'highs',    amount: 3.5 }
+        };
+    } 
+    else {
+        // Default
+        musicMappings = {
+            vortexStrength:   { feature: 'bass',    amount: 2.2 },
+            foodPulse:        { feature: 'mids',    amount: 1.6 },
+            redHazardRate:    { feature: 'highs',   amount: 2.0 },
+            energyWallPulse:  { feature: 'bass',    amount: 1.8 },
+            vortexFallSpeed:  { feature: 'volume',  amount: 1.3 },
+            reproductionRate: { feature: 'mids',    amount: 1.5 },
+            socialPressure:   { feature: 'highs',   amount: 1.7 },
+            particleSpawn:    { feature: 'highs',   amount: 1.8 }
+        };
+    }
 
-              function loadMusicFile(event) {
-                  const file = event.target.files[0];
-                  if (!file) return;
+    syncMusicSliders();
+}
 
-                  if (audioElement) {
-                      audioElement.pause();
-                  }
+// =====================================================
+// FILE LOADING + AUDIO ANALYSIS
+// =====================================================
 
-                  audioElement = new Audio(URL.createObjectURL(file));
-                  document.getElementById('music-track-name').innerText = file.name;
-                  document.getElementById('music-now-playing').classList.remove('hidden');
+function loadMusicFile(event) {
+    const file = event.target.files[0];
+    if (!file) return;
 
-                  // Setup audio analysis when ready
-                  audioElement.onloadedmetadata = () => {
-                      setupAudioAnalysis();
-                  };
-              }
+    if (audioElement) {
+        audioElement.pause();
+    }
 
-              function setupAudioAnalysis() {
-                  if (!audioElement) return;
+    audioElement = new Audio(URL.createObjectURL(file));
+    document.getElementById('music-track-name').innerText = file.name;
+    document.getElementById('music-now-playing').classList.remove('hidden');
 
-                  if (!audioContext) {
-                      audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                  }
+    audioElement.onloadedmetadata = () => {
+        setupAudioAnalysis();
+    };
+}
 
-                  const source = audioContext.createMediaElementSource(audioElement);
-                  analyser = audioContext.createAnalyser();
-                  analyser.fftSize = 256;
+function setupAudioAnalysis() {
+    if (!audioElement) return;
 
-                  source.connect(analyser);
-                  analyser.connect(audioContext.destination);
-              }
+    if (!audioContext) {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    }
 
-              function playMusic() {
-                  if (!audioElement) return;
+    const source = audioContext.createMediaElementSource(audioElement);
+    analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256;
 
-                  if (audioContext && audioContext.state === 'suspended') {
-                      audioContext.resume();
-                  }
+    source.connect(analyser);
+    analyser.connect(audioContext.destination);
+}
 
-                  audioElement.play().catch(console.error);
-                  musicEnabled = true;
+function playMusic() {
+    if (!audioElement) return;
 
-                  const toggle = document.getElementById('music-toggle');
-                  if (toggle) toggle.checked = true;
-              }
+    if (audioContext && audioContext.state === 'suspended') {
+        audioContext.resume();
+    }
 
-              function pauseMusic() {
-                  if (audioElement) audioElement.pause();
-              }
+    audioElement.play().catch(console.error);
+    musicEnabled = true;
 
-              function stopMusic() {
-                  if (audioElement) {
-                      audioElement.pause();
-                      audioElement.currentTime = 0;
-                  }
-              }
+    const toggle = document.getElementById('music-toggle');
+    if (toggle) toggle.checked = true;
+}
 
-              // Called every frame in draw() to analyze audio
-              function updateMusicAnalysis() {
-                  if (!musicEnabled || !analyser) return;
+function pauseMusic() {
+    if (audioElement) audioElement.pause();
+}
 
-                  const bufferLength = analyser.frequencyBinCount;
-                  const dataArray = new Uint8Array(bufferLength);
-                  analyser.getByteFrequencyData(dataArray);
+function stopMusic() {
+    if (audioElement) {
+        audioElement.pause();
+        audioElement.currentTime = 0;
+    }
+}
 
-                  // Calculate overall volume
-                  let sum = 0;
-                  for (let i = 0; i < bufferLength; i++) {
-                      sum += dataArray[i];
-                  }
-                  musicData.volume = sum / bufferLength / 255;
+// Called every frame in draw()
+function updateMusicAnalysis() {
+    if (!musicEnabled || !analyser) return;
 
-                  // === Improved Frequency Band Separation (more perceptually accurate) ===
-                  // Using approximate frequency ranges instead of simple percentage splits
+    const bufferLength = analyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+    analyser.getByteFrequencyData(dataArray);
 
-                  // Helper to get average of a bin range
-                  const getBandAverage = (startBin, endBin) => {
-                      if (endBin <= startBin) return 0;
-                      let s = 0;
-                      for (let i = startBin; i < endBin && i < bufferLength; i++) {
-                          s += dataArray[i];
-                      }
-                      return s / (endBin - startBin) / 255;
-                  };
+    // Overall volume
+    let sum = 0;
+    for (let i = 0; i < bufferLength; i++) {
+        sum += dataArray[i];
+    }
+    musicData.volume = sum / bufferLength / 255;
 
-                  // Approximate bin ranges (assuming 256 fftSize → 128 bins, sampleRate ~44100/48000)
-                  // These are rough but much better than linear percentage splits
-                  const subBassEnd   = Math.floor(bufferLength * 0.06);   // ~20-80Hz
-                  const bassEnd      = Math.floor(bufferLength * 0.15);   // ~80-250Hz
-                  const lowMidsEnd   = Math.floor(bufferLength * 0.28);   // ~250-600Hz
-                  const midsEnd      = Math.floor(bufferLength * 0.55);   // ~600-2.5kHz
-                  const highMidsEnd  = Math.floor(bufferLength * 0.78);   // ~2.5k-6kHz
+    // Improved frequency band separation
+    const getBandAverage = (startBin, endBin) => {
+        if (endBin <= startBin) return 0;
+        let s = 0;
+        for (let i = startBin; i < endBin && i < bufferLength; i++) {
+            s += dataArray[i];
+        }
+        return s / (endBin - startBin) / 255;
+    };
 
-                  musicData.subBass   = getBandAverage(0, subBassEnd);
-                  musicData.bass      = getBandAverage(subBassEnd, bassEnd);
-                  musicData.lowMids   = getBandAverage(bassEnd, lowMidsEnd);
-                  musicData.mids      = getBandAverage(lowMidsEnd, midsEnd);
-                  musicData.highMids  = getBandAverage(midsEnd, highMidsEnd);
-                  musicData.highs     = getBandAverage(highMidsEnd, bufferLength);
-              }
+    // Approximate bin ranges for 256 fftSize
+    const subBassEnd  = Math.floor(bufferLength * 0.06);
+    const bassEnd     = Math.floor(bufferLength * 0.15);
+    const lowMidsEnd  = Math.floor(bufferLength * 0.28);
+    const midsEnd     = Math.floor(bufferLength * 0.55);
+    const highMidsEnd = Math.floor(bufferLength * 0.78);
+
+    musicData.subBass  = getBandAverage(0, subBassEnd);
+    musicData.bass     = getBandAverage(subBassEnd, bassEnd);
+    musicData.lowMids  = getBandAverage(bassEnd, lowMidsEnd);
+    musicData.mids     = getBandAverage(lowMidsEnd, midsEnd);
+    musicData.highMids = getBandAverage(midsEnd, highMidsEnd);
+    musicData.highs    = getBandAverage(highMidsEnd, bufferLength);
+}
 
               // Helper: Get the current influence (0 to ~1) for a mapped parameter
               function getMusicInfluence(key) {
