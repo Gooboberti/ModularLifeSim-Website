@@ -1412,14 +1412,13 @@ Start of Chunk 2
               let maxPlacedHazards = 3;
               let freeMode = false;
       
-// ==================== MUSIC MODES + ENV CYCLE + GLOWING BORDER (FULL) ====================
+// ==================== MUSIC MODAL + MODES (CLEAN VERSION) ====================
 
 let musicEnabled = false;
 let currentMusicMode = null;
 
 let musicData = { bass: 0, mids: 0, highs: 0 };
 
-// Real MP3 tracks (must be in same folder as the HTML)
 let pruneAudio = new Audio('Track_Prune.mp3');
 let replicateAudio = new Audio('Track_Replicate.mp3');
 let evolveAudio = new Audio('Track_Evolve.mp3');
@@ -1428,7 +1427,6 @@ pruneAudio.loop = true;
 replicateAudio.loop = true;
 evolveAudio.loop = true;
 
-// Backup original values
 let originalMusicSettings = {
     vortexMultiplier: null,
     reproductionChance: null,
@@ -1438,10 +1436,33 @@ let originalMusicSettings = {
 let originalRedHazardsEnabled = false;
 let originalRedHazardIntensity = 1;
 
-// Evolve mode env rotation
 let evolveEnvTimer = 0;
 let evolveEnvPhaseIndex = 0;
 const evolveEnvPhases = ['Fertile', 'Normal', 'Drought'];
+
+function showMusicModal() {
+    const modal = document.getElementById('music-modal');
+    if (!modal) {
+        console.warn("Music modal element not found in HTML");
+        return;
+    }
+    if (modal.parentElement !== document.body) {
+        document.body.appendChild(modal);
+    }
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    modal.style.display = 'flex';
+    modal.style.zIndex = '999999';
+}
+
+function hideMusicModal() {
+    const modal = document.getElementById('music-modal');
+    if (modal) {
+        modal.classList.remove('flex');
+        modal.classList.add('hidden');
+        modal.style.display = 'none';
+    }
+}
 
 function activateMusicMode(mode) {
     stopMusicMode();
@@ -1450,7 +1471,6 @@ function activateMusicMode(mode) {
     currentMusicMode = mode;
     evolveEnvTimer = 0;
 
-    // Save current state
     originalMusicSettings.vortexMultiplier = settings.vortexMultiplier;
     originalMusicSettings.reproductionChance = settings.reproductionChance;
     originalMusicSettings.energyDrain = settings.energyDrain;
@@ -1493,7 +1513,6 @@ function stopMusicMode() {
     replicateAudio.pause();
     evolveAudio.pause();
 
-    // Restore values
     if (originalMusicSettings.vortexMultiplier !== null) settings.vortexMultiplier = originalMusicSettings.vortexMultiplier;
     if (originalMusicSettings.reproductionChance !== null) settings.reproductionChance = originalMusicSettings.reproductionChance;
     if (originalMusicSettings.energyDrain !== null) settings.energyDrain = originalMusicSettings.energyDrain;
@@ -1509,21 +1528,22 @@ function stopMusicMode() {
     addFloatingText(width / 2, 70, "Music Stopped - Values Restored", '#f87171');
 }
 
+// ==================== HELPER FUNCTIONS ====================
+
 function forceEnvironmentalPhase(phase) {
     const phaseText = document.getElementById('env-phase-text');
     if (phaseText) phaseText.innerText = phase.toUpperCase();
 
-    const progressBar = document.getElementById('env-progress-bar');
-    if (progressBar) {
-        if (phase === 'Fertile') progressBar.style.width = '33%';
-        else if (phase === 'Normal') progressBar.style.width = '66%';
-        else if (phase === 'Drought') progressBar.style.width = '100%';
+    const bar = document.getElementById('env-progress-bar');
+    if (bar) {
+        if (phase === 'Fertile') bar.style.width = '33%';
+        else if (phase === 'Normal') bar.style.width = '66%';
+        else if (phase === 'Drought') bar.style.width = '100%';
     }
 }
 
 function updateEvolveEnvironmentalCycle() {
     if (currentMusicMode !== 'evolve') return;
-
     evolveEnvTimer++;
     if (evolveEnvTimer > 1800) {
         evolveEnvTimer = 0;
@@ -1533,8 +1553,8 @@ function updateEvolveEnvironmentalCycle() {
 }
 
 function updateEnvBarVisibility(show) {
-    const bar = document.querySelector('.mx-auto.mb-2.w-\\[820px\\]');
-    if (bar) bar.style.display = show ? '' : 'none';
+    const barContainer = document.querySelector('.mx-auto.mb-2.w-\\[820px\\]');
+    if (barContainer) barContainer.style.display = show ? '' : 'none';
 }
 
 // ==================== MODE EFFECTS ====================
@@ -1544,10 +1564,8 @@ function applyPruneModifiers() {
     settings.reproductionChance = 0.0007;
     settings.energyDrain = 0.49;
     settings.particleFoodValue = 0.55;
-
     redHazardsEnabled = true;
     redHazardIntensity = 4.0;
-
     for (let i = 0; i < 18; i++) redHazards.push(new RedHazard());
     addFloatingText(width / 2, 95, "AGGRESSIVE PRUNING + DROUGHT", '#f87171');
 }
@@ -1557,18 +1575,11 @@ function applyReplicateModifiers() {
     settings.reproductionChance = 0.07;
     settings.energyDrain = 0.11;
     settings.particleFoodValue = 3.0;
-
     redHazardsEnabled = false;
-
     if (greenZone) greenZone.food = 800;
     if (blueZone) blueZone.food = 800;
-
     for (let i = 0; i < 8; i++) {
-        foodBlooms.push({
-            x: random(width), y: random(height),
-            radius: random(28, 42), life: 480,
-            targetIsGreen: i % 2 === 0, age: 0
-        });
+        foodBlooms.push({ x: random(width), y: random(height), radius: random(28, 42), life: 480, targetIsGreen: i % 2 === 0, age: 0 });
     }
     addFloatingText(width / 2, 95, "FERTILE GROWTH SURGE", '#34d399');
 }
@@ -1578,10 +1589,8 @@ function applyEvolveModifiers() {
     settings.reproductionChance = 0.026;
     settings.energyDrain = 0.25;
     settings.particleFoodValue = 1.7;
-
     redHazardsEnabled = true;
     redHazardIntensity = 1.5;
-
     addFloatingText(width / 2, 95, "EVOLVING ENVIRONMENT", '#a78bfa');
 }
 
@@ -1589,21 +1598,14 @@ function applyEvolveModifiers() {
 
 function drawMusicModeTintAndBorder() {
     if (!currentMusicMode) return;
-
     push();
     noStroke();
 
-    // Canvas tint
-    if (currentMusicMode === 'prune') {
-        fill(170, 30, 30, 38);
-    } else if (currentMusicMode === 'replicate') {
-        fill(20, 150, 105, 32);
-    } else if (currentMusicMode === 'evolve') {
-        fill(180, 140, 40, 34);
-    }
+    if (currentMusicMode === 'prune') fill(170, 30, 30, 38);
+    else if (currentMusicMode === 'replicate') fill(20, 150, 105, 32);
+    else if (currentMusicMode === 'evolve') fill(180, 140, 40, 34);
     rect(0, 0, width, height);
 
-    // Glowing colored border
     const borderColor = currentMusicMode === 'prune' ? [220, 40, 40] :
                         currentMusicMode === 'replicate' ? [30, 200, 130] :
                         [255, 200, 50];
@@ -1614,11 +1616,9 @@ function drawMusicModeTintAndBorder() {
         noFill();
         rect(0, 0, width, height);
     }
-
     stroke(borderColor[0], borderColor[1], borderColor[2], 180);
     strokeWeight(3);
     rect(0, 0, width, height);
-
     pop();
 }
       // ==================== AETHERIUM RESOURCES + FURNACE ====================
