@@ -8467,7 +8467,6 @@ function showStartIncubationMenu() {
     const modal = document.createElement('div');
     modal.className = 'fixed inset-0 bg-black/80 flex items-center justify-center';
     modal.style.zIndex = '999999';
-    modal.style.position = 'fixed';
 
     modal.innerHTML = `
         <div class="bg-[#121218] border border-white/10 rounded-3xl max-w-md w-full mx-4 p-5">
@@ -8486,31 +8485,43 @@ function showStartIncubationMenu() {
 
     eggs.forEach((egg, index) => {
         const div = document.createElement('div');
-        div.className = 'flex justify-between items-center bg-white/5 hover:bg-white/10 rounded-2xl p-3 cursor-pointer';
+        div.className = 'flex justify-between items-center bg-white/5 hover:bg-white/10 rounded-2xl p-3';
+
         div.innerHTML = `
-            <div>
+            <div class="flex-1 min-w-0 pr-3">
                 <div class="font-semibold text-emerald-400">${egg.name}</div>
                 <div class="text-xs text-white/60">Gen ${egg.generation} • ${egg.modules.length} modules</div>
             </div>
-            <button class="px-4 py-1 text-xs rounded-xl bg-violet-600 hover:bg-violet-500 text-white">Incubate</button>
+            <div class="flex items-center gap-2 flex-shrink-0">
+                <button class="px-4 py-1 text-xs rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-medium">Incubate</button>
+                <button class="px-3 py-1 text-xs rounded-xl bg-red-500/80 hover:bg-red-500 text-white font-medium">Delete</button>
+            </div>
         `;
 
+        // Incubate button
         div.querySelector('button').onclick = (e) => {
             e.stopImmediatePropagation();
-
-            // Start incubation
             startIncubationOnEgg(index);
-
-            // Close this small menu
             modal.remove();
 
-            // Force refresh the incubating list inside the Gene Vault
+            // Refresh Gene Vault incubating list if open
             setTimeout(() => {
                 const container = document.getElementById('gene-vault-incubating-list');
-                if (container) {
-                    updateGeneVaultIncubatingList();
-                }
+                if (container) updateGeneVaultIncubatingList();
             }, 50);
+        };
+
+        // Delete button
+        const deleteBtn = div.querySelectorAll('button')[1];
+        deleteBtn.onclick = (e) => {
+            e.stopImmediatePropagation();
+            if (confirm(`Delete "${egg.name}" permanently?`)) {
+                eggs.splice(index, 1);
+                updateEggCountBadge();
+                modal.remove();
+                // Re-open the menu with updated list
+                setTimeout(() => showStartIncubationMenu(), 60);
+            }
         };
 
         listContainer.appendChild(div);
@@ -8541,23 +8552,21 @@ function updateGeneVaultIncubatingList() {
         const div = document.createElement('div');
         div.className = `bg-white/5 border ${isComplete ? 'border-emerald-500/40' : 'border-violet-500/30'} rounded-2xl p-3`;
 
-        // Create preview canvas
         const canvasId = `inc-preview-${inc.id}`;
+
         div.innerHTML = `
             <div class="flex gap-3">
-                <!-- Creature Preview -->
                 <div class="flex-shrink-0">
                     <canvas id="${canvasId}" width="68" height="68"
                             class="rounded-xl border border-white/10 bg-[#111113]"></canvas>
                 </div>
 
-                <!-- Info -->
                 <div class="flex-1 min-w-0">
                     <div class="flex justify-between items-start">
                         <div>
                             <div class="font-semibold text-emerald-400">${egg.name}</div>
                             <div class="text-[10px] text-white/60">
-                                Gen ${egg.generation} • ${egg.modules ? egg.modules.length : 0} modules • ${egg.killCount || 0} kills
+                                Gen ${egg.generation} • ${egg.modules ? egg.modules.length : 0} modules
                             </div>
                         </div>
                         <div class="text-xs font-mono ${isComplete ? 'text-emerald-400' : 'text-violet-400'}">
@@ -8565,24 +8574,17 @@ function updateGeneVaultIncubatingList() {
                         </div>
                     </div>
 
-                    <!-- Compact module list -->
-                    <div class="mt-1.5 text-[10px] text-white/70 flex flex-wrap gap-x-2 gap-y-0.5">
-                        ${egg.modules ? egg.modules.map(m => {
-                            const tier = m.tier || 1;
-                            return `<span style="color:${m.color}">${m.type}${tier > 1 ? `T${tier}` : ''}</span>`;
-                        }).join(' • ') : ''}
-                    </div>
-
-                    <div class="mt-2">
-                        <button class="w-full py-1 text-xs rounded-xl ${isComplete ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-red-500/80 hover:bg-red-500'} text-white font-medium">
+                    <div class="mt-2 flex gap-2">
+                        <button class="flex-1 py-1 text-xs rounded-xl ${isComplete ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-red-500/80 hover:bg-red-500'} text-white font-medium">
                             ${isComplete ? 'Release Copy' : 'Cancel Early'}
                         </button>
+                        <button class="px-3 py-1 text-xs rounded-xl bg-white/10 hover:bg-white/20 text-white/80">Delete</button>
                     </div>
                 </div>
             </div>
         `;
 
-        // Draw preview after adding to DOM
+        // Draw preview
         setTimeout(() => {
             const canvas = document.getElementById(canvasId);
             if (canvas && typeof drawCreaturePreview === 'function') {
@@ -8590,13 +8592,24 @@ function updateGeneVaultIncubatingList() {
             }
         }, 10);
 
-        const btn = div.querySelector('button');
-        btn.onclick = () => {
+        const buttons = div.querySelectorAll('button');
+
+        // Main action button (Release / Cancel Early)
+        buttons[0].onclick = () => {
             releaseIncubatedEgg(inc.id, !isComplete);
             setTimeout(() => {
                 hideGeneVault();
                 showGeneVault();
             }, 80);
+        };
+
+        // Delete button
+        buttons[1].onclick = () => {
+            if (confirm(`Delete this incubating egg? Progress will be lost.`)) {
+                incubatingEggs = incubatingEggs.filter(e => e.id !== inc.id);
+                updateEggCountBadge();
+                updateGeneVaultIncubatingList();
+            }
         };
 
         container.appendChild(div);
