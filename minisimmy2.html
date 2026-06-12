@@ -5055,38 +5055,63 @@ if (!paused && incubatingEggs.length > 0) {
                       p.show();
 
                       if (dist(p.x, p.y, centerX, centerY) < 4) {
-                          if (p.isPurple) {
-                              // Purple particle reaching center spawns as predator
-                              let predator = new Creature(p.x, p.y);
-                              predator.isPredator = true;
-                              creatures.push(predator);
-                          } else {
-                              spawnCreatureFromVortexCenter(p.x, p.y, vortexDir, vortexStrength);
-                          }
-                          vortexParticles.splice(i, 1);
-                          continue;
-                      }
+    if (p.isSpecial) {
+        // === SPECIAL: Spawn clone from Gene Vault ===
+        spawnVaultEchoCreature(p.x, p.y);
+    } else if (p.isPurple) {
+        let predator = new Creature(p.x, p.y);
+        predator.isPredator = true;
+        creatures.push(predator);
+    } else {
+        spawnCreatureFromVortexCenter(p.x, p.y, vortexDir, vortexStrength);
+    }
+    vortexParticles.splice(i, 1);
+    continue;
+}
 
                       for (let c of creatures) {
                           let harvesterBonus = c.getTieredModuleCount('harvester') * 4.5;
                           let pickupRange = 14 + harvesterBonus; // increased across the board
+if (dist(p.x, p.y, c.x, c.y) < pickupRange) {
+    c.energy = min(100, c.energy + settings.particleFoodValue * timeScale);
+    if (Math.random() < 0.11 * soundDensity) playEatSound(isDay);
 
-                          if (dist(p.x, p.y, c.x, c.y) < pickupRange) {
-                              c.energy = min(100, c.energy + settings.particleFoodValue * timeScale);
-                              if (Math.random() < 0.11 * soundDensity) playEatSound(isDay);
+    // Floating points for eating particles
+    addFloatingText(c.x, c.y - 12, `+${Math.floor(settings.particleFoodValue)}`, '#a3e635');
 
-                              // Floating points for eating particles
-                              addFloatingText(c.x, c.y - 12, `+${Math.floor(settings.particleFoodValue)}`, '#a3e635');
+    // =====================================================
+    // NEW: Special Vault Echo Particle logic
+    // =====================================================
+    if (p.isSpecial) {
+        // Turn creature into a clone of a random Gene Vault creature
+        let filledSlots = geneVaultSlots.filter(slot => slot !== null);
+        if (filledSlots.length > 0) {
+            let vaultData = random(filledSlots);
+            if (vaultData.modules) c.modules = [...vaultData.modules];
+            if (vaultData.generation) c.generation = vaultData.generation;
+            c.currentThought = "Echo Infected";
+            c.energy = max(c.energy, 70);
+        }
 
-                              // New mechanic: Eating white particle while purple can save them from becoming predator
-                              if (c.mustEatWhite) {
-                                  c.ateWhiteParticle = true;
-                                  c.purpleFlash = Math.max(0, c.purpleFlash - 40); // significantly reduce purple
-                                  c.currentThought = "Cleansed";
-                              }
+        // Apply strong purple DoT infection
+        c.mustEatWhite = true;
+        c.purpleFlash = 420;      // Long duration
+        c.damageFlash = 420;
+        c.currentThought = "Infected - Must Feed";
 
-                              p.life = 0;
-                          }
+        addFloatingText(c.x, c.y - 30, "VAULT ECHO", '#c026d3');
+        playTone(420, 'sawtooth', 0.3, 0.7);
+    }
+
+    // Existing cleanse mechanic (keep this)
+    if (c.mustEatWhite) {
+        c.ateWhiteParticle = true;
+        c.purpleFlash = Math.max(0, c.purpleFlash - 40);
+        c.currentThought = "Cleansed";
+    }
+
+    p.life = 0;
+}
                       }
                   }
 
@@ -5962,6 +5987,39 @@ function spawnCreatureFromVortexCenter(x, y, vortexDir, vortexStrength) {
     if (Math.random() < 0.5) playBirthSound();
 }
 
+function spawnVaultEchoCreature(x, y) {
+    // Get all filled Gene Vault slots
+    let filledSlots = geneVaultSlots.filter(slot => slot !== null);
+    
+    if (filledSlots.length === 0) {
+        // Fallback: spawn normal creature if vault is empty
+        spawnCreatureFromVortexCenter(x, y, 1, 1);
+        return;
+    }
+
+    // Pick a random vault creature
+    let vaultData = random(filledSlots);
+    
+    // Create a new creature based on vault data
+    let clone = new Creature(x, y);
+    
+    // Apply vault creature's traits (you can expand this)
+    if (vaultData.generation) clone.generation = vaultData.generation;
+    if (vaultData.modules) clone.modules = [...vaultData.modules];
+    if (vaultData.killCount) clone.killCount = Math.floor(vaultData.killCount * 0.6);
+    
+    clone.currentThought = "Echo";
+    clone.energy = 85;
+    
+    creatures.push(clone);
+    
+    // Visual + sound feedback
+    addFloatingText(x, y - 25, "Vault Echo", '#c084fc');
+    playTone(880, 'sine', 0.25, 0.6);
+}
+
+
+      
 function formatSimTime(seconds) {
     const min = Math.floor(seconds / 60);
     const sec = Math.floor(seconds % 60);
@@ -6257,50 +6315,84 @@ function formatSimTime(seconds) {
                   }
               }
 
-              class VortexParticle {
-                  constructor(fromEdge = false) {
-                      if (fromEdge) {
-                          let angle = random(TWO_PI);
-                          let d = random(450, 570);
-                          this.x = centerX + cos(angle) * d;
-                          this.y = centerY + sin(angle) * d;
-                      } else {
-                          this.x = random(width);
-                          this.y = random(height);
-                      }
-                      this.life = 9999;
-                      this.size = random(1.6, 2.8);
-                  }
-                  update(vortexDir, vortexStrength) {
-                      let dx = this.x - centerX;
-                      let dy = this.y - centerY;
-                      let distToCenter = sqrt(dx * dx + dy * dy) || 1;
-                      if (distToCenter < 3.5) { this.life = 0; return; }
+       class VortexParticle {
+    constructor(fromEdge = false) {
+        if (fromEdge) {
+            let angle = random(TWO_PI);
+            let d = random(450, 570);
+            this.x = centerX + cos(angle) * d;
+            this.y = centerY + sin(angle) * d;
+        } else {
+            this.x = random(width);
+            this.y = random(height);
+        }
+        this.life = 9999;
+        this.size = random(1.6, 2.8);
+        
+        // === NEW: 3% chance to be a special Vault Echo Particle ===
+        this.isSpecial = Math.random() < 0.03;   // 3% rate
+        if (this.isSpecial) {
+            this.size = random(3.2, 4.5);        // Bigger
+            this.pulse = random(TWO_PI);
+        }
+    }
 
-                      let tangentX = -dy, tangentY = dx;
-                      let len = sqrt(tangentX * tangentX + tangentY * tangentY) || 1;
+    update(vortexDir, vortexStrength) {
+        let dx = this.x - centerX;
+        let dy = this.y - centerY;
+        let distToCenter = sqrt(dx * dx + dy * dy) || 1;
+        if (distToCenter < 3.5) { this.life = 0; return; }
 
-                      // Base movement
-                      this.x += (tangentX / len) * 1.25 * vortexStrength * vortexDir;
-                      this.y += (tangentY / len) * 1.25 * vortexStrength * vortexDir;
+        let tangentX = -dy, tangentY = dx;
+        let len = sqrt(tangentX * tangentX + tangentY * tangentY) || 1;
 
-                      let pull = 0.82 * vortexStrength;
-                      this.x += (centerX - this.x) * pull / (distToCenter + 0.8);
-                      this.y += (centerY - this.y) * pull / (distToCenter + 0.8);
+        this.x += (tangentX / len) * 1.25 * vortexStrength * vortexDir;
+        this.y += (tangentY / len) * 1.25 * vortexStrength * vortexDir;
 
-                      // Music-reactive jerky motion (to the beat)
-                      if (musicEnabled && musicData.bass > 0.35) {
-                          let jerk = (musicData.bass - 0.35) * 2.8;
-                          this.x += random(-jerk, jerk);
-                          this.y += random(-jerk, jerk);
-                      }
-                  }
-                  show() {
-                      fill(255, 255, 255, 185);
-                      noStroke();
-                      circle(this.x, this.y, this.size);
-                  }
-              }
+        let pull = 0.82 * vortexStrength;
+        this.x += (centerX - this.x) * pull / (distToCenter + 0.8);
+        this.y += (centerY - this.y) * pull / (distToCenter + 0.8);
+
+        if (musicEnabled && musicData.bass > 0.35) {
+            let jerk = (musicData.bass - 0.35) * 2.8;
+            this.x += random(-jerk, jerk);
+            this.y += random(-jerk, jerk);
+        }
+
+        if (this.isSpecial) {
+            this.pulse = (this.pulse || 0) + 0.08;
+        }
+    }
+
+    show() {
+        if (this.isSpecial) {
+            // === Shiny Vault Echo Particle ===
+            let pulseSize = this.size + sin(this.pulse) * 1.2;
+            
+            // Outer glow
+            fill(255, 255, 255, 40);
+            noStroke();
+            circle(this.x, this.y, pulseSize * 2.8);
+            
+            // Middle glow
+            fill(255, 255, 255, 90);
+            circle(this.x, this.y, pulseSize * 1.8);
+            
+            // Core (bright white)
+            fill(255, 255, 255, 255);
+            circle(this.x, this.y, pulseSize);
+            
+            // Extra sparkle
+            fill(200, 220, 255, 180);
+            circle(this.x, this.y, pulseSize * 0.5);
+        } else {
+            // Normal white particle
+            fill(255, 255, 255, 185);
+            noStroke();
+            circle(this.x, this.y, this.size);
+        }
+    }
+}
 
               // === v1.74: Wall Filter Helper ===
               // =====================================================
