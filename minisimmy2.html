@@ -7584,86 +7584,78 @@ function formatSimTime(seconds) {
     }
 }
 
-      function showEggInventory() {
+function showEggInventory() {
     const modal = document.getElementById('egg-inventory-modal');
     const list = document.getElementById('egg-inventory-list');
-    if (!modal || !list) return;
+    if (!modal || !list) {
+        console.error("Egg Inventory modal elements not found");
+        return;
+    }
 
     list.innerHTML = '';
 
     // Header
     const header = document.createElement('div');
-    header.className = 'col-span-2 mb-3 px-1';
+    header.className = 'col-span-2 mb-4 px-1';
     header.innerHTML = `
         <div class="flex justify-between items-center">
             <div>
-                <div class="text-lg font-semibold text-amber-400">Incubator</div>
-                <div class="text-xs text-white/50">Eggs being studied for cloning • ${incubatingEggs.length}/${MAX_INCUBATOR_SLOTS} slots used</div>
+                <div class="text-xl font-semibold text-amber-400">Incubator</div>
+                <div class="text-xs text-white/50">Slots used: ${incubatingEggs.length}/${MAX_INCUBATOR_SLOTS}</div>
             </div>
-            <div class="text-right text-xs text-white/60">
-                Available: ${eggs.length}
-            </div>
+            <div class="text-xs text-white/60">Available eggs: ${eggs.length}</div>
         </div>
     `;
     list.appendChild(header);
 
-    // === INCUBATING SECTION ===
+    // === INCUBATING EGGS ===
     if (incubatingEggs.length > 0) {
-        const incubatingHeader = document.createElement('div');
-        incubatingHeader.className = 'col-span-2 text-sm font-semibold text-violet-400 px-1 mt-2 mb-1';
-        incubatingHeader.innerText = 'Currently Incubating';
-        list.appendChild(incubatingHeader);
+        const section = document.createElement('div');
+        section.className = 'col-span-2 mb-2 px-1 text-sm font-semibold text-violet-400';
+        section.innerText = 'Incubating';
+        list.appendChild(section);
 
         incubatingEggs.forEach((inc) => {
+            const isDone = inc.progress >= 100;
             const card = document.createElement('div');
-            card.className = 'bg-white/5 border border-violet-500/30 rounded-2xl p-4 mb-2';
-
-            const isComplete = inc.progress >= 100;
-            const progressColor = isComplete ? 'bg-emerald-500' : 'bg-violet-500';
+            card.className = `bg-white/5 border ${isDone ? 'border-emerald-500/40' : 'border-violet-500/30'} rounded-2xl p-4 mb-2`;
 
             card.innerHTML = `
-                <div class="flex justify-between items-start mb-2">
+                <div class="flex justify-between mb-2">
                     <div>
                         <div class="font-semibold text-emerald-400">${inc.eggData.name}</div>
-                        <div class="text-xs text-white/60">Gen ${inc.eggData.generation} • ${inc.eggData.modules.length} modules</div>
+                        <div class="text-xs text-white/50">Gen ${inc.eggData.generation} • ${inc.eggData.modules.length} modules</div>
                     </div>
-                    <div class="text-right">
-                        <div class="text-xs ${isComplete ? 'text-emerald-400' : 'text-violet-400'} font-mono">
-                            ${inc.progress.toFixed(0)}%
-                        </div>
+                    <div class="text-right text-xs font-mono ${isDone ? 'text-emerald-400' : 'text-violet-400'}">
+                        ${inc.progress.toFixed(0)}%
                     </div>
                 </div>
 
-                <div class="w-full bg-white/10 rounded-full h-2 mb-3 overflow-hidden">
-                    <div class="${progressColor} h-2 transition-all" style="width: ${inc.progress}%"></div>
+                <div class="h-2 bg-white/10 rounded-full mb-3 overflow-hidden">
+                    <div class="${isDone ? 'bg-emerald-500' : 'bg-violet-500'} h-2 transition-all" style="width: ${inc.progress}%"></div>
                 </div>
 
                 <div class="flex gap-2">
-                    ${isComplete 
-                        ? `<button class="flex-1 px-3 py-1.5 text-xs rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-medium">Release Copy</button>` 
-                        : `<button class="flex-1 px-3 py-1.5 text-xs rounded-xl bg-red-500/80 hover:bg-red-500 text-white">Remove Early</button>`
-                    }
-                    <button class="px-3 py-1.5 text-xs rounded-xl bg-white/10 hover:bg-white/20">Details</button>
+                    <button class="flex-1 py-1.5 text-xs rounded-xl ${isDone ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-red-500/80 hover:bg-red-500'} text-white">
+                        ${isDone ? 'Release Copy' : 'Remove Early'}
+                    </button>
+                    <button class="px-4 py-1.5 text-xs rounded-xl bg-white/10 hover:bg-white/20">Details</button>
                 </div>
             `;
 
             const buttons = card.querySelectorAll('button');
-            if (isComplete) {
-                buttons[0].onclick = () => releaseIncubatedEgg(inc.id, false);
-            } else {
-                buttons[0].onclick = () => releaseIncubatedEgg(inc.id, true);
-            }
+            buttons[0].onclick = () => releaseIncubatedEgg(inc.id, !isDone);
             buttons[1].onclick = () => showIncubatingEggDetails(inc.id);
 
             list.appendChild(card);
         });
     }
 
-    // === AVAILABLE EGGS SECTION ===
-    const availableHeader = document.createElement('div');
-    availableHeader.className = 'col-span-2 text-sm font-semibold text-amber-400 px-1 mt-4 mb-1';
-    availableHeader.innerText = 'Available Eggs (not incubating)';
-    list.appendChild(availableHeader);
+    // === AVAILABLE EGGS ===
+    const availHeader = document.createElement('div');
+    availHeader.className = 'col-span-2 mt-4 mb-2 px-1 text-sm font-semibold text-amber-400';
+    availHeader.innerText = 'Available Eggs';
+    list.appendChild(availHeader);
 
     if (eggs.length === 0) {
         const empty = document.createElement('div');
@@ -7673,27 +7665,24 @@ function formatSimTime(seconds) {
     } else {
         eggs.forEach((egg, index) => {
             const card = document.createElement('div');
-            card.className = 'bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-4 mb-2 cursor-pointer transition-colors';
+            card.className = 'bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-4 mb-2 flex justify-between items-center cursor-pointer';
+
             card.innerHTML = `
-                <div class="flex justify-between items-center">
-                    <div class="flex items-center gap-x-3">
-                        <i class="fa-solid fa-egg text-amber-400 text-xl"></i>
-                        <div>
-                            <div class="font-semibold text-emerald-400">${egg.name}</div>
-                            <div class="text-xs text-white/60">Gen ${egg.generation} • ${egg.modules.length} modules</div>
-                        </div>
-                    </div>
-                    <button class="px-4 py-1 text-xs rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-medium">Start Incubation</button>
+                <div>
+                    <div class="font-semibold text-emerald-400">${egg.name}</div>
+                    <div class="text-xs text-white/50">Gen ${egg.generation} • ${egg.modules.length} modules</div>
                 </div>
+                <button class="px-4 py-1.5 text-xs rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-medium">Start Incubation</button>
             `;
 
             card.onclick = (e) => {
-                if (e.target.tagName === 'BUTTON') return;
-                showEggDetails(index);
+                if (e.target.tagName !== 'BUTTON') {
+                    showEggDetails(index);
+                }
             };
 
-            const startBtn = card.querySelector('button');
-            startBtn.onclick = (e) => {
+            const btn = card.querySelector('button');
+            btn.onclick = (e) => {
                 e.stopImmediatePropagation();
                 startIncubationOnEgg(index);
             };
@@ -7702,6 +7691,7 @@ function formatSimTime(seconds) {
         });
     }
 
+    // Show modal
     modal.classList.remove('hidden');
     modal.classList.add('flex');
 }
