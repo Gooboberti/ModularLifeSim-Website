@@ -1347,6 +1347,10 @@ Start of Chunk 2
               let energyOrbs = [];
               let redHazards = [];
               let redBeams = [];
+
+              let purpleInfectParticles = [];
+              let moduleParticles = [];
+      
               let explosions = [];
               let spawnEffects = [];
               let floatingTexts = [];
@@ -1559,72 +1563,88 @@ function updateEnvBarVisibility(show) {
 
 // ==================== MODE EFFECTS ====================
 
+function applyPruneModifiers() {
+    settings.vortexMultiplier = 9.8;
+    settings.reproductionChance = 0.0006;
+    settings.energyDrain = 0.52;
+    settings.particleFoodValue = 0.48;
+
+    redHazardsEnabled = true;
+    redHazardIntensity = 4.3;
+
+    purpleInfectParticles = [];
+    for (let i = 0; i < 16; i++) {
+        purpleInfectParticles.push(new PurpleInfectParticle());
+    }
+    addFloatingText(width / 2, 95, "PURPLE INFECTION + DROUGHT", '#c026ff');
+}
+
 function applyReplicateModifiers() {
-    settings.vortexMultiplier = 2.1;
-    settings.reproductionChance = 0.07;
-    settings.energyDrain = 0.11;
-    settings.particleFoodValue = 3.0;
+    settings.vortexMultiplier = 2.0;
+    settings.reproductionChance = 0.078;
+    settings.energyDrain = 0.10;
+    settings.particleFoodValue = 3.3;
+
     redHazardsEnabled = false;
 
-    if (typeof greenZone !== 'undefined' && greenZone) greenZone.food = 800;
-    if (typeof blueZone !== 'undefined' && blueZone) blueZone.food = 800;
+    if (typeof greenZone !== 'undefined' && greenZone) greenZone.food = 920;
+    if (typeof blueZone !== 'undefined' && blueZone) blueZone.food = 920;
 
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 11; i++) {
         foodBlooms.push({
             x: random(width), y: random(height),
-            radius: random(28, 42), life: 480,
+            radius: random(33, 50), life: 540,
             targetIsGreen: i % 2 === 0, age: 0
         });
     }
     addFloatingText(width / 2, 95, "FERTILE GROWTH SURGE", '#34d399');
 }
 
-function applyPruneModifiers() {
-    settings.vortexMultiplier = 9.8;
-    settings.reproductionChance = 0.0007;
-    settings.energyDrain = 0.49;
-    settings.particleFoodValue = 0.55;
-    redHazardsEnabled = true;
-    redHazardIntensity = 4.0;
-
-    for (let i = 0; i < 18; i++) redHazards.push(new RedHazard());
-    addFloatingText(width / 2, 95, "AGGRESSIVE PRUNING + DROUGHT", '#f87171');
-}
-
 function applyEvolveModifiers() {
-    settings.vortexMultiplier = 5.5;
-    settings.reproductionChance = 0.026;
-    settings.energyDrain = 0.25;
-    settings.particleFoodValue = 1.7;
-    redHazardsEnabled = true;
-    redHazardIntensity = 1.5;
-    addFloatingText(width / 2, 95, "EVOLVING ENVIRONMENT", '#a78bfa');
-}
+    settings.vortexMultiplier = 5.9;
+    settings.reproductionChance = 0.029;
+    settings.energyDrain = 0.23;
+    settings.particleFoodValue = 1.85;
 
+    redHazardsEnabled = true;
+    redHazardIntensity = 1.25;
+
+    moduleParticles = [];
+    for (let i = 0; i < 8; i++) {
+        moduleParticles.push(new ModuleParticle());
+    }
+    addFloatingText(width / 2, 95, "MODULE EVOLUTION FIELD", '#fbbf24');
+}
 // ==================== VISUAL TINT + GLOWING BORDER ====================
 
 function drawMusicModeTintAndBorder() {
     if (!currentMusicMode) return;
+
     push();
     noStroke();
 
-    if (currentMusicMode === 'prune') fill(170, 30, 30, 38);
-    else if (currentMusicMode === 'replicate') fill(20, 150, 105, 32);
-    else if (currentMusicMode === 'evolve') fill(180, 140, 40, 34);
+    if (currentMusicMode === 'prune') {
+        fill(200, 40, 60, 55);
+    } else if (currentMusicMode === 'replicate') {
+        fill(30, 180, 120, 48);
+    } else if (currentMusicMode === 'evolve') {
+        fill(200, 160, 50, 50);
+    }
     rect(0, 0, width, height);
 
-    const borderColor = currentMusicMode === 'prune' ? [220, 40, 40] :
-                        currentMusicMode === 'replicate' ? [30, 200, 130] :
-                        [255, 200, 50];
+    const borderColor = currentMusicMode === 'prune' ? [255, 50, 70] :
+                        currentMusicMode === 'replicate' ? [40, 230, 150] :
+                        [255, 220, 70];
 
-    for (let i = 4; i >= 1; i--) {
-        stroke(borderColor[0], borderColor[1], borderColor[2], 25 * i);
-        strokeWeight(8 + i * 3);
+    for (let i = 6; i >= 1; i--) {
+        stroke(borderColor[0], borderColor[1], borderColor[2], 32 * i);
+        strokeWeight(11 + i * 4);
         noFill();
         rect(0, 0, width, height);
     }
-    stroke(borderColor[0], borderColor[1], borderColor[2], 180);
-    strokeWeight(3);
+
+    stroke(borderColor[0], borderColor[1], borderColor[2], 230);
+    strokeWeight(4.5);
     rect(0, 0, width, height);
     pop();
 }
@@ -6281,6 +6301,96 @@ function formatSimTime(seconds) {
     }
 }
 
+// ==================== PRUNE MODE: Purple Infect Particles ====================
+class PurpleInfectParticle {
+    constructor() {
+        this.x = random(width);
+        this.y = random(height * 0.25);
+        this.vx = random(-1.8, 1.8);
+        this.vy = random(0.6, 2.8);
+        this.size = random(7, 12);
+        this.life = 480;
+    }
+
+    update() {
+        let dx = width / 2 - this.x;
+        let dy = height / 2 - this.y;
+        let distToCenter = sqrt(dx * dx + dy * dy) || 1;
+
+        this.vx += (dx / distToCenter) * 0.04;
+        this.vy += (dy / distToCenter) * 0.04;
+
+        this.x += this.vx;
+        this.y += this.vy;
+        this.life--;
+
+        this.vx *= 0.982;
+        this.vy *= 0.982;
+    }
+
+    draw() {
+        push();
+        noStroke();
+        fill(180, 60, 220, 210);
+        circle(this.x, this.y, this.size);
+        fill(220, 100, 255, 130);
+        circle(this.x, this.y, this.size * 1.7);
+        pop();
+    }
+
+    isDead() {
+        return this.life <= 0 || dist(this.x, this.y, width/2, height/2) < 28;
+    }
+}
+
+// ==================== EVOLVE MODE: Module Particles ====================
+class ModuleParticle {
+    constructor() {
+        const types = ['Harvester', 'Sensor', 'Mover', 'Resistant', 'Explorer', 'Communicator'];
+        this.type = random(types);
+        this.x = random(width);
+        this.y = random(height);
+        this.vx = random(-0.9, 0.9);
+        this.vy = random(-0.9, 0.9);
+        this.size = 9.5;
+        this.life = 580;
+        this.collected = false;
+    }
+
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.life--;
+
+        for (let c of creatures) {
+            if (!c.isPredator) {
+                let d = dist(this.x, this.y, c.x, c.y);
+                if (d < 140 && d > 8) {
+                    let dx = c.x - this.x;
+                    let dy = c.y - this.y;
+                    this.vx += dx * 0.0009;
+                    this.vy += dy * 0.0009;
+                }
+            }
+        }
+    }
+
+    draw() {
+        push();
+        noStroke();
+        fill(255, 220, 70, 235);
+        circle(this.x, this.y, this.size);
+        fill(255, 255, 200, 150);
+        circle(this.x, this.y, this.size * 1.75);
+        pop();
+    }
+
+    isDead() {
+        return this.life <= 0 || this.collected;
+    }
+}
+      
+
               // === v1.74: Wall Filter Helper ===
               // =====================================================
               // CLEAN FILTER SYSTEM - REBUILT FROM SCRATCH (v1.93)
@@ -7328,6 +7438,72 @@ function formatSimTime(seconds) {
           updateFurnaceUI();
 
 
+        
+        // ==================== MUSIC MODE SPECIAL PARTICLES ====================
+
+// === PRUNE: Purple Infect Particles ===
+if (currentMusicMode === 'prune' && purpleInfectParticles.length > 0) {
+    for (let i = purpleInfectParticles.length - 1; i >= 0; i--) {
+        let p = purpleInfectParticles[i];
+        p.update();
+        p.draw();
+
+        for (let c of creatures) {
+            if (dist(p.x, p.y, c.x, c.y) < p.size + 20 && !c.isPredator) {
+                c.purpleFlash = max(c.purpleFlash || 0, 160);
+                c.energy -= 9;
+                p.life = 0;
+
+                if (c.energy < 32 && random() < 0.38) {
+                    c.isPredator = true;
+                    c.currentThought = "Infected - Turned predator";
+                }
+                break;
+            }
+        }
+
+        if (p.isDead()) {
+            if (dist(p.x, p.y, width/2, height/2) < 35) {
+                let newPred = null;
+                if (geneVaultSlots[0]) {
+                    newPred = new Creature(width/2 + random(-35,35), height/2 + random(-35,35), 
+                                           geneVaultSlots[0].modules, geneVaultSlots[0].generation || 3);
+                    newPred.isPredator = true;
+                } else {
+                    newPred = new Creature(width/2 + random(-30,30), height/2 + random(-30,30));
+                    newPred.isPredator = true;
+                }
+                creatures.push(newPred);
+                addFloatingText(newPred.x, newPred.y - 22, "PREDATOR SPAWNED", '#c026ff');
+            }
+            purpleInfectParticles.splice(i, 1);
+        }
+    }
+}
+
+// === EVOLVE: Module Particles ===
+if (currentMusicMode === 'evolve' && moduleParticles.length > 0) {
+    for (let i = moduleParticles.length - 1; i >= 0; i--) {
+        let mp = moduleParticles[i];
+        mp.update();
+        mp.draw();
+
+        for (let c of creatures) {
+            if (!c.isPredator && dist(mp.x, mp.y, c.x, c.y) < 24 && c.modules.length < 13) {
+                const newMod = { type: mp.type, tier: 1, color: '#fbbf24' };
+                c.modules.push(newMod);
+                mp.collected = true;
+                addFloatingText(c.x, c.y - 26, `+${mp.type}`, '#fbbf24');
+                c.updateSpecialization();
+                break;
+            }
+        }
+
+        if (mp.isDead()) {
+            moduleParticles.splice(i, 1);
+        }
+    }
+}
 
 
         drawMusicModeTintAndBorder();
