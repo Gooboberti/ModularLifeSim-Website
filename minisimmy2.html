@@ -1411,6 +1411,7 @@ Start of Chunk 2
               let beamCharge = 0;
               let maxPlacedHazards = 3;
               let freeMode = false;
+      
 function showMusicModal() {
     let modal = document.getElementById('music-modal');
     if (!modal) {
@@ -1444,34 +1445,132 @@ let musicData = {
     highs: 0
 };
 
+// Used to restore previous values when stopping a mode
+let originalMusicSettings = {
+    vortexMultiplier: null,
+    reproductionChance: null,
+    energyDrain: null
+};
+let originalRedHazardsEnabled = false;
+let originalRedHazardIntensity = 1;
+
 function activateMusicMode(mode) {
-    stopMusicMode();
+    stopMusicMode(); // reset any previous mode first
+
     musicEnabled = true;
     currentMusicMode = mode;
+
+    // Save current state for clean reversion later
+    originalMusicSettings.vortexMultiplier = settings.vortexMultiplier;
+    originalMusicSettings.reproductionChance = settings.reproductionChance;
+    originalMusicSettings.energyDrain = settings.energyDrain;
+    originalRedHazardsEnabled = redHazardsEnabled;
+    originalRedHazardIntensity = redHazardIntensity;
 
     addFloatingText(width / 2, 75, `${mode.toUpperCase()} MODE`, '#34d399');
 
     if (mode === 'prune') {
-        // applyPruneModifiers();
+        applyPruneModifiers();
     } else if (mode === 'replicate') {
-        // applyReplicateModifiers();
+        applyReplicateModifiers();
     } else if (mode === 'evolve') {
-        // applyEvolveModifiers();
+        applyEvolveModifiers();
     }
 }
 
 function stopMusicMode() {
+    if (!musicEnabled) return;
+
     musicEnabled = false;
+    const wasActive = currentMusicMode;
     currentMusicMode = null;
+
+    // Restore original values
+    if (originalMusicSettings.vortexMultiplier !== null) {
+        settings.vortexMultiplier = originalMusicSettings.vortexMultiplier;
+    }
+    if (originalMusicSettings.reproductionChance !== null) {
+        settings.reproductionChance = originalMusicSettings.reproductionChance;
+    }
+    if (originalMusicSettings.energyDrain !== null) {
+        settings.energyDrain = originalMusicSettings.energyDrain;
+    }
+
+    redHazardsEnabled = originalRedHazardsEnabled;
+    redHazardIntensity = originalRedHazardIntensity;
+
     musicData = { bass: 0, mids: 0, highs: 0 };
+
     addFloatingText(width / 2, 75, "Music Stopped", '#f87171');
+
+    if (wasActive) {
+        setTimeout(() => {
+            addFloatingText(width / 2, 95, "World parameters restored", '#64748b');
+        }, 650);
+    }
+}
+
+// ==================== MODE EFFECTS ====================
+
+function applyPruneModifiers() {
+    settings.vortexMultiplier = 7.8;
+    settings.reproductionChance = 0.0018;
+    settings.energyDrain = 0.39;
+
+    redHazardsEnabled = true;
+    redHazardIntensity = 2.4;
+
+    playModeSting('prune');
+}
+
+function applyReplicateModifiers() {
+    settings.vortexMultiplier = 2.6;
+    settings.reproductionChance = 0.038;
+    settings.energyDrain = 0.17;
+
+    redHazardsEnabled = false;
+    redHazardIntensity = 0.6;
+
+    // Give a nice food boost on activation
+    if (greenZone) greenZone.food = Math.min(650, greenZone.food + 200);
+    if (blueZone)  blueZone.food  = Math.min(650, blueZone.food + 200);
+
+    playModeSting('replicate');
+}
+
+function applyEvolveModifiers() {
+    settings.vortexMultiplier = 5.2;
+    settings.reproductionChance = 0.019;
+    settings.energyDrain = 0.27;
+
+    redHazardsEnabled = true;
+    redHazardIntensity = 1.35;
+
+    playModeSting('evolve');
+}
+
+// Simple musical stings for each mode
+function playModeSting(mode) {
+    if (mode === 'prune') {
+        playTone(135, 'sawtooth', 0.65, 0.28);
+        setTimeout(() => playTone(88, 'sawtooth', 0.85, 0.22), 140);
+    } 
+    else if (mode === 'replicate') {
+        playTone(640, 'sine', 0.38, 0.2);
+        setTimeout(() => playTone(810, 'sine', 0.42, 0.17), 95);
+        setTimeout(() => playTone(1020, 'sine', 0.35, 0.14), 210);
+    } 
+    else if (mode === 'evolve') {
+        playTone(430, 'triangle', 0.55, 0.22);
+        setTimeout(() => playTone(540, 'triangle', 0.48, 0.19), 85);
+        setTimeout(() => playTone(320, 'triangle', 0.65, 0.24), 230);
+    }
 }
 
 // Placeholder to prevent crash
 function updateMusicAnalysis() {
     // TODO: Add real music analysis later if desired
 }
-
 // ==================== SAVE MANAGER (Clean Unified Version) ====================
 
 let saveSlots = {};
