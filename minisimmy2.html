@@ -1140,6 +1140,56 @@ Start of Chunk 1
         </div>
     </div>
 </div>
+
+<!-- ==================== SAVE MANAGER MODAL ==================== -->
+<div id="save-manager-modal" 
+     onclick="if (event.target.id === 'save-manager-modal') hideSaveManager()" 
+     class="fixed inset-0 z-[130] hidden items-center justify-center bg-black/80">
+
+    <div onclick="event.stopImmediatePropagation()" 
+         class="modal bg-[#121218] border border-white/10 rounded-3xl max-w-lg w-full mx-4 p-6 max-h-[85vh] overflow-auto">
+
+        <div class="flex justify-between items-center mb-5">
+            <h3 class="text-xl font-semibold flex items-center gap-x-2">
+                <i class="fa-solid fa-save text-emerald-400"></i>
+                <span>Save Manager</span>
+            </h3>
+            <button onclick="hideSaveManager()" class="text-3xl text-white/60 hover:text-white">&times;</button>
+        </div>
+
+        <!-- Quick Save -->
+        <div class="mb-6">
+            <div class="text-sm font-semibold mb-2 text-white/70">Quick Save</div>
+            <div class="flex gap-2">
+                <input id="new-save-name" type="text" placeholder="Save name (optional)" 
+                       class="flex-1 bg-white/5 border border-white/10 rounded-2xl px-4 py-2 text-sm focus:outline-none">
+                <button onclick="quickSave()" 
+                        class="px-5 py-2 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-sm font-medium">
+                    Save
+                </button>
+            </div>
+        </div>
+
+        <!-- Manual Saves -->
+        <div class="mb-6">
+            <div class="text-sm font-semibold mb-2 text-white/70">Your Saves</div>
+            <div id="manual-saves-list" class="space-y-2 max-h-[220px] overflow-auto"></div>
+        </div>
+
+        <!-- Auto Saves -->
+        <div>
+            <div class="text-sm font-semibold mb-2 text-white/70">Auto Saves (Recent)</div>
+            <div id="autosave-list" class="space-y-2 max-h-[180px] overflow-auto"></div>
+        </div>
+
+        <div class="mt-6 text-center">
+            <button onclick="hideSaveManager()" 
+                    class="px-6 py-2 rounded-2xl bg-white/10 hover:bg-white/20 text-sm">Close</button>
+        </div>
+    </div>
+</div>
+<!-- ==================== END SAVE MANAGER MODAL ==================== -->
+  
   
 <!-- Top 10 Creatures Modal -->
 <div id="top-creatures-modal" onclick="hideTopCreaturesModal()"
@@ -1399,60 +1449,201 @@ Start of Chunk 2
               let maxPlacedHazards = 3;
               let freeMode = false;
 
-// ==================== SAVE / LOAD SYSTEM ====================
+// ==================== MULTI-SLOT SAVE MANAGER ====================
 
-function saveGame() {
-    const saveData = {
+let saveSlots = {};           // { "My Run": saveData, ... }
+let autoSaveHistory = [];     // Last 8 auto-saves
+const MAX_AUTO_SAVES = 8;
+
+function getCurrentSaveData() {
+    return {
         totalScore: totalScore,
         aetheriumDust: aetheriumDust,
         aetheriumCrystals: aetheriumCrystals,
         eggs: eggs,
         incubatingEggs: incubatingEggs,
         geneVaultSlots: geneVaultSlots,
+        timestamp: Date.now(),
         version: "2.01"
     };
+}
+
+function saveToSlot(slotName) {
+    if (!slotName || slotName.trim() === "") {
+        slotName = "Save " + (Object.keys(saveSlots).length + 1);
+    }
+
+    const saveData = getCurrentSaveData();
+    saveSlots[slotName] = saveData;
 
     try {
-        localStorage.setItem("minisimmy2_save", JSON.stringify(saveData));
-        addFloatingText(width / 2, 60, "Game Saved", '#34d399');
+        localStorage.setItem("minisimmy2_slots", JSON.stringify(saveSlots));
+        localStorage.setItem("minisimmy2_autosaves", JSON.stringify(autoSaveHistory));
+        addFloatingText(width / 2, 55, `Saved: ${slotName}`, '#34d399');
     } catch (e) {
-        console.warn("Failed to save game:", e);
+        console.warn("Save failed:", e);
     }
 }
 
-function loadGame() {
+function loadFromSlot(slotName) {
+    const data = saveSlots[slotName];
+    if (!data) {
+        alert("Save not found.");
+        return;
+    }
+
+    if (data.totalScore !== undefined) totalScore = data.totalScore;
+    if (data.aetheriumDust !== undefined) aetheriumDust = data.aetheriumDust;
+    if (data.aetheriumCrystals !== undefined) aetheriumCrystals = data.aetheriumCrystals;
+    if (data.eggs) eggs = data.eggs;
+    if (data.incubatingEggs) incubatingEggs = data.incubatingEggs;
+    if (data.geneVaultSlots) geneVaultSlots = data.geneVaultSlots;
+
+    updateMainStats();
+    updateAetheriumUI();
+    updateEggCountBadge();
+
+    addFloatingText(width / 2, 55, `Loaded: ${slotName}`, '#60a5fa');
+    hideSaveManager();
+}
+
+function autoSave() {
+    if (paused) return;
+
+    const saveData = getCurrentSaveData();
+    autoSaveHistory.unshift(saveData);
+
+    if (autoSaveHistory.length > MAX_AUTO_SAVES) {
+        autoSaveHistory.pop();
+    }
+
     try {
-        const saved = localStorage.getItem("minisimmy2_save");
-        if (!saved) return false;
+        localStorage.setItem("minisimmy2_autosaves", JSON.stringify(autoSaveHistory));
+    } catch (e) {}
+}
 
-        const data = JSON.parse(saved);
+setInterval(autoSave, 45000);
 
-        if (data.totalScore !== undefined) totalScore = data.totalScore;
-        if (data.aetheriumDust !== undefined) aetheriumDust = data.aetheriumDust;
-        if (data.aetheriumCrystals !== undefined) aetheriumCrystals = data.aetheriumCrystals;
-        if (data.eggs) eggs = data.eggs;
-        if (data.incubatingEggs) incubatingEggs = data.incubatingEggs;
-        if (data.geneVaultSlots) geneVaultSlots = data.geneVaultSlots;
+function loadAllSaves() {
+    try {
+        const slots = localStorage.getItem("minisimmy2_slots");
+        if (slots) saveSlots = JSON.parse(slots);
 
-        // Refresh UI after loading
-        updateMainStats();
-        updateAetheriumUI();
-        updateEggCountBadge();
-
-        console.log("%c[MiniSimmy2] Save loaded successfully", "color:#34d399");
-        return true;
+        const autos = localStorage.getItem("minisimmy2_autosaves");
+        if (autos) autoSaveHistory = JSON.parse(autos);
     } catch (e) {
-        console.warn("Failed to load save:", e);
-        return false;
+        console.warn("Failed to load saves:", e);
     }
 }
 
-// Auto-save every 45 seconds
-setInterval(() => {
-    if (!paused) {
-        saveGame();
+loadAllSaves();
+
+// ==================== SAVE MANAGER UI FUNCTIONS ====================
+
+function showSaveManager() {
+    const modal = document.getElementById('save-manager-modal');
+    if (!modal) {
+        alert("Save Manager modal not found. Please add the HTML.");
+        return;
     }
-}, 45000);
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    renderSaveLists();
+}
+
+function hideSaveManager() {
+    const modal = document.getElementById('save-manager-modal');
+    if (modal) {
+        modal.classList.remove('flex');
+        modal.classList.add('hidden');
+    }
+}
+
+function quickSave() {
+    const input = document.getElementById('new-save-name');
+    const name = input ? input.value.trim() : "";
+    saveToSlot(name || undefined);
+    renderSaveLists();
+    if (input) input.value = "";
+}
+
+function renderSaveLists() {
+    // Manual saves
+    const manualList = document.getElementById('manual-saves-list');
+    if (!manualList) return;
+    manualList.innerHTML = '';
+
+    const slotNames = Object.keys(saveSlots);
+    if (slotNames.length === 0) {
+        manualList.innerHTML = `<div class="text-white/50 text-sm px-2">No manual saves yet.</div>`;
+    } else {
+        slotNames.forEach(name => {
+            const data = saveSlots[name];
+            const date = new Date(data.timestamp).toLocaleString();
+
+            const div = document.createElement('div');
+            div.className = 'flex items-center justify-between bg-white/5 hover:bg-white/10 rounded-2xl px-4 py-2 text-sm';
+            div.innerHTML = `
+                <div>
+                    <div class="font-medium">${name}</div>
+                    <div class="text-xs text-white/50">${date}</div>
+                </div>
+                <div class="flex gap-2">
+                    <button class="px-3 py-1 text-xs rounded-xl bg-emerald-600 hover:bg-emerald-500">Load</button>
+                    <button class="px-3 py-1 text-xs rounded-xl bg-red-500/80 hover:bg-red-500">Delete</button>
+                </div>
+            `;
+
+            div.querySelectorAll('button')[0].onclick = () => loadFromSlot(name);
+            div.querySelectorAll('button')[1].onclick = () => {
+                if (confirm(`Delete save "${name}"?`)) {
+                    delete saveSlots[name];
+                    localStorage.setItem("minisimmy2_slots", JSON.stringify(saveSlots));
+                    renderSaveLists();
+                }
+            };
+            manualList.appendChild(div);
+        });
+    }
+
+    // Auto saves
+    const autoList = document.getElementById('autosave-list');
+    if (!autoList) return;
+    autoList.innerHTML = '';
+
+    if (autoSaveHistory.length === 0) {
+        autoList.innerHTML = `<div class="text-white/50 text-sm px-2">No auto-saves yet.</div>`;
+    } else {
+        autoSaveHistory.forEach((data, index) => {
+            const date = new Date(data.timestamp).toLocaleString();
+            const div = document.createElement('div');
+            div.className = 'flex items-center justify-between bg-white/5 hover:bg-white/10 rounded-2xl px-4 py-2 text-sm';
+            div.innerHTML = `
+                <div>
+                    <div class="font-medium">Auto Save #${autoSaveHistory.length - index}</div>
+                    <div class="text-xs text-white/50">${date}</div>
+                </div>
+                <button class="px-3 py-1 text-xs rounded-xl bg-sky-600 hover:bg-sky-500">Load</button>
+            `;
+
+            div.querySelector('button').onclick = () => {
+                if (data.totalScore !== undefined) totalScore = data.totalScore;
+                if (data.aetheriumDust !== undefined) aetheriumDust = data.aetheriumDust;
+                if (data.aetheriumCrystals !== undefined) aetheriumCrystals = data.aetheriumCrystals;
+                if (data.eggs) eggs = data.eggs;
+                if (data.incubatingEggs) incubatingEggs = data.incubatingEggs;
+                if (data.geneVaultSlots) geneVaultSlots = data.geneVaultSlots;
+
+                updateMainStats();
+                updateAetheriumUI();
+                updateEggCountBadge();
+                hideSaveManager();
+                addFloatingText(width/2, 55, "Loaded Auto Save", '#38bdf8');
+            };
+            autoList.appendChild(div);
+        });
+    }
+}
 
 
       
