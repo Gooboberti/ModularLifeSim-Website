@@ -1412,15 +1412,37 @@ Start of Chunk 2
               let maxPlacedHazards = 3;
               let freeMode = false;
       
+// ==================== MUSIC MODES WITH REAL MP3 TRACKS ====================
+
+let musicEnabled = false;
+let currentMusicMode = null;
+
+let musicData = { bass: 0, mids: 0, highs: 0 };
+
+// Real MP3 tracks
+let pruneAudio = new Audio('Track_Prune.mp3');
+let replicateAudio = new Audio('Track_Replicate.mp3');
+let evolveAudio = new Audio('Track_Evolve.mp3');
+
+// Loop the tracks
+pruneAudio.loop = true;
+replicateAudio.loop = true;
+evolveAudio.loop = true;
+
+// Backup original values
+let originalMusicSettings = {
+    vortexMultiplier: null,
+    reproductionChance: null,
+    energyDrain: null,
+    particleFoodValue: null
+};
+let originalRedHazardsEnabled = false;
+let originalRedHazardIntensity = 1;
+
 function showMusicModal() {
     let modal = document.getElementById('music-modal');
-    if (!modal) {
-        console.warn("Music modal element not found");
-        return;
-    }
-    if (modal.parentElement !== document.body) {
-        document.body.appendChild(modal);
-    }
+    if (!modal) return;
+    if (modal.parentElement !== document.body) document.body.appendChild(modal);
     modal.classList.remove('hidden');
     modal.classList.add('flex');
     modal.style.display = 'flex';
@@ -1436,44 +1458,35 @@ function hideMusicModal() {
     }
 }
 
-let musicEnabled = false;
-let currentMusicMode = null;
-
-let musicData = {
-    bass: 0,
-    mids: 0,
-    highs: 0
-};
-
-// Used to restore previous values when stopping a mode
-let originalMusicSettings = {
-    vortexMultiplier: null,
-    reproductionChance: null,
-    energyDrain: null
-};
-let originalRedHazardsEnabled = false;
-let originalRedHazardIntensity = 1;
-
 function activateMusicMode(mode) {
-    stopMusicMode(); // reset any previous mode first
+    stopMusicMode(); // stop previous track + effects
 
     musicEnabled = true;
     currentMusicMode = mode;
 
-    // Save current state for clean reversion later
+    // Save current settings for reversion
     originalMusicSettings.vortexMultiplier = settings.vortexMultiplier;
     originalMusicSettings.reproductionChance = settings.reproductionChance;
     originalMusicSettings.energyDrain = settings.energyDrain;
+    originalMusicSettings.particleFoodValue = settings.particleFoodValue;
     originalRedHazardsEnabled = redHazardsEnabled;
     originalRedHazardIntensity = redHazardIntensity;
 
-    addFloatingText(width / 2, 75, `${mode.toUpperCase()} MODE`, '#34d399');
+    addFloatingText(width / 2, 70, `${mode.toUpperCase()} MODE`, '#34d399');
 
     if (mode === 'prune') {
+        pruneAudio.currentTime = 0;
+        pruneAudio.play().catch(e => console.log("Audio play blocked:", e));
         applyPruneModifiers();
-    } else if (mode === 'replicate') {
+    } 
+    else if (mode === 'replicate') {
+        replicateAudio.currentTime = 0;
+        replicateAudio.play().catch(e => console.log("Audio play blocked:", e));
         applyReplicateModifiers();
-    } else if (mode === 'evolve') {
+    } 
+    else if (mode === 'evolve') {
+        evolveAudio.currentTime = 0;
+        evolveAudio.play().catch(e => console.log("Audio play blocked:", e));
         applyEvolveModifiers();
     }
 }
@@ -1482,8 +1495,12 @@ function stopMusicMode() {
     if (!musicEnabled) return;
 
     musicEnabled = false;
-    const wasActive = currentMusicMode;
     currentMusicMode = null;
+
+    // Stop all tracks
+    pruneAudio.pause();
+    replicateAudio.pause();
+    evolveAudio.pause();
 
     // Restore original values
     if (originalMusicSettings.vortexMultiplier !== null) {
@@ -1495,81 +1512,73 @@ function stopMusicMode() {
     if (originalMusicSettings.energyDrain !== null) {
         settings.energyDrain = originalMusicSettings.energyDrain;
     }
+    if (originalMusicSettings.particleFoodValue !== null) {
+        settings.particleFoodValue = originalMusicSettings.particleFoodValue;
+    }
 
     redHazardsEnabled = originalRedHazardsEnabled;
     redHazardIntensity = originalRedHazardIntensity;
 
     musicData = { bass: 0, mids: 0, highs: 0 };
 
-    addFloatingText(width / 2, 75, "Music Stopped", '#f87171');
-
-    if (wasActive) {
-        setTimeout(() => {
-            addFloatingText(width / 2, 95, "World parameters restored", '#64748b');
-        }, 650);
-    }
+    addFloatingText(width / 2, 70, "Music Stopped - Values Restored", '#f87171');
 }
 
 // ==================== MODE EFFECTS ====================
 
 function applyPruneModifiers() {
-    settings.vortexMultiplier = 7.8;
-    settings.reproductionChance = 0.0018;
-    settings.energyDrain = 0.39;
+    settings.vortexMultiplier = 9.5;
+    settings.reproductionChance = 0.0008;
+    settings.energyDrain = 0.48;
+    settings.particleFoodValue = 0.6;
 
     redHazardsEnabled = true;
-    redHazardIntensity = 2.4;
+    redHazardIntensity = 3.2;
 
-    playModeSting('prune');
+    for (let i = 0; i < 12; i++) {
+        redHazards.push(new RedHazard());
+    }
+    addFloatingText(width / 2, 95, "AGGRESSIVE PRUNING ACTIVE", '#f87171');
 }
 
 function applyReplicateModifiers() {
-    settings.vortexMultiplier = 2.6;
-    settings.reproductionChance = 0.038;
-    settings.energyDrain = 0.17;
+    settings.vortexMultiplier = 2.2;
+    settings.reproductionChance = 0.065;
+    settings.energyDrain = 0.12;
+    settings.particleFoodValue = 2.8;
 
     redHazardsEnabled = false;
-    redHazardIntensity = 0.6;
 
-    // Give a nice food boost on activation
-    if (greenZone) greenZone.food = Math.min(650, greenZone.food + 200);
-    if (blueZone)  blueZone.food  = Math.min(650, blueZone.food + 200);
+    if (greenZone) greenZone.food = 750;
+    if (blueZone) blueZone.food = 750;
 
-    playModeSting('replicate');
+    for (let i = 0; i < 6; i++) {
+        foodBlooms.push({
+            x: random(width),
+            y: random(height),
+            radius: random(25, 40),
+            life: 420,
+            targetIsGreen: i % 2 === 0,
+            age: 0
+        });
+    }
+    addFloatingText(width / 2, 95, "RAPID GROWTH & REPRODUCTION", '#34d399');
 }
 
 function applyEvolveModifiers() {
-    settings.vortexMultiplier = 5.2;
-    settings.reproductionChance = 0.019;
-    settings.energyDrain = 0.27;
+    settings.vortexMultiplier = 5.8;
+    settings.reproductionChance = 0.028;
+    settings.energyDrain = 0.24;
+    settings.particleFoodValue = 1.6;
 
     redHazardsEnabled = true;
-    redHazardIntensity = 1.35;
+    redHazardIntensity = 1.6;
 
-    playModeSting('evolve');
+    addFloatingText(width / 2, 95, "EVOLUTION & MUTATION ACTIVE", '#a78bfa');
 }
 
-// Simple musical stings for each mode
-function playModeSting(mode) {
-    if (mode === 'prune') {
-        playTone(135, 'sawtooth', 0.65, 0.28);
-        setTimeout(() => playTone(88, 'sawtooth', 0.85, 0.22), 140);
-    } 
-    else if (mode === 'replicate') {
-        playTone(640, 'sine', 0.38, 0.2);
-        setTimeout(() => playTone(810, 'sine', 0.42, 0.17), 95);
-        setTimeout(() => playTone(1020, 'sine', 0.35, 0.14), 210);
-    } 
-    else if (mode === 'evolve') {
-        playTone(430, 'triangle', 0.55, 0.22);
-        setTimeout(() => playTone(540, 'triangle', 0.48, 0.19), 85);
-        setTimeout(() => playTone(320, 'triangle', 0.65, 0.24), 230);
-    }
-}
-
-// Placeholder to prevent crash
 function updateMusicAnalysis() {
-    // TODO: Add real music analysis later if desired
+    // placeholder
 }
 // ==================== SAVE MANAGER (Clean Unified Version) ====================
 
