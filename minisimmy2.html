@@ -300,15 +300,7 @@ Start of Chunk 1
                 <i class="fa-solid fa-music"></i>
             </button>
         </div>
-<!-- NEW: Save / Load Button -->
-        <button onclick="showSaveManager()" 
-                class="flex items-center gap-x-2 rounded-2xl border border-white/10 bg-white/10 px-4 py-1.5 text-xs font-medium hover:bg-white/20">
-            <i class="fa-solid fa-save"></i>
-            <span>Save / Load</span>
-        </button>
 
-
-      
         <!-- CENTER: Main Tools -->
         <div class="flex flex-wrap justify-center gap-3">
             <button onclick="if (typeof showRedHazardsMenu === 'function') showRedHazardsMenu(); else toggleRedHazardsQuick();" 
@@ -1407,101 +1399,60 @@ Start of Chunk 2
               let maxPlacedHazards = 3;
               let freeMode = false;
 
-// ==================== MULTI-SLOT SAVE SYSTEM ====================
-let saveSlots = {};           // { "My Run": saveData, ... }
-let autoSaveHistory = [];     // Last 8 auto-saves
-const MAX_AUTO_SAVES = 8;
-      
+// ==================== SAVE / LOAD SYSTEM ====================
 
-// ==================== NEW SAVE SYSTEM ====================
-
-function getCurrentSaveData() {
-    return {
+function saveGame() {
+    const saveData = {
         totalScore: totalScore,
         aetheriumDust: aetheriumDust,
         aetheriumCrystals: aetheriumCrystals,
         eggs: eggs,
         incubatingEggs: incubatingEggs,
         geneVaultSlots: geneVaultSlots,
-        timestamp: Date.now(),
         version: "2.01"
     };
-}
-
-function saveToSlot(slotName) {
-    if (!slotName || slotName.trim() === "") {
-        slotName = "Save " + (Object.keys(saveSlots).length + 1);
-    }
-
-    const saveData = getCurrentSaveData();
-    saveSlots[slotName] = saveData;
 
     try {
-        localStorage.setItem("minisimmy2_slots", JSON.stringify(saveSlots));
-        localStorage.setItem("minisimmy2_autosaves", JSON.stringify(autoSaveHistory));
-        addFloatingText(width / 2, 55, `Saved: ${slotName}`, '#34d399');
+        localStorage.setItem("minisimmy2_save", JSON.stringify(saveData));
+        addFloatingText(width / 2, 60, "Game Saved", '#34d399');
     } catch (e) {
-        console.warn("Save failed:", e);
+        console.warn("Failed to save game:", e);
     }
 }
 
-function loadFromSlot(slotName) {
-    const data = saveSlots[slotName];
-    if (!data) {
-        alert("Save not found.");
-        return;
-    }
-
-    // Restore data
-    if (data.totalScore !== undefined) totalScore = data.totalScore;
-    if (data.aetheriumDust !== undefined) aetheriumDust = data.aetheriumDust;
-    if (data.aetheriumCrystals !== undefined) aetheriumCrystals = data.aetheriumCrystals;
-    if (data.eggs) eggs = data.eggs;
-    if (data.incubatingEggs) incubatingEggs = data.incubatingEggs;
-    if (data.geneVaultSlots) geneVaultSlots = data.geneVaultSlots;
-
-    updateMainStats();
-    updateAetheriumUI();
-    updateEggCountBadge();
-
-    addFloatingText(width / 2, 55, `Loaded: ${slotName}`, '#60a5fa');
-    hideSaveManager();
-}
-
-function autoSave() {
-    if (paused) return;
-
-    const saveData = getCurrentSaveData();
-    autoSaveHistory.unshift(saveData);
-
-    // Keep only last N auto saves
-    if (autoSaveHistory.length > MAX_AUTO_SAVES) {
-        autoSaveHistory.pop();
-    }
-
+function loadGame() {
     try {
-        localStorage.setItem("minisimmy2_autosaves", JSON.stringify(autoSaveHistory));
-    } catch (e) {}
+        const saved = localStorage.getItem("minisimmy2_save");
+        if (!saved) return false;
+
+        const data = JSON.parse(saved);
+
+        if (data.totalScore !== undefined) totalScore = data.totalScore;
+        if (data.aetheriumDust !== undefined) aetheriumDust = data.aetheriumDust;
+        if (data.aetheriumCrystals !== undefined) aetheriumCrystals = data.aetheriumCrystals;
+        if (data.eggs) eggs = data.eggs;
+        if (data.incubatingEggs) incubatingEggs = data.incubatingEggs;
+        if (data.geneVaultSlots) geneVaultSlots = data.geneVaultSlots;
+
+        // Refresh UI after loading
+        updateMainStats();
+        updateAetheriumUI();
+        updateEggCountBadge();
+
+        console.log("%c[MiniSimmy2] Save loaded successfully", "color:#34d399");
+        return true;
+    } catch (e) {
+        console.warn("Failed to load save:", e);
+        return false;
+    }
 }
 
 // Auto-save every 45 seconds
-setInterval(autoSave, 45000);
-
-// Load all saves on startup
-function loadAllSaves() {
-    try {
-        const slots = localStorage.getItem("minisimmy2_slots");
-        if (slots) saveSlots = JSON.parse(slots);
-
-        const autos = localStorage.getItem("minisimmy2_autosaves");
-        if (autos) autoSaveHistory = JSON.parse(autos);
-    } catch (e) {
-        console.warn("Failed to load saves:", e);
+setInterval(() => {
+    if (!paused) {
+        saveGame();
     }
-}
-
-// Call this on game start
-loadAllSaves();
+}, 45000);
 
 
       
@@ -2320,60 +2271,6 @@ function convertDustToCrystals() {
           modal.classList.add('flex');
       }
 
-
-
-<div id="save-manager-modal" onclick="if (event.target.id === 'save-manager-modal') hideSaveManager()" 
-     class="fixed inset-0 z-[130] hidden items-center justify-center bg-black/80">
-    <div onclick="event.stopImmediatePropagation()" 
-         class="modal bg-[#121218] border border-white/10 rounded-3xl max-w-lg w-full mx-4 p-6 max-h-[85vh] overflow-auto">
-
-        <div class="flex justify-between items-center mb-5">
-            <h3 class="text-xl font-semibold flex items-center gap-x-2">
-                <i class="fa-solid fa-save text-emerald-400"></i>
-                <span>Save Manager</span>
-            </h3>
-            <button onclick="hideSaveManager()" class="text-3xl text-white/60 hover:text-white">&times;</button>
-        </div>
-
- 
-        <div class="mb-6">
-            <div class="text-sm font-semibold mb-2 text-white/70">Quick Save</div>
-            <div class="flex gap-2">
-                <input id="new-save-name" type="text" placeholder="Save name (optional)" 
-                       class="flex-1 bg-white/5 border border-white/10 rounded-2xl px-4 py-2 text-sm focus:outline-none">
-                <button onclick="quickSave()" 
-                        class="px-5 py-2 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-sm font-medium">
-                    Save
-                </button>
-            </div>
-        </div>
-
-   
-        <div class="mb-6">
-            <div class="text-sm font-semibold mb-2 text-white/70">Your Saves</div>
-            <div id="manual-saves-list" class="space-y-2 max-h-[220px] overflow-auto"></div>
-        </div>
-
-    
-        <div>
-            <div class="text-sm font-semibold mb-2 text-white/70">Auto Saves (Recent)</div>
-            <div id="autosave-list" class="space-y-2 max-h-[180px] overflow-auto"></div>
-        </div>
-
-        <div class="mt-6 text-center">
-            <button onclick="hideSaveManager()" 
-                    class="px-6 py-2 rounded-2xl bg-white/10 hover:bg-white/20 text-sm">Close</button>
-        </div>
-    </div>
-</div>
-
-      
-
-
-
-      
-
-      
 function showTopCreaturesModal() {
     console.log("Top 10 button clicked");
 
@@ -8279,10 +8176,11 @@ setTimeout(() => {
 
   
 }
+
 function hideGeneVault() {
     const modal = document.getElementById('gene-vault-modal');
     if (modal) {
-        modal.style.cssText = '';
+        modal.style.cssText = '';           // clear the forced styles
         modal.classList.remove('flex');
         modal.classList.add('hidden');
     }
@@ -8332,12 +8230,19 @@ function showStartIncubationMenu() {
 
         div.querySelector('button').onclick = (e) => {
             e.stopImmediatePropagation();
+
+            // Start incubation
             startIncubationOnEgg(index);
+
+            // Close this small menu
             modal.remove();
 
+            // Force refresh the incubating list inside the Gene Vault
             setTimeout(() => {
                 const container = document.getElementById('gene-vault-incubating-list');
-                if (container) updateGeneVaultIncubatingList();
+                if (container) {
+                    updateGeneVaultIncubatingList();
+                }
             }, 50);
         };
 
@@ -8347,7 +8252,7 @@ function showStartIncubationMenu() {
     document.body.appendChild(modal);
 }
 
-// Update the incubating list inside Gene Vault (with creature preview + stats)
+// Update the incubating list inside Gene Vault
 function updateGeneVaultIncubatingList() {
     const container = document.getElementById('gene-vault-incubating-list');
     if (!container) return;
@@ -8369,8 +8274,8 @@ function updateGeneVaultIncubatingList() {
         const div = document.createElement('div');
         div.className = `bg-white/5 border ${isComplete ? 'border-emerald-500/40' : 'border-violet-500/30'} rounded-2xl p-3`;
 
+        // Create preview canvas
         const canvasId = `inc-preview-${inc.id}`;
-
         div.innerHTML = `
             <div class="flex gap-3">
                 <!-- Creature Preview -->
@@ -8410,7 +8315,7 @@ function updateGeneVaultIncubatingList() {
             </div>
         `;
 
-        // Draw preview
+        // Draw preview after adding to DOM
         setTimeout(() => {
             const canvas = document.getElementById(canvasId);
             if (canvas && typeof drawCreaturePreview === 'function') {
@@ -8431,108 +8336,8 @@ function updateGeneVaultIncubatingList() {
     });
 }
 
-// ==================== SAVE MANAGER ====================
-function showSaveManager() {
-    const modal = document.getElementById('save-manager-modal');
-    if (!modal) return;
-    modal.classList.remove('hidden');
-    modal.classList.add('flex');
-    renderSaveLists();
-}
 
-function hideSaveManager() {
-    const modal = document.getElementById('save-manager-modal');
-    if (modal) {
-        modal.classList.remove('flex');
-        modal.classList.add('hidden');
-    }
-}
-
-function quickSave() {
-    const input = document.getElementById('new-save-name');
-    const name = input ? input.value.trim() : "";
-    saveToSlot(name || undefined);
-    renderSaveLists();
-    if (input) input.value = "";
-}
-
-function renderSaveLists() {
-    // Manual saves
-    const manualList = document.getElementById('manual-saves-list');
-    manualList.innerHTML = '';
-
-    const slotNames = Object.keys(saveSlots);
-    if (slotNames.length === 0) {
-        manualList.innerHTML = `<div class="text-white/50 text-sm px-2">No manual saves yet.</div>`;
-    } else {
-        slotNames.forEach(name => {
-            const data = saveSlots[name];
-            const date = new Date(data.timestamp).toLocaleString();
-
-            const div = document.createElement('div');
-            div.className = 'flex items-center justify-between bg-white/5 hover:bg-white/10 rounded-2xl px-4 py-2 text-sm';
-            div.innerHTML = `
-                <div>
-                    <div class="font-medium">${name}</div>
-                    <div class="text-xs text-white/50">${date}</div>
-                </div>
-                <div class="flex gap-2">
-                    <button class="px-3 py-1 text-xs rounded-xl bg-emerald-600 hover:bg-emerald-500">Load</button>
-                    <button class="px-3 py-1 text-xs rounded-xl bg-red-500/80 hover:bg-red-500">Delete</button>
-                </div>
-            `;
-
-            div.querySelectorAll('button')[0].onclick = () => loadFromSlot(name);
-            div.querySelectorAll('button')[1].onclick = () => {
-                if (confirm(`Delete save "${name}"?`)) {
-                    delete saveSlots[name];
-                    localStorage.setItem("minisimmy2_slots", JSON.stringify(saveSlots));
-                    renderSaveLists();
-                }
-            };
-            manualList.appendChild(div);
-        });
-    }
-
-    // Auto saves
-    const autoList = document.getElementById('autosave-list');
-    autoList.innerHTML = '';
-
-    if (autoSaveHistory.length === 0) {
-        autoList.innerHTML = `<div class="text-white/50 text-sm px-2">No auto-saves yet.</div>`;
-    } else {
-        autoSaveHistory.forEach((data, index) => {
-            const date = new Date(data.timestamp).toLocaleString();
-            const div = document.createElement('div');
-            div.className = 'flex items-center justify-between bg-white/5 hover:bg-white/10 rounded-2xl px-4 py-2 text-sm';
-            div.innerHTML = `
-                <div>
-                    <div class="font-medium">Auto Save #${autoSaveHistory.length - index}</div>
-                    <div class="text-xs text-white/50">${date}</div>
-                </div>
-                <button class="px-3 py-1 text-xs rounded-xl bg-sky-600 hover:bg-sky-500">Load</button>
-            `;
-
-            div.querySelector('button').onclick = () => {
-                if (data.totalScore !== undefined) totalScore = data.totalScore;
-                if (data.aetheriumDust !== undefined) aetheriumDust = data.aetheriumDust;
-                if (data.aetheriumCrystals !== undefined) aetheriumCrystals = data.aetheriumCrystals;
-                if (data.eggs) eggs = data.eggs;
-                if (data.incubatingEggs) incubatingEggs = data.incubatingEggs;
-                if (data.geneVaultSlots) geneVaultSlots = data.geneVaultSlots;
-
-                updateMainStats();
-                updateAetheriumUI();
-                updateEggCountBadge();
-                hideSaveManager();
-                addFloatingText(width/2, 55, "Loaded Auto Save", '#38bdf8');
-            };
-            autoList.appendChild(div);
-        });
-    }
-}
-
-// ==================== GENE VAULT SLOT MANAGEMENT ====================
+      
 function purchaseGeneVaultSlot(slotNumber) {
     if (slotNumber === 2) {
         if (aetheriumCrystals >= 5) {
@@ -8550,12 +8355,14 @@ function purchaseGeneVaultSlot(slotNumber) {
 function useGeneVaultSlot(slotNumber) {
     const index = slotNumber - 1;
 
+    // If the slot already has an egg, just show basic info for now
     if (geneVaultSlots[index]) {
         const egg = geneVaultSlots[index];
         alert(`Slot ${slotNumber} contains: ${egg.name} (Gen ${egg.generation})`);
         return;
     }
 
+    // Open the egg chooser for this slot
     showEggInventoryForVault(slotNumber);
 }
 
@@ -8570,6 +8377,7 @@ function updateVaultSlotDisplay(slotNumber) {
         if (!canvas || !info) return;
 
         if (egg) {
+            // Draw creature preview
             if (typeof drawCreaturePreview === 'function') {
                 drawCreaturePreview(egg, canvas);
             }
@@ -8613,6 +8421,7 @@ function showEggInventoryForVault(targetSlot) {
         return;
     }
 
+    // Move to body if needed
     if (modal.parentElement !== document.body) {
         document.body.appendChild(modal);
     }
@@ -8647,8 +8456,11 @@ function showEggInventoryForVault(targetSlot) {
         });
     }
 
+    // Show using classes (so hide still works)
     modal.classList.remove('hidden');
     modal.classList.add('flex');
+
+    // Only raise z-index, don't override display
     modal.style.zIndex = '999999';
 }
 
@@ -8656,8 +8468,10 @@ function swapGeneVaultEgg(slotNumber) {
     const index = slotNumber - 1;
     if (!geneVaultSlots[index]) return;
 
+    // Close current vault view temporarily
     hideGeneVault();
 
+    // Open egg chooser
     setTimeout(() => {
         showEggInventoryForVaultSwap(slotNumber);
     }, 80);
@@ -8668,6 +8482,7 @@ function removeGeneVaultEgg(slotNumber) {
     if (!geneVaultSlots[index]) return;
 
     if (confirm(`Remove ${geneVaultSlots[index].name} from Gene Vault?`)) {
+        // Return egg to inventory
         eggs.push(JSON.parse(JSON.stringify(geneVaultSlots[index])));
         geneVaultSlots[index] = null;
 
@@ -8677,6 +8492,7 @@ function removeGeneVaultEgg(slotNumber) {
     }
 }
 
+// Special version of egg chooser for swapping
 function showEggInventoryForVaultSwap(targetSlot) {
     const modal = document.getElementById('egg-inventory-modal');
     const list = document.getElementById('egg-inventory-list');
@@ -8707,11 +8523,13 @@ function showEggInventoryForVaultSwap(targetSlot) {
             card.querySelector('button').onclick = (e) => {
                 e.stopImmediatePropagation();
 
+                // Put current egg back into inventory
                 const currentEgg = geneVaultSlots[targetSlot - 1];
                 if (currentEgg) {
                     eggs.push(currentEgg);
                 }
 
+                // Place new egg in slot
                 geneVaultSlots[targetSlot - 1] = JSON.parse(JSON.stringify(egg));
                 eggs.splice(index, 1);
 
@@ -8733,6 +8551,7 @@ function showEggInventoryForVaultSwap(targetSlot) {
     modal.classList.add('flex');
     modal.style.zIndex = '999999';
 }
+      
 
 function placeEggInGeneVault(eggIndex, slotNumber) {
     const slotIndex = slotNumber - 1;
@@ -8743,111 +8562,121 @@ function placeEggInGeneVault(eggIndex, slotNumber) {
     eggs.splice(eggIndex, 1);
     updateEggCountBadge();
 
+    // Close chooser
     const eggModal = document.getElementById('egg-inventory-modal');
     if (eggModal) {
         eggModal.classList.remove('flex');
         eggModal.classList.add('hidden');
     }
 
+    // Refresh vault display
     setTimeout(() => {
         updateVaultSlotDisplay(slotNumber);
         addFloatingText(width/2, 80, `Egg placed in Slot ${slotNumber}`, '#a78bfa');
     }, 60);
 }
+      
+      function showEggDetails(index) {
+          const egg = eggs[index];
+          if (!egg) return;
 
-// Egg details modal
-function showEggDetails(index) {
-    const egg = eggs[index];
-    if (!egg) return;
+          // Create a minimal creature-like object for drawing the preview
+          const previewData = {
+              modules: egg.modules || [],
+              isPredator: false,
+              specialization: null
+          };
 
-    const previewData = {
-        modules: egg.modules || [],
-        isPredator: false,
-        specialization: null
-    };
+          // Build modules list HTML
+          let modulesHTML = '';
+          if (egg.modules && egg.modules.length > 0) {
+              modulesHTML = egg.modules.map(m => {
+                  const tier = m.tier || 1;
+                  const tierLabel = tier > 1 ? ` <span class="text-amber-400">T${tier}</span>` : '';
+                  return `
+                      <div class="flex justify-between items-center py-px">
+                          <span class="font-mono text-[11px]" style="color: ${m.color}">${m.type}</span>
+                          ${tierLabel}
+                      </div>
+                  `;
+              }).join('');
+          } else {
+              modulesHTML = `<div class="text-white/50 text-xs py-1">No modules</div>`;
+          }
 
-    let modulesHTML = '';
-    if (egg.modules && egg.modules.length > 0) {
-        modulesHTML = egg.modules.map(m => {
-            const tier = m.tier || 1;
-            const tierLabel = tier > 1 ? ` <span class="text-amber-400">T${tier}</span>` : '';
-            return `
-                <div class="flex justify-between items-center py-px">
-                    <span class="font-mono text-[11px]" style="color: ${m.color}">${m.type}</span>
-                    ${tierLabel}
-                </div>
-            `;
-        }).join('');
-    } else {
-        modulesHTML = `<div class="text-white/50 text-xs py-1">No modules</div>`;
-    }
+          const totalTier = egg.modules ? egg.modules.reduce((sum, m) => sum + (m.tier || 1), 0) : 0;
 
-    const totalTier = egg.modules ? egg.modules.reduce((sum, m) => sum + (m.tier || 1), 0) : 0;
+          const detailHTML = `
+              <div class="fixed inset-0 bg-black/80 flex items-center justify-center z-[110]" onclick="this.remove()">
+                  <div onclick="event.stopImmediatePropagation()"
+                       class="modal bg-[#121218] border border-white/10 rounded-3xl max-w-md w-full mx-4 p-5">
 
-    const detailHTML = `
-        <div class="fixed inset-0 bg-black/80 flex items-center justify-center z-[110]" onclick="this.remove()">
-            <div onclick="event.stopImmediatePropagation()"
-                 class="modal bg-[#121218] border border-white/10 rounded-3xl max-w-md w-full mx-4 p-5">
+                      <!-- Header + Preview -->
+                      <div class="flex gap-4 mb-4">
+                          <!-- Creature Shape Preview -->
+                          <div class="flex-shrink-0">
+                              <canvas id="egg-preview-canvas" width="92" height="92"
+                                      class="rounded-xl border border-white/10 bg-[#111113]"></canvas>
+                          </div>
 
-                <div class="flex gap-4 mb-4">
-                    <div class="flex-shrink-0">
-                        <canvas id="egg-preview-canvas" width="92" height="92"
-                                class="rounded-xl border border-white/10 bg-[#111113]"></canvas>
-                    </div>
+                          <div class="flex-1 min-w-0">
+                              <div class="font-semibold text-xl text-emerald-400">${egg.name}</div>
+                              <div class="text-xs text-white/50 mt-0.5">Stored Neural Pattern • Dormant</div>
 
-                    <div class="flex-1 min-w-0">
-                        <div class="font-semibold text-xl text-emerald-400">${egg.name}</div>
-                        <div class="text-xs text-white/50 mt-0.5">Stored Neural Pattern • Dormant</div>
+                              <!-- Quick Stats -->
+                              <div class="flex gap-x-4 mt-3 text-sm">
+                                  <div><span class="text-white/50 text-xs">Gen</span><br><span class="font-mono">${egg.generation}</span></div>
+                                  <div><span class="text-white/50 text-xs">Kills</span><br><span class="font-mono text-red-400">${egg.killCount || 0}</span></div>
+                                  <div><span class="text-white/50 text-xs">Modules</span><br><span class="font-mono text-emerald-400">${egg.modules ? egg.modules.length : 0}</span></div>
+                              </div>
+                          </div>
+                      </div>
 
-                        <div class="flex gap-x-4 mt-3 text-sm">
-                            <div><span class="text-white/50 text-xs">Gen</span><br><span class="font-mono">${egg.generation}</span></div>
-                            <div><span class="text-white/50 text-xs">Kills</span><br><span class="font-mono text-red-400">${egg.killCount || 0}</span></div>
-                            <div><span class="text-white/50 text-xs">Modules</span><br><span class="font-mono text-emerald-400">${egg.modules ? egg.modules.length : 0}</span></div>
-                        </div>
-                    </div>
-                </div>
+                      <!-- Modules Section -->
+                      <div class="mb-4">
+                          <div class="flex justify-between items-center mb-1.5">
+                              <div class="inspector-label text-xs">Modules (${totalTier} total tier)</div>
+                          </div>
+                          <div class="bg-white/5 rounded-2xl p-3 text-sm max-h-36 overflow-auto space-y-0.5 border border-white/10">
+                              ${modulesHTML}
+                          </div>
+                      </div>
 
-                <div class="mb-4">
-                    <div class="flex justify-between items-center mb-1.5">
-                        <div class="inspector-label text-xs">Modules (${totalTier} total tier)</div>
-                    </div>
-                    <div class="bg-white/5 rounded-2xl p-3 text-sm max-h-36 overflow-auto space-y-0.5 border border-white/10">
-                        ${modulesHTML}
-                    </div>
-                </div>
+                      <!-- Action Buttons -->
+                      <div class="flex gap-3 mt-5">
+                          <button onclick="deleteEgg(${index}); this.closest('.fixed').remove()"
+                                  class="flex-1 px-4 py-2.5 bg-red-500/90 hover:bg-red-500 rounded-2xl text-sm font-medium transition-colors">
+                              Delete Egg
+                          </button>
+                          <button onclick="this.closest('.fixed').remove()"
+                                  class="flex-1 px-4 py-2.5 bg-white/10 hover:bg-white/20 rounded-2xl text-sm">
+                              Close
+                          </button>
+                      </div>
+                  </div>
+              </div>
+          `;
 
-                <div class="flex gap-3 mt-5">
-                    <button onclick="deleteEgg(${index}); this.closest('.fixed').remove()"
-                            class="flex-1 px-4 py-2.5 bg-red-500/90 hover:bg-red-500 rounded-2xl text-sm font-medium transition-colors">
-                        Delete Egg
-                    </button>
-                    <button onclick="this.closest('.fixed').remove()"
-                            class="flex-1 px-4 py-2.5 bg-white/10 hover:bg-white/20 rounded-2xl text-sm">
-                        Close
-                    </button>
-                </div>
-            </div>
-        </div>
-    `;
+          document.body.insertAdjacentHTML('beforeend', detailHTML);
 
-    document.body.insertAdjacentHTML('beforeend', detailHTML);
+          // Draw the creature preview after the modal is added to the DOM
+          setTimeout(() => {
+              const canvas = document.getElementById('egg-preview-canvas');
+              if (canvas && typeof drawCreaturePreview === 'function') {
+                  drawCreaturePreview(previewData, canvas);
+              }
+          }, 50);
+      }
 
-    setTimeout(() => {
-        const canvas = document.getElementById('egg-preview-canvas');
-        if (canvas && typeof drawCreaturePreview === 'function') {
-            drawCreaturePreview(previewData, canvas);
-        }
-    }, 50);
-}
+      function deleteEgg(index) {
+          if (confirm("Delete this egg permanently?")) {
+              eggs.splice(index, 1);
+              hideEggInventory();
+              showEggInventory();
+              updateEggCountBadge();
+          }
+      }
 
-function deleteEgg(index) {
-    if (confirm("Delete this egg permanently?")) {
-        eggs.splice(index, 1);
-        hideEggInventory();
-        showEggInventory();
-        updateEggCountBadge();
-    }
-}
          // ==================== CLEAN INVENTORY + PRESTIGE + AETHERIUM ====================
 
 // ==================== INVENTORY MODAL (Fixed) ====================
