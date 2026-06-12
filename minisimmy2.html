@@ -1273,6 +1273,9 @@ Start of Chunk 2
               // 5. Egg inventory, Aetherium inventory, prestige, and cleanup helpers
               let creatures = [];
               let eggs = [];
+              const MAX_INCUBATOR_SLOTS = 10;
+              let incubatingEggs = []; // { id, eggData, progress (0-100), completed }
+              let nextIncubationId = 1;
               const MAX_EGGS = 10;   // Max eggs player can hold
               let predators = [];
               let vortexParticles = [];
@@ -4346,6 +4349,23 @@ for (let c of creatures) {
                   }
 
                   simTime += (1 / 60) * timeScale;
+
+
+// === Incubation Progress Tick ===
+if (!paused && incubatingEggs.length > 0) {
+    for (let i = incubatingEggs.length - 1; i >= 0; i--) {
+        let inc = incubatingEggs[i];
+        let progressGain = 0.016 * timeScale; // ~1% per second at 1x speed
+        inc.progress = Math.min(100, inc.progress + progressGain);
+
+        if (inc.progress >= 100 && !inc.completed) {
+            inc.completed = true;
+            addFloatingText(width/2, 80, "Incubation Complete!", '#a78bfa');
+        }
+    }
+}
+
+                
                   const timeEl = document.getElementById('sim-time');
                   if (timeEl) timeEl.innerText = formatSimTime(simTime);
 
@@ -7552,47 +7572,134 @@ function formatSimTime(seconds) {
       }
               // ==================== v2.11.2+: Egg Inventory System ====================
       function updateEggCountBadge() {
-          const badge = document.getElementById('egg-count-badge');
-          if (badge) {
-              badge.innerText = `${eggs.length}/${MAX_EGGS}`;
-          }
-      }
+    const badge = document.getElementById('egg-count-badge');
+    if (badge) {
+        const total = eggs.length + incubatingEggs.length;
+        badge.innerText = `${total}/${MAX_EGGS}`;
+    }
+}
 
       function showEggInventory() {
-          const modal = document.getElementById('egg-inventory-modal');
-          const list = document.getElementById('egg-inventory-list');
-          if (!modal || !list) return;
+    const modal = document.getElementById('egg-inventory-modal');
+    const list = document.getElementById('egg-inventory-list');
+    if (!modal || !list) return;
 
-          list.innerHTML = '';
+    list.innerHTML = '';
 
-          if (eggs.length === 0) {
-              list.innerHTML = `<div class="col-span-2 text-center py-12 text-white/60">No eggs in inventory yet.</div>`;
-          } else {
-              eggs.forEach((egg, index) => {
-          const card = document.createElement('div');
-          card.className = 'bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-4 cursor-pointer transition-colors';
-          card.innerHTML = `
-              <div class="flex justify-between items-start">
-                  <div class="flex items-center gap-x-3">
-                      <i class="fa-solid fa-egg text-amber-400 text-xl"></i>
-                      <div>
-                          <div class="font-semibold text-emerald-400">${egg.name}</div>
-                          <div class="text-xs text-white/60 mt-0.5">Gen ${egg.generation} • ${egg.modules.length} modules</div>
-                      </div>
-                  </div>
-                  <div class="text-right text-xs">
-                      <div class="text-red-400">${egg.killCount || 0} kills</div>
-                  </div>
-              </div>
-          `;
-          card.onclick = () => showEggDetails(index);
-          list.appendChild(card);
-      });
-          }
+    // Header
+    const header = document.createElement('div');
+    header.className = 'col-span-2 mb-3 px-1';
+    header.innerHTML = `
+        <div class="flex justify-between items-center">
+            <div>
+                <div class="text-lg font-semibold text-amber-400">Incubator</div>
+                <div class="text-xs text-white/50">Eggs being studied for cloning • ${incubatingEggs.length}/${MAX_INCUBATOR_SLOTS} slots used</div>
+            </div>
+            <div class="text-right text-xs text-white/60">
+                Available: ${eggs.length}
+            </div>
+        </div>
+    `;
+    list.appendChild(header);
 
-          modal.classList.remove('hidden');
-          modal.classList.add('flex');
-      }
+    // === INCUBATING SECTION ===
+    if (incubatingEggs.length > 0) {
+        const incubatingHeader = document.createElement('div');
+        incubatingHeader.className = 'col-span-2 text-sm font-semibold text-violet-400 px-1 mt-2 mb-1';
+        incubatingHeader.innerText = 'Currently Incubating';
+        list.appendChild(incubatingHeader);
+
+        incubatingEggs.forEach((inc) => {
+            const card = document.createElement('div');
+            card.className = 'bg-white/5 border border-violet-500/30 rounded-2xl p-4 mb-2';
+
+            const isComplete = inc.progress >= 100;
+            const progressColor = isComplete ? 'bg-emerald-500' : 'bg-violet-500';
+
+            card.innerHTML = `
+                <div class="flex justify-between items-start mb-2">
+                    <div>
+                        <div class="font-semibold text-emerald-400">${inc.eggData.name}</div>
+                        <div class="text-xs text-white/60">Gen ${inc.eggData.generation} • ${inc.eggData.modules.length} modules</div>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-xs ${isComplete ? 'text-emerald-400' : 'text-violet-400'} font-mono">
+                            ${inc.progress.toFixed(0)}%
+                        </div>
+                    </div>
+                </div>
+
+                <div class="w-full bg-white/10 rounded-full h-2 mb-3 overflow-hidden">
+                    <div class="${progressColor} h-2 transition-all" style="width: ${inc.progress}%"></div>
+                </div>
+
+                <div class="flex gap-2">
+                    ${isComplete 
+                        ? `<button class="flex-1 px-3 py-1.5 text-xs rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-medium">Release Copy</button>` 
+                        : `<button class="flex-1 px-3 py-1.5 text-xs rounded-xl bg-red-500/80 hover:bg-red-500 text-white">Remove Early</button>`
+                    }
+                    <button class="px-3 py-1.5 text-xs rounded-xl bg-white/10 hover:bg-white/20">Details</button>
+                </div>
+            `;
+
+            const buttons = card.querySelectorAll('button');
+            if (isComplete) {
+                buttons[0].onclick = () => releaseIncubatedEgg(inc.id, false);
+            } else {
+                buttons[0].onclick = () => releaseIncubatedEgg(inc.id, true);
+            }
+            buttons[1].onclick = () => showIncubatingEggDetails(inc.id);
+
+            list.appendChild(card);
+        });
+    }
+
+    // === AVAILABLE EGGS SECTION ===
+    const availableHeader = document.createElement('div');
+    availableHeader.className = 'col-span-2 text-sm font-semibold text-amber-400 px-1 mt-4 mb-1';
+    availableHeader.innerText = 'Available Eggs (not incubating)';
+    list.appendChild(availableHeader);
+
+    if (eggs.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'col-span-2 text-center py-6 text-white/50 text-sm';
+        empty.innerText = 'No eggs available. Extract creatures to create eggs.';
+        list.appendChild(empty);
+    } else {
+        eggs.forEach((egg, index) => {
+            const card = document.createElement('div');
+            card.className = 'bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-4 mb-2 cursor-pointer transition-colors';
+            card.innerHTML = `
+                <div class="flex justify-between items-center">
+                    <div class="flex items-center gap-x-3">
+                        <i class="fa-solid fa-egg text-amber-400 text-xl"></i>
+                        <div>
+                            <div class="font-semibold text-emerald-400">${egg.name}</div>
+                            <div class="text-xs text-white/60">Gen ${egg.generation} • ${egg.modules.length} modules</div>
+                        </div>
+                    </div>
+                    <button class="px-4 py-1 text-xs rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-medium">Start Incubation</button>
+                </div>
+            `;
+
+            card.onclick = (e) => {
+                if (e.target.tagName === 'BUTTON') return;
+                showEggDetails(index);
+            };
+
+            const startBtn = card.querySelector('button');
+            startBtn.onclick = (e) => {
+                e.stopImmediatePropagation();
+                startIncubationOnEgg(index);
+            };
+
+            list.appendChild(card);
+        });
+    }
+
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
 
       function hideEggInventory() {
           const modal = document.getElementById('egg-inventory-modal');
@@ -7601,6 +7708,120 @@ function formatSimTime(seconds) {
               modal.classList.add('hidden');
           }
       }
+
+function startIncubationOnEgg(eggIndex) {
+    if (incubatingEggs.length >= MAX_INCUBATOR_SLOTS) {
+        alert("Incubator is full (max 10 slots).");
+        return;
+    }
+
+    const egg = eggs[eggIndex];
+    if (!egg) return;
+
+    const incubationEntry = {
+        id: nextIncubationId++,
+        eggData: JSON.parse(JSON.stringify(egg)),
+        progress: 0,
+        completed: false
+    };
+
+    incubatingEggs.push(incubationEntry);
+    eggs.splice(eggIndex, 1);
+    updateEggCountBadge();
+    showEggInventory();
+}
+
+function releaseIncubatedEgg(incubationId, isEarly = false) {
+    const index = incubatingEggs.findIndex(e => e.id === incubationId);
+    if (index === -1) return;
+
+    const inc = incubatingEggs[index];
+
+    if (isEarly && inc.progress < 100) {
+        if (!confirm("Warning: Releasing early will lose all incubation progress.\nThe creature may be weaker.\n\nRelease anyway?")) {
+            return;
+        }
+    }
+
+    // Spawn creature
+    const eggData = inc.eggData;
+    const newCreature = new Creature(
+        random(width * 0.3, width * 0.7),
+        random(height * 0.3, height * 0.7),
+        eggData.modules,
+        eggData.generation || 1
+    );
+
+    if (eggData.traits) newCreature.traits = JSON.parse(JSON.stringify(eggData.traits));
+    newCreature.name = eggData.name;
+    newCreature.killCount = eggData.killCount || 0;
+    newCreature.childrenCount = eggData.childrenCount || 0;
+    newCreature.currentThought = isEarly ? "Released early from Incubator" : "Released from Incubator";
+
+    creatures.push(newCreature);
+    spawnEffects.push(new SpawnEffect(newCreature.x, newCreature.y));
+
+    // If fully incubated, keep a copy
+    if (!isEarly && inc.progress >= 100) {
+        eggs.push(JSON.parse(JSON.stringify(eggData)));
+        addFloatingText(newCreature.x, newCreature.y - 25, "Stable Copy Kept", '#a78bfa');
+    } else {
+        addFloatingText(newCreature.x, newCreature.y - 25, "Released (Progress Lost)", '#f87171');
+    }
+
+    incubatingEggs.splice(index, 1);
+    updateEggCountBadge();
+    showEggInventory();
+}
+
+function showIncubatingEggDetails(incubationId) {
+    const inc = incubatingEggs.find(e => e.id === incubationId);
+    if (!inc) return;
+
+    const egg = inc.eggData;
+
+    let modulesHTML = '';
+    if (egg.modules && egg.modules.length > 0) {
+        modulesHTML = egg.modules.map(m => {
+            const tier = m.tier || 1;
+            return `<div class="text-xs" style="color: ${m.color}">${m.type} ${tier > 1 ? `T${tier}` : ''}</div>`;
+        }).join('');
+    }
+
+    const html = `
+        <div class="fixed inset-0 bg-black/80 flex items-center justify-center z-[120]" onclick="this.remove()">
+            <div onclick="event.stopImmediatePropagation()" class="modal bg-[#121218] border border-white/10 rounded-3xl max-w-md w-full mx-4 p-5">
+                <div class="flex justify-between items-start mb-4">
+                    <div>
+                        <div class="font-semibold text-xl text-emerald-400">${egg.name}</div>
+                        <div class="text-xs text-white/50">Incubating • ${inc.progress.toFixed(0)}% complete</div>
+                    </div>
+                    <button onclick="this.closest('.fixed').remove()" class="text-3xl leading-none text-white/60 hover:text-white">&times;</button>
+                </div>
+
+                <div class="mb-4">
+                    <div class="text-xs text-white/60 mb-1">Modules</div>
+                    <div class="bg-white/5 rounded-2xl p-3 text-sm max-h-32 overflow-auto border border-white/10">
+                        ${modulesHTML || '<span class="text-white/50">No modules</span>'}
+                    </div>
+                </div>
+
+                <div class="flex gap-3">
+                    <button onclick="releaseIncubatedEgg(${incubationId}, ${inc.progress < 100}); this.closest('.fixed').remove()"
+                            class="flex-1 px-4 py-2 rounded-2xl text-sm font-medium ${inc.progress >= 100 ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-red-500/90 hover:bg-red-500'} text-white">
+                        ${inc.progress >= 100 ? 'Release Copy' : 'Release Early (Lose Progress)'}
+                    </button>
+                    <button onclick="this.closest('.fixed').remove()" class="flex-1 px-4 py-2 rounded-2xl bg-white/10 hover:bg-white/20 text-sm">
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.body.insertAdjacentHTML('beforeend', html);
+}
+      
 
 // ==================== GENE VAULT FUNCTIONS ====================
 
