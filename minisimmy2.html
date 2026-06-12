@@ -3192,19 +3192,19 @@ function toggleEnergyWallMode() {
 // MUSIC SYSTEM (File-based + Reactivity)
 // =====================================================
 
+// =====================================================
+// MUSIC MODAL CONTROLS (Mode Based)
+// =====================================================
+
 function showMusicModal() {
     const modal = document.getElementById('music-modal');
-    if (!modal) return;
+    if (!modal) {
+        console.warn("Music modal not found");
+        return;
+    }
 
     modal.classList.remove('hidden');
     modal.classList.add('flex');
-
-    // Sync toggle state
-    const toggle = document.getElementById('music-toggle');
-    if (toggle) toggle.checked = musicEnabled;
-
-    // Sync sliders
-    syncMusicSliders();
 }
 
 function hideMusicModal() {
@@ -3215,6 +3215,62 @@ function hideMusicModal() {
     }
 }
 
+function activateMusicMode(mode) {
+    stopMusicMode();
+
+    musicEnabled = true;
+    currentMusicMode = mode;
+
+    const ctx = getAudioContext();
+
+    musicGain = ctx.createGain();
+    musicGain.gain.value = 0.6;
+    musicGain.connect(masterGain);
+
+    if (mode === 'prune') {
+        startPruneMusic(ctx);
+        applyPruneModifiers();
+    } 
+    else if (mode === 'replicate') {
+        startReplicateMusic(ctx);
+        applyReplicateModifiers();
+    } 
+    else if (mode === 'evolve') {
+        startEvolveMusic(ctx);
+        applyEvolveModifiers();
+    }
+
+    if (musicInterval) clearInterval(musicInterval);
+    musicInterval = setInterval(updateMusicReactivity, 750);
+
+    addFloatingText(width / 2, 75, `${mode.toUpperCase()} MODE`, '#34d399');
+}
+
+function stopMusicMode() {
+    musicEnabled = false;
+    currentMusicMode = null;
+
+    musicOscillators.forEach(osc => {
+        try { osc.stop(); } catch(e) {}
+    });
+    musicOscillators = [];
+
+    if (musicGain) {
+        try { musicGain.disconnect(); } catch(e) {}
+        musicGain = null;
+    }
+
+    if (musicInterval) {
+        clearInterval(musicInterval);
+        musicInterval = null;
+    }
+
+    musicData = { bass: 0, energy: 0, tension: 0, pulse: 0 };
+    resetMusicModifiers();
+}
+
+
+      
 function toggleMusicReactivity() {
     const toggle = document.getElementById('music-toggle');
     musicEnabled = toggle ? toggle.checked : false;
