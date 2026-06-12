@@ -8929,7 +8929,7 @@ function hideInventory() {
           document.head.appendChild(style);
       }
 
-// ==================== SAVE MANAGER (FIXED VERSION) ====================
+// ==================== SAVE MANAGER (CORRECTED) ====================
 
 function showSaveManager() {
     const modal = document.getElementById('save-manager-modal');
@@ -8968,14 +8968,25 @@ function quickSave() {
     const saveData = {
         name: saveName,
         timestamp: Date.now(),
+        version: "2.0",
+
+        // Core simulation
         creatures: JSON.parse(JSON.stringify(creatures)),
         settings: JSON.parse(JSON.stringify(settings)),
+
+        // Economy
         totalScore: totalScore,
         aetheriumCrystals: aetheriumCrystals,
         aetheriumDust: aetheriumDust,
         highRollerPoints: highRollerPoints,
+
+        // Zones
         greenFood: greenZone ? greenZone.food : 320,
         blueFood: blueZone ? blueZone.food : 320,
+
+        // Gene Vault & Eggs
+        geneVaultSlots: JSON.parse(JSON.stringify(geneVaultSlots)),
+        eggs: JSON.parse(JSON.stringify(eggs)),
     };
 
     let saves = JSON.parse(localStorage.getItem('minisimmy_saves') || '[]');
@@ -9044,22 +9055,47 @@ function loadSave(index) {
     const save = saves[index];
     if (!save) return;
 
-    if (!confirm(`Load "${save.name}"? Current progress will be lost.`)) return;
+    if (!confirm(`Load "${save.name}"?\nCurrent progress will be lost.`)) return;
 
+    // Restore core simulation
     creatures = save.creatures || [];
     settings = save.settings || settings;
+
+    // Restore economy
     totalScore = save.totalScore || 0;
     aetheriumCrystals = save.aetheriumCrystals || 0;
     aetheriumDust = save.aetheriumDust || 0;
     highRollerPoints = save.highRollerPoints || 0;
 
+    // Restore zones
     if (greenZone && save.greenFood) greenZone.food = save.greenFood;
     if (blueZone && save.blueFood) blueZone.food = save.blueFood;
 
+    // Restore Gene Vault
+    if (save.geneVaultSlots) {
+        geneVaultSlots = save.geneVaultSlots;
+    }
+
+    // Restore Eggs
+    if (save.eggs) {
+        eggs = save.eggs;
+    }
+
     addFloatingText(width / 2, 80, `Loaded: ${save.name}`, '#34d399');
     hideSaveManager();
+
+    // Refresh all relevant UI
     updateMainStats();
     updateAetheriumUI();
+    updateEggCountBadge();
+
+    // Optional: refresh gene vault display if it's currently open
+    const vaultModal = document.getElementById('gene-vault-modal');
+    if (vaultModal && !vaultModal.classList.contains('hidden')) {
+        setTimeout(() => {
+            renderAllGeneVaultSlots?.();
+        }, 50);
+    }
 }
 
       
