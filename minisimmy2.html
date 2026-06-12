@@ -957,21 +957,27 @@ Start of Chunk 1
         <!-- Slots Grid -->
         <div class="grid grid-cols-2 gap-3 sm:grid-cols-5">
             
-            <!-- Slot 1 - Active -->
-            <div onclick="useGeneVaultSlot(1)"
-                 class="group cursor-pointer rounded-2xl border border-violet-500/40 bg-[#0a0a0f] p-4 transition-all hover:border-violet-400">
-                <div class="mb-2 flex items-center justify-between">
-                    <div class="text-sm font-semibold text-violet-400">Slot 1</div>
-                    <div class="rounded-full bg-violet-500/20 px-2 py-0.5 text-[10px] text-violet-400">ACTIVE</div>
-                </div>
-                <div class="flex h-20 items-center justify-center rounded-xl border border-white/10 bg-black/30 text-center">
-                    <div>
-                        <i class="fa-solid fa-dna mb-1 text-2xl text-violet-400/60"></i>
-                        <div class="text-xs text-white/60">Empty</div>
-                        <div class="text-[10px] text-white/40">Click to place egg</div>
-                    </div>
-                </div>
-            </div>
+           <!-- Slot 1 - Active (with creature preview) -->
+<div onclick="useGeneVaultSlot(1)"
+     class="group cursor-pointer rounded-2xl border border-violet-500/40 bg-[#0a0a0f] p-4 transition-all hover:border-violet-400">
+    
+    <div class="mb-2 flex items-center justify-between">
+        <div class="text-sm font-semibold text-violet-400">Slot 1</div>
+        <div class="rounded-full bg-violet-500/20 px-2 py-0.5 text-[10px] text-violet-400">ACTIVE</div>
+    </div>
+
+    <!-- Creature Preview Canvas -->
+    <div class="mb-2 flex justify-center">
+        <canvas id="vault-slot-1-canvas" width="92" height="92"
+                class="rounded-xl border border-white/10 bg-[#111113]"></canvas>
+    </div>
+
+    <!-- Info area -->
+    <div id="vault-slot-1-info" class="text-center">
+        <div class="text-xs text-white/60">Empty</div>
+        <div class="text-[10px] text-white/40">Click to place egg</div>
+    </div>
+</div>
 
             <!-- Slot 2 - Purchasable -->
             <div onclick="purchaseGeneVaultSlot(2)"
@@ -1251,6 +1257,8 @@ Start of Chunk 2
               let evolutionHistory = [];
 
               let hidePrestigeWarning = false;
+
+              let geneVaultSlots = new Array(10).fill(null);
 
               // === Real Chart History (v1.5) ===
               let historyPop = [];
@@ -7375,35 +7383,26 @@ function formatSimTime(seconds) {
           }
       }
 
-// ==================== GENE VAULT (Robust version) ====================
+// ==================== GENE VAULT FUNCTIONS ====================
+
 function showGeneVault() {
     const modal = document.getElementById('gene-vault-modal');
     if (!modal) {
-        console.error("Gene Vault modal not found");
+        console.error("Gene Vault modal not found in HTML");
         return;
     }
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
 
-    // Move to body if needed (prevents z-index issues)
-    if (modal.parentElement !== document.body) {
-        document.body.appendChild(modal);
-    }
-
-    // Force show with strong styling (same fix that worked for Top 10)
-    modal.style.cssText = `
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        position: fixed !important;
-        inset: 0 !important;
-        background-color: rgba(0, 0, 0, 0.8) !important;
-        z-index: 99999 !important;
-    `;
+    // Refresh slots (draw creature if one exists in a slot)
+    setTimeout(() => {
+        renderAllGeneVaultSlots();
+    }, 30);
 }
 
 function hideGeneVault() {
     const modal = document.getElementById('gene-vault-modal');
     if (modal) {
-        modal.style.cssText = '';
         modal.classList.remove('flex');
         modal.classList.add('hidden');
     }
@@ -7414,10 +7413,9 @@ function purchaseGeneVaultSlot(slotNumber) {
         if (aetheriumCrystals >= 5) {
             aetheriumCrystals -= 5;
             updateAetheriumUI();
-            alert("Slot 2 unlocked! You can now place an egg here.");
-            // Later we can make this slot actually usable
+            alert("Slot 2 unlocked!");
             hideGeneVault();
-            showGeneVault(); // refresh modal
+            showGeneVault();
         } else {
             alert("You need 5 Aetherium Crystals to unlock this slot.");
         }
@@ -7425,13 +7423,108 @@ function purchaseGeneVaultSlot(slotNumber) {
 }
 
 function useGeneVaultSlot(slotNumber) {
+    const index = slotNumber - 1;
+
+    if (geneVaultSlots[index]) {
+        alert(`Slot ${slotNumber} contains: ${geneVaultSlots[index].name}`);
+        return;
+    }
+
     if (slotNumber === 1) {
-        // For now just show a message. We'll connect egg placement later.
-        alert("Slot 1 is ready. We'll add egg placement in the next step.");
+        hideGeneVault();
+        showEggInventoryForVault(1);
     }
 }
-      
 
+function updateVaultSlotDisplay(slotNumber) {
+    const index = slotNumber - 1;
+    const egg = geneVaultSlots[index];
+
+    if (slotNumber === 1) {
+        const canvas = document.getElementById('vault-slot-1-canvas');
+        const info = document.getElementById('vault-slot-1-info');
+
+        if (!canvas || !info) return;
+
+        if (egg) {
+            if (typeof drawCreaturePreview === 'function') {
+                drawCreaturePreview(egg, canvas);
+            }
+            const totalModules = egg.modules ? egg.modules.length : 0;
+            info.innerHTML = `
+                <div class="font-semibold text-emerald-400 text-sm">${egg.name}</div>
+                <div class="text-[10px] text-white/60">Gen ${egg.generation} • ${totalModules} modules</div>
+            `;
+        } else {
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            info.innerHTML = `
+                <div class="text-xs text-white/60">Empty</div>
+                <div class="text-[10px] text-white/40">Click to place egg</div>
+            `;
+        }
+    }
+}
+
+function renderAllGeneVaultSlots() {
+    updateVaultSlotDisplay(1);
+}
+
+function showEggInventoryForVault(targetSlot) {
+    const modal = document.getElementById('egg-inventory-modal');
+    const list = document.getElementById('egg-inventory-list');
+    if (!modal || !list) return;
+
+    list.innerHTML = '';
+
+    if (eggs.length === 0) {
+        list.innerHTML = `<div class="col-span-2 text-center py-12 text-white/60">You have no eggs to place.</div>`;
+    } else {
+        eggs.forEach((egg, index) => {
+            const card = document.createElement('div');
+            card.className = 'bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-4 cursor-pointer transition-colors';
+            card.innerHTML = `
+                <div class="flex justify-between items-start">
+                    <div>
+                        <div class="font-semibold text-emerald-400">${egg.name}</div>
+                        <div class="text-xs text-white/60 mt-0.5">Gen ${egg.generation} • ${egg.modules.length} modules</div>
+                    </div>
+                    <div class="text-right text-xs">
+                        <div class="text-red-400">${egg.killCount || 0} kills</div>
+                    </div>
+                </div>
+                <button class="mt-3 w-full rounded-xl bg-violet-600 py-1.5 text-xs font-medium text-white hover:bg-violet-500">
+                    Place in Gene Vault Slot ${targetSlot}
+                </button>
+            `;
+            card.querySelector('button').onclick = (e) => {
+                e.stopImmediatePropagation();
+                placeEggInGeneVault(index, targetSlot);
+            };
+            list.appendChild(card);
+        });
+    }
+
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+function placeEggInGeneVault(eggIndex, slotNumber) {
+    const slotIndex = slotNumber - 1;
+    const egg = eggs[eggIndex];
+    if (!egg) return;
+
+    geneVaultSlots[slotIndex] = { ...egg };
+    eggs.splice(eggIndex, 1);
+    updateEggCountBadge();
+
+    hideEggInventory();
+    showGeneVault();
+
+    setTimeout(() => {
+        updateVaultSlotDisplay(slotNumber);
+    }, 50);
+}
       
       function showEggDetails(index) {
           const egg = eggs[index];
