@@ -1412,7 +1412,7 @@ Start of Chunk 2
               let maxPlacedHazards = 3;
               let freeMode = false;
       
-// ==================== MUSIC MODES WITH REAL MP3 TRACKS ====================
+// ==================== MUSIC MODES + ENV CYCLE + GLOWING BORDER ====================
 
 let musicEnabled = false;
 let currentMusicMode = null;
@@ -1424,12 +1424,11 @@ let pruneAudio = new Audio('Track_Prune.mp3');
 let replicateAudio = new Audio('Track_Replicate.mp3');
 let evolveAudio = new Audio('Track_Evolve.mp3');
 
-// Loop the tracks
 pruneAudio.loop = true;
 replicateAudio.loop = true;
 evolveAudio.loop = true;
 
-// Backup original values
+// Backup values
 let originalMusicSettings = {
     vortexMultiplier: null,
     reproductionChance: null,
@@ -1438,6 +1437,11 @@ let originalMusicSettings = {
 };
 let originalRedHazardsEnabled = false;
 let originalRedHazardIntensity = 1;
+
+// Evolve mode env rotation timer
+let evolveEnvTimer = 0;
+let evolveEnvPhaseIndex = 0;
+const evolveEnvPhases = ['Fertile', 'Normal', 'Drought'];
 
 function showMusicModal() {
     let modal = document.getElementById('music-modal');
@@ -1459,12 +1463,13 @@ function hideMusicModal() {
 }
 
 function activateMusicMode(mode) {
-    stopMusicMode(); // stop previous track + effects
+    stopMusicMode();
 
     musicEnabled = true;
     currentMusicMode = mode;
+    evolveEnvTimer = 0;
 
-    // Save current settings for reversion
+    // Save original values
     originalMusicSettings.vortexMultiplier = settings.vortexMultiplier;
     originalMusicSettings.reproductionChance = settings.reproductionChance;
     originalMusicSettings.energyDrain = settings.energyDrain;
@@ -1474,21 +1479,28 @@ function activateMusicMode(mode) {
 
     addFloatingText(width / 2, 70, `${mode.toUpperCase()} MODE`, '#34d399');
 
-    if (mode === 'prune') {
-        pruneAudio.currentTime = 0;
-        pruneAudio.play().catch(e => console.log("Audio play blocked:", e));
-        applyPruneModifiers();
-    } 
-    else if (mode === 'replicate') {
+    // === Environmental Cycle Control ===
+    if (mode === 'replicate') {
+        forceEnvironmentalPhase('Fertile');
         replicateAudio.currentTime = 0;
-        replicateAudio.play().catch(e => console.log("Audio play blocked:", e));
+        replicateAudio.play().catch(() => {});
         applyReplicateModifiers();
     } 
+    else if (mode === 'prune') {
+        forceEnvironmentalPhase('Drought');
+        pruneAudio.currentTime = 0;
+        pruneAudio.play().catch(() => {});
+        applyPruneModifiers();
+    } 
     else if (mode === 'evolve') {
+        evolveEnvPhaseIndex = 0;
+        forceEnvironmentalPhase(evolveEnvPhases[0]);
         evolveAudio.currentTime = 0;
-        evolveAudio.play().catch(e => console.log("Audio play blocked:", e));
+        evolveAudio.play().catch(() => {});
         applyEvolveModifiers();
     }
+
+    updateEnvBarVisibility(true);
 }
 
 function stopMusicMode() {
@@ -1497,352 +1509,183 @@ function stopMusicMode() {
     musicEnabled = false;
     currentMusicMode = null;
 
-    // Stop all tracks
     pruneAudio.pause();
     replicateAudio.pause();
     evolveAudio.pause();
 
-    // Restore original values
-    if (originalMusicSettings.vortexMultiplier !== null) {
-        settings.vortexMultiplier = originalMusicSettings.vortexMultiplier;
-    }
-    if (originalMusicSettings.reproductionChance !== null) {
-        settings.reproductionChance = originalMusicSettings.reproductionChance;
-    }
-    if (originalMusicSettings.energyDrain !== null) {
-        settings.energyDrain = originalMusicSettings.energyDrain;
-    }
-    if (originalMusicSettings.particleFoodValue !== null) {
-        settings.particleFoodValue = originalMusicSettings.particleFoodValue;
-    }
+    // Restore values
+    if (originalMusicSettings.vortexMultiplier !== null) settings.vortexMultiplier = originalMusicSettings.vortexMultiplier;
+    if (originalMusicSettings.reproductionChance !== null) settings.reproductionChance = originalMusicSettings.reproductionChance;
+    if (originalMusicSettings.energyDrain !== null) settings.energyDrain = originalMusicSettings.energyDrain;
+    if (originalMusicSettings.particleFoodValue !== null) settings.particleFoodValue = originalMusicSettings.particleFoodValue;
 
     redHazardsEnabled = originalRedHazardsEnabled;
     redHazardIntensity = originalRedHazardIntensity;
 
     musicData = { bass: 0, mids: 0, highs: 0 };
+    evolveEnvTimer = 0;
 
+    updateEnvBarVisibility(false);
     addFloatingText(width / 2, 70, "Music Stopped - Values Restored", '#f87171');
+}
+
+// Force environmental phase
+function forceEnvironmentalPhase(phase) {
+    // Update text
+    const phaseText = document.getElementById('env-phase-text');
+    if (phaseText) phaseText.innerText = phase.toUpperCase();
+
+    // Update progress bar visually (approximate)
+    const progressBar = document.getElementById('env-progress-bar');
+    if (progressBar) {
+        if (phase === 'Fertile') progressBar.style.width = '33%';
+        else if (phase === 'Normal') progressBar.style.width = '66%';
+        else if (phase === 'Drought') progressBar.style.width = '100%';
+    }
+
+    // If your sim has an internal variable for current phase, set it here
+    // Example: currentEnvPhase = phase;
+}
+
+// Evolve mode - rotate every day/night cycle
+function updateEvolveEnvironmentalCycle() {
+    if (currentMusicMode !== 'evolve') return;
+
+    evolveEnvTimer++;
+    // Rotate roughly once per day/night cycle (adjust number as needed)
+    if (evolveEnvTimer > 1800) { // ~30 seconds at 60fps
+        evolveEnvTimer = 0;
+        evolveEnvPhaseIndex = (evolveEnvPhaseIndex + 1) % evolveEnvPhases.length;
+        forceEnvironmentalPhase(evolveEnvPhases[evolveEnvPhaseIndex]);
+    }
+}
+
+// Show/hide environmental bar
+function updateEnvBarVisibility(show) {
+    const bar = document.querySelector('.mx-auto.mb-2.w-\\[820px\\]');
+    if (bar) {
+        bar.style.display = show ? '' : 'none';
+    }
 }
 
 // ==================== MODE EFFECTS ====================
 
 function applyPruneModifiers() {
-    settings.vortexMultiplier = 9.5;
-    settings.reproductionChance = 0.0008;
-    settings.energyDrain = 0.48;
-    settings.particleFoodValue = 0.6;
+    settings.vortexMultiplier = 9.8;
+    settings.reproductionChance = 0.0007;
+    settings.energyDrain = 0.49;
+    settings.particleFoodValue = 0.55;
 
     redHazardsEnabled = true;
-    redHazardIntensity = 3.2;
+    redHazardIntensity = 4.0; // Extra heavy
 
-    for (let i = 0; i < 12; i++) {
+    // Spawn extra red hazards immediately
+    for (let i = 0; i < 18; i++) {
         redHazards.push(new RedHazard());
     }
-    addFloatingText(width / 2, 95, "AGGRESSIVE PRUNING ACTIVE", '#f87171');
+    addFloatingText(width / 2, 95, "AGGRESSIVE PRUNING + DROUGHT", '#f87171');
 }
 
 function applyReplicateModifiers() {
-    settings.vortexMultiplier = 2.2;
-    settings.reproductionChance = 0.065;
-    settings.energyDrain = 0.12;
-    settings.particleFoodValue = 2.8;
+    settings.vortexMultiplier = 2.1;
+    settings.reproductionChance = 0.07;
+    settings.energyDrain = 0.11;
+    settings.particleFoodValue = 3.0;
 
     redHazardsEnabled = false;
 
-    if (greenZone) greenZone.food = 750;
-    if (blueZone) blueZone.food = 750;
+    if (greenZone) greenZone.food = 800;
+    if (blueZone) blueZone.food = 800;
 
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 8; i++) {
         foodBlooms.push({
-            x: random(width),
-            y: random(height),
-            radius: random(25, 40),
-            life: 420,
-            targetIsGreen: i % 2 === 0,
-            age: 0
+            x: random(width), y: random(height),
+            radius: random(28, 42), life: 480,
+            targetIsGreen: i % 2 === 0, age: 0
         });
     }
-    addFloatingText(width / 2, 95, "RAPID GROWTH & REPRODUCTION", '#34d399');
+    addFloatingText(width / 2, 95, "FERTILE GROWTH SURGE", '#34d399');
 }
 
 function applyEvolveModifiers() {
-    settings.vortexMultiplier = 5.8;
-    settings.reproductionChance = 0.028;
-    settings.energyDrain = 0.24;
-    settings.particleFoodValue = 1.6;
+    settings.vortexMultiplier = 5.5;
+    settings.reproductionChance = 0.026;
+    settings.energyDrain = 0.25;
+    settings.particleFoodValue = 1.7;
 
     redHazardsEnabled = true;
-    redHazardIntensity = 1.6;
+    redHazardIntensity = 1.5;
 
-    addFloatingText(width / 2, 95, "EVOLUTION & MUTATION ACTIVE", '#a78bfa');
+    addFloatingText(width / 2, 95, "EVOLVING ENVIRONMENT", '#a78bfa');
 }
 
-function updateMusicAnalysis() {
-    // placeholder
-}
-// ==================== SAVE MANAGER (Clean Unified Version) ====================
+// ==================== MODE-AWARE SOUND ====================
 
-let saveSlots = {};
-let autoSaveHistory = [];
-const MAX_AUTO_SAVES = 8;
+function playModeAwareTone(baseFreq, type = 'sine', vol = 0.5, dur = 0.2) {
+    let freq = baseFreq;
+    let waveform = type;
+    let volume = vol;
+    let duration = dur;
 
-// Load saved data on startup
-function loadAllSaves() {
-    try {
-        const slots = localStorage.getItem("minisimmy2_slots");
-        if (slots) saveSlots = JSON.parse(slots);
-
-        const autos = localStorage.getItem("minisimmy2_autosaves");
-        if (autos) autoSaveHistory = JSON.parse(autos);
-    } catch (e) {
-        console.warn("Failed to load saves from localStorage");
-    }
-}
-loadAllSaves();
-
-// Get current game state for saving
-function getCurrentSaveData() {
-    return {
-        totalScore: totalScore || 0,
-        aetheriumDust: aetheriumDust || 0,
-        aetheriumCrystals: aetheriumCrystals || 0,
-        eggs: eggs || [],
-        incubatingEggs: incubatingEggs || [],
-        geneVaultSlots: geneVaultSlots || [],
-        timestamp: Date.now(),
-        version: "2.11"
-    };
-}
-
-// Save to a named slot
-function saveToSlot(slotName) {
-    if (!slotName || slotName.trim() === "") {
-        slotName = "Save " + (Object.keys(saveSlots).length + 1);
+    if (currentMusicMode === 'replicate') {
+        waveform = 'sine';
+        freq = baseFreq * 0.94;
+        volume = vol * 0.82;
+        duration = dur * 1.4;
+    } 
+    else if (currentMusicMode === 'evolve') {
+        waveform = 'triangle';
+        freq = baseFreq * random(0.9, 1.1);
+        volume = vol * 0.88;
+        duration = dur * 1.2;
+    } 
+    else if (currentMusicMode === 'prune') {
+        waveform = 'sawtooth';
+        freq = baseFreq * 0.86;
+        volume = vol * 0.92;
+        duration = dur * 0.85;
     }
 
-    const saveData = getCurrentSaveData();
-    saveSlots[slotName] = saveData;
+    playTone(freq, waveform, volume, duration);
+}
 
-    try {
-        localStorage.setItem("minisimmy2_slots", JSON.stringify(saveSlots));
-        addFloatingText(width / 2, 55, `Saved: ${slotName}`, '#34d399');
-    } catch (e) {
-        console.warn("Failed to save to localStorage");
+// ==================== VISUAL TINT + GLOWING BORDER ====================
+
+function drawMusicModeTintAndBorder() {
+    if (!currentMusicMode) return;
+
+    push();
+    noStroke();
+
+    // Canvas tint
+    if (currentMusicMode === 'prune') {
+        fill(170, 30, 30, 38);
+    } else if (currentMusicMode === 'replicate') {
+        fill(20, 150, 105, 32);
+    } else if (currentMusicMode === 'evolve') {
+        fill(180, 140, 40, 34);
     }
-}
+    rect(0, 0, width, height);
 
-// Load from a named slot
-function loadFromSlot(slotName) {
-    const data = saveSlots[slotName];
-    if (!data) return;
+    // Glowing border
+    const borderColor = currentMusicMode === 'prune' ? [220, 40, 40] :
+                        currentMusicMode === 'replicate' ? [30, 200, 130] :
+                        [255, 200, 50];
 
-    if (data.totalScore !== undefined) totalScore = data.totalScore;
-    if (data.aetheriumDust !== undefined) aetheriumDust = data.aetheriumDust;
-    if (data.aetheriumCrystals !== undefined) aetheriumCrystals = data.aetheriumCrystals;
-    if (data.eggs) eggs = data.eggs;
-    if (data.incubatingEggs) incubatingEggs = data.incubatingEggs;
-    if (data.geneVaultSlots) geneVaultSlots = data.geneVaultSlots;
-
-    updateMainStats();
-    if (typeof updateAetheriumUI === 'function') updateAetheriumUI();
-    if (typeof updateEggCountBadge === 'function') updateEggCountBadge();
-
-    // Close the modal
-    const modal = document.getElementById('save-manager-modal');
-    if (modal) modal.remove();
-
-    addFloatingText(width / 2, 55, `Loaded: ${slotName}`, '#60a5fa');
-}
-
-// Auto-save every 45 seconds
-function autoSave() {
-    if (paused) return;
-
-    const saveData = getCurrentSaveData();
-    autoSaveHistory.unshift(saveData);
-
-    if (autoSaveHistory.length > MAX_AUTO_SAVES) {
-        autoSaveHistory.pop();
+    // Outer glow layers
+    for (let i = 4; i >= 1; i--) {
+        stroke(borderColor[0], borderColor[1], borderColor[2], 25 * i);
+        strokeWeight(8 + i * 3);
+        noFill();
+        rect(0, 0, width, height);
     }
 
-    try {
-        localStorage.setItem("minisimmy2_autosaves", JSON.stringify(autoSaveHistory));
-    } catch (e) {}
-}
+    // Sharp inner border
+    stroke(borderColor[0], borderColor[1], borderColor[2], 180);
+    strokeWeight(3);
+    rect(0, 0, width, height);
 
-setInterval(autoSave, 45000);
-
-// ==================== DYNAMIC SAVE MANAGER MODAL ====================
-
-function showSaveManager() {
-    console.log("Save/Load button clicked");
-
-    // Remove any existing modal
-    const existing = document.getElementById('save-manager-modal');
-    if (existing) existing.remove();
-
-    const modal = document.createElement('div');
-    modal.id = 'save-manager-modal';
-    modal.style.cssText = `
-        position: fixed !important;
-        top: 0 !important; left: 0 !important;
-        width: 100vw !important; height: 100vh !important;
-        background-color: rgba(0, 0, 0, 0.92) !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        z-index: 99999999 !important;
-        pointer-events: auto !important;
-    `;
-
-    modal.innerHTML = `
-        <div style="
-            background: #121218;
-            border: 2px solid #10b981;
-            border-radius: 20px;
-            max-width: 560px;
-            width: 95%;
-            max-height: 88vh;
-            overflow: auto;
-            padding: 24px;
-            box-shadow: 0 25px 50px -12px rgb(0 0 0);
-        ">
-            <!-- Header -->
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-                <h3 style="font-size:26px; font-weight:700; color:white; display:flex; align-items:center; gap:12px;">
-                    <i class="fa-solid fa-save" style="color:#34d399"></i>
-                    <span>Save / Load</span>
-                </h3>
-                <button onclick="document.getElementById('save-manager-modal').remove()"
-                        style="font-size:32px; background:none; border:none; color:#ffffff88; cursor:pointer; line-height:1; padding:0 8px;">×</button>
-            </div>
-
-            <!-- Quick Save Section -->
-            <div style="background:#ffffff10; padding:18px; border-radius:16px; margin-bottom:24px;">
-                <div style="color:#34d399; font-weight:600; font-size:15px; margin-bottom:10px;">
-                    Quick Save
-                </div>
-                <div style="display:flex; gap:10px;">
-                    <input id="save-name-input" type="text" placeholder="Enter save name..." 
-                           style="flex:1; background:#0a0a0f; border:1px solid #ffffff30; border-radius:9999px; padding:12px 18px; color:white; font-size:14px;">
-                    <button onclick="quickSaveFromModal()" 
-                            style="padding:12px 26px; background:#10b981; color:white; border:none; border-radius:9999px; font-weight:600; font-size:14px; white-space:nowrap;">
-                        Save
-                    </button>
-                </div>
-                <div style="font-size:12px; color:#ffffff55; margin-top:8px;">
-                    Saves your current progress
-                </div>
-            </div>
-
-            <!-- Load Section -->
-            <div>
-                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
-                    <div style="color:#ffffffcc; font-weight:600; font-size:15px;">
-                        Your Saves
-                    </div>
-                    <div style="font-size:12px; color:#ffffff55;">
-                        Click any save to load
-                    </div>
-                </div>
-
-                <div id="manual-saves-list" 
-                     style="max-height:280px; overflow:auto; background:#ffffff08; border-radius:14px; padding:8px; min-height:80px;">
-                    <!-- Populated by renderSaveLists() -->
-                </div>
-            </div>
-        </div>
-    `;
-
-    document.body.appendChild(modal);
-
-    // Populate the saves list
-    renderSaveLists();
-}
-
-// Quick Save from modal
-function quickSaveFromModal() {
-    const input = document.getElementById('save-name-input');
-    const name = input ? input.value.trim() : "";
-    
-    saveToSlot(name || undefined);
-    renderSaveLists(); // refresh list after saving
-    
-    if (input) input.value = "";
-}
-
-// Render both manual and auto saves inside the modal
-function renderSaveLists() {
-    const container = document.getElementById('manual-saves-list');
-    if (!container) return;
-
-    container.innerHTML = '';
-
-    const slotNames = Object.keys(saveSlots);
-
-    if (slotNames.length === 0) {
-        const empty = document.createElement('div');
-        empty.style.cssText = 'padding:20px; text-align:center; color:#ffffff66; font-size:14px;';
-        empty.innerHTML = `
-            No saves yet.<br>
-            <span style="font-size:12px;">Use Quick Save above to create your first save.</span>
-        `;
-        container.appendChild(empty);
-        return;
-    }
-
-    slotNames.forEach(name => {
-        const data = saveSlots[name];
-        const date = data.timestamp ? new Date(data.timestamp).toLocaleString() : "Unknown";
-
-        const row = document.createElement('div');
-        row.style.cssText = `
-            display:flex; 
-            justify-content:space-between; 
-            align-items:center; 
-            background:#ffffff10; 
-            margin-bottom:6px; 
-            padding:12px 16px; 
-            border-radius:12px;
-            cursor: pointer;
-        `;
-        
-        row.innerHTML = `
-            <div>
-                <div style="color:white; font-weight:600; font-size:15px;">${name}</div>
-                <div style="font-size:12px; color:#ffffff66;">${date}</div>
-            </div>
-            <div style="display:flex; gap:8px; align-items:center;">
-                <button class="load-btn" style="padding:8px 18px; background:#3b82f6; color:white; border:none; border-radius:9999px; font-size:13px; font-weight:500;">Load</button>
-                <button class="delete-btn" style="padding:8px 14px; background:#ef4444; color:white; border:none; border-radius:9999px; font-size:13px;">Delete</button>
-            </div>
-        `;
-
-        // Make the whole row clickable to load (except delete button)
-        row.onclick = (e) => {
-            if (!e.target.classList.contains('delete-btn')) {
-                loadFromSlot(name);
-            }
-        };
-
-        // Load button
-        row.querySelector('.load-btn').onclick = (e) => {
-            e.stopImmediatePropagation();
-            loadFromSlot(name);
-        };
-
-        // Delete button
-        row.querySelector('.delete-btn').onclick = (e) => {
-            e.stopImmediatePropagation();
-            if (confirm(`Delete save "${name}"?`)) {
-                delete saveSlots[name];
-                localStorage.setItem("minisimmy2_slots", JSON.stringify(saveSlots));
-                renderSaveLists();
-            }
-        };
-
-        container.appendChild(row);
-    });
+    pop();
 }
 
 // Optional: hide function (kept for compatibility)
@@ -7555,6 +7398,8 @@ function formatSimTime(seconds) {
 
 
 
+
+        
         
       }
 
