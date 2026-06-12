@@ -8239,32 +8239,21 @@ function showIncubatingEggDetails(incubationId) {
 
 function showGeneVault() {
     const modal = document.getElementById('gene-vault-modal');
-    if (!modal) {
-        console.error("Gene Vault modal not found in HTML");
-        return;
-    }
+    if (!modal) return;
 
-    // Move modal to body if needed (safety)
     if (modal.parentElement !== document.body) {
         document.body.appendChild(modal);
     }
 
-    // Force show with strong inline styles (same method that worked for Top 10)
-    modal.style.cssText = `
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        position: fixed !important;
-        inset: 0 !important;
-        background-color: rgba(0, 0, 0, 0.8) !important;
-        z-index: 99999 !important;
-    `;
-setTimeout(() => {
-    updateGeneVaultIncubatingList();
-}, 100);
+    // Clean way to show
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    modal.style.cssText = '';
 
-
-  
+    setTimeout(() => {
+        updateGeneVaultIncubatingList();
+        renderAllGeneVaultSlots?.();
+    }, 80);
 }
 
 function hideGeneVault() {
@@ -8457,15 +8446,34 @@ function purchaseGeneVaultSlot(slotNumber) {
 
 function useGeneVaultSlot(slotNumber) {
     const index = slotNumber - 1;
+    const egg = geneVaultSlots[index];
 
-    // If the slot already has an egg, just show basic info for now
-    if (geneVaultSlots[index]) {
-        const egg = geneVaultSlots[index];
-        alert(`Slot ${slotNumber} contains: ${egg.name} (Gen ${egg.generation})`);
+    if (egg) {
+        // Slot already has an egg → show options
+        const choice = confirm(
+            `Slot ${slotNumber} contains: ${egg.name}\n\n` +
+            `Click OK to Swap egg\nClick Cancel to Remove egg`
+        );
+
+        if (choice) {
+            // Swap
+            hideGeneVault();
+            setTimeout(() => {
+                showEggInventoryForVaultSwap(slotNumber);
+            }, 60);
+        } else {
+            // Remove
+            if (confirm(`Remove ${egg.name} from vault?`)) {
+                eggs.push(JSON.parse(JSON.stringify(egg)));
+                geneVaultSlots[index] = null;
+                updateEggCountBadge();
+                updateVaultSlotDisplay(slotNumber);
+            }
+        }
         return;
     }
 
-    // Open the egg chooser for this slot
+    // Empty slot → choose an egg to place
     showEggInventoryForVault(slotNumber);
 }
 
@@ -9016,25 +9024,25 @@ function quickSave() {
     const saveData = {
         name: saveName,
         timestamp: Date.now(),
-        version: "2.0",
+        version: "2.1",
 
-        // Core simulation
         creatures: JSON.parse(JSON.stringify(creatures)),
         settings: JSON.parse(JSON.stringify(settings)),
 
-        // Economy
         totalScore: totalScore,
         aetheriumCrystals: aetheriumCrystals,
         aetheriumDust: aetheriumDust,
         highRollerPoints: highRollerPoints,
 
-        // Zones
         greenFood: greenZone ? greenZone.food : 320,
         blueFood: blueZone ? blueZone.food : 320,
 
-        // Gene Vault & Eggs
         geneVaultSlots: JSON.parse(JSON.stringify(geneVaultSlots)),
         eggs: JSON.parse(JSON.stringify(eggs)),
+
+        // === NEW: Save incubator state ===
+        incubatingEggs: JSON.parse(JSON.stringify(incubatingEggs)),
+        nextIncubationId: nextIncubationId
     };
 
     let saves = JSON.parse(localStorage.getItem('minisimmy_saves') || '[]');
@@ -9105,14 +9113,10 @@ function loadSave(index) {
 
     if (!confirm(`Load "${save.name}"?\nCurrent progress will be lost.`)) return;
 
-    // === FIX: Revive creatures so methods work again ===
+    // Revive creatures
     creatures = (save.creatures || []).map(data => {
         const c = new Creature(data.x || 0, data.y || 0, data.modules || [], data.generation || 1, data.traits || null);
-        
-        // Copy over all the saved properties
         Object.assign(c, data);
-        
-        // Make sure these are numbers
         c.energy = data.energy || 50;
         c.honey = data.honey || 0;
         c.killCount = data.killCount || 0;
@@ -9120,7 +9124,6 @@ function loadSave(index) {
         c.reproCooldown = data.reproCooldown || 0;
         c.damageFlash = 0;
         c.purpleFlash = 0;
-        
         c.updateSpecialization();
         return c;
     });
@@ -9137,12 +9140,25 @@ function loadSave(index) {
     if (save.geneVaultSlots) geneVaultSlots = save.geneVaultSlots;
     if (save.eggs) eggs = save.eggs;
 
+    // === NEW: Restore incubator ===
+    if (save.incubatingEggs) incubatingEggs = save.incubatingEggs;
+    if (save.nextIncubationId) nextIncubationId = save.nextIncubationId;
+
     addFloatingText(width / 2, 80, `Loaded: ${save.name}`, '#34d399');
     hideSaveManager();
 
     updateMainStats();
     updateAetheriumUI();
     updateEggCountBadge();
+
+    // Refresh Gene Vault if it's open
+    const vaultModal = document.getElementById('gene-vault-modal');
+    if (vaultModal && vaultModal.style.display !== 'none') {
+        setTimeout(() => {
+            updateGeneVaultIncubatingList();
+            renderAllGeneVaultSlots?.();
+        }, 80);
+    }
 }
 
       
