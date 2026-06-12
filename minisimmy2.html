@@ -7600,106 +7600,97 @@ if (currentMusicMode === 'evolve') {
             moduleParticles.splice(i, 1);
         }
     }
-
-    drawMusicModeTintAndBorder();
-    drawMusicVisualizer();
-    updateEvolveEnvironmentalCycle();
-  
 }
 
+function resetSim() {
+    // Clear all simulation arrays
+    creatures = [];
+    vortexParticles = [];
+    pheromones = [];
+    foodBlooms = [];
+    staticFoodPatches = [];
+    energyOrbs = [];
+    redHazards = [];
+    redBeams = [];
+    explosions = [];
+    spawnEffects = [];
+    floatingTexts = [];
+    energyWalls = [];
+    evolutionHistory = [];
 
-       function resetSim() {
-          // Clear all simulation arrays
-          creatures = [];
-          vortexParticles = [];
-          pheromones = [];
-          foodBlooms = [];
-          staticFoodPatches = [];
-          energyOrbs = [];
-          redHazards = [];
-          redBeams = [];
-          explosions = [];
-          spawnEffects = [];
-          floatingTexts = [];
-          energyWalls = [];
-          evolutionHistory = [];
+    // === FIX: Properly reset graph data ===
+    graphData = {
+        pop: [],
+        modules: [],
+        predators: [],
+        greenFood: [],
+        blueFood: []
+    };
 
-          // === FIX: Properly reset graph data ===
-          graphData = {
-              pop: [],
-              modules: [],
-              predators: [],
-              greenFood: [],
-              blueFood: []
-          };
+    greenZone.food = 320;
+    blueZone.food = 320;
+    globalReproCooldown = 0;
+    selectedCreature = null;
+    paused = false;
+    timeScale = 1;
+    simTime = 0;
+    zoomLevel = 1.0;
+    document.getElementById('zoom-level').innerText = '100%';
 
-          greenZone.food = 320;
-          blueZone.food = 320;
-          globalReproCooldown = 0;
-          selectedCreature = null;
-          paused = false;
-          timeScale = 1;
-          simTime = 0;
-          zoomLevel = 1.0;
+    const timeEl = document.getElementById('sim-time');
+    if (timeEl) timeEl.innerText = '00:00';
 
-          document.getElementById('zoom-level').innerText = '100%';
-          const timeEl = document.getElementById('sim-time');
-          if (timeEl) timeEl.innerText = '00:00';
+    const pauseBtn = document.getElementById('pause-btn');
+    const pauseText = document.getElementById('pause-text');
+    if (pauseBtn && pauseText) {
+        pauseBtn.classList.remove('bg-red-500/80', 'text-white');
+        pauseBtn.classList.add('bg-white/10');
+        pauseText.innerHTML = 'Pause';
+    }
 
-          const pauseBtn = document.getElementById('pause-btn');
-          const pauseText = document.getElementById('pause-text');
-          if (pauseBtn && pauseText) {
-              pauseBtn.classList.remove('bg-red-500/80', 'text-white');
-              pauseBtn.classList.add('bg-white/10');
-              pauseText.innerHTML = 'Pause';
-          }
+    document.querySelectorAll('[id^="speed-"]').forEach(el => el.classList.remove('active', 'bg-emerald-500', 'text-[#0a0a0f]'));
+    const speed1 = document.getElementById('speed-1');
+    if (speed1) speed1.classList.add('active', 'bg-emerald-500', 'text-[#0a0a0f]');
 
-          document.querySelectorAll('[id^="speed-"]').forEach(el => el.classList.remove('active', 'bg-emerald-500', 'text-[#0a0a0f]'));
-          const speed1 = document.getElementById('speed-1');
-          if (speed1) speed1.classList.add('active', 'bg-emerald-500', 'text-[#0a0a0f]');
+    deselectCreature();
+    totalScore = 0;
+    totalPredatorKills = 0;
 
-          deselectCreature();
+    // Reset UI stats
+    const scoreEl = document.getElementById('vegas-score');
+    if (scoreEl) scoreEl.innerText = '0';
 
-          totalScore = 0;
-          totalPredatorKills = 0;
+    const popEl = document.getElementById('stat-pop');
+    const predEl = document.getElementById('stat-pred');
+    const modEl = document.getElementById('stat-modules');
+    const greenFoodEl = document.getElementById('stat-green-food');
+    const blueFoodEl = document.getElementById('stat-blue-food');
 
-          // Reset UI stats
-          const scoreEl = document.getElementById('vegas-score');
-          if (scoreEl) scoreEl.innerText = '0';
+    if (popEl) popEl.innerText = '9';
+    if (predEl) predEl.innerText = '0';
+    if (modEl) modEl.innerText = '1.0';
+    if (greenFoodEl) greenFoodEl.innerText = '320';
+    if (blueFoodEl) blueFoodEl.innerText = '320';
 
-          const popEl = document.getElementById('stat-pop');
-          const predEl = document.getElementById('stat-pred');
-          const modEl = document.getElementById('stat-modules');
-          const greenFoodEl = document.getElementById('stat-green-food');
-          const blueFoodEl = document.getElementById('stat-blue-food');
+    environmentPhase = 0;
+    envPhaseProgress = 0;
+    if (envLabelElement) envLabelElement.classList.add('hidden');
 
-          if (popEl) popEl.innerText = '9';
-          if (predEl) predEl.innerText = '0';
-          if (modEl) modEl.innerText = '1.0';
-          if (greenFoodEl) greenFoodEl.innerText = '320';
-          if (blueFoodEl) blueFoodEl.innerText = '320';
+    // Respawn creatures and particles
+    for (let i = 0; i < 9; i++) {
+        creatures.push(new Creature(random(width), random(height)));
+    }
+    for (let i = 0; i < 110; i++) {
+        vortexParticles.push(new VortexParticle());
+    }
+    // Start with some Red Hazards
+    for (let i = 0; i < 6; i++) {
+        redHazards.push(new RedHazard());
+    }
 
-          environmentPhase = 0;
-          envPhaseProgress = 0;
-          if (envLabelElement) envLabelElement.classList.add('hidden');
-
-          // Respawn creatures and particles
-          for (let i = 0; i < 9; i++) {
-              creatures.push(new Creature(random(width), random(height)));
-          }
-          for (let i = 0; i < 110; i++) {
-              vortexParticles.push(new VortexParticle());
-          }
-
-          // Start with some Red Hazards
-          for (let i = 0; i < 6; i++) {
-              redHazards.push(new RedHazard());
-          }
-
-          if (miniChartCtx) drawMiniChart();
-          updateMainStats();
-      }
-
+    if (miniChartCtx) drawMiniChart();
+    updateMainStats();
+}
               // ==================== SPACESHIP CONTROLS ====================
 
               document.addEventListener('keydown', function(e) {
