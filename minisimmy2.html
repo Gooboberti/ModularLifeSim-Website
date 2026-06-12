@@ -1561,12 +1561,81 @@ function loadAllSaves() {
 
 loadAllSaves();
 
-// ==================== SAVE MANAGER UI FUNCTIONS ====================
+// ==================== SAVE MANAGER (Clean Version) ====================
+
+let saveSlots = {};
+let autoSaveHistory = [];
+const MAX_AUTO_SAVES = 8;
+
+function getCurrentSaveData() {
+    return {
+        totalScore: totalScore,
+        aetheriumDust: aetheriumDust,
+        aetheriumCrystals: aetheriumCrystals,
+        eggs: eggs,
+        incubatingEggs: incubatingEggs,
+        geneVaultSlots: geneVaultSlots,
+        timestamp: Date.now(),
+        version: "2.01"
+    };
+}
+
+function saveToSlot(slotName) {
+    if (!slotName || slotName.trim() === "") {
+        slotName = "Save " + (Object.keys(saveSlots).length + 1);
+    }
+    const saveData = getCurrentSaveData();
+    saveSlots[slotName] = saveData;
+
+    try {
+        localStorage.setItem("minisimmy2_slots", JSON.stringify(saveSlots));
+        addFloatingText(width / 2, 55, `Saved: ${slotName}`, '#34d399');
+    } catch (e) {}
+}
+
+function loadFromSlot(slotName) {
+    const data = saveSlots[slotName];
+    if (!data) return;
+
+    if (data.totalScore !== undefined) totalScore = data.totalScore;
+    if (data.aetheriumDust !== undefined) aetheriumDust = data.aetheriumDust;
+    if (data.aetheriumCrystals !== undefined) aetheriumCrystals = data.aetheriumCrystals;
+    if (data.eggs) eggs = data.eggs;
+    if (data.incubatingEggs) incubatingEggs = data.incubatingEggs;
+    if (data.geneVaultSlots) geneVaultSlots = data.geneVaultSlots;
+
+    updateMainStats();
+    updateAetheriumUI();
+    updateEggCountBadge();
+    hideSaveManager();
+    addFloatingText(width / 2, 55, `Loaded: ${slotName}`, '#60a5fa');
+}
+
+function autoSave() {
+    if (paused) return;
+    const saveData = getCurrentSaveData();
+    autoSaveHistory.unshift(saveData);
+    if (autoSaveHistory.length > MAX_AUTO_SAVES) autoSaveHistory.pop();
+    try {
+        localStorage.setItem("minisimmy2_autosaves", JSON.stringify(autoSaveHistory));
+    } catch (e) {}
+}
+setInterval(autoSave, 45000);
+
+function loadAllSaves() {
+    try {
+        const slots = localStorage.getItem("minisimmy2_slots");
+        if (slots) saveSlots = JSON.parse(slots);
+        const autos = localStorage.getItem("minisimmy2_autosaves");
+        if (autos) autoSaveHistory = JSON.parse(autos);
+    } catch (e) {}
+}
+loadAllSaves();
 
 function showSaveManager() {
     const modal = document.getElementById('save-manager-modal');
     if (!modal) {
-        alert("Save Manager modal not found. Please add the HTML.");
+        alert("Save modal not found");
         return;
     }
     modal.classList.remove('hidden');
@@ -1591,19 +1660,19 @@ function quickSave() {
 }
 
 function renderSaveLists() {
-    // Manual saves
     const manualList = document.getElementById('manual-saves-list');
-    if (!manualList) return;
-    manualList.innerHTML = '';
+    const autoList = document.getElementById('autosave-list');
+    if (!manualList || !autoList) return;
 
+    // Manual saves
+    manualList.innerHTML = '';
     const slotNames = Object.keys(saveSlots);
     if (slotNames.length === 0) {
         manualList.innerHTML = `<div class="text-white/50 text-sm px-2">No manual saves yet.</div>`;
     } else {
         slotNames.forEach(name => {
             const data = saveSlots[name];
-            const date = new Date(data.timestamp).toLocaleString();
-
+            const date = data.timestamp ? new Date(data.timestamp).toLocaleString() : "Unknown";
             const div = document.createElement('div');
             div.className = 'flex items-center justify-between bg-white/5 hover:bg-white/10 rounded-2xl px-4 py-2 text-sm';
             div.innerHTML = `
@@ -1616,10 +1685,9 @@ function renderSaveLists() {
                     <button class="px-3 py-1 text-xs rounded-xl bg-red-500/80 hover:bg-red-500">Delete</button>
                 </div>
             `;
-
             div.querySelectorAll('button')[0].onclick = () => loadFromSlot(name);
             div.querySelectorAll('button')[1].onclick = () => {
-                if (confirm(`Delete save "${name}"?`)) {
+                if (confirm(`Delete "${name}"?`)) {
                     delete saveSlots[name];
                     localStorage.setItem("minisimmy2_slots", JSON.stringify(saveSlots));
                     renderSaveLists();
@@ -1630,15 +1698,12 @@ function renderSaveLists() {
     }
 
     // Auto saves
-    const autoList = document.getElementById('autosave-list');
-    if (!autoList) return;
     autoList.innerHTML = '';
-
     if (autoSaveHistory.length === 0) {
         autoList.innerHTML = `<div class="text-white/50 text-sm px-2">No auto-saves yet.</div>`;
     } else {
         autoSaveHistory.forEach((data, index) => {
-            const date = new Date(data.timestamp).toLocaleString();
+            const date = data.timestamp ? new Date(data.timestamp).toLocaleString() : "Unknown";
             const div = document.createElement('div');
             div.className = 'flex items-center justify-between bg-white/5 hover:bg-white/10 rounded-2xl px-4 py-2 text-sm';
             div.innerHTML = `
@@ -1648,7 +1713,6 @@ function renderSaveLists() {
                 </div>
                 <button class="px-3 py-1 text-xs rounded-xl bg-sky-600 hover:bg-sky-500">Load</button>
             `;
-
             div.querySelector('button').onclick = () => {
                 if (data.totalScore !== undefined) totalScore = data.totalScore;
                 if (data.aetheriumDust !== undefined) aetheriumDust = data.aetheriumDust;
@@ -1661,14 +1725,11 @@ function renderSaveLists() {
                 updateAetheriumUI();
                 updateEggCountBadge();
                 hideSaveManager();
-                addFloatingText(width/2, 55, "Loaded Auto Save", '#38bdf8');
             };
             autoList.appendChild(div);
         });
     }
 }
-
-
       
 
       // ==================== AETHERIUM RESOURCES + FURNACE ====================
