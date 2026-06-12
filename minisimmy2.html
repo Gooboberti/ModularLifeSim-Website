@@ -702,10 +702,10 @@ Start of Chunk 1
         </div>
 
         <div class="mt-6 flex justify-between items-center">
-            <button onclick="()" 
-                    class="px-5 py-2 rounded-2xl bg-white/10 hover:bg-white/20 text-sm">
-                Stop Music
-            </button>
+            <button onclick="stopMusicMode()" 
+        class="px-5 py-2 rounded-2xl bg-white/10 hover:bg-white/20 text-sm">
+    Stop Music
+</button>
             <div class="text-xs text-white/50">Track resets when stopped</div>
         </div>
     </div>
@@ -1678,7 +1678,7 @@ function drawMusicModeTintAndBorder() {
     pop();
 }
 
-      function drawMusicVisualizer() {
+ function drawMusicVisualizer() {
     if (!musicVisualizerActive || !currentMusicMode) return;
 
     push();
@@ -1688,7 +1688,7 @@ function drawMusicModeTintAndBorder() {
     const c = musicVisualizerColor;
     const baseR = musicVisualizerRadius;
 
-    // Outer glowing layers (gradient feel)
+    // Outer glow layers
     for (let i = 7; i >= 1; i--) {
         const alpha = 16 * i;
         stroke(c[0], c[1], c[2], alpha);
@@ -1696,7 +1696,7 @@ function drawMusicModeTintAndBorder() {
         circle(0, 0, baseR * 2 + i * 9);
     }
 
-    // Main bright ring
+    // Main ring
     stroke(c[0], c[1], c[2], 230);
     strokeWeight(8);
     circle(0, 0, baseR * 2);
@@ -2791,30 +2791,48 @@ function hideTopCreaturesModal() {
               }
 function togglePause() {
     paused = !paused;
-   
-    const btn = document.getElementById('pause-btn');
-    const text = document.getElementById('pause-text');
-   
-    if (!btn || !text) return;
+
+    const pauseBtn = document.getElementById('pause-btn');
+    const pauseText = document.getElementById('pause-text');
+
     if (paused) {
-        btn.classList.add('bg-red-500/80', 'text-white');
-        btn.classList.remove('bg-white/10');
-        text.innerText = 'Resume';
-       
-        // Extra safety: make sure we don't crash on pause
-        try {
-            drawWorld();
-            updateMainStats();
-        } catch (e) {
-            console.warn("Pause draw error (non-fatal):", e);
+        // Pause the simulation
+        if (pauseBtn) {
+            pauseBtn.classList.remove('bg-white/10');
+            pauseBtn.classList.add('bg-red-500/80', 'text-white');
         }
+        if (pauseText) pauseText.innerHTML = 'Resume';
+
+        // Pause music if a music mode is active
+        if (currentMusicMode === 'prune' && pruneAudio) {
+            pruneAudio.pause();
+        }
+        if (currentMusicMode === 'replicate' && replicateAudio) {
+            replicateAudio.pause();
+        }
+        if (currentMusicMode === 'evolve' && evolveAudio) {
+            evolveAudio.pause();
+        }
+
     } else {
-        btn.classList.remove('bg-red-500/80', 'text-white');
-        btn.classList.add('bg-white/10');
-        text.innerText = 'Pause';
+        // Resume the simulation
+        if (pauseBtn) {
+            pauseBtn.classList.remove('bg-red-500/80', 'text-white');
+            pauseBtn.classList.add('bg-white/10');
+        }
+        if (pauseText) pauseText.innerHTML = 'Pause';
+
+        // Resume music if a music mode is active
+        if (currentMusicMode === 'prune' && pruneAudio) {
+            pruneAudio.play().catch(() => {});
+        }
+        if (currentMusicMode === 'replicate' && replicateAudio) {
+            replicateAudio.play().catch(() => {});
+        }
+        if (currentMusicMode === 'evolve' && evolveAudio) {
+            evolveAudio.play().catch(() => {});
+        }
     }
-   
-    updateMainStats();
 }
 
 function setTimeScale(scale) {
@@ -9113,7 +9131,7 @@ function loadSave(index) {
 
     if (!confirm(`Load "${save.name}"?\nCurrent progress will be lost.`)) return;
 
-    // Revive creatures
+    // === Revive creatures properly ===
     creatures = (save.creatures || []).map(data => {
         const c = new Creature(data.x || 0, data.y || 0, data.modules || [], data.generation || 1, data.traits || null);
         Object.assign(c, data);
@@ -9128,30 +9146,35 @@ function loadSave(index) {
         return c;
     });
 
+    // === Restore settings and economy ===
     settings = save.settings || settings;
+
     totalScore = save.totalScore || 0;
     aetheriumCrystals = save.aetheriumCrystals || 0;
     aetheriumDust = save.aetheriumDust || 0;
     highRollerPoints = save.highRollerPoints || 0;
 
+    // === Restore zones ===
     if (greenZone && save.greenFood) greenZone.food = save.greenFood;
     if (blueZone && save.blueFood) blueZone.food = save.blueFood;
 
+    // === Restore Gene Vault + Eggs + Incubator ===
     if (save.geneVaultSlots) geneVaultSlots = save.geneVaultSlots;
     if (save.eggs) eggs = save.eggs;
-
-    // === NEW: Restore incubator ===
     if (save.incubatingEggs) incubatingEggs = save.incubatingEggs;
     if (save.nextIncubationId) nextIncubationId = save.nextIncubationId;
 
     addFloatingText(width / 2, 80, `Loaded: ${save.name}`, '#34d399');
     hideSaveManager();
 
+    // === Force refresh all UI ===
     updateMainStats();
-    updateAetheriumUI();
+    updateAetheriumUI();           // This updates top bar + inventory
     updateEggCountBadge();
+    updatePrestigePreview?.();     // Updates prestige dust preview
+    updateTopFurnaceUI?.();        // Updates furnace timer/bonus if visible
 
-    // Refresh Gene Vault if it's open
+    // Refresh Gene Vault if it's currently open
     const vaultModal = document.getElementById('gene-vault-modal');
     if (vaultModal && vaultModal.style.display !== 'none') {
         setTimeout(() => {
