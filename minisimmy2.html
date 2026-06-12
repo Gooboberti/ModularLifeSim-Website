@@ -1098,6 +1098,7 @@ Start of Chunk 1
                 </div>
             </div>
 
+                        <!-- Slot 10 - Locked -->
             <div class="rounded-2xl border border-white/10 bg-[#0a0a0f] p-4 opacity-60">
                 <div class="mb-2 flex items-center justify-between">
                     <div class="text-sm font-semibold text-white/50">Slot 10</div>
@@ -1110,12 +1111,35 @@ Start of Chunk 1
 
         </div>
 
+        <!-- ==================== INCUBATION SECTION (NEW) ==================== -->
+        <div class="mt-6 border-t border-white/10 pt-5">
+            <div class="flex items-center justify-between mb-3 px-1">
+                <div>
+                    <div class="text-sm font-semibold text-amber-400 flex items-center gap-x-2">
+                        <i class="fa-solid fa-egg"></i>
+                        <span>Incubating Eggs</span>
+                    </div>
+                    <div class="text-xs text-white/50">Max 10 eggs • Eggs incubate over time</div>
+                </div>
+
+                <button onclick="showStartIncubationMenu()"
+                        class="px-4 py-1.5 text-xs rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-medium">
+                    + Start Incubating Egg
+                </button>
+            </div>
+
+            <!-- Incubating eggs will be listed here -->
+            <div id="gene-vault-incubating-list" class="max-h-[220px] overflow-auto space-y-2 pr-1">
+                <!-- Populated by JavaScript -->
+            </div>
+        </div>
+        <!-- ==================== END INCUBATION SECTION ==================== -->
+
         <div class="mt-6 text-center text-xs text-white/50">
             Unlocked slots persist through prestige. Higher-tier creatures in slots give better prestige bonuses.
         </div>
     </div>
 </div>
-
   
 <!-- Top 10 Creatures Modal -->
 <div id="top-creatures-modal" onclick="hideTopCreaturesModal()"
@@ -7931,6 +7955,12 @@ function showGeneVault() {
         background-color: rgba(0, 0, 0, 0.8) !important;
         z-index: 99999 !important;
     `;
+setTimeout(() => {
+    updateGeneVaultIncubatingList();
+}, 100);
+
+
+  
 }
 
 function hideGeneVault() {
@@ -7942,6 +7972,112 @@ function hideGeneVault() {
     }
 }
 
+// Show list of available eggs to start incubating
+function showStartIncubationMenu() {
+    if (eggs.length === 0) {
+        alert("You have no eggs available to incubate.");
+        return;
+    }
+    if (incubatingEggs.length >= MAX_INCUBATOR_SLOTS) {
+        alert("Incubator is full (max 10).");
+        return;
+    }
+
+    const modal = document.createElement('div');
+    modal.className = 'fixed inset-0 bg-black/80 flex items-center justify-center z-[130]';
+    modal.innerHTML = `
+        <div class="bg-[#121218] border border-white/10 rounded-3xl max-w-md w-full mx-4 p-5">
+            <div class="flex justify-between items-center mb-4">
+                <div class="text-lg font-semibold text-amber-400">Start Incubating Egg</div>
+                <button class="text-2xl text-white/60 hover:text-white">&times;</button>
+            </div>
+            <div class="space-y-2 max-h-[400px] overflow-auto" id="incubate-egg-list"></div>
+        </div>
+    `;
+
+    const closeBtn = modal.querySelector('button');
+    closeBtn.onclick = () => modal.remove();
+
+    const listContainer = modal.querySelector('#incubate-egg-list');
+
+    eggs.forEach((egg, index) => {
+        const div = document.createElement('div');
+        div.className = 'flex justify-between items-center bg-white/5 hover:bg-white/10 rounded-2xl p-3 cursor-pointer';
+        div.innerHTML = `
+            <div>
+                <div class="font-semibold text-emerald-400">${egg.name}</div>
+                <div class="text-xs text-white/60">Gen ${egg.generation} • ${egg.modules.length} modules</div>
+            </div>
+            <button class="px-4 py-1 text-xs rounded-xl bg-violet-600 hover:bg-violet-500 text-white">Incubate</button>
+        `;
+
+        div.querySelector('button').onclick = (e) => {
+            e.stopImmediatePropagation();
+            startIncubationOnEgg(index);
+            modal.remove();
+            // Refresh Gene Vault
+            setTimeout(() => {
+                hideGeneVault();
+                showGeneVault();
+            }, 80);
+        };
+
+        listContainer.appendChild(div);
+    });
+
+    document.body.appendChild(modal);
+}
+
+// Update the incubating list inside Gene Vault
+function updateGeneVaultIncubatingList() {
+    const container = document.getElementById('gene-vault-incubating-list');
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    if (incubatingEggs.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'text-center text-white/50 text-sm py-4';
+        empty.innerText = 'No eggs currently incubating.';
+        container.appendChild(empty);
+        return;
+    }
+
+    incubatingEggs.forEach((inc) => {
+        const isComplete = inc.progress >= 100;
+        const div = document.createElement('div');
+        div.className = `bg-white/5 border ${isComplete ? 'border-emerald-500/40' : 'border-violet-500/30'} rounded-2xl p-3`;
+
+        div.innerHTML = `
+            <div class="flex justify-between items-center mb-1.5">
+                <div class="font-semibold text-emerald-400">${inc.eggData.name}</div>
+                <div class="text-xs font-mono ${isComplete ? 'text-emerald-400' : 'text-violet-400'}">${inc.progress.toFixed(0)}%</div>
+            </div>
+            <div class="h-2 bg-white/10 rounded-full overflow-hidden mb-2">
+                <div class="${isComplete ? 'bg-emerald-500' : 'bg-violet-500'} h-2 transition-all" style="width: ${inc.progress}%"></div>
+            </div>
+            <div class="flex gap-2">
+                <button class="flex-1 py-1 text-xs rounded-xl ${isComplete ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-red-500/80 hover:bg-red-500'} text-white">
+                    ${isComplete ? 'Release Copy' : 'Cancel Early'}
+                </button>
+            </div>
+        `;
+
+        const btn = div.querySelector('button');
+        btn.onclick = () => {
+            releaseIncubatedEgg(inc.id, !isComplete);
+            setTimeout(() => {
+                hideGeneVault();
+                showGeneVault();
+            }, 100);
+        };
+
+        container.appendChild(div);
+    });
+}
+
+
+      
 function purchaseGeneVaultSlot(slotNumber) {
     if (slotNumber === 2) {
         if (aetheriumCrystals >= 5) {
