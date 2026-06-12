@@ -1485,11 +1485,11 @@ function activateMusicMode(mode) {
     addFloatingText(width / 2, 70, `${mode.toUpperCase()} MODE`, '#34d399');
 
     // === AUTO SET SPEED PER MODE ===
-    if (mode === 'prune') {
-        setTimeScale(8);           // Experimental 8x for Prune
-    } else {
-        setTimeScale(4);           // Normal 4x for Replicate & Evolve
-    }
+   if (mode === 'prune') {
+    setTimeScale(4);   // changed from 8 back to 4
+} else {
+    setTimeScale(4);
+}
 
     if (mode === 'replicate') {
         forceEnvironmentalPhase('Fertile');
@@ -9057,45 +9057,44 @@ function loadSave(index) {
 
     if (!confirm(`Load "${save.name}"?\nCurrent progress will be lost.`)) return;
 
-    // Restore core simulation
-    creatures = save.creatures || [];
-    settings = save.settings || settings;
+    // === FIX: Revive creatures so methods work again ===
+    creatures = (save.creatures || []).map(data => {
+        const c = new Creature(data.x || 0, data.y || 0, data.modules || [], data.generation || 1, data.traits || null);
+        
+        // Copy over all the saved properties
+        Object.assign(c, data);
+        
+        // Make sure these are numbers
+        c.energy = data.energy || 50;
+        c.honey = data.honey || 0;
+        c.killCount = data.killCount || 0;
+        c.childrenCount = data.childrenCount || 0;
+        c.reproCooldown = data.reproCooldown || 0;
+        c.damageFlash = 0;
+        c.purpleFlash = 0;
+        
+        c.updateSpecialization();
+        return c;
+    });
 
-    // Restore economy
+    settings = save.settings || settings;
     totalScore = save.totalScore || 0;
     aetheriumCrystals = save.aetheriumCrystals || 0;
     aetheriumDust = save.aetheriumDust || 0;
     highRollerPoints = save.highRollerPoints || 0;
 
-    // Restore zones
     if (greenZone && save.greenFood) greenZone.food = save.greenFood;
     if (blueZone && save.blueFood) blueZone.food = save.blueFood;
 
-    // Restore Gene Vault
-    if (save.geneVaultSlots) {
-        geneVaultSlots = save.geneVaultSlots;
-    }
-
-    // Restore Eggs
-    if (save.eggs) {
-        eggs = save.eggs;
-    }
+    if (save.geneVaultSlots) geneVaultSlots = save.geneVaultSlots;
+    if (save.eggs) eggs = save.eggs;
 
     addFloatingText(width / 2, 80, `Loaded: ${save.name}`, '#34d399');
     hideSaveManager();
 
-    // Refresh all relevant UI
     updateMainStats();
     updateAetheriumUI();
     updateEggCountBadge();
-
-    // Optional: refresh gene vault display if it's currently open
-    const vaultModal = document.getElementById('gene-vault-modal');
-    if (vaultModal && !vaultModal.classList.contains('hidden')) {
-        setTimeout(() => {
-            renderAllGeneVaultSlots?.();
-        }, 50);
-    }
 }
 
       
