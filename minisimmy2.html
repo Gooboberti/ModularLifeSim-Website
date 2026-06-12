@@ -1412,14 +1412,14 @@ Start of Chunk 2
               let maxPlacedHazards = 3;
               let freeMode = false;
       
-// ==================== MUSIC MODES + ENV CYCLE + GLOWING BORDER ====================
+// ==================== MUSIC MODES + ENV CYCLE + GLOWING BORDER (FULL) ====================
 
 let musicEnabled = false;
 let currentMusicMode = null;
 
 let musicData = { bass: 0, mids: 0, highs: 0 };
 
-// Real MP3 tracks
+// Real MP3 tracks (must be in same folder as the HTML)
 let pruneAudio = new Audio('Track_Prune.mp3');
 let replicateAudio = new Audio('Track_Replicate.mp3');
 let evolveAudio = new Audio('Track_Evolve.mp3');
@@ -1428,7 +1428,7 @@ pruneAudio.loop = true;
 replicateAudio.loop = true;
 evolveAudio.loop = true;
 
-// Backup values
+// Backup original values
 let originalMusicSettings = {
     vortexMultiplier: null,
     reproductionChance: null,
@@ -1438,29 +1438,10 @@ let originalMusicSettings = {
 let originalRedHazardsEnabled = false;
 let originalRedHazardIntensity = 1;
 
-// Evolve mode env rotation timer
+// Evolve mode env rotation
 let evolveEnvTimer = 0;
 let evolveEnvPhaseIndex = 0;
 const evolveEnvPhases = ['Fertile', 'Normal', 'Drought'];
-
-function showMusicModal() {
-    let modal = document.getElementById('music-modal');
-    if (!modal) return;
-    if (modal.parentElement !== document.body) document.body.appendChild(modal);
-    modal.classList.remove('hidden');
-    modal.classList.add('flex');
-    modal.style.display = 'flex';
-    modal.style.zIndex = '999999';
-}
-
-function hideMusicModal() {
-    const modal = document.getElementById('music-modal');
-    if (modal) {
-        modal.classList.remove('flex');
-        modal.classList.add('hidden');
-        modal.style.display = 'none';
-    }
-}
 
 function activateMusicMode(mode) {
     stopMusicMode();
@@ -1469,7 +1450,7 @@ function activateMusicMode(mode) {
     currentMusicMode = mode;
     evolveEnvTimer = 0;
 
-    // Save original values
+    // Save current state
     originalMusicSettings.vortexMultiplier = settings.vortexMultiplier;
     originalMusicSettings.reproductionChance = settings.reproductionChance;
     originalMusicSettings.energyDrain = settings.energyDrain;
@@ -1479,7 +1460,6 @@ function activateMusicMode(mode) {
 
     addFloatingText(width / 2, 70, `${mode.toUpperCase()} MODE`, '#34d399');
 
-    // === Environmental Cycle Control ===
     if (mode === 'replicate') {
         forceEnvironmentalPhase('Fertile');
         replicateAudio.currentTime = 0;
@@ -1529,43 +1509,32 @@ function stopMusicMode() {
     addFloatingText(width / 2, 70, "Music Stopped - Values Restored", '#f87171');
 }
 
-// Force environmental phase
 function forceEnvironmentalPhase(phase) {
-    // Update text
     const phaseText = document.getElementById('env-phase-text');
     if (phaseText) phaseText.innerText = phase.toUpperCase();
 
-    // Update progress bar visually (approximate)
     const progressBar = document.getElementById('env-progress-bar');
     if (progressBar) {
         if (phase === 'Fertile') progressBar.style.width = '33%';
         else if (phase === 'Normal') progressBar.style.width = '66%';
         else if (phase === 'Drought') progressBar.style.width = '100%';
     }
-
-    // If your sim has an internal variable for current phase, set it here
-    // Example: currentEnvPhase = phase;
 }
 
-// Evolve mode - rotate every day/night cycle
 function updateEvolveEnvironmentalCycle() {
     if (currentMusicMode !== 'evolve') return;
 
     evolveEnvTimer++;
-    // Rotate roughly once per day/night cycle (adjust number as needed)
-    if (evolveEnvTimer > 1800) { // ~30 seconds at 60fps
+    if (evolveEnvTimer > 1800) {
         evolveEnvTimer = 0;
         evolveEnvPhaseIndex = (evolveEnvPhaseIndex + 1) % evolveEnvPhases.length;
         forceEnvironmentalPhase(evolveEnvPhases[evolveEnvPhaseIndex]);
     }
 }
 
-// Show/hide environmental bar
 function updateEnvBarVisibility(show) {
     const bar = document.querySelector('.mx-auto.mb-2.w-\\[820px\\]');
-    if (bar) {
-        bar.style.display = show ? '' : 'none';
-    }
+    if (bar) bar.style.display = show ? '' : 'none';
 }
 
 // ==================== MODE EFFECTS ====================
@@ -1577,12 +1546,9 @@ function applyPruneModifiers() {
     settings.particleFoodValue = 0.55;
 
     redHazardsEnabled = true;
-    redHazardIntensity = 4.0; // Extra heavy
+    redHazardIntensity = 4.0;
 
-    // Spawn extra red hazards immediately
-    for (let i = 0; i < 18; i++) {
-        redHazards.push(new RedHazard());
-    }
+    for (let i = 0; i < 18; i++) redHazards.push(new RedHazard());
     addFloatingText(width / 2, 95, "AGGRESSIVE PRUNING + DROUGHT", '#f87171');
 }
 
@@ -1619,36 +1585,6 @@ function applyEvolveModifiers() {
     addFloatingText(width / 2, 95, "EVOLVING ENVIRONMENT", '#a78bfa');
 }
 
-// ==================== MODE-AWARE SOUND ====================
-
-function playModeAwareTone(baseFreq, type = 'sine', vol = 0.5, dur = 0.2) {
-    let freq = baseFreq;
-    let waveform = type;
-    let volume = vol;
-    let duration = dur;
-
-    if (currentMusicMode === 'replicate') {
-        waveform = 'sine';
-        freq = baseFreq * 0.94;
-        volume = vol * 0.82;
-        duration = dur * 1.4;
-    } 
-    else if (currentMusicMode === 'evolve') {
-        waveform = 'triangle';
-        freq = baseFreq * random(0.9, 1.1);
-        volume = vol * 0.88;
-        duration = dur * 1.2;
-    } 
-    else if (currentMusicMode === 'prune') {
-        waveform = 'sawtooth';
-        freq = baseFreq * 0.86;
-        volume = vol * 0.92;
-        duration = dur * 0.85;
-    }
-
-    playTone(freq, waveform, volume, duration);
-}
-
 // ==================== VISUAL TINT + GLOWING BORDER ====================
 
 function drawMusicModeTintAndBorder() {
@@ -1667,12 +1603,11 @@ function drawMusicModeTintAndBorder() {
     }
     rect(0, 0, width, height);
 
-    // Glowing border
+    // Glowing colored border
     const borderColor = currentMusicMode === 'prune' ? [220, 40, 40] :
                         currentMusicMode === 'replicate' ? [30, 200, 130] :
                         [255, 200, 50];
 
-    // Outer glow layers
     for (let i = 4; i >= 1; i--) {
         stroke(borderColor[0], borderColor[1], borderColor[2], 25 * i);
         strokeWeight(8 + i * 3);
@@ -1680,18 +1615,11 @@ function drawMusicModeTintAndBorder() {
         rect(0, 0, width, height);
     }
 
-    // Sharp inner border
     stroke(borderColor[0], borderColor[1], borderColor[2], 180);
     strokeWeight(3);
     rect(0, 0, width, height);
 
     pop();
-}
-
-// Optional: hide function (kept for compatibility)
-function hideSaveManager() {
-    const modal = document.getElementById('save-manager-modal');
-    if (modal) modal.remove();
 }
       // ==================== AETHERIUM RESOURCES + FURNACE ====================
       let aetheriumCrystals = 0;     // Stackable crystals in inventory (max 999)
