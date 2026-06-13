@@ -1587,6 +1587,55 @@ Start of Chunk 2
               let activeVoices = 0;
               const MAX_VOICES = 26; // increased for higher populations
 
+              // ==================== SOUND CONTROL SYSTEM ====================
+let soundEnabled = {
+    master: true,
+    effects: true,
+    birth: true,
+    eating: true,
+    death: true,
+    predator: true,
+    hazards: true,
+    deposit: true,
+    ambient: true,
+    spaceship: true,
+    special: true
+};
+
+function updateSoundSettings() {
+    soundEnabled.master = document.getElementById('sound-master')?.checked ?? true;
+    soundEnabled.effects = document.getElementById('sound-effects')?.checked ?? true;
+    soundEnabled.birth = document.getElementById('sound-birth')?.checked ?? true;
+    soundEnabled.eating = document.getElementById('sound-eating')?.checked ?? true;
+    soundEnabled.death = document.getElementById('sound-death')?.checked ?? true;
+    soundEnabled.predator = document.getElementById('sound-predator')?.checked ?? true;
+    soundEnabled.hazards = document.getElementById('sound-hazards')?.checked ?? true;
+    soundEnabled.deposit = document.getElementById('sound-deposit')?.checked ?? true;
+    soundEnabled.ambient = document.getElementById('sound-ambient')?.checked ?? true;
+    soundEnabled.spaceship = document.getElementById('sound-spaceship')?.checked ?? true;
+    soundEnabled.special = document.getElementById('sound-special')?.checked ?? true;
+}
+
+function muteAllSounds() {
+    const ids = [
+        'sound-master', 'sound-effects', 'sound-birth', 'sound-eating',
+        'sound-death', 'sound-predator', 'sound-hazards', 'sound-deposit',
+        'sound-ambient', 'sound-spaceship', 'sound-special'
+    ];
+    ids.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.checked = false;
+    });
+    updateSoundSettings();
+}
+
+// Helper used by all sound functions
+function canPlaySound(category) {
+    if (!soundEnabled.master) return false;
+    return soundEnabled[category] ?? true;
+}
+      
+
               let cursorHumOsc = null;
               let cursorHumGain = null;
               let cursorHumFilter = null;
@@ -2388,21 +2437,17 @@ function convertDustToCrystals() {
               function getAudioContext() {
                   if (!audioCtx) {
                       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-
                       masterGain = audioCtx.createGain();
                       compressor = audioCtx.createDynamicsCompressor();
-
                       compressor.threshold.value = -18;
                       compressor.knee.value = 8;
                       compressor.ratio.value = 12;
                       compressor.attack.value = 0.003;
                       compressor.release.value = 0.25;
-
                       masterGain.gain.value = masterVolume;
                       masterGain.connect(compressor);
                       compressor.connect(audioCtx.destination);
                   }
-
                   if (audioCtx.state === 'suspended') {
                       audioCtx.resume();
                   }
@@ -2412,22 +2457,18 @@ function convertDustToCrystals() {
               function startCursorHum() {
                   const ctx = getAudioContext();
                   if (cursorHumOsc) return;
-
                   cursorHumOsc = ctx.createOscillator();
                   cursorHumGain = ctx.createGain();
                   cursorHumFilter = ctx.createBiquadFilter();
-
                   cursorHumOsc.type = 'sine';
                   cursorHumOsc.frequency.value = 48;
                   cursorHumFilter.type = 'lowpass';
                   cursorHumFilter.frequency.value = 180;
                   cursorHumGain.gain.value = 0;
-
                   cursorHumOsc.connect(cursorHumFilter);
                   cursorHumFilter.connect(cursorHumGain);
                   cursorHumGain.connect(masterGain);
                   cursorHumOsc.start();
-
                   const targetVol = 0.015 * effectsVolume;
                   cursorHumGain.gain.linearRampToValueAtTime(targetVol, ctx.currentTime + 0.8);
               }
@@ -2436,7 +2477,6 @@ function convertDustToCrystals() {
                   if (!cursorHumOsc || !cursorHumGain) return;
                   const ctx = getAudioContext();
                   cursorHumGain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.6);
-
                   setTimeout(() => {
                       try { if (cursorHumOsc) cursorHumOsc.stop(); } catch(e) {}
                       cursorHumOsc = null;
@@ -2446,84 +2486,67 @@ function convertDustToCrystals() {
               }
 
               function playCursorDamageSound(creature) {
+                  if (!canPlaySound('hazards')) return;
                   if (activeVoices > MAX_VOICES) return;
                   activeVoices++;
-
                   const ctx = getAudioContext();
-
                   const osc1 = ctx.createOscillator();
                   const gain1 = ctx.createGain();
                   const filter1 = ctx.createBiquadFilter();
-
                   osc1.type = 'sawtooth';
                   osc1.frequency.value = 95 + Math.random() * 25;
                   filter1.type = 'lowpass';
                   filter1.frequency.value = 420;
-
                   gain1.gain.value = 0.18 * effectsVolume;
                   gain1.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.35);
-
                   osc1.connect(filter1);
                   filter1.connect(gain1);
                   gain1.connect(masterGain);
                   osc1.start();
-
                   setTimeout(() => {
                       try { osc1.stop(); } catch(e){}
                       activeVoices = Math.max(0, activeVoices - 1);
                   }, 400);
-
                   setTimeout(() => {
                       if (activeVoices > MAX_VOICES) return;
                       activeVoices++;
-
                       const osc2 = ctx.createOscillator();
                       const gain2 = ctx.createGain();
                       const filter2 = ctx.createBiquadFilter();
-
                       osc2.type = 'square';
                       osc2.frequency.value = 185 + Math.random() * 40;
                       filter2.type = 'bandpass';
                       filter2.frequency.value = 680;
                       filter2.Q.value = 2.2;
-
                       gain2.gain.value = 0.08 * effectsVolume;
                       gain2.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.22);
-
                       osc2.connect(filter2);
                       filter2.connect(gain2);
                       gain2.connect(masterGain);
                       osc2.start();
-
                       setTimeout(() => {
                           try { osc2.stop(); } catch(e){}
                           activeVoices = Math.max(0, activeVoices - 1);
                       }, 280);
                   }, 25);
-
                   const noise = ctx.createBufferSource();
                   const noiseGain = ctx.createGain();
                   const noiseFilter = ctx.createBiquadFilter();
-
                   const buffer = ctx.createBuffer(1, ctx.sampleRate * 0.18, ctx.sampleRate);
                   const data = buffer.getChannelData(0);
                   for (let i = 0; i < data.length; i++) {
                       data[i] = Math.random() * 2 - 1;
                   }
                   noise.buffer = buffer;
-
                   noiseFilter.type = 'bandpass';
                   noiseFilter.frequency.value = 1200;
                   noiseFilter.Q.value = 1.6;
-
                   noiseGain.gain.value = 0.06 * effectsVolume;
                   noiseGain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.18);
-
                   noise.connect(noiseFilter);
                   noiseFilter.connect(noiseGain);
                   noiseGain.connect(masterGain);
                   noise.start();
-
                   setTimeout(() => {
                       try { noise.stop(); } catch(e){}
                       activeVoices = Math.max(0, activeVoices - 1);
@@ -2531,32 +2554,26 @@ function convertDustToCrystals() {
               }
 
               function playTone(freq, type = null, duration = 0.28, volume = 0.055, detune = 0, attack = 0.012, release = 0.22) {
+                  if (!canPlaySound('effects')) return;
                   if (activeVoices > MAX_VOICES) return;
                   activeVoices++;
-
                   const ctx = getAudioContext();
                   const osc = ctx.createOscillator();
                   const gain = ctx.createGain();
                   const filter = ctx.createBiquadFilter();
-
                   osc.type = type || defaultWaveform;
                   osc.frequency.value = freq * pitchShift;
                   if (detune) osc.detune.value = detune;
-
                   filter.type = 'lowpass';
                   filter.frequency.value = 2100;
-
                   const finalVol = volume * effectsVolume;
                   gain.gain.value = 0;
                   gain.gain.linearRampToValueAtTime(finalVol, ctx.currentTime + attack);
                   gain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + duration);
-
                   osc.connect(filter);
                   filter.connect(gain);
                   gain.connect(masterGain);
-
                   osc.start();
-
                   setTimeout(() => {
                       try { osc.stop(); } catch(e){}
                       activeVoices = Math.max(0, activeVoices - 1);
@@ -2564,12 +2581,14 @@ function convertDustToCrystals() {
               }
 
               function playBirthSound() {
+                  if (!canPlaySound('birth')) return;
                   playTone(880, 'sine', 0.38, 0.04, 0, 0.02, 0.32);
                   setTimeout(() => playTone(1108, 'sine', 0.30, 0.032, 12, 0.015, 0.26), 55);
                   setTimeout(() => playTone(1320, 'sine', 0.24, 0.026, -8, 0.01, 0.22), 105);
               }
 
               function playEatSound(isGreenZone = true) {
+                  if (!canPlaySound('eating')) return;
                   // Throttle eat sounds heavily at high population and when near voice limit
                   if (activeVoices > MAX_VOICES - 4) return;
                   if (creatures.length > 90 && Math.random() > 0.25) return;
@@ -2580,84 +2599,75 @@ function convertDustToCrystals() {
               }
 
               function playDeathSound() {
+                  if (!canPlaySound('death')) return;
                   if (creatures.length > 110 && Math.random() > 0.4) return; // reduce spam at very high pop
                   playTone(220, 'sawtooth', 0.48, 0.038, 0, 0.02, 0.42);
                   setTimeout(() => playTone(175, 'sine', 0.38, 0.028, -10, 0.012, 0.32), 75);
               }
 
               function playDepositSound() {
+                  if (!canPlaySound('deposit')) return;
                   playTone(540, 'sine', 0.24, 0.028, 0, 0.012, 0.22);
                   setTimeout(() => playTone(680, 'sine', 0.17, 0.022, 8, 0.008, 0.15), 38);
               }
 
               function playPredatorFeedSound() {
+                  if (!canPlaySound('predator')) return;
                   playTone(165, 'sawtooth', 0.22, 0.042, 0, 0.01, 0.20);
                   setTimeout(() => playTone(210, 'sine', 0.16, 0.032, 15, 0.006, 0.14), 28);
               }
 
               function playAmbientPulse(isDay) {
+                  if (!canPlaySound('ambient')) return;
                   const freq = isDay ? 48 : 42;
                   const vol = (isDay ? 0.007 : 0.011) * ambientVolume;
                   playTone(freq, 'sine', 1.9, vol, 0, 0.35, 1.5);
               }
 
               function playExplosionSound() {
+                  if (!canPlaySound('hazards')) return;
                   // High priority - explosions (ship + wall) should take precedence
                   if (activeVoices > MAX_VOICES + 1) return;
-
                   const ctx = getAudioContext();
-
                   const osc1 = ctx.createOscillator();
                   const gain1 = ctx.createGain();
                   const filter1 = ctx.createBiquadFilter();
-
                   osc1.type = 'sawtooth';
                   osc1.frequency.value = 85;
                   filter1.type = 'lowpass';
                   filter1.frequency.value = 420;
-
                   gain1.gain.value = 0.16 * effectsVolume;
                   gain1.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.65);
-
                   osc1.connect(filter1);
                   filter1.connect(gain1);
                   gain1.connect(masterGain);
                   osc1.start();
-
                   setTimeout(() => { try { osc1.stop(); } catch(e){} }, 720);
-
                   setTimeout(() => {
                       const osc2 = ctx.createOscillator();
                       const gain2 = ctx.createGain();
                       const noise = ctx.createBufferSource();
                       const noiseFilter = ctx.createBiquadFilter();
                       const noiseGain = ctx.createGain();
-
                       osc2.type = 'square';
                       osc2.frequency.value = 180;
-
                       const buffer = ctx.createBuffer(1, ctx.sampleRate * 0.4, ctx.sampleRate);
                       const data = buffer.getChannelData(0);
                       for (let i = 0; i < data.length; i++) {
                           data[i] = Math.random() * 2 - 1;
                       }
                       noise.buffer = buffer;
-
                       noiseFilter.type = 'bandpass';
                       noiseFilter.frequency.value = 1200;
                       noiseFilter.Q.value = 1.8;
-
                       noiseGain.gain.value = 0.08 * effectsVolume;
                       noiseGain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.45);
-
                       osc2.connect(noiseFilter);
                       noise.connect(noiseFilter);
                       noiseFilter.connect(noiseGain);
                       noiseGain.connect(masterGain);
-
                       osc2.start();
                       noise.start();
-
                       setTimeout(() => {
                           try { osc2.stop(); noise.stop(); } catch(e){}
                       }, 500);
@@ -2665,150 +2675,120 @@ function convertDustToCrystals() {
               }
 
               function playWallBreakSound(sizeMult = 1) {
+                  if (!canPlaySound('special')) return;
                   // High priority - Energy Wall breaks should be audible
                   if (activeVoices > MAX_VOICES + 2) return;
                   activeVoices++;
-
                   const ctx = getAudioContext();
-
                   // Glassy shatter - high crystalline noise burst
                   const noise = ctx.createBufferSource();
                   const noiseFilter = ctx.createBiquadFilter();
                   const noiseGain = ctx.createGain();
-
                   const buffer = ctx.createBuffer(1, ctx.sampleRate * 0.55, ctx.sampleRate);
                   const data = buffer.getChannelData(0);
                   for (let i = 0; i < data.length; i++) {
                       data[i] = Math.random() * 2 - 1;
                   }
                   noise.buffer = buffer;
-
                   noiseFilter.type = 'bandpass';
                   noiseFilter.frequency.value = 2650 + sizeMult * 350;
                   noiseFilter.Q.value = 4.2;
-
                   noiseGain.gain.value = 0.26 * effectsVolume * Math.min(sizeMult, 1.7);
                   noiseGain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.48);
-
                   noise.connect(noiseFilter);
                   noiseFilter.connect(noiseGain);
                   noiseGain.connect(masterGain);
                   noise.start();
-
                   setTimeout(() => {
                       try { noise.stop(); } catch(e){}
                       activeVoices = Math.max(0, activeVoices - 1);
                   }, 550);
-
                   // Sharp high sine crack (glass breaking)
                   const osc = ctx.createOscillator();
                   const gain = ctx.createGain();
                   const filter = ctx.createBiquadFilter();
-
                   osc.type = 'sine';
                   osc.frequency.value = 1720 + sizeMult * 280;
-
                   filter.type = 'highpass';
                   filter.frequency.value = 1350;
-
                   gain.gain.value = 0.19 * effectsVolume;
                   gain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.28);
-
                   osc.connect(filter);
                   filter.connect(gain);
                   gain.connect(masterGain);
                   osc.start();
-
                   setTimeout(() => {
                       try { osc.stop(); } catch(e){}
                   }, 340);
               }
 
               function playShipShootSound() {
+                  if (!canPlaySound('spaceship')) return;
                   // High priority - spaceship gunfire should almost always play
                   if (activeVoices > MAX_VOICES + 2) return;
-
                   const ctx = getAudioContext();
-
                   // More obvious dual laser shot
                   const osc = ctx.createOscillator();
                   const gain = ctx.createGain();
                   const filter = ctx.createBiquadFilter();
-
                   osc.type = 'sawtooth';
                   osc.frequency.value = 920;
-
                   filter.type = 'lowpass';
                   filter.frequency.value = 2200;
-
                   gain.gain.value = 0.22 * effectsVolume;
                   gain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.16);
-
                   osc.connect(filter);
                   filter.connect(gain);
                   gain.connect(masterGain);
                   osc.start();
-
                   setTimeout(() => {
                       try { osc.stop(); } catch(e){}
                   }, 200);
               }
 
               function playBulletImpactSound() {
+                  if (!canPlaySound('spaceship')) return;
                   // High priority - bullet/explosion impacts
                   if (activeVoices > MAX_VOICES + 1) return;
-
                   const ctx = getAudioContext();
-
                   // Small sharp impact / zap
                   const osc = ctx.createOscillator();
                   const gain = ctx.createGain();
                   const filter = ctx.createBiquadFilter();
-
                   osc.type = 'square';
                   osc.frequency.value = 620;
-
                   filter.type = 'bandpass';
                   filter.frequency.value = 1100;
                   filter.Q.value = 2.5;
-
                   gain.gain.value = 0.18 * effectsVolume;
                   gain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.22);
-
                   osc.connect(filter);
                   filter.connect(gain);
                   gain.connect(masterGain);
                   osc.start();
-
                   setTimeout(() => {
                       try { osc.stop(); } catch(e){}
                   }, 280);
               }
 
               function playAbsorbSound() {
+                  if (!canPlaySound('special')) return;
                   if (activeVoices > MAX_VOICES - 1) return;
-
                   const ctx = getAudioContext();
-
                   // Nice sucking/absorb sound for hazard cursor eating red particles
                   const osc = ctx.createOscillator();
                   const gain = ctx.createGain();
                   const filter = ctx.createBiquadFilter();
-
                   osc.type = 'sine';
                   osc.frequency.value = 420;
-
                   filter.type = 'lowpass';
                   filter.frequency.value = 900;
-
                   gain.gain.value = 0.16 * effectsVolume;
                   gain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.35);
-
                   osc.connect(filter);
                   filter.connect(gain);
                   gain.connect(masterGain);
                   osc.start();
-
                   setTimeout(() => {
                       try { osc.stop(); } catch(e){}
                   }, 400);
@@ -2848,10 +2828,8 @@ function convertDustToCrystals() {
               }
 
               function setupSoundSliders() {}
-
               function setupSliders() {
                   setupSoundSliders();
-
                   const mappings = [
                       ['slider-drain', 'val-drain', 'energyDrain', 3],
                       ['slider-particle', 'val-particle', 'particleFoodValue', 1],
@@ -2860,7 +2838,6 @@ function convertDustToCrystals() {
                       ['slider-phero', 'val-phero', 'pheromoneDeposit', 1],
                       ['slider-zonepull', 'val-zonepull', 'zonePullStrength', 1]
                   ];
-
                   mappings.forEach(([sliderId, valId, key, decimals]) => {
                       const slider = document.getElementById(sliderId);
                       const val = document.getElementById(valId);
