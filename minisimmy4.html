@@ -3194,6 +3194,13 @@ function addMasterToneSection(attempt = 0) {
     }
     if (document.getElementById('master-effects-section')) return;
 
+    // Make sure master settings exist
+    if (!soundSettings.masterFilterFreq) soundSettings.masterFilterFreq = 2200;
+    if (!soundSettings.masterVolume) soundSettings.masterVolume = 0.7;
+    if (!soundSettings.masterWaveform) soundSettings.masterWaveform = 'sawtooth';
+    if (!soundSettings.masterAttack) soundSettings.masterAttack = 1.0;
+    if (!soundSettings.masterRelease) soundSettings.masterRelease = 1.0;
+
     const section = document.createElement('div');
     section.id = 'master-effects-section';
     section.style.marginTop = '18px';
@@ -3201,48 +3208,69 @@ function addMasterToneSection(attempt = 0) {
     section.style.borderTop = '1px solid #555';
 
     section.innerHTML = `
-        <div style="font-weight:700; margin-bottom:10px; color:#ccc; font-size:14px;">Master Effects</div>
+        <div style="font-weight:700; margin-bottom:12px; color:#ccc; font-size:14px;">Master Effects</div>
 
         <!-- Master Volume -->
         <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
-            <label style="width:95px; font-size:13px;">Master Volume</label>
+            <label style="width:100px; font-size:13px;">Master Volume</label>
             <input type="range" id="master-vol-slider" min="0" max="1" step="0.01" style="flex:1;">
             <span id="master-vol-value" style="width:45px; text-align:right; font-size:13px;"></span>
         </div>
 
-        <!-- Brightness / Low-pass -->
-        <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
-            <label style="width:95px; font-size:13px;">Brightness</label>
+        <!-- Brightness -->
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+            <label style="width:100px; font-size:13px;">Brightness</label>
             <input type="range" id="master-tone-slider" min="600" max="8000" step="50" style="flex:1;">
             <span id="master-tone-value" style="width:55px; text-align:right; font-size:13px;"></span>
+        </div>
+
+        <!-- Master Waveform -->
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+            <label style="width:100px; font-size:13px;">Waveform</label>
+            <select id="master-waveform" style="flex:1; background:#111; color:#ddd; border:1px solid #444; padding:2px 6px; border-radius:4px;">
+                <option value="sine">Sine (smooth)</option>
+                <option value="triangle">Triangle</option>
+                <option value="sawtooth">Sawtooth (bright)</option>
+                <option value="square">Square (harsh)</option>
+            </select>
+        </div>
+
+        <!-- Master Attack Scale -->
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+            <label style="width:100px; font-size:13px;">Attack Scale</label>
+            <input type="range" id="master-attack-slider" min="0.2" max="3" step="0.1" style="flex:1;">
+            <span id="master-attack-value" style="width:45px; text-align:right; font-size:13px;"></span>
+        </div>
+
+        <!-- Master Release Scale -->
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+            <label style="width:100px; font-size:13px;">Release Scale</label>
+            <input type="range" id="master-release-slider" min="0.2" max="3" step="0.1" style="flex:1;">
+            <span id="master-release-value" style="width:45px; text-align:right; font-size:13px;"></span>
         </div>
     `;
 
     container.appendChild(section);
 
-    // === Master Volume Setup ===
+    // === Master Volume ===
     const volSlider = document.getElementById('master-vol-slider');
     const volValue = document.getElementById('master-vol-value');
-
-    // Set initial value from masterGain if it exists
-    const initialVol = (typeof masterGain !== 'undefined' && masterGain) ? masterGain.gain.value : 0.7;
-    volSlider.value = initialVol;
-    volValue.innerText = initialVol.toFixed(2);
+    volSlider.value = soundSettings.masterVolume;
+    volValue.innerText = soundSettings.masterVolume.toFixed(2);
 
     volSlider.oninput = () => {
-        const v = parseFloat(volSlider.value);
-        volValue.innerText = v.toFixed(2);
+        soundSettings.masterVolume = parseFloat(volSlider.value);
+        volValue.innerText = soundSettings.masterVolume.toFixed(2);
         if (typeof masterGain !== 'undefined' && masterGain) {
-            masterGain.gain.value = v;
+            masterGain.gain.value = soundSettings.masterVolume;
         }
     };
 
-    // === Brightness (Low-pass Filter) Setup ===
+    // === Brightness ===
     const toneSlider = document.getElementById('master-tone-slider');
     const toneValue = document.getElementById('master-tone-value');
-
-    toneSlider.value = soundSettings.masterFilterFreq || 2200;
-    toneValue.innerText = (soundSettings.masterFilterFreq || 2200) + ' Hz';
+    toneSlider.value = soundSettings.masterFilterFreq;
+    toneValue.innerText = soundSettings.masterFilterFreq + ' Hz';
 
     toneSlider.oninput = () => {
         soundSettings.masterFilterFreq = parseFloat(toneSlider.value);
@@ -3250,8 +3278,37 @@ function addMasterToneSection(attempt = 0) {
         updateMasterFilter();
     };
 
+    // === Master Waveform ===
+    const waveSelect = document.getElementById('master-waveform');
+    waveSelect.value = soundSettings.masterWaveform;
+    waveSelect.onchange = () => {
+        soundSettings.masterWaveform = waveSelect.value;
+    };
+
+    // === Master Attack Scale ===
+    const attackSlider = document.getElementById('master-attack-slider');
+    const attackValue = document.getElementById('master-attack-value');
+    attackSlider.value = soundSettings.masterAttack;
+    attackValue.innerText = soundSettings.masterAttack.toFixed(1) + 'x';
+
+    attackSlider.oninput = () => {
+        soundSettings.masterAttack = parseFloat(attackSlider.value);
+        attackValue.innerText = soundSettings.masterAttack.toFixed(1) + 'x';
+    };
+
+    // === Master Release Scale ===
+    const releaseSlider = document.getElementById('master-release-slider');
+    const releaseValue = document.getElementById('master-release-value');
+    releaseSlider.value = soundSettings.masterRelease;
+    releaseValue.innerText = soundSettings.masterRelease.toFixed(1) + 'x';
+
+    releaseSlider.oninput = () => {
+        soundSettings.masterRelease = parseFloat(releaseSlider.value);
+        releaseValue.innerText = soundSettings.masterRelease.toFixed(1) + 'x';
+    };
+
     updateMasterFilter();
-    console.log('[Sound] Master Effects section added');
+    console.log('[Sound] Master Effects section added with more controls');
 }
 
 // Initialize Sound Editor
