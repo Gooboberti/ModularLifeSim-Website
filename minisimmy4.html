@@ -7921,9 +7921,7 @@ class ModuleParticle {
           updateFurnaceUI();
 
 
-        
-
-// ==================== MUSIC MODE SPECIAL PARTICLES + VISUALIZER ====================
+ // ==================== MUSIC MODE SPECIAL PARTICLES + VISUALIZER ====================
 
 // PRUNE - Purple Infect Particles
 if (currentMusicMode === 'prune' && purpleInfectParticles.length > 0) {
@@ -7964,6 +7962,7 @@ if (currentMusicMode === 'prune' && purpleInfectParticles.length > 0) {
         }
     }
 }
+
 // EVOLVE - Module Particles
 if (currentMusicMode === 'evolve') {
     if (frameCount % 28 === 0 && moduleParticles.length < 14) {
@@ -7993,166 +7992,7 @@ if (currentMusicMode === 'evolve') {
 drawMusicModeTintAndBorder();
 updateEvolveEnvironmentalCycle();
 drawMusicVisualizer();
-
-} // ← Correct closing bracket for draw()
-     
-// ==================== RESET SIM ====================
-function resetSim() {
-    creatures = [];
-    vortexParticles = [];
-    pheromones = [];
-    foodBlooms = [];
-    staticFoodPatches = [];
-    energyOrbs = [];
-    redHazards = [];
-    redBeams = [];
-    explosions = [];
-    spawnEffects = [];
-    floatingTexts = [];
-    energyWalls = [];
-    evolutionHistory = [];
-    graphData = {
-        pop: [],
-        modules: [],
-        predators: [],
-        greenFood: [],
-        blueFood: []
-    };
-    greenZone.food = 320;
-    blueZone.food = 320;
-    globalReproCooldown = 0;
-    selectedCreature = null;
-    paused = false;
-    timeScale = 1;
-    simTime = 0;
-    zoomLevel = 1.0;
-    const zoomEl = document.getElementById('zoom-level');
-    if (zoomEl) zoomEl.innerText = '100%';
-    const timeEl = document.getElementById('sim-time');
-    if (timeEl) timeEl.innerText = '00:00';
-    const pauseBtn = document.getElementById('pause-btn');
-    const pauseText = document.getElementById('pause-text');
-    if (pauseBtn && pauseText) {
-        pauseBtn.classList.remove('bg-red-500/80', 'text-white');
-        pauseBtn.classList.add('bg-white/10');
-        pauseText.innerHTML = 'Pause';
-    }
-    document.querySelectorAll('[id^="speed-"]').forEach(el => el.classList.remove('active', 'bg-emerald-500', 'text-[#0a0a0f]'));
-    const speed1 = document.getElementById('speed-1');
-    if (speed1) speed1.classList.add('active', 'bg-emerald-500', 'text-[#0a0a0f]');
-    deselectCreature();
-    totalScore = 0;
-    totalPredatorKills = 0;
-    const scoreEl = document.getElementById('vegas-score');
-    if (scoreEl) scoreEl.innerText = '0';
-    const popEl = document.getElementById('stat-pop');
-    const predEl = document.getElementById('stat-pred');
-    const modEl = document.getElementById('stat-modules');
-    const greenFoodEl = document.getElementById('stat-green-food');
-    const blueFoodEl = document.getElementById('stat-blue-food');
-    if (popEl) popEl.innerText = '9';
-    if (predEl) predEl.innerText = '0';
-    if (modEl) modEl.innerText = '1.0';
-    if (greenFoodEl) greenFoodEl.innerText = '320';
-    if (blueFoodEl) blueFoodEl.innerText = '320';
-    environmentPhase = 0;
-    envPhaseProgress = 0;
-    if (envLabelElement) envLabelElement.classList.add('hidden');
-    for (let i = 0; i < 9; i++) {
-        creatures.push(new Creature(random(width), random(height)));
-    }
-    for (let i = 0; i < 110; i++) {
-        vortexParticles.push(new VortexParticle());
-    }
-    for (let i = 0; i < 6; i++) {
-        redHazards.push(new RedHazard());
-    }
-    if (miniChartCtx) drawMiniChart();
-    updateMainStats();
-}
-// ==================== SPACESHIP CONTROLS ====================
-document.addEventListener('keydown', function(e) {
-    if (!spaceshipActive) return;
-
-    if (e.key === 'ArrowLeft') {
-        shipX -= 18;
-    }
-    if (e.key === 'ArrowRight') {
-        shipX += 18;
-    }
-    if (e.key === ' ' || e.key === 'Spacebar') {
-        e.preventDefault();
-        shootFromShip();
-    }
-
-    shipX = constrain(shipX, 30, width - 30);
-});
-
-let mouseControlActive = false;
-
-document.addEventListener('click', function(e) {
-    if (!spaceshipActive) return;
-
-    const rect = document.querySelector('canvas').getBoundingClientRect();
-    if (e.clientX > rect.left && e.clientX < rect.right && e.clientY > rect.top && e.clientY < rect.bottom) {
-        mouseControlActive = true;
-        shootFromShip();
-    }
-});
-
-document.addEventListener('mousemove', function(e) {
-    if (!spaceshipActive || !mouseControlActive) return;
-
-    const rect = document.querySelector('canvas').getBoundingClientRect();
-    shipX = e.clientX - rect.left;
-    shipX = constrain(shipX, 30, width - 30);
-});
-
-function shootFromShip() {
-    if (!spaceshipActive) return;
-    const now = Date.now();
-
-    if (now - lastShotTime < 130) return;
-
-    lastShotTime = now;
-    bullets.push({ x: shipX - 7, y: shipY - 12, vx: 0, vy: -12 });
-    bullets.push({ x: shipX + 7, y: shipY - 12, vx: 0, vy: -12 });
-
-    playShipShootSound();
-}
-
-// ==================== BULLET EXPLOSION AoE ====================
-function createBulletExplosion(x, y) {
-    explosions.push(new Explosion(x, y));
-
-    for (let c of creatures) {
-        let d = dist(c.x, c.y, x, y);
-        if (d < 55) {
-            let falloff = map(d, 0, 55, 1.0, 0.3);
-
-            c.energy -= 35 * falloff;
-            c.damageFlash = 65;
-            c.purpleFlash = max(c.purpleFlash || 0, 110);
-            c.vx *= (0.4 + falloff * 0.3);
-            c.vy *= (0.4 + falloff * 0.3);
-
-            let dx = c.x - x;
-            let dy = c.y - y;
-            let len = sqrt(dx*dx + dy*dy) || 1;
-            let knock = map(d, 0, 55, 4.5, 1.2);
-            c.vx += (dx / len) * knock;
-            c.vy += (dy / len) * knock;
-
-            if (c.energy > 5 && c.energy < 35 && !c.isPredator && random() < 0.38) {
-                c.isPredator = true;
-                c.currentThought = "Blown into predator";
-            }
-        }
-    }
-
-    playExplosionSound();
-}
-
+} // end of draw()
 // ==================== EXTRACT TO EGG MODAL ====================
 function showExtractEggModal() {
     const modal = document.getElementById('extract-egg-modal');
