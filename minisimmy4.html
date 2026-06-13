@@ -1865,6 +1865,7 @@ let musicVisualizerHighReact = 6.0;
 let musicVisualizerCenterGlow = 1.5;
 
 // ==================== AGGRESSIVE FLAME VISUALIZER ====================
+// ==================== HYBRID FLAME VISUALIZER (Always Visible + Reactive) ====================
 function drawMusicVisualizer() {
     if (!musicVisualizerActive || !currentMusicMode) return;
 
@@ -1883,51 +1884,74 @@ function drawMusicVisualizer() {
     const opac    = musicVisualizerOpacity || 1.0;
     const centerG = musicVisualizerCenterGlow || 1.5;
 
-    // Force higher reactivity even if sliders are low
-    const bassR = (musicVisualizerBassReact || 6.0) * 1.4;
-    const midR  = (musicVisualizerMidReact  || 5.5) * 1.4;
-    const highR = (musicVisualizerHighReact || 5.0) * 1.4;
+    const bassR = (musicVisualizerBassReact || 7.0) * 1.3;
+    const midR  = (musicVisualizerMidReact  || 6.5) * 1.3;
+    const highR = (musicVisualizerHighReact || 6.0) * 1.3;
 
-    const numFlames = 90;
+    const numFlames = 95;
     const innerR = baseR * 0.52;
 
-    // Very strong central fire
-    noStroke();
-    fill(255, 235, 100, 55 * glow * centerG);
-    ellipse(cx, cy, baseR * 1.75, baseR * 1.75);
-    fill(255, 180, 60, 28 * glow * centerG);
-    ellipse(cx, cy, baseR * 1.25, baseR * 1.25);
+    // === MODE CORE COLOR ===
+    let coreColor;
+    if (currentMusicMode === 'prune') {
+        coreColor = { r: 255, g: 60, b: 70 };      // Red
+    } else if (currentMusicMode === 'replicate') {
+        coreColor = { r: 40, g: 230, b: 110 };     // Green
+    } else {
+        coreColor = { r: 255, g: 210, b: 70 };     // Yellow
+    }
 
+    // Strong central fire glow
+    noStroke();
+    fill(coreColor.r, coreColor.g, coreColor.b, 50 * glow * centerG);
+    ellipse(cx, cy, baseR * 1.8, baseR * 1.8);
+    fill(255, 255, 200, 25 * glow * centerG);
+    ellipse(cx, cy, baseR * 1.3, baseR * 1.3);
+
+    // === DRAW FLAMES ===
     for (let i = 0; i < numFlames; i++) {
         const angle = map(i, 0, numFlames, 0, TWO_PI);
-        const bin = Math.floor(map(i, 0, numFlames, 0, freqData.length * 0.95));
-        let intensity = (freqData[bin] || 0) / 255;
+        const bin = Math.floor(map(i, 0, numFlames, 0, freqData.length * 0.94));
+        let audioIntensity = (freqData[bin] || 0) / 255;
 
-        intensity *= (bassR + midR + highR) / 5.5;
+        // Apply reactivity
+        audioIntensity *= (bassR + midR + highR) / 5.8;
 
-        const flameLength = intensity * 260 * glow;   // Much longer flames
+        // === BASE FIRE (always visible, organic movement) ===
+        const baseVariation = sin(frameCount * 0.035 + i * 1.7) * 0.5 + 0.6; // organic random feel
+        const baseLength = 55 + baseVariation * 45; // always some visible flame
+
+        // === AUDIO BOOST ===
+        const audioBoost = audioIntensity * 220 * glow;
+        const finalLength = baseLength + audioBoost;
 
         const x1 = cx + cos(angle) * innerR;
         const y1 = cy + sin(angle) * innerR;
-        const x2 = cx + cos(angle) * (innerR + flameLength);
-        const y2 = cy + sin(angle) * (innerR + flameLength);
+        const x2 = cx + cos(angle) * (innerR + finalLength);
+        const y2 = cy + sin(angle) * (innerR + finalLength);
 
-        let flameCol;
-        if (intensity > 0.55) {
-            flameCol = color(255, 255, 140);
-        } else if (intensity > 0.32) {
-            flameCol = color(255, 215, 75);
-        } else {
-            flameCol = color(255, 140, 50);
+        // Color blending: core color + audio brightness
+        let r = coreColor.r;
+        let g = coreColor.g;
+        let b = coreColor.b;
+
+        if (audioIntensity > 0.35) {
+            // Audio makes it brighter/whiter
+            const mix = constrain(audioIntensity * 1.6, 0, 1);
+            r = lerp(r, 255, mix * 0.7);
+            g = lerp(g, 255, mix * 0.7);
+            b = lerp(b, 200, mix * 0.5);
         }
 
-        stroke(flameCol);
+        // Draw base flame
+        stroke(r, g, b);
         strokeWeight(thick);
         line(x1, y1, x2, y2);
 
-        if (intensity > 0.38) {
-            stroke(255, 250, 120, 95 * intensity * glow * opac);
-            strokeWeight(thick * 2.6);
+        // Extra bright reactive glow on strong hits
+        if (audioIntensity > 0.4) {
+            stroke(255, 250, 180, 90 * audioIntensity * glow * opac);
+            strokeWeight(thick * 2.5);
             line(x1, y1, x2, y2);
         }
     }
