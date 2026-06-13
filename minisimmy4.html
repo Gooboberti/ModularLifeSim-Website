@@ -1530,12 +1530,7 @@ Start of Chunk 2
 -->
     <!-- ========== CHUNK 2 START ========== -->
 <script>
-              // MiniSimmy2 code map:
-              // 1. Core state and resource systems
-              // 2. Audio, setup, controls, and tools
-              // 3. Analytics, inspector, and neural visualizer
-              // 4. Draw loop, world simulation, and creature behavior
-              // 5. Egg inventory, Aetherium inventory, prestige, and cleanup helpers
+          
               let creatures = [];
               let eggs = [];
               const MAX_INCUBATOR_SLOTS = 10;
@@ -1552,7 +1547,7 @@ Start of Chunk 2
               let redBeams = [];
               let purpleInfectParticles = [];
               let moduleParticles = [];
-     
+    
               let explosions = [];
               let spawnEffects = [];
               let floatingTexts = [];
@@ -1581,6 +1576,7 @@ Start of Chunk 2
               let analyticsModalOpen = false;
               // === VERSIONING (for future updates) ===
       const GAME_VERSION = "v2.01 - Fixed crash: isFilterMode scope error during wall drawing";
+
 // ==================== AUDIO VARIABLES ====================
 let masterVolume = 0.12;
 let effectsVolume = 0.65;
@@ -1593,6 +1589,10 @@ let masterGain;
 let compressor;
 let activeVoices = 0;
 const MAX_VOICES = 26;
+
+let cursorHumOsc = null;
+let cursorHumGain = null;
+let cursorHumFilter = null;
 
 // ==================== SOUND CONTROL SYSTEM (Granular + Debug) ====================
 let soundEnabled = {
@@ -1651,7 +1651,6 @@ function muteAllSounds() {
     updateSoundSettings();
 }
 
-// Debug version of canPlaySound
 function canPlaySound(category) {
     if (!soundEnabled.master) return false;
     if (soundEnabled.hasOwnProperty(category)) {
@@ -1661,7 +1660,25 @@ function canPlaySound(category) {
         return true;
     }
 }
-     
+
+// ==================== SCORE, UNLOCKS & HAZARDS (MISSING VARIABLES ADDED) ====================
+let totalScore = 0;
+let totalPredatorKills = 0;
+let lastScoreUpdate = 0;
+let unlockedSpeeds = {2: true, 4: true};
+let redHazardsUnlocked = false;
+let cursorHazardUnlocked = false;
+let freeMode = false;
+
+let redHazardsEnabled = true;
+let redHazardIntensity = 1;
+let cursorHazardActive = false;
+
+let persistentHazard = { x: 0, y: 0, active: false };
+let placedHazards = [];
+let beamCharge = 0;
+let maxPlacedHazards = 3;
+
 // ==================== MUSIC MODAL + MODES (CLEAN VERSION) ====================
 let musicEnabled = false;
 let currentMusicMode = null;
@@ -1704,13 +1721,11 @@ function startMusicAnalysis(audioEl) {
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
     }
     if (audioContext.state === 'suspended') audioContext.resume();
-
     if (currentSource) {
         try { currentSource.disconnect(); } catch(e){}
     }
     const source = getOrCreateSource(audioEl);
     if (!source) return;
-
     analyser = audioContext.createAnalyser();
     analyser.fftSize = 256;
     analyser.smoothingTimeConstant = 0.78;
@@ -1718,7 +1733,6 @@ function startMusicAnalysis(audioEl) {
     analyser.connect(audioContext.destination);
     currentSource = source;
     currentAudioEl = audioEl;
-
     if (!window.musicAnalysisRunning) {
         window.musicAnalysisRunning = true;
         updateMusicDataLoop();
@@ -1731,21 +1745,18 @@ function updateMusicDataLoop() {
     const len = freqData.length;
     let bass = 0, mids = 0, highs = 0;
     let bassCount = 0, midCount = 0, highCount = 0;
-
     for (let i = 0; i < len; i++) {
         const val = freqData[i];
         if (i < 14) { bass += val; bassCount++; }
         else if (i < 45) { mids += val; midCount++; }
         else { highs += val; highCount++; }
     }
-
     musicData.bass  = bassCount  ? (bass  / bassCount)  / 255 : 0;
     musicData.mids  = midCount  ? (mids  / midCount)  / 255 : 0;
     musicData.highs = highCount ? (highs / highCount) / 255 : 0;
-
     requestAnimationFrame(updateMusicDataLoop);
 }
-     
+
 let originalMusicSettings = {
     vortexMultiplier: null,
     reproductionChance: null,
@@ -1812,7 +1823,6 @@ function activateMusicMode(mode) {
         musicVisualizerColor = [255, 210, 50];
         musicVisualizerRadius = 375;
     }
-
     musicVisualizerActive = true;
 
     if (mode === 'replicate') {
@@ -1951,9 +1961,9 @@ function drawMusicModeTintAndBorder() {
     if (!currentMusicMode) return;
     push();
     noStroke();
-    if (currentMusicMode === 'prune')        fill(220, 30, 50, 62);
+    if (currentMusicMode === 'prune') fill(220, 30, 50, 62);
     else if (currentMusicMode === 'replicate') fill(20, 190, 110, 55);
-    else if (currentMusicMode === 'evolve')    fill(230, 180, 40, 58);
+    else if (currentMusicMode === 'evolve') fill(230, 180, 40, 58);
     rect(0, 0, width, height);
 
     const borderColor = currentMusicMode === 'prune' ? [255, 40, 60] :
@@ -1990,7 +2000,6 @@ function drawMusicVisualizer() {
     colorMode(RGB, 255);
     ellipseMode(CENTER);
     noFill();
-
     const cx = width / 2;
     const cy = height / 2;
     let r, g, b;
@@ -2041,9 +2050,28 @@ let aetheriumDust = 0;
 let burningCrystals = 0;
 let furnaceEndTime = 0;
 
-function formatDust(mg) { /* your existing formatDust function */ }
-function formatLargeNumber(n) { /* your existing formatLargeNumber function */ }
-function formatMultiplier(n) { /* your existing formatMultiplier function */ }
+function formatDust(mg) {
+    if (mg >= 1000000000) return (mg / 1000000000).toFixed(2) + " t";
+    else if (mg >= 1000000) return (mg / 1000000).toFixed(2) + " kg";
+    else if (mg >= 1000) return (mg / 1000).toFixed(2) + " g";
+    else if (mg >= 1) return mg.toFixed(2) + " mg";
+    else if (mg > 0) return (mg * 1000).toFixed(1) + " µg";
+    else return "0 mg";
+}
+
+function formatLargeNumber(n) {
+    if (n >= 1e12) return n.toExponential(2);
+    else if (n >= 1e9) return (n / 1e9).toFixed(2) + "B";
+    else if (n >= 1e6) return (n / 1e6).toFixed(2) + "M";
+    else if (n >= 10000) return (n / 1000).toFixed(1) + "k";
+    else return Math.floor(n).toLocaleString();
+}
+
+function formatMultiplier(n) {
+    if (n >= 10000) return n.toExponential(2);
+    else if (n >= 1000) return Math.floor(n).toLocaleString();
+    else return n.toFixed(0);
+}
 
 let timeScale = 1;
 let paused = false;
@@ -2076,7 +2104,6 @@ setInterval(() => {
         updateFurnaceUI();
     }
 }, 1000);
-
 // ==================== PERFORMANCE & ENVIRONMENT ====================
 let frameCountForFPS = 0;
 let lastFPSUpdate = 0;
