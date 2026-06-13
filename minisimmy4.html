@@ -1511,156 +1511,39 @@ Start of Chunk 2
               // 3. Analytics, inspector, and neural visualizer
               // 4. Draw loop, world simulation, and creature behavior
               // 5. Egg inventory, Aetherium inventory, prestige, and cleanup helpers
-              let creatures = [];
-              let eggs = [];
-              const MAX_INCUBATOR_SLOTS = 10;
-              let incubatingEggs = []; // { id, eggData, progress (0-100), completed }
-              let nextIncubationId = 1;
-              const MAX_EGGS = 10;   // Max eggs player can hold
-              let predators = [];
-              let vortexParticles = [];
-              let pheromones = [];
-              let foodBlooms = [];
-              let staticFoodPatches = [];
-              let energyOrbs = [];
-              let redHazards = [];
-              let redBeams = [];
+  // Audio
+let masterVolume = 0.12;
+let effectsVolume = 0.65;
+let ambientVolume = 1.6;
+let pitchShift = 0.98;
+let soundDensity = 1.55;
+let defaultWaveform = 'triangle';
 
-              let purpleInfectParticles = [];
-              let moduleParticles = [];
-      
-              let explosions = [];
-              let spawnEffects = [];
-              let floatingTexts = [];
-              let vortexProjectiles = []; // Bullets deflected by Energy Walls that spiral in the vortex
-              let showDamageNumbers = false; // Hidden by default at startup
-              let evolutionHistory = [];
-
-              let hidePrestigeWarning = false;
-
-              let geneVaultSlots = new Array(10).fill(null);
-
-              // === Real Chart History (v1.5) ===
-              let historyPop = [];
-              let historyPred = [];
-              let historyHR = [];
-              let historyModules = [];
-              const MAX_HISTORY = 180; // ~3-6 minutes depending on recording rate
-
-              let greenZone, blueZone;
-              let timeOfDay = 0;
-              let dayLength = 1600;
-              let lastIsDay = true;
-              let globalReproCooldown = 0;
-              let centerX, centerY;
-              let selectedCreature = null;
-              let trackAlpha = true;   // ← ADD THIS
-
-              // High Roller Points (main currency) - exposed on window for reliable access from modal/chart functions
-              let highRollerPoints = 0;
-              if (typeof window !== 'undefined') window.highRollerPoints = highRollerPoints;
-              let analyticsModalOpen = false;
-
-              // === VERSIONING (for future updates) ===
-      const GAME_VERSION = "v2.01 - Fixed crash: isFilterMode scope error during wall drawing";
-
-              // Audio
-              let masterVolume = 0.12;
-              let effectsVolume = 0.65;
-              let ambientVolume = 1.6;
-              let pitchShift = 0.98;
-              let soundDensity = 1.55;
-              let defaultWaveform = 'triangle';
-      
 // === Sound Calibration (Expanded) ===
 let deathVolume = 0.038;
 let deathAttack = 0.02;
 let deathRelease = 0.42;
 let deathLowFreq = 220;
 let deathHighFreq = 175;
-let explosionVolume = 0.16;
 
-      
+let explosionVolume = 0.16;
 let eatVolume = 0.032;
 let birthVolume = 0.04;
 let otherFxVolume = 0.03;     // deposit, predator feed, etc.
 
+let audioCtx;
+let masterGain;
+let compressor;
+let activeVoices = 0;
+const MAX_VOICES = 26; // increased for higher populations
 
-      
-              let audioCtx;
-              let masterGain;
-              let compressor;
-              let activeVoices = 0;
-              const MAX_VOICES = 26; // increased for higher populations
+let cursorHumOsc = null;
+let cursorHumGain = null;
+let cursorHumFilter = null;
 
-              let cursorHumOsc = null;
-              let cursorHumGain = null;
-              let cursorHumFilter = null;
-
-              // Currency & Unlocks
-              let totalScore = 0;
-              let totalPredatorKills = 0;
-              let lastScoreUpdate = 0;
-              let unlockedSpeeds = {2: true, 4: true}; // 2x and 4x are free and always unlocked; 8x removed completely
-              let redHazardsUnlocked = false;
-              let cursorHazardUnlocked = false;
-              let persistentHazard = { x: 0, y: 0, active: false };
-              let placedHazards = []; // {x, y, timer: 420 (~7s), shakeTimer: 0, exploding: false}
-              let beamCharge = 0;
-              let maxPlacedHazards = 3;
-              let freeMode = false;
-      
-// ==================== MUSIC MODAL + MODES (CLEAN VERSION) ====================
-
-let musicEnabled = false;
-let currentMusicMode = null;
-
-let musicData = { bass: 0, mids: 0, highs: 0 };
-
-let pruneAudio = new Audio('Track_Prune.mp3');
-let replicateAudio = new Audio('Track_Replicate.mp3');
-let evolveAudio = new Audio('Track_Evolve.mp3');
-
-pruneAudio.loop = true;
-replicateAudio.loop = true;
-evolveAudio.loop = true;
-
-// ==================== REAL AUDIO ANALYSIS (MODE SWITCHING FIXED) ====================
-let audioContext;
-let analyser;
-let currentSource = null;
-let currentAudioEl = null;
-let freqData = new Uint8Array(128);
-
-let pruneSource = null;
-let replicateSource = null;
-let evolveSource = null;
-
-function getOrCreateSource(audioEl) {
-    if (audioEl === pruneAudio) {
-        if (!pruneSource) {
-            pruneSource = audioContext.createMediaElementSource(audioEl);
-        }
-        return pruneSource;
-    }
-    if (audioEl === replicateAudio) {
-        if (!replicateSource) {
-            replicateSource = audioContext.createMediaElementSource(audioEl);
-        }
-        return replicateSource;
-    }
-    if (audioEl === evolveAudio) {
-        if (!evolveSource) {
-            evolveSource = audioContext.createMediaElementSource(audioEl);
-        }
-        return evolveSource;
-    }
-    return null;
-}
-
-// ==================== SOUND CALIBRATION SLIDERS ====================
+// ==================== SOUND CALIBRATION SLIDERS (Full Expanded Version) ====================
 function setupSoundCalibrationSliders() {
-    // Effects Volume
+    // === Global Effects Volume ===
     const effectsSlider = document.getElementById('sound-effects-vol-slider');
     const effectsVal = document.getElementById('sound-effects-vol-value');
     if (effectsSlider && effectsVal) {
@@ -1672,266 +1555,121 @@ function setupSoundCalibrationSliders() {
         effectsVal.textContent = effectsVolume.toFixed(2);
     }
 
-    // Death Volume
-    const deathVol = document.getElementById('sound-death-vol-slider');
+    // === Death Volume ===
+    const deathVolSlider = document.getElementById('sound-death-vol-slider');
     const deathVolVal = document.getElementById('sound-death-vol-value');
-    if (deathVol && deathVolVal) {
-        deathVol.oninput = () => { deathVolume = parseFloat(deathVol.value); deathVolVal.textContent = deathVolume.toFixed(3); };
-        deathVol.value = deathVolume; deathVolVal.textContent = deathVolume.toFixed(3);
+    if (deathVolSlider && deathVolVal) {
+        deathVolSlider.oninput = () => {
+            deathVolume = parseFloat(deathVolSlider.value);
+            deathVolVal.textContent = deathVolume.toFixed(3);
+        };
+        deathVolSlider.value = deathVolume;
+        deathVolVal.textContent = deathVolume.toFixed(3);
     }
 
-    // Death Attack
-    const attack = document.getElementById('sound-death-attack-slider');
+    // === Death Attack ===
+    const attackSlider = document.getElementById('sound-death-attack-slider');
     const attackVal = document.getElementById('sound-death-attack-value');
-    if (attack && attackVal) {
-        attack.oninput = () => { deathAttack = parseFloat(attack.value); attackVal.textContent = deathAttack.toFixed(3); };
-        attack.value = deathAttack; attackVal.textContent = deathAttack.toFixed(3);
+    if (attackSlider && attackVal) {
+        attackSlider.oninput = () => {
+            deathAttack = parseFloat(attackSlider.value);
+            attackVal.textContent = deathAttack.toFixed(3);
+        };
+        attackSlider.value = deathAttack;
+        attackVal.textContent = deathAttack.toFixed(3);
     }
 
-    // Death Release
-    const release = document.getElementById('sound-death-release-slider');
+    // === Death Release ===
+    const releaseSlider = document.getElementById('sound-death-release-slider');
     const releaseVal = document.getElementById('sound-death-release-value');
-    if (release && releaseVal) {
-        release.oninput = () => { deathRelease = parseFloat(release.value); releaseVal.textContent = deathRelease.toFixed(3); };
-        release.value = deathRelease; releaseVal.textContent = deathRelease.toFixed(3);
+    if (releaseSlider && releaseVal) {
+        releaseSlider.oninput = () => {
+            deathRelease = parseFloat(releaseSlider.value);
+            releaseVal.textContent = deathRelease.toFixed(3);
+        };
+        releaseSlider.value = deathRelease;
+        releaseVal.textContent = deathRelease.toFixed(3);
     }
 
-    // Death Low Freq
-    const low = document.getElementById('sound-death-low-slider');
+    // === Death Low Freq ===
+    const lowSlider = document.getElementById('sound-death-low-slider');
     const lowVal = document.getElementById('sound-death-low-value');
-    if (low && lowVal) {
-        low.oninput = () => { deathLowFreq = parseFloat(low.value); lowVal.textContent = Math.round(deathLowFreq); };
-        low.value = deathLowFreq; lowVal.textContent = Math.round(deathLowFreq);
+    if (lowSlider && lowVal) {
+        lowSlider.oninput = () => {
+            deathLowFreq = parseFloat(lowSlider.value);
+            lowVal.textContent = Math.round(deathLowFreq);
+        };
+        lowSlider.value = deathLowFreq;
+        lowVal.textContent = Math.round(deathLowFreq);
     }
 
-    // Death High Freq
-    const high = document.getElementById('sound-death-high-slider');
+    // === Death High Freq ===
+    const highSlider = document.getElementById('sound-death-high-slider');
     const highVal = document.getElementById('sound-death-high-value');
-    if (high && highVal) {
-        high.oninput = () => { deathHighFreq = parseFloat(high.value); highVal.textContent = Math.round(deathHighFreq); };
-        high.value = deathHighFreq; highVal.textContent = Math.round(deathHighFreq);
+    if (highSlider && highVal) {
+        highSlider.oninput = () => {
+            deathHighFreq = parseFloat(highSlider.value);
+            highVal.textContent = Math.round(deathHighFreq);
+        };
+        highSlider.value = deathHighFreq;
+        highVal.textContent = Math.round(deathHighFreq);
+    }
+
+    // === Explosion Volume ===
+    const expSlider = document.getElementById('sound-explosion-vol-slider');
+    const expVal = document.getElementById('sound-explosion-vol-value');
+    if (expSlider && expVal) {
+        expSlider.oninput = () => {
+            explosionVolume = parseFloat(expSlider.value);
+            expVal.textContent = explosionVolume.toFixed(2);
+        };
+        expSlider.value = explosionVolume;
+        expVal.textContent = explosionVolume.toFixed(2);
+    }
+
+    // === Eat Volume ===
+    const eatSlider = document.getElementById('sound-eat-vol-slider');
+    const eatVal = document.getElementById('sound-eat-vol-value');
+    if (eatSlider && eatVal) {
+        eatSlider.oninput = () => {
+            eatVolume = parseFloat(eatSlider.value);
+            eatVal.textContent = eatVolume.toFixed(3);
+        };
+        eatSlider.value = eatVolume;
+        eatVal.textContent = eatVolume.toFixed(3);
+    }
+
+    // === Birth Volume ===
+    const birthSlider = document.getElementById('sound-birth-vol-slider');
+    const birthVal = document.getElementById('sound-birth-vol-value');
+    if (birthSlider && birthVal) {
+        birthSlider.oninput = () => {
+            birthVolume = parseFloat(birthSlider.value);
+            birthVal.textContent = birthVolume.toFixed(3);
+        };
+        birthSlider.value = birthVolume;
+        birthVal.textContent = birthVolume.toFixed(3);
+    }
+
+    // === Other FX Volume (Deposit / Predator Feed) ===
+    const otherSlider = document.getElementById('sound-other-vol-slider');
+    const otherVal = document.getElementById('sound-other-vol-value');
+    if (otherSlider && otherVal) {
+        otherSlider.oninput = () => {
+            otherFxVolume = parseFloat(otherSlider.value);
+            otherVal.textContent = otherFxVolume.toFixed(3);
+        };
+        otherSlider.value = otherFxVolume;
+        otherVal.textContent = otherFxVolume.toFixed(3);
     }
 }
 
-// Auto-run on load
-setTimeout(() => {
-    if (typeof setupSoundCalibrationSliders === 'function') setupSoundCalibrationSliders();
-}, 900);
-// Auto-setup when page loads
+// Auto-initialize sound calibration sliders on load
 setTimeout(() => {
     if (typeof setupSoundCalibrationSliders === 'function') {
         setupSoundCalibrationSliders();
     }
-}, 800);
-      
-
-function startMusicAnalysis(audioEl) {
-    if (!audioContext) {
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    }
-
-    if (audioContext.state === 'suspended') {
-        audioContext.resume();
-    }
-
-    if (currentSource) {
-        try { currentSource.disconnect(); } catch(e){}
-    }
-
-    const source = getOrCreateSource(audioEl);
-    if (!source) return;
-
-    analyser = audioContext.createAnalyser();
-    analyser.fftSize = 256;
-    analyser.smoothingTimeConstant = 0.78;
-
-    source.connect(analyser);
-    analyser.connect(audioContext.destination);
-
-    currentSource = source;
-    currentAudioEl = audioEl;
-
-    if (!window.musicAnalysisRunning) {
-        window.musicAnalysisRunning = true;
-        updateMusicDataLoop();
-    }
-}
-
-function updateMusicDataLoop() {
-    if (!analyser) return;
-
-    analyser.getByteFrequencyData(freqData);
-
-    const len = freqData.length;
-    let bass = 0, mids = 0, highs = 0;
-    let bassCount = 0, midCount = 0, highCount = 0;
-
-    for (let i = 0; i < len; i++) {
-        const val = freqData[i];
-        if (i < 14) {
-            bass += val; bassCount++;
-        } else if (i < 45) {
-            mids += val; midCount++;
-        } else {
-            highs += val; highCount++;
-        }
-    }
-
-    musicData.bass = bassCount ? (bass / bassCount) / 255 : 0;
-    musicData.mids = midCount ? (mids / midCount) / 255 : 0;
-    musicData.highs = highCount ? (highs / highCount) / 255 : 0;
-
-    requestAnimationFrame(updateMusicDataLoop);
-}
-      
-
-let originalMusicSettings = {
-    vortexMultiplier: null,
-    reproductionChance: null,
-    energyDrain: null,
-    particleFoodValue: null
-};
-let originalRedHazardsEnabled = false;
-let originalRedHazardIntensity = 1;
-
-let evolveEnvTimer = 0;
-let evolveEnvPhaseIndex = 0;
-const evolveEnvPhases = ['Fertile', 'Normal', 'Drought'];
-
-// === MUSIC VISUALIZER RING ===
-let musicVisualizerActive = false;
-let musicVisualizerColor = [255, 50, 70];
-
-
-function showMusicModal() {
-    const modal = document.getElementById('music-modal');
-    if (!modal) {
-        console.warn("Music modal element not found in HTML");
-        return;
-    }
-    if (modal.parentElement !== document.body) {
-        document.body.appendChild(modal);
-    }
-    modal.classList.remove('hidden');
-    modal.classList.add('flex');
-    modal.style.display = 'flex';
-    modal.style.zIndex = '999999';
-}
-
-function hideMusicModal() {
-    const modal = document.getElementById('music-modal');
-    if (modal) {
-        modal.classList.remove('flex');
-        modal.classList.add('hidden');
-        modal.style.display = 'none';
-    }
-}
-
-function activateMusicMode(mode) {
-    stopMusicMode();
-
-    musicEnabled = true;
-    currentMusicMode = mode;
-    evolveEnvTimer = 0;
-
-    // Save original settings
-    originalMusicSettings.vortexMultiplier = settings.vortexMultiplier;
-    originalMusicSettings.reproductionChance = settings.reproductionChance;
-    originalMusicSettings.energyDrain = settings.energyDrain;
-    originalMusicSettings.particleFoodValue = settings.particleFoodValue;
-    originalRedHazardsEnabled = redHazardsEnabled;
-    originalRedHazardIntensity = redHazardIntensity;
-
-    addFloatingText(width / 2, 70, `${mode.toUpperCase()} MODE`, '#34d399');
-
-    // Set speed + visualizer defaults
-    if (mode === 'prune') {
-        setTimeScale(4);
-        musicVisualizerColor = [255, 40, 70];
-        musicVisualizerRadius = 380;
-    } else if (mode === 'replicate') {
-        setTimeScale(4);
-        musicVisualizerColor = [30, 230, 120];
-        musicVisualizerRadius = 370;
-    } else if (mode === 'evolve') {
-        setTimeScale(4);
-        musicVisualizerColor = [255, 210, 50];
-        musicVisualizerRadius = 375;
-    }
-
-    musicVisualizerActive = true;
-
-    if (mode === 'replicate') {
-        forceEnvironmentalPhase('Fertile');
-        replicateAudio.currentTime = 0;
-        replicateAudio.play().catch(() => {});
-        startMusicAnalysis(replicateAudio);
-        applyReplicateModifiers();
-    } 
-    else if (mode === 'prune') {
-        forceEnvironmentalPhase('Drought');
-        pruneAudio.currentTime = 0;
-        pruneAudio.play().catch(() => {});
-        startMusicAnalysis(pruneAudio);
-        applyPruneModifiers();
-    } 
-    else if (mode === 'evolve') {
-        evolveEnvPhaseIndex = 0;
-        forceEnvironmentalPhase(evolveEnvPhases[0]);
-        evolveAudio.currentTime = 0;
-        evolveAudio.play().catch(() => {});
-        startMusicAnalysis(evolveAudio);
-        applyEvolveModifiers();
-    }
-
-    updateEnvBarVisibility(true);
-}
-
-function stopMusicMode() {
-    if (!musicEnabled) return;
-
-    musicEnabled = false;
-    currentMusicMode = null;
-    musicVisualizerActive = false;
-
-    // Stop all audio
-    if (pruneAudio) pruneAudio.pause();
-    if (replicateAudio) replicateAudio.pause();
-    if (evolveAudio) evolveAudio.pause();
-
-    // Disconnect current source (fixed variable name)
-    if (currentSource) {
-        try { currentSource.disconnect(); } catch(e){}
-        currentSource = null;
-    }
-    currentAudioEl = null;
-    analyser = null;
-
-    // Reset data
-    musicData = { bass: 0, mids: 0, highs: 0 };
-    freqData = new Uint8Array(128);
-
-    // Restore original game settings (keep your existing restore code)
-    if (originalMusicSettings.vortexMultiplier !== null) {
-        settings.vortexMultiplier = originalMusicSettings.vortexMultiplier;
-    }
-    if (originalMusicSettings.reproductionChance !== null) {
-        settings.reproductionChance = originalMusicSettings.reproductionChance;
-    }
-    if (originalMusicSettings.energyDrain !== null) {
-        settings.energyDrain = originalMusicSettings.energyDrain;
-    }
-    if (originalMusicSettings.particleFoodValue !== null) {
-        settings.particleFoodValue = originalMusicSettings.particleFoodValue;
-    }
-
-    redHazardsEnabled = originalRedHazardsEnabled;
-    redHazardIntensity = originalRedHazardIntensity || 1;
-
-    evolveEnvTimer = 0;
-
-    addFloatingText(width / 2, 70, "Music Stopped", '#f87171');
-}
+}, 900);
 
 // ==================== HELPER FUNCTIONS ====================
 
