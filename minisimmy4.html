@@ -2824,707 +2824,165 @@ function hideTopCreaturesModal() {
       //CHUNK 3 of 3  —  RUNTIME LOOP + DRAW + HANDLERS
       //===============================================================================
 
-            function setupCheatSliders() {
-          // Energy Drain
-          const drainSlider = document.getElementById('cheat-slider-drain');
-          const drainVal = document.getElementById('cheat-val-drain');
-          if (drainSlider && drainVal) {
-              drainSlider.oninput = () => {
-                  settings.energyDrain = parseFloat(drainSlider.value);
-                  drainVal.innerText = settings.energyDrain.toFixed(3);
-              };
-          }
+         // ==================== AUDIO + SOUND CALIBRATION ====================
+let masterVolume = 0.12;
+let effectsVolume = 0.65;
+let ambientVolume = 1.6;
+let pitchShift = 0.98;
+let soundDensity = 1.55;
+let defaultWaveform = 'triangle';
 
-          // Food per Particle
-          const particleSlider = document.getElementById('cheat-slider-particle');
-          const particleVal = document.getElementById('cheat-val-particle');
-          if (particleSlider && particleVal) {
-              particleSlider.oninput = () => {
-                  settings.particleFoodValue = parseFloat(particleSlider.value);
-                  particleVal.innerText = settings.particleFoodValue.toFixed(1);
-              };
-          }
+// === Sound Calibration Variables (Expanded) ===
+let deathVolume = 0.038;
+let deathAttack = 0.02;
+let deathRelease = 0.42;
+let deathLowFreq = 220;
+let deathHighFreq = 175;
 
-          // Reproduction Chance
-          const reproSlider = document.getElementById('cheat-slider-repro');
-          const reproVal = document.getElementById('cheat-val-repro');
-          if (reproSlider && reproVal) {
-              reproSlider.oninput = () => {
-                  settings.reproductionChance = parseFloat(reproSlider.value);
-                  reproVal.innerText = settings.reproductionChance.toFixed(4);
-              };
-          }
+let explosionVolume = 0.16;
+let eatVolume = 0.032;
+let birthVolume = 0.04;
+let otherFxVolume = 0.03;     // deposit, predator feed, etc.
 
-          // Vortex Strength
-          const vortexSlider = document.getElementById('cheat-slider-vortex');
-          const vortexVal = document.getElementById('cheat-val-vortex');
-          if (vortexSlider && vortexVal) {
-              vortexSlider.oninput = () => {
-                  settings.vortexStrength = parseFloat(vortexSlider.value);
-                  vortexVal.innerText = settings.vortexStrength.toFixed(1);
-              };
-          }
-      }
+let audioCtx;
+let masterGain;
+let compressor;
+let activeVoices = 0;
+const MAX_VOICES = 26;
 
+let cursorHumOsc = null;
+let cursorHumGain = null;
+let cursorHumFilter = null;
 
-      
+// ==================== SOUND CALIBRATION SLIDERS (Full) ====================
+function setupSoundCalibrationSliders() {
+    // Global Effects Volume
+    const effectsSlider = document.getElementById('sound-effects-vol-slider');
+    const effectsVal = document.getElementById('sound-effects-vol-value');
+    if (effectsSlider && effectsVal) {
+        effectsSlider.oninput = () => {
+            effectsVolume = parseFloat(effectsSlider.value);
+            effectsVal.textContent = effectsVolume.toFixed(2);
+        };
+        effectsSlider.value = effectsVolume;
+        effectsVal.textContent = effectsVolume.toFixed(2);
+    }
 
-      function setup() {
-          let canvas = createCanvas(820, 580);
-          canvas.parent('canvas-container');
-          canvas.mousePressed(handleMousePress);
+    // Death Volume
+    const deathVolSlider = document.getElementById('sound-death-vol-slider');
+    const deathVolVal = document.getElementById('sound-death-vol-value');
+    if (deathVolSlider && deathVolVal) {
+        deathVolSlider.oninput = () => {
+            deathVolume = parseFloat(deathVolSlider.value);
+            deathVolVal.textContent = deathVolume.toFixed(3);
+        };
+        deathVolSlider.value = deathVolume;
+        deathVolVal.textContent = deathVolume.toFixed(3);
+    }
 
-          // Prevent browser context menu on right-click inside the sim
-          canvas.elt.addEventListener('contextmenu', e => e.preventDefault());
+    // Death Attack
+    const attackSlider = document.getElementById('sound-death-attack-slider');
+    const attackVal = document.getElementById('sound-death-attack-value');
+    if (attackSlider && attackVal) {
+        attackSlider.oninput = () => {
+            deathAttack = parseFloat(attackSlider.value);
+            attackVal.textContent = deathAttack.toFixed(3);
+        };
+        attackSlider.value = deathAttack;
+        attackVal.textContent = deathAttack.toFixed(3);
+    }
 
-          centerX = width / 2;
-          centerY = height / 2;
+    // Death Release
+    const releaseSlider = document.getElementById('sound-death-release-slider');
+    const releaseVal = document.getElementById('sound-death-release-value');
+    if (releaseSlider && releaseVal) {
+        releaseSlider.oninput = () => {
+            deathRelease = parseFloat(releaseSlider.value);
+            releaseVal.textContent = deathRelease.toFixed(3);
+        };
+        releaseSlider.value = deathRelease;
+        releaseVal.textContent = deathRelease.toFixed(3);
+    }
 
-          greenZone = { x: 200, y: 290, baseR: 105, minR: 36, food: 320, maxFood: 420 };
-          blueZone  = { x: 620, y: 290, baseR: 105, minR: 36, food: 320, maxFood: 420 };
+    // Death Low Freq
+    const lowSlider = document.getElementById('sound-death-low-slider');
+    const lowVal = document.getElementById('sound-death-low-value');
+    if (lowSlider && lowVal) {
+        lowSlider.oninput = () => {
+            deathLowFreq = parseFloat(lowSlider.value);
+            lowVal.textContent = Math.round(deathLowFreq);
+        };
+        lowSlider.value = deathLowFreq;
+        lowVal.textContent = Math.round(deathLowFreq);
+    }
 
-          for (let i = 0; i < 9; i++) {
-              creatures.push(new Creature(random(width), random(height)));
-          }
+    // Death High Freq
+    const highSlider = document.getElementById('sound-death-high-slider');
+    const highVal = document.getElementById('sound-death-high-value');
+    if (highSlider && highVal) {
+        highSlider.oninput = () => {
+            deathHighFreq = parseFloat(highSlider.value);
+            highVal.textContent = Math.round(deathHighFreq);
+        };
+        highSlider.value = deathHighFreq;
+        highVal.textContent = Math.round(deathHighFreq);
+    }
 
-          for (let i = 0; i < 110; i++) {
-              vortexParticles.push(new VortexParticle());
-          }
+    // Explosion Volume
+    const expSlider = document.getElementById('sound-explosion-vol-slider');
+    const expVal = document.getElementById('sound-explosion-vol-value');
+    if (expSlider && expVal) {
+        expSlider.oninput = () => {
+            explosionVolume = parseFloat(expSlider.value);
+            expVal.textContent = explosionVolume.toFixed(2);
+        };
+        expSlider.value = explosionVolume;
+        expVal.textContent = explosionVolume.toFixed(2);
+    }
 
-          setupSliders();
-          setupCheatSliders();   // ← Now active
+    // Eat Volume
+    const eatSlider = document.getElementById('sound-eat-vol-slider');
+    const eatVal = document.getElementById('sound-eat-vol-value');
+    if (eatSlider && eatVal) {
+        eatSlider.oninput = () => {
+            eatVolume = parseFloat(eatSlider.value);
+            eatVal.textContent = eatVolume.toFixed(3);
+        };
+        eatSlider.value = eatVolume;
+        eatVal.textContent = eatVolume.toFixed(3);
+    }
 
-          const miniCanvas = document.getElementById('mini-chart');
-          if (miniCanvas) miniChartCtx = miniCanvas.getContext('2d');
+    // Birth Volume
+    const birthSlider = document.getElementById('sound-birth-vol-slider');
+    const birthVal = document.getElementById('sound-birth-vol-value');
+    if (birthSlider && birthVal) {
+        birthSlider.oninput = () => {
+            birthVolume = parseFloat(birthSlider.value);
+            birthVal.textContent = birthVolume.toFixed(3);
+        };
+        birthSlider.value = birthVolume;
+        birthVal.textContent = birthVolume.toFixed(3);
+    }
 
-          evolutionHistory = [];
-          document.addEventListener('keydown', handleKeyPress);
-          document.getElementById('speed-1').classList.add('active', 'bg-emerald-500', 'text-[#0a0a0f]');
-
-          createEnvLabel();
-          updateMainStats();
-          updateTopFurnaceUI();
-
-          // === Auto-select a creature so the inspector is never empty on startup ===
-          if (creatures.length > 0) {
-              const alpha = getCurrentAlpha();
-              if (alpha) {
-                  selectCreature(alpha);
-              } else {
-                  selectCreature(creatures[0]);
-              }
-          }
-      }
-
-      function createEnvLabel() {
-          const container = document.getElementById('canvas-container');
-          if (!container) return;
-
-          envLabelElement = document.createElement('div');
-          envLabelElement.className = 'env-label hidden';
-          envLabelElement.style.color = '#34d399';
-          container.appendChild(envLabelElement);
-      }
-
-      function updateEnvLabel(phase) {
-          if (!envLabelElement) return;
-
-          let text = '';
-          let color = '#34d399';
-
-          if (phase === 0) {
-              text = 'FERTILE SEASON';
-              color = '#34d399';
-          } else if (phase === 1) {
-              text = 'NORMAL CONDITIONS';
-              color = '#a3a3a3';
-          } else if (phase === 2) {
-              text = 'DROUGHT';
-              color = '#f59e0b';
-          }
-
-          envLabelElement.innerText = text;
-          envLabelElement.style.color = color;
-          envLabelElement.classList.remove('hidden');
-
-          setTimeout(() => {
-              if (envLabelElement) envLabelElement.style.transition = 'opacity 1.2s ease';
-              if (envLabelElement) envLabelElement.style.opacity = '0';
-
-              setTimeout(() => {
-                  if (envLabelElement) {
-                      envLabelElement.style.transition = '';
-                      envLabelElement.style.opacity = '1';
-                      envLabelElement.classList.add('hidden');
-                  }
-              }, 1300);
-          }, 2800);
-      }
-
-      function updateEnvironmentalUI() {
-          const phaseText = document.getElementById('env-phase-text');
-          const progressBar = document.getElementById('env-progress-bar');
-
-          let label = 'FERTILE';
-          let progress = 0;
-          let barColor = 'from-emerald-400 via-amber-400 to-orange-500';
-
-          if (environmentPhase === 0) {
-              label = 'FERTILE';
-              progress = (envPhaseProgress / envCycleLength) * 100;
-              barColor = 'from-emerald-400 to-emerald-500';
-          } else if (environmentPhase === 1) {
-              label = 'NORMAL';
-              progress = (envPhaseProgress / envCycleLength) * 100;
-              barColor = 'from-amber-400 to-yellow-500';
-          } else if (environmentPhase === 2) {
-              label = 'DROUGHT';
-              progress = (envPhaseProgress / envCycleLength) * 100;
-              barColor = 'from-orange-500 to-red-500';
-          }
-
-          if (phaseText) phaseText.innerText = label;
-          if (progressBar) {
-              progressBar.style.width = Math.min(100, Math.max(0, progress)) + '%';
-              progressBar.className = `h-full bg-gradient-to-r ${barColor} transition-all`;
-          }
-      }
-
-      function getEnvironmentModifiers() {
-          if (environmentPhase === 0) {
-              return { energyGainMult: 1.85, drainMult: 0.65, reproMult: 2.4, vortexMult: 0.75 };
-          } else if (environmentPhase === 1) {
-              return { energyGainMult: 1.0, drainMult: 1.0, reproMult: 1.0, vortexMult: 1.0 };
-          } else {
-              return { energyGainMult: 0.55, drainMult: 1.85, reproMult: 0.35, vortexMult: 1.45 };
-          }
-      }
-
-              function handleKeyPress(e) {
-                  if (e.key === ' ') { e.preventDefault(); togglePause(); }
-                  if (e.key === '+') setTimeScale(Math.min(4, timeScale * 2));
-                  if (e.key === '-') setTimeScale(Math.max(0.25, timeScale / 2));
-              }
-function togglePause() {
-    paused = !paused;
-
-    const pauseBtn = document.getElementById('pause-btn');
-    const pauseText = document.getElementById('pause-text');
-
-    if (paused) {
-        // Pause the simulation
-        if (pauseBtn) {
-            pauseBtn.classList.remove('bg-white/10');
-            pauseBtn.classList.add('bg-red-500/80', 'text-white');
-        }
-        if (pauseText) pauseText.innerHTML = 'Resume';
-
-        // Pause music if a music mode is active
-        if (currentMusicMode === 'prune' && pruneAudio) {
-            pruneAudio.pause();
-        }
-        if (currentMusicMode === 'replicate' && replicateAudio) {
-            replicateAudio.pause();
-        }
-        if (currentMusicMode === 'evolve' && evolveAudio) {
-            evolveAudio.pause();
-        }
-
-    } else {
-        // Resume the simulation
-        if (pauseBtn) {
-            pauseBtn.classList.remove('bg-red-500/80', 'text-white');
-            pauseBtn.classList.add('bg-white/10');
-        }
-        if (pauseText) pauseText.innerHTML = 'Pause';
-
-        // Resume music if a music mode is active
-        if (currentMusicMode === 'prune' && pruneAudio) {
-            pruneAudio.play().catch(() => {});
-        }
-        if (currentMusicMode === 'replicate' && replicateAudio) {
-            replicateAudio.play().catch(() => {});
-        }
-        if (currentMusicMode === 'evolve' && evolveAudio) {
-            evolveAudio.play().catch(() => {});
-        }
+    // Other FX Volume (Deposit / Predator)
+    const otherSlider = document.getElementById('sound-other-vol-slider');
+    const otherVal = document.getElementById('sound-other-vol-value');
+    if (otherSlider && otherVal) {
+        otherSlider.oninput = () => {
+            otherFxVolume = parseFloat(otherSlider.value);
+            otherVal.textContent = otherFxVolume.toFixed(3);
+        };
+        otherSlider.value = otherFxVolume;
+        otherVal.textContent = otherFxVolume.toFixed(3);
     }
 }
 
-function setTimeScale(scale) {
-    if (scale === 8) return;
-    timeScale = scale;
-    document.querySelectorAll('[id^="speed-"]').forEach(el => {
-        el.classList.remove('active', 'bg-emerald-500', 'text-[#0a0a0f]');
-        if (parseFloat(el.id.split('-')[1]) === scale) {
-            el.classList.add('active', 'bg-emerald-500', 'text-[#0a0a0f]');
-        }
-    });
-}
-
-function adjustZoom(delta) {
-    zoomLevel = constrain(zoomLevel + delta, 0.4, 2.0);
-    document.getElementById('zoom-level').innerText = Math.round(zoomLevel * 100) + '%';
-}
-
-// Quick bottom bar toggles
-function toggleRedHazardsQuick() {
-    if (!redHazardsUnlocked) {
-        if (totalScore >= 180) {
-            buyRedHazards();
-        } else {
-            showCheatsModal();
-            return;
-        }
+// Auto-init sound sliders (safe version)
+setTimeout(() => {
+    if (typeof setupSoundCalibrationSliders === 'function') {
+        setupSoundCalibrationSliders();
     }
-    redHazardsEnabled = !redHazardsEnabled;
-    if (redHazardsEnabled && redHazards.length < 6) {
-        for (let i = 0; i < 6; i++) redHazards.push(new RedHazard());
-    }
-    updateQuickButtons();
-}
-
-function toggleCursorHazardQuick() {
-    if (!cursorHazardUnlocked) {
-        if (totalScore >= 240) {
-            buyCursorHazard();
-        } else {
-            showCheatsModal();
-            return;
-        }
-    }
-    cursorHazardActive = !cursorHazardActive;
-    const container = document.getElementById('canvas-container');
-    if (cursorHazardActive) {
-        container.classList.add('hazard-cursor');
-        startCursorHum();
-    } else {
-        container.classList.remove('hazard-cursor');
-        stopCursorHum();
-    }
-    updateQuickButtons();
-}
-
-// =====================================================
-// ENERGY WALLS
-// =====================================================
-let energyWallMode = false;
-let isDrawingWall = false;
-let wallStartX = 0;
-let wallStartY = 0;
-let currentWallPreview = null; // Temporary line while drawing
-let currentWallFilterMode = "repel_all"; // v1.74+ Filter mode for new walls
-let energyWalls = [];
-let cursorPushActive = false;
-
-// =====================================================
-// SPACESHIP (Space Invaders style power-up)
-// =====================================================
-let spaceshipActive = false;
-let shipX = 400;
-let shipY = 0;
-let bullets = [];
-let lastShotTime = 0;
-let showMobileControls = false;
-
-// =====================================================
-// ENERGY WALL TOGGLE
-// =====================================================
-function toggleEnergyWallMode() {
-    energyWallMode = !energyWallMode;
-    isDrawingWall = false;
-    currentWallPreview = null;
-    const btn = document.getElementById('quick-wall-btn');
-    if (!btn) return;
-    if (energyWallMode) {
-        btn.classList.add('bg-violet-500/80', 'text-white');
-        btn.classList.remove('bg-white/10');
-    } else {
-        btn.classList.remove('bg-violet-500/80', 'text-white');
-        btn.classList.add('bg-white/10');
-    }
-}
-
-// ==================== v1.75: Energy Wall Placement Menu ====================
-function showEnergyWallPlacementMenu() {
-    closeDynamicModals();
-    const modal = document.createElement('div');
-    modal.className = 'dynamic-modal fixed inset-0 bg-black/80 flex items-center justify-center z-[250]';
-    modal.innerHTML = `
-        <div class="bg-[#121218] border border-white/10 rounded-3xl w-full max-w-lg mx-4 p-6">
-            <div class="flex justify-between items-center mb-5">
-                <h3 class="text-xl font-semibold flex items-center gap-x-2">
-                    <i class="fa-solid fa-shield-alt text-violet-400"></i>
-                    <span>Place Energy Wall</span>
-                </h3>
-                <button onclick="this.closest('.fixed').remove()" class="text-3xl leading-none text-white/60 hover:text-white">×</button>
-            </div>
-            <div class="grid grid-cols-1 gap-3 mb-4">
-                <!-- Solid Barrier -->
-                <button onclick="selectWallType('solid')"
-                        class="w-full text-left p-4 bg-white/5 hover:bg-white/10 rounded-2xl border border-white/10 flex items-center gap-x-4 transition-colors">
-                    <div class="w-10 h-10 rounded-xl bg-violet-500/20 flex items-center justify-center flex-shrink-0">
-                        <i class="fa-solid fa-square text-violet-400 text-xl"></i>
-                    </div>
-                    <div>
-                        <div class="font-semibold">Solid Barrier</div>
-                        <div class="text-xs text-white/60">Blocks most creatures. Classic wall behavior.</div>
-                    </div>
-                </button>
-                <!-- Filter / Pusher Wall -->
-                <button onclick="showFilterWallSubMenu()"
-                        class="w-full text-left p-4 bg-white/5 hover:bg-white/10 rounded-2xl border border-white/10 flex items-center gap-x-4 transition-colors">
-                    <div class="w-10 h-10 rounded-xl bg-sky-500/20 flex items-center justify-center flex-shrink-0">
-                        <i class="fa-solid fa-filter text-sky-400 text-xl"></i>
-                    </div>
-                    <div>
-                        <div class="font-semibold">Selective Filter Wall</div>
-                        <div class="text-xs text-white/60">Only affects chosen creature types. Unaffected creatures pass through.</div>
-                    </div>
-                </button>
-            </div>
-            <!-- Offensive Mode in main menu -->
-            <div class="flex items-center justify-between bg-white/5 rounded-2xl p-3 mb-4">
-                <div>
-                    <div class="font-medium text-sm flex items-center gap-x-2">
-                        <i class="fa-solid fa-skull text-red-400"></i>
-                        <span>Offensive Mode</span>
-                    </div>
-                    <div class="text-xs text-white/60">Enable damage, breaking, red particle reaction &amp; empowerment</div>
-                </div>
-                <label class="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" id="main-offensive-toggle" class="sr-only peer" onchange="window.selectedOffensive = this.checked">
-                    <div class="w-11 h-6 bg-white/20 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-500"></div>
-                </label>
-            </div>
-            <div class="text-xs text-white/50 text-center mb-3">
-                Most walls are peaceful selective barriers by default.
-            </div>
-            <div class="flex justify-center">
-                <button onclick="clearAllEnergyWalls(); this.closest('.fixed').remove();"
-                        class="px-4 py-1.5 text-xs rounded-2xl bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30">
-                    Clear All Energy Walls
-                </button>
-            </div>
-        </div>
-    `;
-    document.body.appendChild(modal);
-}
-
-function clearAllEnergyWalls() {
-    if (energyWalls.length > 0) {
-        energyWalls = [];
-        addFloatingText(width/2, 60, "All walls cleared", '#f87171');
-    }
-}
-
-function selectWallType(type) {
-    closeDynamicModals();
-    if (type === 'solid') {
-        currentWallFilterMode = "repel_all";
-        const isOff = window.selectedOffensive === true;
-        window.currentFilterWallSettings = { offensive: isOff };
-        toggleEnergyWallMode();
-    }
-}
-
-function showFilterWallSubMenu() {
-    closeDynamicModals();
-    const modal = document.createElement('div');
-    modal.className = 'dynamic-modal fixed inset-0 bg-black/80 flex items-center justify-center z-[260]';
-    
-    const types = ['predator', 'white', 'red', 'high_module', 'low_module'];
-    const labels = {
-        predator: 'Predators',
-        white: 'White Particles',
-        red: 'Red Particles',
-        high_module: 'Top 10% Highest Modules',
-        low_module: 'Bottom 10% Lowest Modules'
-    };
-    
-    let radioHTML = '';
-    types.forEach(type => {
-        const checked = (selectedFilterTypes.length > 0 && selectedFilterTypes[0] === type) ? 'checked' : '';
-        radioHTML += `
-            <label class="flex items-center gap-x-3 p-3 bg-white/5 hover:bg-white/10 rounded-2xl cursor-pointer">
-                <input type="radio" name="filter-type" data-type="${type}" ${checked} class="accent-sky-400">
-                <span>${labels[type]}</span>
-            </label>
-        `;
-    });
-    
-    modal.innerHTML = `
-        <div class="bg-[#121218] border border-white/10 rounded-3xl w-full max-w-md mx-4 p-6">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-lg font-semibold flex items-center gap-x-2">
-                    <i class="fa-solid fa-filter text-sky-400"></i>
-                    <span>Selective Filter Wall</span>
-                </h3>
-                <button onclick="this.closest('.fixed').remove()" class="text-3xl leading-none text-white/60 hover:text-white">×</button>
-            </div>
-            <div class="text-sm text-white/70 mb-3">Choose which type this wall will strongly push back (only one):</div>
-            <div class="flex flex-col gap-1.5 text-sm mb-5" id="filter-options">
-                ${radioHTML}
-            </div>
-            <div class="flex justify-end gap-x-3">
-                <button onclick="this.closest('.fixed').remove()" class="px-5 py-2 text-sm rounded-2xl bg-white/10 hover:bg-white/20">Cancel</button>
-                <button onclick="confirmFilterWall(this)" class="px-5 py-2 text-sm rounded-2xl bg-sky-500 hover:bg-sky-600 font-medium">Start Drawing</button>
-            </div>
-        </div>
-    `;
-    document.body.appendChild(modal);
-}
-
-let selectedFilterTypes = [];
-
-function confirmFilterWall(btn) {
-    const modal = btn.closest('.fixed');
-    const container = modal.querySelector('#filter-options');
-    const selectedRadio = container.querySelector('input[type="radio"]:checked');
-    
-    selectedFilterTypes = [];
-    if (selectedRadio) {
-        selectedFilterTypes.push(selectedRadio.dataset.type);
-    }
-    
-    const mainToggle = document.getElementById('main-offensive-toggle');
-    const isOffensive = mainToggle ? mainToggle.checked : (window.selectedOffensive === true);
-    
-    window.currentFilterWallSettings = {
-        types: selectedFilterTypes,
-        offensive: isOffensive
-    };
-    
-    modal.remove();
-    currentWallFilterMode = "custom_filter";
-    toggleEnergyWallMode();
-}
-
-function toggleCursorPush() {
-    cursorPushActive = !cursorPushActive;
-    const btn = document.getElementById('quick-push-btn');
-    if (!btn) return;
-    if (cursorPushActive) {
-        btn.classList.add('bg-sky-500/80', 'text-white');
-        btn.classList.remove('bg-white/10');
-    } else {
-        btn.classList.remove('bg-sky-500/80', 'text-white');
-        btn.classList.add('bg-white/10');
-    }
-}
-
-function toggleSpaceship() {
-    spaceshipActive = !spaceshipActive;
-    const btn = document.getElementById('quick-ship-btn');
-    if (!btn) return;
-    
-    if (spaceshipActive) {
-        btn.classList.add('bg-emerald-500/80', 'text-white');
-        btn.classList.remove('bg-white/10');
-        shipX = width / 2;
-        shipY = height - 45;
-        bullets = [];
-    } else {
-        btn.classList.remove('bg-emerald-500/80', 'text-white');
-        btn.classList.add('bg-white/10');
-        bullets = [];
-    }
-}
-
-function toggleFreeMode() {
-    freeMode = !freeMode;
-    const btn = document.getElementById('free-mode-btn');
-    if (!btn) return;
-    if (freeMode) {
-        btn.classList.add('bg-yellow-500/80', 'text-black');
-        btn.classList.remove('bg-white/10');
-        totalScore = Math.max(totalScore, 800000);
-    } else {
-        btn.classList.remove('bg-yellow-500/80', 'text-black');
-        btn.classList.add('bg-white/10');
-    }
-}
-
-function showAerosolMenu() {
-    const modal = document.createElement('div');
-    modal.className = 'dynamic-modal fixed inset-0 bg-black/80 flex items-center justify-center z-[200]';
-    modal.innerHTML = `
-        <div class="bg-[#121218] border border-white/10 rounded-3xl w-full max-w-md mx-4 p-6">
-            <div class="flex justify-between items-center mb-5">
-                <h3 class="text-xl font-semibold flex items-center gap-x-2">
-                    <i class="fa-solid fa-spray-can text-emerald-400"></i>
-                    <span>Aerosol Sprays</span>
-                </h3>
-                <button onclick="this.closest('.fixed').remove()" class="text-3xl leading-none text-white/60 hover:text-white">×</button>
-            </div>
-            <div class="space-y-2 text-sm">
-                <button onclick="applyAerosolSpray('immunity')" class="w-full text-left px-4 py-3 bg-white/5 hover:bg-white/10 rounded-2xl flex justify-between items-center">
-                    <span>Immunity Shield</span>
-                    <span class="text-amber-400 font-mono">85,000</span>
-                </button>
-                <button onclick="applyAerosolSpray('fertility')" class="w-full text-left px-4 py-3 bg-white/5 hover:bg-white/10 rounded-2xl flex justify-between items-center">
-                    <span>Fertility Mist</span>
-                    <span class="text-amber-400 font-mono">120,000</span>
-                </button>
-                <button onclick="applyAerosolSpray('evolution')" class="w-full text-left px-4 py-3 bg-white/5 hover:bg-white/10 rounded-2xl flex justify-between items-center">
-                    <span>Evolution Accelerator</span>
-                    <span class="text-amber-400 font-mono">250,000</span>
-                </button>
-                <button onclick="applyAerosolSpray('predator')" class="w-full text-left px-4 py-3 bg-white/5 hover:bg-white/10 rounded-2xl flex justify-between items-center">
-                    <span>Predator Spray</span>
-                    <span class="text-amber-400 font-mono">180,000</span>
-                </button>
-            </div>
-            <div class="mt-6 text-center text-xs text-white/50">
-                High-cost targeted sprays. Click a spray then click a creature.
-            </div>
-        </div>
-    `;
-    document.body.appendChild(modal);
-}
-
-function applyAerosolSpray(type) {
-    alert("Selected: " + type + " spray. Click on a creature to apply (full implementation in next build).");
-    closeDynamicModals();
-}
-
-
-
-
-
-
-              function toggleRedHazardsFromStore() {
-                  redHazardsEnabled = !redHazardsEnabled;
-
-                  if (redHazardsEnabled && redHazards.length < 6) {
-                      for (let i = 0; i < 4; i++) {
-                          redHazards.push(new RedHazard());
-                      }
-                  }
-
-                  updateCheatsUI();
-              }
-
-              function buyCursorHazard() {
-                  if (totalScore < 240) return;
-                  totalScore -= 240;
-                  cursorHazardUnlocked = true;
-                  cursorHazardActive = true;
-
-                  const container = document.getElementById('canvas-container');
-                  container.classList.add('hazard-cursor');
-                  startCursorHum();
-
-                  addFloatingText(width/2, 80, '-240', '#f87171');
-                  updateCheatsUI();
-              }
-
-              function toggleCursorHazardFromStore() {
-                  cursorHazardActive = !cursorHazardActive;
-                  const container = document.getElementById('canvas-container');
-
-                  if (cursorHazardActive) {
-                      container.classList.add('hazard-cursor');
-                      startCursorHum();
-                  } else {
-                      container.classList.remove('hazard-cursor');
-                      stopCursorHum();
-                  }
-                  updateCheatsUI();
-              }
-
-              function buySpeedUnlock(speed) {
-                  let cost = 0;
-                  if (speed === 2) cost = 120;
-                  else if (speed === 4) cost = 280;
-                  else if (speed === 8) cost = 520;
-
-                  if (totalScore < cost || unlockedSpeeds[speed]) return;
-
-                  totalScore -= cost;
-                  unlockedSpeeds[speed] = true;
-
-                  // Auto-enable the speed
-                  setTimeScale(speed);
-
-                  addFloatingText(width/2, 80, `-${cost}`, '#f87171');
-                  updateCheatsUI();
-                  updateMainStats();
-              }
-
-              function toggleRedHazards() {
-                  // Legacy - now handled in store
-                  if (!redHazardsUnlocked) return;
-                  redHazardsEnabled = !redHazardsEnabled;
-
-                  if (redHazardsEnabled && redHazards.length < 6) {
-                      for (let i = 0; i < 4; i++) redHazards.push(new RedHazard());
-                  }
-              }
-
-              function toggleCursorHazard() {
-                  // Legacy - now handled in store
-                  if (!cursorHazardUnlocked) return;
-                  cursorHazardActive = !cursorHazardActive;
-                  const container = document.getElementById('canvas-container');
-
-                  if (cursorHazardActive) {
-                      container.classList.add('hazard-cursor');
-                      startCursorHum();
-                  } else {
-                      container.classList.remove('hazard-cursor');
-                      stopCursorHum();
-                  }
-              }
-
-              function calculatePileBonus() {
-                  if (creatures.length < 3) return 0;
-
-                  let totalClosePairs = 0;
-                  const radius = 38;
-
-                  for (let i = 0; i < creatures.length; i++) {
-                      let closeCount = 0;
-                      for (let j = 0; j < creatures.length; j++) {
-                          if (i === j) continue;
-                          if (dist(creatures[i].x, creatures[i].y, creatures[j].x, creatures[j].y) < radius) {
-                              closeCount++;
-                          }
-                      }
-                      if (closeCount >= 2) {
-                          totalClosePairs += closeCount;
-                      }
-                  }
-
-                  const avgClustering = totalClosePairs / creatures.length;
-                  return Math.floor(avgClustering * 1.8);
-              }
-
-              function updateVegasScore() {
-                  if (paused) return;
-
-                  const now = Date.now();
-                  if (now - lastScoreUpdate < 180) return;
-                  lastScoreUpdate = now;
-
-                  const minutes = simTime / 60;
-                  let score = Math.floor(minutes * 12);
-
-let multiplier = 1.0;
-const pop = creatures.length;
-
-if (pop < 10) multiplier = 5.0;
-else if (pop < 30) multiplier = 3.5;
-else if (pop < 50) multiplier = 2.6;
-else if (pop < 80) multiplier = 2.0;
-else if (pop < 100) multiplier = 1.6;
-else if (pop < 150) multiplier = 1.3;
-
-const pileBonus = calculatePileBonus();
-score += pileBonus;
-
-const predKillBonus = totalPredatorKills * 28;
-score += predKillBonus;
+}, 900);
 
 // === NEW: Apply Population / Predators / Avg Modules multipliers ===
 const popPredModuleMults = getScoreMultipliers();
