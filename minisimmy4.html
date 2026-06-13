@@ -1525,33 +1525,65 @@ pruneAudio.loop = true;
 replicateAudio.loop = true;
 evolveAudio.loop = true;
 
-// ==================== REAL AUDIO ANALYSIS ====================
+// ==================== REAL AUDIO ANALYSIS (MODE SWITCHING FIXED) ====================
 let audioContext;
 let analyser;
-let currentAnalysedAudio = null;
+let currentSource = null;
+let currentAudioEl = null;
 let freqData = new Uint8Array(128);
+
+let pruneSource = null;
+let replicateSource = null;
+let evolveSource = null;
+
+function getOrCreateSource(audioEl) {
+    if (audioEl === pruneAudio) {
+        if (!pruneSource) {
+            pruneSource = audioContext.createMediaElementSource(audioEl);
+        }
+        return pruneSource;
+    }
+    if (audioEl === replicateAudio) {
+        if (!replicateSource) {
+            replicateSource = audioContext.createMediaElementSource(audioEl);
+        }
+        return replicateSource;
+    }
+    if (audioEl === evolveAudio) {
+        if (!evolveSource) {
+            evolveSource = audioContext.createMediaElementSource(audioEl);
+        }
+        return evolveSource;
+    }
+    return null;
+}
 
 function startMusicAnalysis(audioEl) {
     if (!audioContext) {
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
     }
 
-    // If we're already analysing something, disconnect it first
-    if (currentAnalysedAudio) {
-        try { currentAnalysedAudio.disconnect(); } catch(e){}
+    if (audioContext.state === 'suspended') {
+        audioContext.resume();
     }
 
-    const source = audioContext.createMediaElementSource(audioEl);
+    if (currentSource) {
+        try { currentSource.disconnect(); } catch(e){}
+    }
+
+    const source = getOrCreateSource(audioEl);
+    if (!source) return;
+
     analyser = audioContext.createAnalyser();
     analyser.fftSize = 256;
-    analyser.smoothingTimeConstant = 0.75;
+    analyser.smoothingTimeConstant = 0.78;
 
     source.connect(analyser);
     analyser.connect(audioContext.destination);
 
-    currentAnalysedAudio = source;
+    currentSource = source;
+    currentAudioEl = audioEl;
 
-    // Start updating musicData every frame
     if (!window.musicAnalysisRunning) {
         window.musicAnalysisRunning = true;
         updateMusicDataLoop();
@@ -1563,18 +1595,17 @@ function updateMusicDataLoop() {
 
     analyser.getByteFrequencyData(freqData);
 
-    // Split into bass / mids / highs
     const len = freqData.length;
     let bass = 0, mids = 0, highs = 0;
     let bassCount = 0, midCount = 0, highCount = 0;
 
     for (let i = 0; i < len; i++) {
         const val = freqData[i];
-        if (i < 12) {           // Bass (low frequencies)
+        if (i < 14) {
             bass += val; bassCount++;
-        } else if (i < 40) {    // Mids
+        } else if (i < 45) {
             mids += val; midCount++;
-        } else {                // Highs
+        } else {
             highs += val; highCount++;
         }
     }
@@ -1585,7 +1616,6 @@ function updateMusicDataLoop() {
 
     requestAnimationFrame(updateMusicDataLoop);
 }
-
       
 
 let originalMusicSettings = {
@@ -1866,79 +1896,50 @@ let musicVisualizerCenterGlow = 0.3;
 
 
 // ==================== MUSIC VISUALIZER (FINAL VERSION) ====================
-// ==================== MUSIC VISUALIZER (FORCED CLEAN MATRIX VERSION) ====================
-// ==================== MUSIC VISUALIZER (AGGRESSIVE BYPASS VERSION) ====================
-// ==================== CIRCULAR FLAME VISUALIZER ====================
 function drawMusicVisualizer() {
     if (!musicVisualizerActive || !currentMusicMode) return;
 
     push();
-    drawingContext.save();
     resetMatrix();
     colorMode(RGB, 255);
     ellipseMode(CENTER);
+    noFill();
 
-    const centerX = width / 2;
-    const centerY = height / 2;
+    const cx = width / 2;
+    const cy = height / 2;
 
-    const baseR = musicVisualizerRadius || 210;
-    const opacity = musicVisualizerOpacity || 0.45;
-    const glow = musicVisualizerGlow || 0.3;
+    let r, g, b;
+    if (currentMusicMode === 'prune')      { r = 255; g = 50;  b = 70; }
+    else if (currentMusicMode === 'replicate') { r = 40;  g = 255; b = 130; }
+    else                                   { r = 255; g = 215; b = 60; }
 
-    const bassReact = musicVisualizerBassReact || 3.0;
-    const midReact  = musicVisualizerMidReact  || 3.0;
-    const highReact = musicVisualizerHighReact || 2.95;
+    const bass = musicData.bass || 0;
+    const mids = musicData.mids || 0;
+    const highs = musicData.highs || 0;
 
-    const numFlames = 68;                    // Number of flame bars
-    const flameBaseRadius = baseR * 0.65;
+    // Multiple pulsing rings
+    const rings = 5;
+    for (let i = 0; i < rings; i++) {
+        const t = (frameCount * 0.035 + i * 1.8) % TWO_PI;
+        const pulse = sin(t) * 0.5 + 0.5;
 
-    // Draw central soft glow
-    noStroke();
-    fill(255, 180, 40, 18 * glow * musicVisualizerCenterGlow);
-    ellipse(centerX, centerY, baseR * 1.1, baseR * 1.1);
-    fill(255, 120, 30, 12 * glow * musicVisualizerCenterGlow);
-    ellipse(centerX, centerY, baseR * 0.75, baseR * 0.75);
+        let radius = 160 + i * 38;
+        radius += bass * 55;
+        radius += mids * 28;
+        radius += highs * 18;
 
-    // Main flame bars
-    for (let i = 0; i < numFlames; i++) {
-        const angle = map(i, 0, numFlames, 0, TWO_PI);
-        const bin = Math.floor(map(i, 0, numFlames, 0, freqData.length * 0.9));
-        let intensity = (freqData[bin] || 0) / 255;
+        const alpha = (0.35 + pulse * 0.45) * (1.0 - i * 0.12);
 
-        // Apply reactivity (we can refine this later)
-        intensity *= (bassReact + midReact + highReact) / 3;
-
-        // Flame length
-        const flameLength = intensity * 95 * glow;
-
-        const x1 = centerX + cos(angle) * flameBaseRadius;
-        const y1 = centerY + sin(angle) * flameBaseRadius;
-        const x2 = centerX + cos(angle) * (flameBaseRadius + flameLength);
-        const y2 = centerY + sin(angle) * (flameBaseRadius + flameLength);
-
-        // Flame color gradient (yellow core → red tips)
-        let flameColor;
-        if (intensity > 0.65) {
-            flameColor = color(255, 255, 80);      // Bright yellow
-        } else if (intensity > 0.4) {
-            flameColor = color(255, 180, 40);      // Orange
-        } else {
-            flameColor = color(255, 80, 30);       // Red
-        }
-
-        stroke(flameColor);
-        strokeWeight(2.2);
-        line(x1, y1, x2, y2);
-
-        // Extra glow on stronger flames
-        if (intensity > 0.5) {
-            stroke(255, 200, 60, 60 * intensity * glow);
-            strokeWeight(4.5);
-            line(x1, y1, x2, y2);
-        }
+        stroke(r, g, b, alpha * 255);
+        strokeWeight(3.5 + i * 0.8);
+        ellipse(cx, cy, radius * 2, radius * 2);
     }
 
-    drawingContext.restore();
+    // Bright core
+    noStroke();
+    fill(r, g, b, 70 + bass * 90);
+    ellipse(cx, cy, 95 + mids * 40, 95 + mids * 40);
+
     pop();
 }
 // ==================== END FLAME VISUALIZER ====================
