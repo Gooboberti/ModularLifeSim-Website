@@ -2389,8 +2389,6 @@ function convertDustToCrystals() {
     updateAetheriumUI();
     showInventory();
 }
-
-
       function extractDustEarly() {
           if (burningCrystals <= 0) return;
           aetheriumDust += Math.floor(burningCrystals * 0.25);
@@ -2425,12 +2423,12 @@ function convertDustToCrystals() {
 
               // Consistent colors for both big and mini charts
               const CHART_COLORS = {
-                  pop: '#34d399',        // Emerald
-                  predators: '#f87171',  // Red
-                  hr: '#c084fc',         // Purple / Violet
-                  modules: '#60a5fa',    // Sky blue
-                  greenFood: '#10b981',  // Slightly deeper emerald
-                  blueFood: '#38bdf8'    // Sky
+                  pop: '#34d399', // Emerald
+                  predators: '#f87171', // Red
+                  hr: '#c084fc', // Purple / Violet
+                  modules: '#60a5fa', // Sky blue
+                  greenFood: '#10b981', // Slightly deeper emerald
+                  blueFood: '#38bdf8' // Sky
               };
 
               // Which lines are shown in the mini chart (synced with Analytics Modal)
@@ -2454,12 +2452,12 @@ function convertDustToCrystals() {
               let envLabelElement = null;
 
               let settings = {
-                  energyDrain: 0.28, // Increased for lower population (v0.97)
+                  energyDrain: 0.28,
                   particleFoodValue: 1.3,
-                  reproductionChance: 0.008, // Significantly lowered for performance (v0.97)
+                  reproductionChance: 0.008,
                   zoneAttraction: 0.075,
                   socialResist: 0.14,
-                  vortexMultiplier: 4.5, // Increased base for more dramatic music reactivity
+                  vortexMultiplier: 4.5,
                   pheromoneDeposit: 3.4,
                   zonePullStrength: 0.5
               };
@@ -2469,6 +2467,7 @@ function convertDustToCrystals() {
                   const suffixes = ['-9','-12','ara','ith','on','yx','ar','en','os','ix','ael','or'];
                   return prefixes[Math.floor(Math.random()*prefixes.length)] + suffixes[Math.floor(Math.random()*suffixes.length)];
               }
+
               function getAudioContext() {
                   if (!audioCtx) {
                       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -2591,24 +2590,41 @@ function convertDustToCrystals() {
               function playTone(freq, type = null, duration = 0.28, volume = 0.055, detune = 0, attack = 0.012, release = 0.22) {
                   if (!canPlaySound('core')) return;
                   if (activeVoices > MAX_VOICES) return;
+
                   activeVoices++;
+
                   const ctx = getAudioContext();
                   const osc = ctx.createOscillator();
                   const gain = ctx.createGain();
                   const filter = ctx.createBiquadFilter();
+
                   osc.type = type || defaultWaveform;
                   osc.frequency.value = freq * pitchShift;
-                  if (detune) osc.detune.value = detune;
+
+                  // Light random detune to reduce harsh perfect harmonics
+                  const randomDetune = (Math.random() - 0.5) * 18;
+                  osc.detune.value = detune + randomDetune;
+
                   filter.type = 'lowpass';
                   filter.frequency.value = 2100;
-                  const finalVol = volume * effectsVolume;
+
+                  // Dynamic volume reduction when many voices are active
+                  let finalVol = volume * effectsVolume;
+
+                  if (activeVoices > 8) {
+                      const reduction = Math.min(0.65, (activeVoices - 8) * 0.06);
+                      finalVol *= (1 - reduction);
+                  }
+
                   gain.gain.value = 0;
                   gain.gain.linearRampToValueAtTime(finalVol, ctx.currentTime + attack);
                   gain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + duration);
+
                   osc.connect(filter);
                   filter.connect(gain);
                   gain.connect(masterGain);
                   osc.start();
+
                   setTimeout(() => {
                       try { osc.stop(); } catch(e){}
                       activeVoices = Math.max(0, activeVoices - 1);
@@ -2635,7 +2651,7 @@ function convertDustToCrystals() {
 
               function playDeathSound() {
                   if (!canPlaySound('death')) return;
-                  if (creatures.length > 110 && Math.random() > 0.4) return; // reduce spam at very high pop
+                  if (creatures.length > 110 && Math.random() > 0.4) return;
                   playTone(220, 'sawtooth', 0.48, 0.038, 0, 0.02, 0.42);
                   setTimeout(() => playTone(175, 'sine', 0.38, 0.028, -10, 0.012, 0.32), 75);
               }
@@ -2661,7 +2677,6 @@ function convertDustToCrystals() {
 
               function playExplosionSound() {
                   if (!canPlaySound('explosion')) return;
-                  // High priority - explosions (ship + wall) should take precedence
                   if (activeVoices > MAX_VOICES + 1) return;
                   const ctx = getAudioContext();
                   const osc1 = ctx.createOscillator();
@@ -2711,11 +2726,9 @@ function convertDustToCrystals() {
 
               function playWallBreakSound(sizeMult = 1) {
                   if (!canPlaySound('wall')) return;
-                  // High priority - Energy Wall breaks should be audible
                   if (activeVoices > MAX_VOICES + 2) return;
                   activeVoices++;
                   const ctx = getAudioContext();
-                  // Glassy shatter - high crystalline noise burst
                   const noise = ctx.createBufferSource();
                   const noiseFilter = ctx.createBiquadFilter();
                   const noiseGain = ctx.createGain();
@@ -2738,7 +2751,6 @@ function convertDustToCrystals() {
                       try { noise.stop(); } catch(e){}
                       activeVoices = Math.max(0, activeVoices - 1);
                   }, 550);
-                  // Sharp high sine crack (glass breaking)
                   const osc = ctx.createOscillator();
                   const gain = ctx.createGain();
                   const filter = ctx.createBiquadFilter();
@@ -2759,10 +2771,8 @@ function convertDustToCrystals() {
 
               function playShipShootSound() {
                   if (!canPlaySound('ship')) return;
-                  // High priority - spaceship gunfire should almost always play
                   if (activeVoices > MAX_VOICES + 2) return;
                   const ctx = getAudioContext();
-                  // More obvious dual laser shot
                   const osc = ctx.createOscillator();
                   const gain = ctx.createGain();
                   const filter = ctx.createBiquadFilter();
@@ -2783,10 +2793,8 @@ function convertDustToCrystals() {
 
               function playBulletImpactSound() {
                   if (!canPlaySound('bullet')) return;
-                  // High priority - bullet/explosion impacts
                   if (activeVoices > MAX_VOICES + 1) return;
                   const ctx = getAudioContext();
-                  // Small sharp impact / zap
                   const osc = ctx.createOscillator();
                   const gain = ctx.createGain();
                   const filter = ctx.createBiquadFilter();
@@ -2810,7 +2818,6 @@ function convertDustToCrystals() {
                   if (!canPlaySound('absorb')) return;
                   if (activeVoices > MAX_VOICES - 1) return;
                   const ctx = getAudioContext();
-                  // Nice sucking/absorb sound for hazard cursor eating red particles
                   const osc = ctx.createOscillator();
                   const gain = ctx.createGain();
                   const filter = ctx.createBiquadFilter();
@@ -2828,6 +2835,7 @@ function convertDustToCrystals() {
                       try { osc.stop(); } catch(e){}
                   }, 400);
               }
+
               // === FLOATING TEXT ===
               class FloatingText {
                   constructor(x, y, text, color = '#34d399') {
@@ -2884,9 +2892,7 @@ function convertDustToCrystals() {
                           };
                       }
                   });
-              }
-
-    
+              } 
 
       // Enhanced Extract to Egg modal with live balance + top 10
       function showExtractEggModal() {
