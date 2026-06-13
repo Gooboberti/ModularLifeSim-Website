@@ -2334,34 +2334,33 @@ function formatMultiplier(n) {
     updateFurnaceUI();
     updateAetheriumUI();
 }
-
- function convertCrystalsToDust() {
+function convertCrystalsToDust() {
     if (aetheriumCrystals <= 0) return;
-    aetheriumDust += aetheriumCrystals * 1000000;   // 1 Crystal = 1 kg = 1,000,000 mg
+
+    aetheriumDust += aetheriumCrystals * 1000000;
     aetheriumCrystals = 0;
 
-    playTone(620, 'sine', 0.18, 0.5);
+    playSound('deposit');   // Using deposit sound for now
     addFloatingText(width/2, 90, `Crushed to Dust`, '#f59e0b');
     updateAetheriumUI();
     showInventory();
 }
 
 function convertDustToCrystals() {
-    const kg = Math.floor(aetheriumDust / 1000000); // 1,000,000 mg = 1 kg = 1 Crystal
+    const kg = Math.floor(aetheriumDust / 1000000);
     if (kg < 1) {
         addFloatingText(width/2, 100, "Need at least 1 kg of dust!", '#f87171');
         return;
     }
+
     aetheriumCrystals += kg;
     aetheriumDust -= kg * 1000000;
 
-    playTone(720, 'sine', 0.22, 0.5);
+    playSound('deposit');   // Using deposit sound for now
     addFloatingText(width/2, 90, `+${kg} Crystal${kg > 1 ? 's' : ''}`, '#f472b6');
     updateAetheriumUI();
     showInventory();
 }
-
-
       function extractDustEarly() {
           if (burningCrystals <= 0) return;
           aetheriumDust += Math.floor(burningCrystals * 0.25);
@@ -2593,125 +2592,86 @@ function playCursorDamageSound(creature) {
     }, 220);
 }
 
+// ==================== OLD playTone FUNCTION (DISABLED) ====================
+// This has been replaced by the new audio file system (playSound).
+// Keeping it commented out for now in case any old calls still exist.
+
 function playTone(freq, type = null, duration = 0.28, volume = 0.055, detune = 0, attack = 0.012, release = 0.22) {
-    if (activeVoices > MAX_VOICES) return;
-    activeVoices++;
-
-    console.log(`[SOUND] playTone called`, { freq, type, duration, volume, detune, attack, release });
-
-    const ctx = getAudioContext();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    const filter = ctx.createBiquadFilter();
-
-    osc.type = type || defaultWaveform;
-    osc.frequency.value = freq * pitchShift;
-    if (detune) osc.detune.value = detune;
-
-    filter.type = 'lowpass';
-    filter.frequency.value = 2100;
-
-    const finalVol = volume * effectsVolume;
-    gain.gain.value = 0;
-    gain.gain.linearRampToValueAtTime(finalVol, ctx.currentTime + attack);
-    gain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + duration);
-
-    osc.connect(filter);
-    filter.connect(gain);
-    gain.connect(masterGain);
-
-    osc.start();
-
-    setTimeout(() => {
-        try { osc.stop(); } catch(e){}
-        activeVoices = Math.max(0, activeVoices - 1);
-    }, (duration + 0.12) * 1000);
+    console.warn('[Sound] playTone() is disabled. Use playSound() instead.');
+    // if (activeVoices > MAX_VOICES) return;
+    // activeVoices++;
+    // console.log(`[SOUND] playTone called`, { freq, type, duration, volume, detune, attack, release });
+    // const ctx = getAudioContext();
+    // const osc = ctx.createOscillator();
+    // const gain = ctx.createGain();
+    // const filter = ctx.createBiquadFilter();
+    // osc.type = type || defaultWaveform;
+    // osc.frequency.value = freq * pitchShift;
+    // if (detune) osc.detune.value = detune;
+    // filter.type = 'lowpass';
+    // filter.frequency.value = 2100;
+    // const finalVol = volume * effectsVolume;
+    // gain.gain.value = 0;
+    // gain.gain.linearRampToValueAtTime(finalVol, ctx.currentTime + attack);
+    // gain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + duration);
+    // osc.connect(filter);
+    // filter.connect(gain);
+    // gain.connect(masterGain);
+    // osc.start();
+    // setTimeout(() => {
+    //     try { osc.stop(); } catch(e){}
+    //     activeVoices = Math.max(0, activeVoices - 1);
+    // }, (duration + 0.12) * 1000);
 }
 
 // ==================== UPDATED SOUND FUNCTIONS ====================
-
 function playBirthSound() {
     console.log(`[SOUND] playBirthSound called`);
+    if (window.soundDisabled) return;
 
-    if (!soundSettings.birth) {
-        // Fallback
-        playTone(880, 'sine', 0.38, 0.7, 0, 0.02, 0.32);
-        setTimeout(() => playTone(1108, 'sine', 0.30, 0.55, 12, 0.015, 0.26), 55);
-        return;
-    }
-
-    const s = soundSettings.birth;
-
-    playTone(s.lowFreq || 880, s.waveform || 'sine', s.release || 0.38, s.volume || 0.7, 0, s.attack || 0.02, s.release || 0.32);
-    setTimeout(() => {
-        playTone(s.highFreq || 1108, s.waveform || 'sine', (s.release || 0.38) * 0.8, (s.volume || 0.7) * 0.8, 12, (s.attack || 0.02) * 0.75, (s.release || 0.32) * 0.8);
-    }, 55);
+    playSound('birth');
 }
 
 function playEatSound(isGreenZone = true) {
     console.log(`[SOUND] playEatSound called`, isGreenZone);
-
+    if (window.soundDisabled) return;
     if (activeVoices > MAX_VOICES - 4) return;
     if (creatures.length > 90 && Math.random() > 0.25) return;
     if (Math.random() > soundDensity * 0.55) return;
 
-    if (!soundSettings.eat) {
-        // Fallback to old behavior
-        const base = isGreenZone ? 620 : 780;
-        playTone(base, 'triangle', 0.20, 0.6, 0, 0.006, 0.18);
-        setTimeout(() => playTone(base * 1.5, 'triangle', 0.13, 0.4, 5, 0.004, 0.12), 22);
-        return;
-    }
-
-    const s = soundSettings.eat;
-    const base = isGreenZone ? (s.lowFreq || 620) : (s.highFreq || 780);
-
-    playTone(base, s.waveform || 'triangle', s.release * 0.85 || 0.20, s.volume || 0.6, 0, s.attack || 0.006, s.release || 0.18);
-    setTimeout(() => {
-        playTone(base * 1.5, s.waveform || 'triangle', (s.release || 0.18) * 0.65, (s.volume || 0.6) * 0.65, 5, (s.attack || 0.006) * 0.7, (s.release || 0.18) * 0.65);
-    }, 22);
+    playSound('eat');
 }
 
 function playDeathSound() {
     console.log(`[SOUND] playDeathSound called`);
-
+    if (window.soundDisabled) return;
     if (creatures.length > 110 && Math.random() > 0.4) return;
 
-    if (!soundSettings.death) {
-        // Fallback
-        playTone(228, 'sawtooth', 0.48, 0.65, 0, 0.02, 0.42);
-        setTimeout(() => playTone(165, 'sine', 0.38, 0.5, -10, 0.015, 0.32), 75);
-        return;
-    }
-
-    const s = soundSettings.death;
-
-    playTone(s.lowFreq || 228, s.waveform || 'sawtooth', s.release || 0.48, s.volume || 0.65, 0, s.attack || 0.02, s.release || 0.42);
-    setTimeout(() => {
-        playTone(s.highFreq || 165, 'sine', (s.release || 0.48) * 0.8, (s.volume || 0.65) * 0.75, -10, (s.attack || 0.02) * 0.75, (s.release || 0.42) * 0.75);
-    }, 75);
+    playSound('death');
 }
 
 // ==================== OTHER SOUND FUNCTIONS ====================
-
 function playDepositSound() {
     console.log(`[SOUND] playDepositSound called`);
-    playTone(540, 'sine', 0.24, 0.028, 0, 0.012, 0.22);
-    setTimeout(() => playTone(680, 'sine', 0.17, 0.022, 8, 0.008, 0.15), 38);
+    if (window.soundDisabled) return;
+
+    playSound('deposit');
 }
 
 function playPredatorFeedSound() {
     console.log(`[SOUND] playPredatorFeedSound called`);
-    playTone(165, 'sawtooth', 0.22, 0.042, 0, 0.01, 0.20);
-    setTimeout(() => playTone(210, 'sine', 0.16, 0.032, 15, 0.006, 0.14), 28);
+    if (window.soundDisabled) return;
+
+    playSound('predatorFeed');
 }
 
 function playAmbientPulse(isDay) {
-    const freq = isDay ? 48 : 42;
-    const vol = (isDay ? 0.007 : 0.011) * ambientVolume;
-    playTone(freq, 'sine', 1.9, vol, 0, 0.35, 1.5);
-}
+    if (window.soundDisabled) return;
 
+    // This one is a continuous low pulse — we'll improve it later
+    // For now it uses the old system or you can map it to a looping sound
+    console.log(`[SOUND] playAmbientPulse called (isDay: ${isDay})`);
+}
 function playExplosionSound() {
     if (activeVoices > MAX_VOICES + 1) return;
 
@@ -5844,26 +5804,24 @@ if (dist(p.x, p.y, c.x, c.y) < pickupRange) {
     // =====================================================
     // NEW: Special Vault Echo Particle logic
     // =====================================================
-    if (p.isSpecial) {
-        // Turn creature into a clone of a random Gene Vault creature
-        let filledSlots = geneVaultSlots.filter(slot => slot !== null);
-        if (filledSlots.length > 0) {
-            let vaultData = random(filledSlots);
-            if (vaultData.modules) c.modules = [...vaultData.modules];
-            if (vaultData.generation) c.generation = vaultData.generation;
-            c.currentThought = "Echo Infected";
-            c.energy = max(c.energy, 70);
-        }
-
-        // Apply strong purple DoT infection
-        c.mustEatWhite = true;
-        c.purpleFlash = 420;      // Long duration
-        c.damageFlash = 420;
-        c.currentThought = "Infected - Must Feed";
-
-        addFloatingText(c.x, c.y - 30, "VAULT ECHO", '#c026d3');
-        playTone(420, 'sawtooth', 0.3, 0.7);
+ if (p.isSpecial) {
+    // Turn creature into a clone of a random Gene Vault creature
+    let filledSlots = geneVaultSlots.filter(slot => slot !== null);
+    if (filledSlots.length > 0) {
+        let vaultData = random(filledSlots);
+        if (vaultData.modules) c.modules = [...vaultData.modules];
+        if (vaultData.generation) c.generation = vaultData.generation;
+        c.currentThought = "Echo Infected";
+        c.energy = max(c.energy, 70);
     }
+    // Apply strong purple DoT infection
+    c.mustEatWhite = true;
+    c.purpleFlash = 420; // Long duration
+    c.damageFlash = 420;
+    c.currentThought = "Infected - Must Feed";
+    addFloatingText(c.x, c.y - 30, "VAULT ECHO", '#c026d3');
+    playSound('absorb');   // Using absorb sound for the Vault Echo / infection effect
+}
 
     // Existing cleanse mechanic (keep this)
     if (c.mustEatWhite) {
@@ -6180,11 +6138,10 @@ if (dist(p.x, p.y, c.x, c.y) < pickupRange) {
                           }
                       }
 
-                      if (c.energy < 24 && random() < 0.009 * timeScale) {
-                          playTone(195, 'sawtooth', 0.12, 0.016);
-                          c.currentThought = "Hungry";
-                      }
-
+                     if (c.energy < 24 && random() < 0.009 * timeScale) {
+    playSound('eat');
+    c.currentThought = "Hungry";
+}
                       if (c.energy <= 0) {
                           let targetIsGreen = isDay;
                           let releasedEnergy = Math.max(7, Math.floor(c.energy * -0.55) + 11);
@@ -6775,9 +6732,9 @@ function spawnVaultEchoCreature(x, y) {
     
     creatures.push(clone);
     
-    // Visual + sound feedback
+// Visual + sound feedback
     addFloatingText(x, y - 25, "Vault Echo", '#c084fc');
-    playTone(880, 'sine', 0.25, 0.6);
+    playSound('absorb');
 }
 
 
@@ -8642,9 +8599,8 @@ function extractCreatureToEgg(creature) {
     updateMainStats();
     updateEggCountBadge();
 
-    addFloatingText(creature.x, creature.y - 30, "-250,000", '#fbbf24');
-    playTone(620, 'sine', 0.18, 0.6);
-    setTimeout(() => playTone(880, 'sine', 0.12, 0.4), 110);
+addFloatingText(creature.x, creature.y - 30, "-250,000", '#fbbf24');
+    playSound('wallBreak');
 
     const eggData = {
         name: creature.name,
@@ -8834,11 +8790,8 @@ function startIncubationOnEgg(eggIndex) {
 }
 
 function playIncubationCompleteSound() {
-    playTone(880, 'sine', 0.18, 0.5);
-    setTimeout(() => playTone(1100, 'sine', 0.22, 0.45), 90);
-    setTimeout(() => playTone(1320, 'sine', 0.28, 0.4), 200);
+    playSound('birth');
 }
-
       
 
       
@@ -9649,11 +9602,8 @@ function hideInventory() {
           // === NEW CONVERSION: 100,000 points = 1 mg ===
           const dustGained = totalScore / 100000; // now in milligrams
           aetheriumDust += dustGained;
-
-          playTone(660, 'sine', 0.18, 0.6);
-          setTimeout(() => playTone(880, 'sine', 0.22, 0.55), 90);
-          setTimeout(() => playTone(1100, 'sine', 0.28, 0.5), 200);
-
+        
+          playSound('birth');
           // Visual feedback on Dust button
           const dustBtn = document.getElementById('top-dust-btn');
           if (dustBtn) {
@@ -9980,12 +9930,14 @@ function confirmExtractToEgg() {
 
       
 // ==================== SOUND DEBUG LOGGING ====================
-const originalPlayTone = playTone;
-
-playTone = function(freq, type = 'sine', duration = 0.3, volume = 0.5, detune = 0, attack = 0.02, release = 0.3) {
-    console.log(`[SOUND] playTone called`, { freq, type, duration, volume, detune, attack, release });
-    return originalPlayTone.apply(this, arguments);
-};
+// This old debug wrapper for playTone has been disabled.
+// We are now using the new playSound() system with real audio files.
+// You can add debug logging to playSound() later if needed.
+// const originalPlayTone = playTone;
+// playTone = function(freq, type = 'sine', duration = 0.3, volume = 0.5, detune = 0, attack = 0.02, release = 0.3) {
+//     console.log(`[SOUND] playTone called`, { freq, type, duration, volume, detune, attack, release });
+//     return originalPlayTone.apply(this, arguments);
+// };
 
 // Add logging to the main named sound functions
 const soundFunctions = [
