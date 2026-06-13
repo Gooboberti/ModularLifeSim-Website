@@ -1530,31 +1530,41 @@ let audioContext;
 let analyser;
 let currentAnalysedAudio = null;
 let freqData = new Uint8Array(128);
+let currentAudioSource = null;
 
 function startMusicAnalysis(audioEl) {
     if (!audioContext) {
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
     }
 
-    // If we're already analysing something, disconnect it first
-    if (currentAnalysedAudio) {
-        try { currentAnalysedAudio.disconnect(); } catch(e){}
+    // Resume context if needed
+    if (audioContext.state === 'suspended') {
+        audioContext.resume();
     }
 
-    const source = audioContext.createMediaElementSource(audioEl);
-    analyser = audioContext.createAnalyser();
-    analyser.fftSize = 256;
-    analyser.smoothingTimeConstant = 0.75;
+    // Disconnect previous source if exists
+    if (currentAudioSource) {
+        try { currentAudioSource.disconnect(); } catch(e){}
+        currentAudioSource = null;
+    }
 
-    source.connect(analyser);
-    analyser.connect(audioContext.destination);
+    try {
+        const source = audioContext.createMediaElementSource(audioEl);
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = 256;
+        analyser.smoothingTimeConstant = 0.72;
 
-    currentAnalysedAudio = source;
+        source.connect(analyser);
+        analyser.connect(audioContext.destination);
 
-    // Start updating musicData every frame
-    if (!window.musicAnalysisRunning) {
-        window.musicAnalysisRunning = true;
-        updateMusicDataLoop();
+        currentAudioSource = source;
+
+        if (!window.musicAnalysisRunning) {
+            window.musicAnalysisRunning = true;
+            updateMusicDataLoop();
+        }
+    } catch (err) {
+        console.warn("Audio analysis setup failed:", err);
     }
 }
 
@@ -1864,98 +1874,89 @@ let flameReactivity     = 1.15;     // Master multiplier for audio response
 
 // ==================== HYBRID FLAME VISUALIZER ====================
 // Always-visible base fire + strong reactive flames
+// ==================== CLEAN VISIBLE FLAME VISUALIZER ====================
 function drawMusicVisualizer() {
     if (!musicVisualizerActive || !currentMusicMode) return;
-    console.log("%c[FLAME] drawMusicVisualizer is RUNNING", "color: #ff00ff; font-weight: bold");
 
     push();
-    drawingContext.save();
-    resetMatrix();
+    noStroke();
     colorMode(RGB, 255);
     ellipseMode(CENTER);
 
     const cx = width / 2;
     const cy = height / 2;
 
-    const baseR   = flameBaseRadius || 265;
-    const count   = flameCount || 105;
-    const maxLen  = flameMaxLength || 255;
-    const thick   = flameThickness || 5.8;
-    const glow    = flameGlow || 1.45;
-    const opac    = flameOpacity || 0.95;
-    const centerG = flameCentralGlow || 1.65;
-    const react   = flameReactivity || 1.15;
+    const baseR = flameBaseRadius || 280;
+    const count = flameCount || 120;
+    const maxLen = flameMaxLength || 320;
+    const thick = flameThickness || 6.5;
+    const glow = flameGlow || 1.8;
+    const opac = flameOpacity || 0.95;
+    const centerG = flameCentralGlow || 2.0;
+    const react = flameReactivity || 1.4;
 
     const bass = (musicData.bass || 0) * react;
     const mids = (musicData.mids || 0) * react;
     const highs = (musicData.highs || 0) * react;
 
-    // === MODE CORE COLOR ===
+    // Mode color
     let coreColor;
-    if (currentMusicMode === 'prune') {
-        coreColor = { r: 255, g: 55, b: 65 };
-    } else if (currentMusicMode === 'replicate') {
-        coreColor = { r: 35, g: 235, b: 105 };
-    } else {
-        coreColor = { r: 255, g: 205, b: 55 };
-    }
+    if (currentMusicMode === 'prune') coreColor = { r: 255, g: 50, b: 70 };
+    else if (currentMusicMode === 'replicate') coreColor = { r: 30, g: 240, b: 110 };
+    else coreColor = { r: 255, g: 210, b: 50 };
 
-    // Strong central fire glow
-    noStroke();
-    fill(coreColor.r, coreColor.g, coreColor.b, 52 * glow * centerG);
-    ellipse(cx, cy, baseR * 1.85, baseR * 1.85);
-    fill(255, 255, 195, 26 * glow * centerG);
-    ellipse(cx, cy, baseR * 1.32, baseR * 1.32);
+    // Strong central glow
+    fill(coreColor.r, coreColor.g, coreColor.b, 65 * glow * centerG);
+    ellipse(cx, cy, baseR * 2.1, baseR * 2.1);
+    fill(255, 255, 200, 35 * glow * centerG);
+    ellipse(cx, cy, baseR * 1.45, baseR * 1.45);
 
-    // === DRAW FLAMES ===
-    const innerR = baseR * 0.52;
+    const innerR = baseR * 0.48;
 
     for (let i = 0; i < count; i++) {
         const angle = map(i, 0, count, 0, TWO_PI);
-        const bin = Math.floor(map(i, 0, count, 0, freqData.length * 0.93));
-        let audioIntensity = (freqData[bin] || 0) / 255;
+        const bin = Math.floor(map(i, 0, count, 0, (freqData?.length || 128) * 0.9));
+        let audioIntensity = ((freqData && freqData[bin]) || 0) / 255;
 
-        // Reactivity scaling
-        audioIntensity *= (bass + mids + highs) / 3.2;
+        audioIntensity *= (bass + mids + highs) / 3;
 
-        // === BASE FIRE (always visible + organic) ===
-        const baseVariation = sin(frameCount * 0.032 + i * 1.65) * 0.48 + 0.62;
-        const baseLength = 52 + baseVariation * 48;
+        // Base flame (always visible)
+        const baseVar = sin(frameCount * 0.028 + i * 1.7) * 0.5 + 0.7;
+        const baseLen = 65 + baseVar * 55;
 
-        // === AUDIO BOOST ===
-        const audioBoost = audioIntensity * maxLen * glow * 0.95;
-        const finalLength = baseLength + audioBoost;
+        // Audio boost
+        const audioBoost = audioIntensity * maxLen * glow * 1.1;
+        const finalLen = baseLen + audioBoost;
 
         const x1 = cx + cos(angle) * innerR;
         const y1 = cy + sin(angle) * innerR;
-        const x2 = cx + cos(angle) * (innerR + finalLength);
-        const y2 = cy + sin(angle) * (innerR + finalLength);
+        const x2 = cx + cos(angle) * (innerR + finalLen);
+        const y2 = cy + sin(angle) * (innerR + finalLen);
 
-        // Color
         let r = coreColor.r;
         let g = coreColor.g;
         let b = coreColor.b;
 
-        if (audioIntensity > 0.32) {
-            const mix = constrain(audioIntensity * 1.55, 0, 1);
-            r = lerp(r, 255, mix * 0.72);
-            g = lerp(g, 255, mix * 0.72);
-            b = lerp(b, 195, mix * 0.48);
+        if (audioIntensity > 0.25) {
+            const mix = constrain(audioIntensity * 1.7, 0, 1);
+            r = lerp(r, 255, mix * 0.85);
+            g = lerp(g, 255, mix * 0.75);
+            b = lerp(b, 210, mix * 0.6);
         }
 
+        // Main flame
         stroke(r, g, b);
         strokeWeight(thick);
         line(x1, y1, x2, y2);
 
-        // Extra bright glow layer on strong audio
-        if (audioIntensity > 0.38) {
-            stroke(255, 252, 175, 85 * audioIntensity * glow * opac);
-            strokeWeight(thick * 2.6);
+        // Bright tip on strong audio
+        if (audioIntensity > 0.32) {
+            stroke(255, 255, 220, 110 * audioIntensity * glow * opac);
+            strokeWeight(thick * 2.8);
             line(x1, y1, x2, y2);
         }
     }
 
-    drawingContext.restore();
     pop();
 }
 // ==================== END HYBRID FLAME VISUALIZER ====================
