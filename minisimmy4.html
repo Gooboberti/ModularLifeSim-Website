@@ -3181,73 +3181,77 @@ function updateMasterFilter() {
 }
 
 // ==================== MASTER TONE (Global Harshness Control) ====================
-function updateMasterFilter() {
-    if (typeof masterFilter !== 'undefined' && masterFilter && soundSettings.masterFilterFreq) {
-        masterFilter.frequency.value = soundSettings.masterFilterFreq;
-    }
-}
-
 function addMasterToneSection(attempt = 0) {
-    // Try ID first
     let container = document.getElementById('sound-editor-content');
-
-    // Fallback: find the actual content box in the Sound Editor (from your screenshot)
     if (!container) {
         container = document.querySelector('.rounded-2xl.border.border-white\\/10.bg-\\[\\#0a0a0f\\].p-3');
     }
-
-    // Extra fallback: try other common IDs
-    if (!container) {
-        const possibleIds = ['sound-editor', 'soundPanel', 'editor-content', 'sound-controls', 'sound-modal-content'];
-        for (let id of possibleIds) {
-            container = document.getElementById(id);
-            if (container) break;
-        }
-    }
-
     if (!container) {
         if (attempt < 8) {
             setTimeout(() => addMasterToneSection(attempt + 1), 400);
-        } else {
-            console.log('[Sound] Could not find Sound Editor container for Master Tone');
         }
         return;
     }
-
-    if (document.getElementById('master-tone-section')) return;
+    if (document.getElementById('master-effects-section')) return;
 
     const section = document.createElement('div');
-    section.id = 'master-tone-section';
-    section.style.marginTop = '16px';
-    section.style.paddingTop = '12px';
-    section.style.borderTop = '1px solid #444';
+    section.id = 'master-effects-section';
+    section.style.marginTop = '18px';
+    section.style.paddingTop = '14px';
+    section.style.borderTop = '1px solid #555';
 
     section.innerHTML = `
-        <div style="font-weight:600; margin-bottom:8px; color:#aaa; font-size:13px;">Master Tone (Global)</div>
-        
+        <div style="font-weight:700; margin-bottom:10px; color:#ccc; font-size:14px;">Master Effects</div>
+
+        <!-- Master Volume -->
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+            <label style="width:95px; font-size:13px;">Master Volume</label>
+            <input type="range" id="master-vol-slider" min="0" max="1" step="0.01" style="flex:1;">
+            <span id="master-vol-value" style="width:45px; text-align:right; font-size:13px;"></span>
+        </div>
+
+        <!-- Brightness / Low-pass -->
         <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
-            <label style="width:90px; font-size:13px;">Brightness</label>
+            <label style="width:95px; font-size:13px;">Brightness</label>
             <input type="range" id="master-tone-slider" min="600" max="8000" step="50" style="flex:1;">
-            <span id="master-tone-value" style="width:60px; text-align:right; font-size:13px;"></span>
+            <span id="master-tone-value" style="width:55px; text-align:right; font-size:13px;"></span>
         </div>
     `;
 
     container.appendChild(section);
 
-    const slider = document.getElementById('master-tone-slider');
-    const valueDisplay = document.getElementById('master-tone-value');
+    // === Master Volume Setup ===
+    const volSlider = document.getElementById('master-vol-slider');
+    const volValue = document.getElementById('master-vol-value');
 
-    slider.value = soundSettings.masterFilterFreq || 2200;
-    valueDisplay.innerText = (soundSettings.masterFilterFreq || 2200) + ' Hz';
+    // Set initial value from masterGain if it exists
+    const initialVol = (typeof masterGain !== 'undefined' && masterGain) ? masterGain.gain.value : 0.7;
+    volSlider.value = initialVol;
+    volValue.innerText = initialVol.toFixed(2);
 
-    slider.oninput = () => {
-        soundSettings.masterFilterFreq = parseFloat(slider.value);
-        valueDisplay.innerText = soundSettings.masterFilterFreq + ' Hz';
+    volSlider.oninput = () => {
+        const v = parseFloat(volSlider.value);
+        volValue.innerText = v.toFixed(2);
+        if (typeof masterGain !== 'undefined' && masterGain) {
+            masterGain.gain.value = v;
+        }
+    };
+
+    // === Brightness (Low-pass Filter) Setup ===
+    const toneSlider = document.getElementById('master-tone-slider');
+    const toneValue = document.getElementById('master-tone-value');
+
+    toneSlider.value = soundSettings.masterFilterFreq || 2200;
+    toneValue.innerText = (soundSettings.masterFilterFreq || 2200) + ' Hz';
+
+    toneSlider.oninput = () => {
+        soundSettings.masterFilterFreq = parseFloat(toneSlider.value);
+        toneValue.innerText = soundSettings.masterFilterFreq + ' Hz';
         updateMasterFilter();
     };
 
     updateMasterFilter();
-    console.log('[Sound] Master Tone section added successfully');
+    console.log('[Sound] Master Effects section added');
 }
 
 // Initialize Sound Editor
