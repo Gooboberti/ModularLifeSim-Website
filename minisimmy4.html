@@ -3159,42 +3159,102 @@ function hideTopCreaturesModal() {
     }
 }
 
-      // ==================== NEW SOUND EDITOR ====================
-function testSelectedSound() {
+  // ==================== SOUND EDITOR (with per-sound memory) ====================
+let currentSoundKey = 'death';
+
+function loadSoundIntoEditor(key) {
+    const s = soundSettings[key];
+    if (!s) return;
+
+    currentSoundKey = key;
+
     const select = document.getElementById('sound-select');
-    const waveformEl = document.getElementById('sound-waveform');
-    const volEl = document.getElementById('sound-vol-slider');
-    const attackEl = document.getElementById('sound-attack-slider');
-    const releaseEl = document.getElementById('sound-release-slider');
-    const lowEl = document.getElementById('sound-low-slider');
-    const highEl = document.getElementById('sound-high-slider');
+    const vol = document.getElementById('sound-vol-slider');
+    const wave = document.getElementById('sound-waveform');
+    const attack = document.getElementById('sound-attack-slider');
+    const release = document.getElementById('sound-release-slider');
+    const low = document.getElementById('sound-low-slider');
+    const high = document.getElementById('sound-high-slider');
 
-    if (!select || !volEl) {
-        console.warn("Sound Editor: Could not find controls");
-        return;
-    }
+    if (select) select.value = key;
+    if (vol) vol.value = s.volume;
+    if (wave) wave.value = s.waveform;
+    if (attack) attack.value = s.attack;
+    if (release) release.value = s.release;
+    if (low) low.value = s.lowFreq;
+    if (high) high.value = s.highFreq;
 
-    const key = select.value;
-    const waveform = waveformEl ? waveformEl.value : 'sine';
-    const volume = parseFloat(volEl.value) || 0.5;
-    const attack = parseFloat(attackEl?.value || 0.02);
-    const release = parseFloat(releaseEl?.value || 0.3);
-    const lowFreq = parseFloat(lowEl?.value || 440);
-    const highFreq = parseFloat(highEl?.value || 880);
-
-    // Play using the current slider values
-    playTone(lowFreq, waveform, 0.65, volume, 0, attack, release);
-
-    // Play a second tone for certain sounds (death, birth, spawn, etc.)
-    if (key === 'death' || key === 'birth' || key === 'eat' || key === 'spawn') {
-        setTimeout(() => {
-            playTone(highFreq, waveform, 0.45, volume * 0.7, -8, attack * 0.6, release * 0.75);
-        }, 85);
-    }
-
-    console.log(`[Sound Editor] Tested: ${key}`, { waveform, volume, attack, release, lowFreq, highFreq });
+    updateSoundEditorDisplays();
 }
 
+function updateSoundEditorDisplays() {
+    const pairs = [
+        ['sound-vol-slider', 'sound-vol-value'],
+        ['sound-attack-slider', 'sound-attack-value'],
+        ['sound-release-slider', 'sound-release-value'],
+        ['sound-low-slider', 'sound-low-value'],
+        ['sound-high-slider', 'sound-high-value']
+    ];
+
+    pairs.forEach(([sliderId, valueId]) => {
+        const slider = document.getElementById(sliderId);
+        const valEl = document.getElementById(valueId);
+        if (slider && valEl) {
+            valEl.textContent = parseFloat(slider.value).toFixed(3);
+        }
+    });
+}
+
+function saveCurrentSoundSettings() {
+    const key = currentSoundKey;
+    if (!soundSettings[key]) return;
+
+    const vol = document.getElementById('sound-vol-slider');
+    const wave = document.getElementById('sound-waveform');
+    const attack = document.getElementById('sound-attack-slider');
+    const release = document.getElementById('sound-release-slider');
+    const low = document.getElementById('sound-low-slider');
+    const high = document.getElementById('sound-high-slider');
+
+    if (vol) soundSettings[key].volume = parseFloat(vol.value);
+    if (wave) soundSettings[key].waveform = wave.value;
+    if (attack) soundSettings[key].attack = parseFloat(attack.value);
+    if (release) soundSettings[key].release = parseFloat(release.value);
+    if (low) soundSettings[key].lowFreq = parseFloat(low.value);
+    if (high) soundSettings[key].highFreq = parseFloat(high.value);
+}
+
+function testSelectedSound() {
+    saveCurrentSoundSettings();
+
+    const key = currentSoundKey;
+    const s = soundSettings[key];
+    if (!s) return;
+
+    playTone(s.lowFreq, s.waveform, 0.7, s.volume, 0, s.attack, s.release);
+
+    if (key === 'death' || key === 'birth' || key === 'eat' || key === 'spawn') {
+        setTimeout(() => {
+            playTone(s.highFreq, s.waveform, 0.5, s.volume * 0.7, -8, s.attack * 0.6, s.release * 0.75);
+        }, 85);
+    }
+}
+
+// Load default sound when page loads
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+        loadSoundIntoEditor('death');
+    }, 400);
+});
+
+// When user changes the dropdown, save old + load new
+const soundSelect = document.getElementById('sound-select');
+if (soundSelect) {
+    soundSelect.addEventListener('change', () => {
+        saveCurrentSoundSettings();
+        loadSoundIntoEditor(soundSelect.value);
+    });
+}
       
       //================================================================================
       //CHUNK 3 of 3  —  RUNTIME LOOP + DRAW + HANDLERS
