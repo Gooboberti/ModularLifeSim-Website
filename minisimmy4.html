@@ -1473,6 +1473,69 @@ pruneAudio.loop = true;
 replicateAudio.loop = true;
 evolveAudio.loop = true;
 
+// ==================== REAL AUDIO ANALYSIS ====================
+let audioContext;
+let analyser;
+let currentAnalysedAudio = null;
+let freqData = new Uint8Array(128);
+
+function startMusicAnalysis(audioEl) {
+    if (!audioContext) {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    }
+
+    // If we're already analysing something, disconnect it first
+    if (currentAnalysedAudio) {
+        try { currentAnalysedAudio.disconnect(); } catch(e){}
+    }
+
+    const source = audioContext.createMediaElementSource(audioEl);
+    analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256;
+    analyser.smoothingTimeConstant = 0.75;
+
+    source.connect(analyser);
+    analyser.connect(audioContext.destination);
+
+    currentAnalysedAudio = source;
+
+    // Start updating musicData every frame
+    if (!window.musicAnalysisRunning) {
+        window.musicAnalysisRunning = true;
+        updateMusicDataLoop();
+    }
+}
+
+function updateMusicDataLoop() {
+    if (!analyser) return;
+
+    analyser.getByteFrequencyData(freqData);
+
+    // Split into bass / mids / highs
+    const len = freqData.length;
+    let bass = 0, mids = 0, highs = 0;
+    let bassCount = 0, midCount = 0, highCount = 0;
+
+    for (let i = 0; i < len; i++) {
+        const val = freqData[i];
+        if (i < 12) {           // Bass (low frequencies)
+            bass += val; bassCount++;
+        } else if (i < 40) {    // Mids
+            mids += val; midCount++;
+        } else {                // Highs
+            highs += val; highCount++;
+        }
+    }
+
+    musicData.bass = bassCount ? (bass / bassCount) / 255 : 0;
+    musicData.mids = midCount ? (mids / midCount) / 255 : 0;
+    musicData.highs = highCount ? (highs / highCount) / 255 : 0;
+
+    requestAnimationFrame(updateMusicDataLoop);
+}
+
+      
+
 let originalMusicSettings = {
     vortexMultiplier: null,
     reproductionChance: null,
@@ -1522,6 +1585,7 @@ function activateMusicMode(mode) {
     currentMusicMode = mode;
     evolveEnvTimer = 0;
 
+    // Save original settings
     originalMusicSettings.vortexMultiplier = settings.vortexMultiplier;
     originalMusicSettings.reproductionChance = settings.reproductionChance;
     originalMusicSettings.energyDrain = settings.energyDrain;
@@ -1531,33 +1595,35 @@ function activateMusicMode(mode) {
 
     addFloatingText(width / 2, 70, `${mode.toUpperCase()} MODE`, '#34d399');
 
-          // === AUTO SET SPEED + VISUALIZER RING ===
-if (mode === 'prune') {
-    setTimeScale(4);
-    musicVisualizerColor = [255, 40, 70];
-    musicVisualizerRadius = 380;     // ← changed
-} else if (mode === 'replicate') {
-    setTimeScale(4);
-    musicVisualizerColor = [30, 230, 120];
-    musicVisualizerRadius = 370;     // ← changed
-} else if (mode === 'evolve') {
-    setTimeScale(4);
-    musicVisualizerColor = [255, 210, 50];
-    musicVisualizerRadius = 375;     // ← changed
-}
+    // Set speed + visualizer defaults
+    if (mode === 'prune') {
+        setTimeScale(4);
+        musicVisualizerColor = [255, 40, 70];
+        musicVisualizerRadius = 380;
+    } else if (mode === 'replicate') {
+        setTimeScale(4);
+        musicVisualizerColor = [30, 230, 120];
+        musicVisualizerRadius = 370;
+    } else if (mode === 'evolve') {
+        setTimeScale(4);
+        musicVisualizerColor = [255, 210, 50];
+        musicVisualizerRadius = 375;
+    }
 
-    musicVisualizerActive = true;   // ← This must be here
+    musicVisualizerActive = true;
 
     if (mode === 'replicate') {
         forceEnvironmentalPhase('Fertile');
         replicateAudio.currentTime = 0;
         replicateAudio.play().catch(() => {});
+        startMusicAnalysis(replicateAudio);
         applyReplicateModifiers();
     } 
     else if (mode === 'prune') {
         forceEnvironmentalPhase('Drought');
         pruneAudio.currentTime = 0;
         pruneAudio.play().catch(() => {});
+        startMusicAnalysis(pruneAudio);
         applyPruneModifiers();
     } 
     else if (mode === 'evolve') {
@@ -1565,6 +1631,7 @@ if (mode === 'prune') {
         forceEnvironmentalPhase(evolveEnvPhases[0]);
         evolveAudio.currentTime = 0;
         evolveAudio.play().catch(() => {});
+        startMusicAnalysis(evolveAudio);
         applyEvolveModifiers();
     }
 
@@ -1578,10 +1645,17 @@ function stopMusicMode() {
     currentMusicMode = null;
     musicVisualizerActive = false;
 
-    // Stop all music tracks
+    // Stop audio
     if (pruneAudio) pruneAudio.pause();
     if (replicateAudio) replicateAudio.pause();
     if (evolveAudio) evolveAudio.pause();
+
+    // Disconnect audio analysis
+    if (currentAnalysedAudio) {
+        try { currentAnalysedAudio.disconnect(); } catch(e){}
+        currentAnalysedAudio = null;
+    }
+    analyser = null;
 
     // Restore original settings
     if (originalMusicSettings.vortexMultiplier !== null) {
@@ -1602,9 +1676,6 @@ function stopMusicMode() {
 
     musicData = { bass: 0, mids: 0, highs: 0 };
     evolveEnvTimer = 0;
-
-    // Do NOT hide the top bar — only restore env bar visibility if needed
-    // updateEnvBarVisibility(false);   // ← REMOVED (this was hiding your top header)
 
     addFloatingText(width / 2, 70, "Music Stopped - Values Restored", '#f87171');
 }
@@ -4501,7 +4572,7 @@ for (let c of creatures) {
 
     background(12, 14, 22);
 
-// ==================== MUSIC VISUALIZER v2 (Dynamic & Pretty) ====================
+// ==================== MUSIC VISUALIZER (Real Audio Reactive) ====================
 if (musicVisualizerActive && currentMusicMode) {
     push();
     drawingContext.save();
@@ -4514,57 +4585,55 @@ if (musicVisualizerActive && currentMusicMode) {
     let glow = musicVisualizerGlow || 1.0;
     let thickness = musicVisualizerThickness || 6;
 
-    // === Dynamic pulsing energy (we'll connect real audio later) ===
-    let t = frameCount * 0.035;
-    let pulse = sin(t) * 0.5 + 1.0;                    // slow breathing
-    let fastPulse = sin(t * 2.3) * 0.5 + 1.0;          // faster reaction
-    let energy = 0.7 + sin(t * 1.7) * 0.3;             // overall energy
+    // === REAL AUDIO DATA ===
+    const bass = musicData.bass || 0;
+    const mids = musicData.mids || 0;
+    const highs = musicData.highs || 0;
 
-    let r = baseR * (0.95 + pulse * 0.08);             // breathing radius
+    // Dynamic radius per band
+    let rOuter = baseR * (1.0 + bass * 0.45);
+    let rMid   = baseR * (1.0 + mids * 0.35);
+    let rInner = baseR * (1.0 + highs * 0.55);
 
-    // Mode-specific color base
-    let col;
-    if (currentMusicMode === 'prune') {
-        col = { r: 255, g: 40, b: 70 };     // aggressive red
-    } else if (currentMusicMode === 'replicate') {
-        col = { r: 30, g: 230, b: 120 };    // lush green
-    } else {
-        col = { r: 255, g: 210, b: 50 };    // evolve gold
-    }
+    // Mode color
+    let col = currentMusicMode === 'prune'   ? {r:255, g:40,  b:70} :
+              currentMusicMode === 'replicate'? {r:30,  g:230, b:120} :
+                                               {r:255, g:210, b:50};
 
-    // === OUTER RING (slow bass-like pulse) ===
-    stroke(col.r, col.g, col.b, 220 * glow);
-    strokeWeight(thickness * 3.2 * energy);
-    ellipse(width/2, height/2, r * 2.35, r * 2.35);
+    // === OUTER RING (Bass) ===
+    stroke(col.r, col.g, col.b, 200 * glow);
+    strokeWeight(thickness * 3.5 * (0.7 + bass * 1.8));
+    ellipse(width/2, height/2, rOuter * 2.35, rOuter * 2.35);
 
-    // soft outer glow layer
-    stroke(col.r, col.g, col.b, 60 * glow);
-    strokeWeight(thickness * 5.5);
-    ellipse(width/2, height/2, r * 2.5, r * 2.5);
+    // Soft glow
+    stroke(col.r, col.g, col.b, 50 * glow);
+    strokeWeight(thickness * 6);
+    ellipse(width/2, height/2, rOuter * 2.55, rOuter * 2.55);
 
-    // === MIDDLE RING (medium pulse) ===
-    stroke(col.r * 0.7, col.g * 0.9, col.b, 200 * glow);
-    strokeWeight(thickness * 2.1 * fastPulse);
-    ellipse(width/2, height/2, r * 1.65, r * 1.65);
+    // === MIDDLE RING (Mids) ===
+    stroke(col.r * 0.85, col.g * 0.95, col.b, 210 * glow);
+    strokeWeight(thickness * 2.2 * (0.8 + mids * 1.6));
+    ellipse(width/2, height/2, rMid * 1.7, rMid * 1.7);
 
-    // === INNER RING (fast reactive) ===
-    stroke(255, 255, 255, 180 * glow);
-    strokeWeight(thickness * 1.1);
-    ellipse(width/2, height/2, r * 1.05, r * 1.05);
+    // === INNER RING (Highs) ===
+    stroke(255, 255, 255, 230 * glow);
+    strokeWeight(thickness * 1.3 * (0.6 + highs * 2.2));
+    ellipse(width/2, height/2, rInner * 1.1, rInner * 1.1);
 
-    // === CENTRAL GLOW ORB ===
-    let coreSize = r * 0.55 * (0.9 + fastPulse * 0.2);
-    fill(col.r, col.g, col.b, 35 * glow);
+    // === CENTRAL PULSE (overall energy) ===
+    let energy = (bass + mids + highs) / 3;
+    let coreSize = baseR * 0.5 * (0.85 + energy * 0.6);
+    fill(col.r, col.g, col.b, 45 * glow);
     noStroke();
-    ellipse(width/2, height/2, coreSize * 1.8, coreSize * 1.8);
+    ellipse(width/2, height/2, coreSize * 2.1, coreSize * 2.1);
 
-    fill(255, 255, 255, 120 * glow);
-    ellipse(width/2, height/2, coreSize * 0.9, coreSize * 0.9);
+    fill(255, 255, 255, 140 * glow);
+    ellipse(width/2, height/2, coreSize * 1.1, coreSize * 1.1);
 
-    pop();
     drawingContext.restore();
+    pop();
 }
-// ==================== END MUSIC VISUALIZER v2 ====================
+// ==================== END MUSIC VISUALIZER ====================
 
     if (paused) {
         try {
