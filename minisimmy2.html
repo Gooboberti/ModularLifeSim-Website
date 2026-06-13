@@ -492,17 +492,111 @@ Start of Chunk 1
         </div>
     </div>
 
-    <!-- Legend button inside Inspector -->
-    <div class="border-t border-white/10 pt-2">
-        <button onclick="showLegendModal()"
-                class="flex w-full items-center justify-center gap-x-2 rounded-2xl bg-white/10 px-3 py-1.5 text-xs transition-colors hover:bg-white/20">
-            <i class="fa-solid fa-info-circle"></i>
-            <span>Legend & Info</span>
-        </button>
-    </div>
+   <!-- Legend button inside Inspector -->
+<div class="border-t border-white/10 pt-2">
+    <button onclick="showLegendModal()"
+            class="flex w-full items-center justify-center gap-x-2 rounded-2xl bg-white/10 px-3 py-1.5 text-xs transition-colors hover:bg-white/20">
+        <i class="fa-solid fa-info-circle"></i>
+        <span>Legend & Info</span>
+    </button>
 </div>
 
-   
+<!-- ==================== MUSIC VISUALIZER DEBUG PANEL ==================== -->
+<div class="mt-3 border-t border-white/10 pt-3">
+    <div class="mb-2 flex items-center gap-x-2 px-1 text-xs font-semibold text-white/70">
+        <i class="fa-solid fa-sliders-h"></i>
+        <span>Music Visualizer (Debug)</span>
+    </div>
+
+    <div class="space-y-3 rounded-2xl border border-white/10 bg-[#0a0a0f] p-3 text-xs">
+
+        <!-- Ring Radius -->
+        <div>
+            <div class="mb-1 flex items-center justify-between">
+                <div class="text-white/60">Ring Radius</div>
+                <div id="viz-radius-value" class="font-mono text-emerald-400">380</div>
+            </div>
+            <input type="range" id="viz-radius-slider" class="w-full accent-emerald-400"
+                   min="180" max="620" step="5" value="380">
+        </div>
+
+        <!-- Overall Opacity -->
+        <div>
+            <div class="mb-1 flex items-center justify-between">
+                <div class="text-white/60">Overall Opacity</div>
+                <div id="viz-opacity-value" class="font-mono text-emerald-400">1.0</div>
+            </div>
+            <input type="range" id="viz-opacity-slider" class="w-full accent-emerald-400"
+                   min="0.2" max="2.0" step="0.05" value="1.0">
+        </div>
+
+        <!-- Glow Intensity -->
+        <div>
+            <div class="mb-1 flex items-center justify-between">
+                <div class="text-white/60">Glow Intensity</div>
+                <div id="viz-glow-value" class="font-mono text-emerald-400">1.0</div>
+            </div>
+            <input type="range" id="viz-glow-slider" class="w-full accent-emerald-400"
+                   min="0.3" max="4" step="0.1" value="1.0">
+        </div>
+
+        <!-- Ring Thickness -->
+        <div>
+            <div class="mb-1 flex items-center justify-between">
+                <div class="text-white/60">Ring Thickness</div>
+                <div id="viz-thickness-value" class="font-mono text-emerald-400">6</div>
+            </div>
+            <input type="range" id="viz-thickness-slider" class="w-full accent-emerald-400"
+                   min="2" max="18" step="1" value="6">
+        </div>
+
+        <!-- Reactivity Sliders -->
+        <div class="pt-2 border-t border-white/10">
+            <div class="mb-1 text-white/60 text-[10px]">Reactivity Strength</div>
+
+            <!-- Bass Reactivity -->
+            <div class="mb-2">
+                <div class="flex justify-between text-[10px] mb-0.5">
+                    <div class="text-white/50">Bass (Outer)</div>
+                    <div id="viz-bass-react-value" class="font-mono text-emerald-400">1.0</div>
+                </div>
+                <input type="range" id="viz-bass-react-slider" class="w-full accent-red-400"
+                       min="0" max="3" step="0.05" value="1.0">
+            </div>
+
+            <!-- Mid Reactivity -->
+            <div class="mb-2">
+                <div class="flex justify-between text-[10px] mb-0.5">
+                    <div class="text-white/50">Mids (Middle)</div>
+                    <div id="viz-mid-react-value" class="font-mono text-emerald-400">1.0</div>
+                </div>
+                <input type="range" id="viz-mid-react-slider" class="w-full accent-yellow-400"
+                       min="0" max="3" step="0.05" value="1.0">
+            </div>
+
+            <!-- High Reactivity -->
+            <div>
+                <div class="flex justify-between text-[10px] mb-0.5">
+                    <div class="text-white/50">Highs (Inner)</div>
+                    <div id="viz-high-react-value" class="font-mono text-emerald-400">1.0</div>
+                </div>
+                <input type="range" id="viz-high-react-slider" class="w-full accent-cyan-400"
+                       min="0" max="3" step="0.05" value="1.0">
+            </div>
+        </div>
+
+        <!-- Central Glow -->
+        <div class="pt-2 border-t border-white/10">
+            <div class="mb-1 flex items-center justify-between">
+                <div class="text-white/60">Central Glow</div>
+                <div id="viz-center-glow-value" class="font-mono text-emerald-400">1.0</div>
+            </div>
+            <input type="range" id="viz-center-glow-slider" class="w-full accent-emerald-400"
+                   min="0" max="3" step="0.1" value="1.0">
+        </div>
+
+    </div>
+</div>
 
 </div>
 <!-- ==================== END OF RIGHT SIDEBAR ==================== -->
@@ -1431,6 +1525,99 @@ pruneAudio.loop = true;
 replicateAudio.loop = true;
 evolveAudio.loop = true;
 
+// ==================== REAL AUDIO ANALYSIS (MODE SWITCHING FIXED) ====================
+let audioContext;
+let analyser;
+let currentSource = null;
+let currentAudioEl = null;
+let freqData = new Uint8Array(128);
+
+let pruneSource = null;
+let replicateSource = null;
+let evolveSource = null;
+
+function getOrCreateSource(audioEl) {
+    if (audioEl === pruneAudio) {
+        if (!pruneSource) {
+            pruneSource = audioContext.createMediaElementSource(audioEl);
+        }
+        return pruneSource;
+    }
+    if (audioEl === replicateAudio) {
+        if (!replicateSource) {
+            replicateSource = audioContext.createMediaElementSource(audioEl);
+        }
+        return replicateSource;
+    }
+    if (audioEl === evolveAudio) {
+        if (!evolveSource) {
+            evolveSource = audioContext.createMediaElementSource(audioEl);
+        }
+        return evolveSource;
+    }
+    return null;
+}
+
+function startMusicAnalysis(audioEl) {
+    if (!audioContext) {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    }
+
+    if (audioContext.state === 'suspended') {
+        audioContext.resume();
+    }
+
+    if (currentSource) {
+        try { currentSource.disconnect(); } catch(e){}
+    }
+
+    const source = getOrCreateSource(audioEl);
+    if (!source) return;
+
+    analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256;
+    analyser.smoothingTimeConstant = 0.78;
+
+    source.connect(analyser);
+    analyser.connect(audioContext.destination);
+
+    currentSource = source;
+    currentAudioEl = audioEl;
+
+    if (!window.musicAnalysisRunning) {
+        window.musicAnalysisRunning = true;
+        updateMusicDataLoop();
+    }
+}
+
+function updateMusicDataLoop() {
+    if (!analyser) return;
+
+    analyser.getByteFrequencyData(freqData);
+
+    const len = freqData.length;
+    let bass = 0, mids = 0, highs = 0;
+    let bassCount = 0, midCount = 0, highCount = 0;
+
+    for (let i = 0; i < len; i++) {
+        const val = freqData[i];
+        if (i < 14) {
+            bass += val; bassCount++;
+        } else if (i < 45) {
+            mids += val; midCount++;
+        } else {
+            highs += val; highCount++;
+        }
+    }
+
+    musicData.bass = bassCount ? (bass / bassCount) / 255 : 0;
+    musicData.mids = midCount ? (mids / midCount) / 255 : 0;
+    musicData.highs = highCount ? (highs / highCount) / 255 : 0;
+
+    requestAnimationFrame(updateMusicDataLoop);
+}
+      
+
 let originalMusicSettings = {
     vortexMultiplier: null,
     reproductionChance: null,
@@ -1447,7 +1634,7 @@ const evolveEnvPhases = ['Fertile', 'Normal', 'Drought'];
 // === MUSIC VISUALIZER RING ===
 let musicVisualizerActive = false;
 let musicVisualizerColor = [255, 50, 70];
-let musicVisualizerRadius = 535;
+
 
 function showMusicModal() {
     const modal = document.getElementById('music-modal');
@@ -1480,6 +1667,7 @@ function activateMusicMode(mode) {
     currentMusicMode = mode;
     evolveEnvTimer = 0;
 
+    // Save original settings
     originalMusicSettings.vortexMultiplier = settings.vortexMultiplier;
     originalMusicSettings.reproductionChance = settings.reproductionChance;
     originalMusicSettings.energyDrain = settings.energyDrain;
@@ -1489,33 +1677,35 @@ function activateMusicMode(mode) {
 
     addFloatingText(width / 2, 70, `${mode.toUpperCase()} MODE`, '#34d399');
 
-          // === AUTO SET SPEED + VISUALIZER RING ===
+    // Set speed + visualizer defaults
     if (mode === 'prune') {
         setTimeScale(4);
-        musicVisualizerColor = [255, 40, 70];     // Red
-        musicVisualizerRadius = 545;
+        musicVisualizerColor = [255, 40, 70];
+        musicVisualizerRadius = 380;
     } else if (mode === 'replicate') {
         setTimeScale(4);
-        musicVisualizerColor = [30, 230, 120];    // Green
-        musicVisualizerRadius = 535;
+        musicVisualizerColor = [30, 230, 120];
+        musicVisualizerRadius = 370;
     } else if (mode === 'evolve') {
         setTimeScale(4);
-        musicVisualizerColor = [255, 210, 50];    // Yellow
-        musicVisualizerRadius = 540;
+        musicVisualizerColor = [255, 210, 50];
+        musicVisualizerRadius = 375;
     }
 
-    musicVisualizerActive = true;   // ← This must be here
+    musicVisualizerActive = true;
 
     if (mode === 'replicate') {
         forceEnvironmentalPhase('Fertile');
         replicateAudio.currentTime = 0;
         replicateAudio.play().catch(() => {});
+        startMusicAnalysis(replicateAudio);
         applyReplicateModifiers();
     } 
     else if (mode === 'prune') {
         forceEnvironmentalPhase('Drought');
         pruneAudio.currentTime = 0;
         pruneAudio.play().catch(() => {});
+        startMusicAnalysis(pruneAudio);
         applyPruneModifiers();
     } 
     else if (mode === 'evolve') {
@@ -1523,6 +1713,7 @@ function activateMusicMode(mode) {
         forceEnvironmentalPhase(evolveEnvPhases[0]);
         evolveAudio.currentTime = 0;
         evolveAudio.play().catch(() => {});
+        startMusicAnalysis(evolveAudio);
         applyEvolveModifiers();
     }
 
@@ -1536,12 +1727,24 @@ function stopMusicMode() {
     currentMusicMode = null;
     musicVisualizerActive = false;
 
-    // Stop all music tracks
+    // Stop all audio
     if (pruneAudio) pruneAudio.pause();
     if (replicateAudio) replicateAudio.pause();
     if (evolveAudio) evolveAudio.pause();
 
-    // Restore original settings
+    // Disconnect current source (fixed variable name)
+    if (currentSource) {
+        try { currentSource.disconnect(); } catch(e){}
+        currentSource = null;
+    }
+    currentAudioEl = null;
+    analyser = null;
+
+    // Reset data
+    musicData = { bass: 0, mids: 0, highs: 0 };
+    freqData = new Uint8Array(128);
+
+    // Restore original game settings (keep your existing restore code)
     if (originalMusicSettings.vortexMultiplier !== null) {
         settings.vortexMultiplier = originalMusicSettings.vortexMultiplier;
     }
@@ -1558,13 +1761,9 @@ function stopMusicMode() {
     redHazardsEnabled = originalRedHazardsEnabled;
     redHazardIntensity = originalRedHazardIntensity || 1;
 
-    musicData = { bass: 0, mids: 0, highs: 0 };
     evolveEnvTimer = 0;
 
-    // Do NOT hide the top bar — only restore env bar visibility if needed
-    // updateEnvBarVisibility(false);   // ← REMOVED (this was hiding your top header)
-
-    addFloatingText(width / 2, 70, "Music Stopped - Values Restored", '#f87171');
+    addFloatingText(width / 2, 70, "Music Stopped", '#f87171');
 }
 
 // ==================== HELPER FUNCTIONS ====================
@@ -1634,7 +1833,6 @@ function applyReplicateModifiers() {
     }
     addFloatingText(width / 2, 95, "FERTILE GROWTH SURGE", '#34d399');
 }
-
 function applyEvolveModifiers() {
     settings.vortexMultiplier = 5.9;
     settings.reproductionChance = 0.029;
@@ -1651,7 +1849,6 @@ function applyEvolveModifiers() {
     addFloatingText(width / 2, 95, "MODULE EVOLUTION FIELD", '#fbbf24');
 }
 // ==================== VISUAL TINT + GLOWING BORDER ====================
-
 function drawMusicModeTintAndBorder() {
     if (!currentMusicMode) return;
 
@@ -1673,7 +1870,7 @@ function drawMusicModeTintAndBorder() {
                         currentMusicMode === 'replicate' ? [30, 240, 140] :
                         [255, 215, 60];
 
-    let pulse = sin(frameCount * 0.08) * 0.5 + 1.0; // pulsating effect
+    let pulse = sin(frameCount * 0.08) * 0.5 + 1.0;
 
     for (let i = 7; i >= 1; i--) {
         let alpha = (28 * i) * pulse;
@@ -1690,56 +1887,188 @@ function drawMusicModeTintAndBorder() {
     pop();
 }
 
- function drawMusicVisualizer() {
+// ==================== MUSIC VISUALIZER (CLEAN FINAL VERSION) ====================
+let musicVisualizerRadius = 210;
+let musicVisualizerGlow = 0.3;
+let musicVisualizerThickness = 2;
+let musicVisualizerOpacity = 0.45;
+
+let musicVisualizerBassReact = 3.00;
+let musicVisualizerMidReact = 3.00;
+let musicVisualizerHighReact = 2.95;
+let musicVisualizerCenterGlow = 0.3;
+
+
+// ==================== MUSIC VISUALIZER (FINAL VERSION) ====================
+function drawMusicVisualizer() {
     if (!musicVisualizerActive || !currentMusicMode) return;
 
     push();
-    translate(width / 2, height / 2);
+    resetMatrix();
+    colorMode(RGB, 255);
+    ellipseMode(CENTER);
     noFill();
 
-    const c = musicVisualizerColor;
-    const baseR = musicVisualizerRadius;
+    const cx = width / 2;
+    const cy = height / 2;
 
-    // Outer glowing layers
-    for (let i = 7; i >= 1; i--) {
-        const alpha = 16 * i;
-        stroke(c[0], c[1], c[2], alpha);
-        strokeWeight(22 + i * 7);
-        circle(0, 0, baseR * 2 + i * 9);
+    let r, g, b;
+    if (currentMusicMode === 'prune')      { r = 255; g = 50;  b = 70; }
+    else if (currentMusicMode === 'replicate') { r = 40;  g = 255; b = 130; }
+    else                                   { r = 255; g = 215; b = 60; }
+
+    const bass = musicData.bass || 0;
+    const mids = musicData.mids || 0;
+    const highs = musicData.highs || 0;
+
+    // Multiple pulsing rings
+    const rings = 5;
+    for (let i = 0; i < rings; i++) {
+        const t = (frameCount * 0.035 + i * 1.8) % TWO_PI;
+        const pulse = sin(t) * 0.5 + 0.5;
+
+        let radius = 160 + i * 38;
+        radius += bass * 55;
+        radius += mids * 28;
+        radius += highs * 18;
+
+        const alpha = (0.35 + pulse * 0.45) * (1.0 - i * 0.12);
+
+        stroke(r, g, b, alpha * 255);
+        strokeWeight(3.5 + i * 0.8);
+        ellipse(cx, cy, radius * 2, radius * 2);
     }
 
-    // Main bright ring
-    stroke(c[0], c[1], c[2], 230);
-    strokeWeight(8);
-    circle(0, 0, baseR * 2);
-
-    // Inner highlight
-    stroke(c[0], c[1], c[2], 130);
-    strokeWeight(3.5);
-    circle(0, 0, baseR * 2 - 14);
+    // Bright core
+    noStroke();
+    fill(r, g, b, 70 + bass * 90);
+    ellipse(cx, cy, 95 + mids * 40, 95 + mids * 40);
 
     pop();
 }
-      // ==================== AETHERIUM RESOURCES + FURNACE ====================
-      let aetheriumCrystals = 0;     // Stackable crystals in inventory (max 999)
-      let aetheriumDust = 0;         // Dust in oz (max 999)
+// ==================== END FLAME VISUALIZER ====================
 
-      // Furnace system
-      let burningCrystals = 0;       // Number of crystals currently burning in furnace
-      let furnaceEndTime = 0;        // Timestamp when current burn ends
+// ==================== SLIDER INITIALIZATION ====================
+function initVisualizerSliders() {
+    // Ring Radius
+    const radiusSlider = document.getElementById('viz-radius-slider');
+    const radiusValue = document.getElementById('viz-radius-value');
+    if (radiusSlider && radiusValue) {
+        radiusSlider.value = musicVisualizerRadius;
+        radiusValue.innerText = musicVisualizerRadius;
+        radiusSlider.oninput = function() {
+            musicVisualizerRadius = parseInt(this.value);
+            radiusValue.innerText = musicVisualizerRadius;
+        };
+    }
 
- function formatDust(mg) {
-    if (mg >= 1e11) { 
-        // 100,000+ tons → use scientific notation in tons
+    // Overall Opacity
+    const opacitySlider = document.getElementById('viz-opacity-slider');
+    const opacityValue = document.getElementById('viz-opacity-value');
+    if (opacitySlider && opacityValue) {
+        opacitySlider.value = musicVisualizerOpacity;
+        opacityValue.innerText = musicVisualizerOpacity.toFixed(2);
+        opacitySlider.oninput = function() {
+            musicVisualizerOpacity = parseFloat(this.value);
+            opacityValue.innerText = musicVisualizerOpacity.toFixed(2);
+        };
+    }
+
+    // Glow Intensity
+    const glowSlider = document.getElementById('viz-glow-slider');
+    const glowValue = document.getElementById('viz-glow-value');
+    if (glowSlider && glowValue) {
+        glowSlider.value = musicVisualizerGlow;
+        glowValue.innerText = musicVisualizerGlow.toFixed(1);
+        glowSlider.oninput = function() {
+            musicVisualizerGlow = parseFloat(this.value);
+            glowValue.innerText = musicVisualizerGlow.toFixed(1);
+        };
+    }
+
+    // Ring Thickness
+    const thicknessSlider = document.getElementById('viz-thickness-slider');
+    const thicknessValue = document.getElementById('viz-thickness-value');
+    if (thicknessSlider && thicknessValue) {
+        thicknessSlider.value = musicVisualizerThickness;
+        thicknessValue.innerText = musicVisualizerThickness;
+        thicknessSlider.oninput = function() {
+            musicVisualizerThickness = parseInt(this.value);
+            thicknessValue.innerText = musicVisualizerThickness;
+        };
+    }
+
+    // Bass Reactivity
+    const bassSlider = document.getElementById('viz-bass-react-slider');
+    const bassValue = document.getElementById('viz-bass-react-value');
+    if (bassSlider && bassValue) {
+        bassSlider.value = musicVisualizerBassReact;
+        bassValue.innerText = musicVisualizerBassReact.toFixed(2);
+        bassSlider.oninput = function() {
+            musicVisualizerBassReact = parseFloat(this.value);
+            bassValue.innerText = musicVisualizerBassReact.toFixed(2);
+        };
+    }
+
+    // Mid Reactivity
+    const midSlider = document.getElementById('viz-mid-react-slider');
+    const midValue = document.getElementById('viz-mid-react-value');
+    if (midSlider && midValue) {
+        midSlider.value = musicVisualizerMidReact;
+        midValue.innerText = musicVisualizerMidReact.toFixed(2);
+        midSlider.oninput = function() {
+            musicVisualizerMidReact = parseFloat(this.value);
+            midValue.innerText = musicVisualizerMidReact.toFixed(2);
+        };
+    }
+
+    // High Reactivity
+    const highSlider = document.getElementById('viz-high-react-slider');
+    const highValue = document.getElementById('viz-high-react-value');
+    if (highSlider && highValue) {
+        highSlider.value = musicVisualizerHighReact;
+        highValue.innerText = musicVisualizerHighReact.toFixed(2);
+        highSlider.oninput = function() {
+            musicVisualizerHighReact = parseFloat(this.value);
+            highValue.innerText = musicVisualizerHighReact.toFixed(2);
+        };
+    }
+
+    // Central Glow
+    const centerSlider = document.getElementById('viz-center-glow-slider');
+    const centerValue = document.getElementById('viz-center-glow-value');
+    if (centerSlider && centerValue) {
+        centerSlider.value = musicVisualizerCenterGlow;
+        centerValue.innerText = musicVisualizerCenterGlow.toFixed(1);
+        centerSlider.oninput = function() {
+            musicVisualizerCenterGlow = parseFloat(this.value);
+            centerValue.innerText = musicVisualizerCenterGlow.toFixed(1);
+        };
+    }
+}
+
+// Auto-initialize sliders when page loads
+window.addEventListener('load', () => {
+    setTimeout(() => {
+        initVisualizerSliders();
+        console.log("%c[Music Visualizer] Debug sliders initialized", "color:#34d399");
+    }, 700);
+});
+
+// ==================== AETHERIUM RESOURCES + FURNACE ====================
+let aetheriumCrystals = 0; // Stackable crystals in inventory (max 999)
+let aetheriumDust = 0;     // Dust in mg (milligrams)
+let burningCrystals = 0;   // Number of crystals currently burning in furnace
+let furnaceEndTime = 0;    // Timestamp when current burn ends
+
+function formatDust(mg) {
+    if (mg >= 1e11) {
         return (mg / 1e9).toExponential(2) + " t";
     } else if (mg >= 1e9) {
-        // 1,000+ tons
         return (mg / 1e9).toFixed(2) + " t";
     } else if (mg >= 1_000_000) {
-        // Metric tons
         return (mg / 1_000_000).toFixed(2) + " t";
     } else if (mg >= 100_000) {
-        // 100+ kg
         return (mg / 1000).toFixed(1) + " kg";
     } else if (mg >= 1000) {
         return (mg / 1000).toFixed(2) + " kg";
@@ -1751,7 +2080,6 @@ function drawMusicModeTintAndBorder() {
         return (mg * 1_000_000).toFixed(0) + " µg";
     }
 }
-
 
 function formatLargeNumber(n) {
     if (n >= 1e12) {
@@ -4383,18 +4711,88 @@ for (let c of creatures) {
               }
 
               function draw() {
-                  background(12, 14, 22);
-
-                if (paused) {
-    try {
-        drawWorld();
-        updateMainStats();
-        if (miniChartCtx) drawMiniChart();
-    } catch (e) {
-        console.warn("Paused draw error:", e);
+    // ==================== DEBUG ====================
+    if (frameCount % 60 === 0) {
+        console.log("%c[DEBUG] draw() is running | currentMusicMode =", "color:#f87171", currentMusicMode);
+        console.log("%c[DEBUG] musicVisualizerActive =", "color:#f87171", musicVisualizerActive);
     }
-    return;
+    // ===============================================
+
+    background(12, 14, 22);
+
+// ==================== MUSIC VISUALIZER (Real Audio Reactive) ====================
+if (musicVisualizerActive && currentMusicMode) {
+    push();
+    drawingContext.save();
+    resetMatrix();
+    colorMode(RGB, 255);
+    ellipseMode(CENTER);
+    noFill();
+
+    let baseR = musicVisualizerRadius || 280;
+    let glow = musicVisualizerGlow || 1.0;
+    let thickness = musicVisualizerThickness || 6;
+
+    // === REAL AUDIO DATA ===
+    const bass = musicData.bass || 0;
+    const mids = musicData.mids || 0;
+    const highs = musicData.highs || 0;
+
+    // Dynamic radius per band
+    let rOuter = baseR * (1.0 + bass * 0.45);
+    let rMid   = baseR * (1.0 + mids * 0.35);
+    let rInner = baseR * (1.0 + highs * 0.55);
+
+    // Mode color
+    let col = currentMusicMode === 'prune'   ? {r:255, g:40,  b:70} :
+              currentMusicMode === 'replicate'? {r:30,  g:230, b:120} :
+                                               {r:255, g:210, b:50};
+
+    // === OUTER RING (Bass) ===
+    stroke(col.r, col.g, col.b, 200 * glow);
+    strokeWeight(thickness * 3.5 * (0.7 + bass * 1.8));
+    ellipse(width/2, height/2, rOuter * 2.35, rOuter * 2.35);
+
+    // Soft glow
+    stroke(col.r, col.g, col.b, 50 * glow);
+    strokeWeight(thickness * 6);
+    ellipse(width/2, height/2, rOuter * 2.55, rOuter * 2.55);
+
+    // === MIDDLE RING (Mids) ===
+    stroke(col.r * 0.85, col.g * 0.95, col.b, 210 * glow);
+    strokeWeight(thickness * 2.2 * (0.8 + mids * 1.6));
+    ellipse(width/2, height/2, rMid * 1.7, rMid * 1.7);
+
+    // === INNER RING (Highs) ===
+    stroke(255, 255, 255, 230 * glow);
+    strokeWeight(thickness * 1.3 * (0.6 + highs * 2.2));
+    ellipse(width/2, height/2, rInner * 1.1, rInner * 1.1);
+
+    // === CENTRAL PULSE (overall energy) ===
+    let energy = (bass + mids + highs) / 3;
+    let coreSize = baseR * 0.5 * (0.85 + energy * 0.6);
+    fill(col.r, col.g, col.b, 45 * glow);
+    noStroke();
+    ellipse(width/2, height/2, coreSize * 2.1, coreSize * 2.1);
+
+    fill(255, 255, 255, 140 * glow);
+    ellipse(width/2, height/2, coreSize * 1.1, coreSize * 1.1);
+
+    drawingContext.restore();
+    pop();
 }
+// ==================== END MUSIC VISUALIZER ====================
+
+    if (paused) {
+        try {
+            drawWorld();
+            updateMainStats();
+            if (miniChartCtx) drawMiniChart();
+        } catch (e) {
+            console.warn("Paused draw error:", e);
+        }
+        return;
+    }
 
                   if (paused) {
                       drawWorld();
@@ -7529,9 +7927,8 @@ class ModuleParticle {
 
 
         
-        // ==================== MUSIC MODE SPECIAL PARTICLES ====================
 
-// ==================== MUSIC MODE SPECIAL PARTICLES ====================
+// ==================== MUSIC MODE SPECIAL PARTICLES + VISUALIZER ====================
 
 // PRUNE - Purple Infect Particles
 if (currentMusicMode === 'prune' && purpleInfectParticles.length > 0) {
@@ -7558,7 +7955,7 @@ if (currentMusicMode === 'prune' && purpleInfectParticles.length > 0) {
             if (dist(p.x, p.y, width/2, height/2) < 35) {
                 let newPred = null;
                 if (geneVaultSlots[0]) {
-                    newPred = new Creature(width/2 + random(-35,35), height/2 + random(-35,35), 
+                    newPred = new Creature(width/2 + random(-35,35), height/2 + random(-35,35),
                                            geneVaultSlots[0].modules, geneVaultSlots[0].generation || 3);
                     newPred.isPredator = true;
                 } else {
@@ -7572,19 +7969,15 @@ if (currentMusicMode === 'prune' && purpleInfectParticles.length > 0) {
         }
     }
 }
-
-// EVOLVE - Module Particles (spawn + consumption)
+// EVOLVE - Module Particles
 if (currentMusicMode === 'evolve') {
-    // Keep spawning new module particles over time
     if (frameCount % 28 === 0 && moduleParticles.length < 14) {
         moduleParticles.push(new ModuleParticle());
     }
-
     for (let i = moduleParticles.length - 1; i >= 0; i--) {
         let mp = moduleParticles[i];
         mp.update();
         mp.draw();
-
         for (let c of creatures) {
             if (!c.isPredator && dist(mp.x, mp.y, c.x, c.y) < 24 && c.modules.length < 13) {
                 const newMod = { type: mp.type, tier: 1, color: '#fbbf24' };
@@ -7595,16 +7988,72 @@ if (currentMusicMode === 'evolve') {
                 break;
             }
         }
-
         if (mp.isDead()) {
             moduleParticles.splice(i, 1);
         }
     }
 }
-}       
 
+// Visualizer + Tint + Diagnostic (END OF draw())
+drawMusicModeTintAndBorder();
+updateEvolveEnvironmentalCycle();
+
+// ==================== DIRECT INJECTION TEST - MUSIC VISUALIZER ====================
+if (musicVisualizerActive && currentMusicMode) {
+    console.log("%c[DIRECT] Attempting to draw visualizer NOW", "color: lime; font-size: 14px");
+
+    push();
+    drawingContext.save();
+    resetMatrix();
+    colorMode(RGB, 255);
+    ellipseMode(CENTER);
+    noFill();
+
+    let r = musicVisualizerRadius || 280;
+
+    // Huge obvious rings
+    stroke(255, 255, 0);
+    strokeWeight(30);
+    ellipse(width/2, height/2, r * 2.4, r * 2.4);
+
+    stroke(255, 0, 255);
+    strokeWeight(18);
+    ellipse(width/2, height/2, r * 1.7, r * 1.7);
+
+    stroke(0, 255, 255);
+    strokeWeight(10);
+    ellipse(width/2, height/2, r * 1.1, r * 1.1);
+
+    // Massive centered text
+    fill(255);
+    noStroke();
+    textAlign(CENTER, CENTER);
+    textSize(48);
+    text("DIRECT DRAW TEST", width/2, height/2 - 30);
+    textSize(32);
+    text(currentMusicMode.toUpperCase(), width/2, height/2 + 30);
+
+    drawingContext.restore();
+    pop();
+}
+// ==================== END DIRECT INJECTION ====================
+
+// === EMERGENCY DIAGNOSTIC (red bar at top) ===
+if (musicVisualizerActive) {
+    push();
+    noStroke();
+    fill(255, 0, 0, 90);
+    rect(0, 0, width, 60);
+    fill(255);
+    textSize(22);
+    textAlign(LEFT, CENTER);
+    text("MUSIC VISUALIZER IS RUNNING", 20, 32);
+    pop();
+}
+} // ← Correct closing bracket for draw()
+     
+// ==================== RESET SIM ====================
 function resetSim() {
-    // Clear all simulation arrays
     creatures = [];
     vortexParticles = [];
     pheromones = [];
@@ -7618,8 +8067,6 @@ function resetSim() {
     floatingTexts = [];
     energyWalls = [];
     evolutionHistory = [];
-
-    // === FIX: Properly reset graph data ===
     graphData = {
         pop: [],
         modules: [],
@@ -7627,7 +8074,6 @@ function resetSim() {
         greenFood: [],
         blueFood: []
     };
-
     greenZone.food = 320;
     blueZone.food = 320;
     globalReproCooldown = 0;
@@ -7636,11 +8082,10 @@ function resetSim() {
     timeScale = 1;
     simTime = 0;
     zoomLevel = 1.0;
-    document.getElementById('zoom-level').innerText = '100%';
-
+    const zoomEl = document.getElementById('zoom-level');
+    if (zoomEl) zoomEl.innerText = '100%';
     const timeEl = document.getElementById('sim-time');
     if (timeEl) timeEl.innerText = '00:00';
-
     const pauseBtn = document.getElementById('pause-btn');
     const pauseText = document.getElementById('pause-text');
     if (pauseBtn && pauseText) {
@@ -7648,250 +8093,220 @@ function resetSim() {
         pauseBtn.classList.add('bg-white/10');
         pauseText.innerHTML = 'Pause';
     }
-
     document.querySelectorAll('[id^="speed-"]').forEach(el => el.classList.remove('active', 'bg-emerald-500', 'text-[#0a0a0f]'));
     const speed1 = document.getElementById('speed-1');
     if (speed1) speed1.classList.add('active', 'bg-emerald-500', 'text-[#0a0a0f]');
-
     deselectCreature();
     totalScore = 0;
     totalPredatorKills = 0;
-
-    // Reset UI stats
     const scoreEl = document.getElementById('vegas-score');
     if (scoreEl) scoreEl.innerText = '0';
-
     const popEl = document.getElementById('stat-pop');
     const predEl = document.getElementById('stat-pred');
     const modEl = document.getElementById('stat-modules');
     const greenFoodEl = document.getElementById('stat-green-food');
     const blueFoodEl = document.getElementById('stat-blue-food');
-
     if (popEl) popEl.innerText = '9';
     if (predEl) predEl.innerText = '0';
     if (modEl) modEl.innerText = '1.0';
     if (greenFoodEl) greenFoodEl.innerText = '320';
     if (blueFoodEl) blueFoodEl.innerText = '320';
-
     environmentPhase = 0;
     envPhaseProgress = 0;
     if (envLabelElement) envLabelElement.classList.add('hidden');
-
-    // Respawn creatures and particles
     for (let i = 0; i < 9; i++) {
         creatures.push(new Creature(random(width), random(height)));
     }
     for (let i = 0; i < 110; i++) {
         vortexParticles.push(new VortexParticle());
     }
-    // Start with some Red Hazards
     for (let i = 0; i < 6; i++) {
         redHazards.push(new RedHazard());
     }
-
     if (miniChartCtx) drawMiniChart();
     updateMainStats();
 }
-              // ==================== SPACESHIP CONTROLS ====================
+// ==================== SPACESHIP CONTROLS ====================
+document.addEventListener('keydown', function(e) {
+    if (!spaceshipActive) return;
 
-              document.addEventListener('keydown', function(e) {
-                  if (!spaceshipActive) return;
+    if (e.key === 'ArrowLeft') {
+        shipX -= 18;
+    }
+    if (e.key === 'ArrowRight') {
+        shipX += 18;
+    }
+    if (e.key === ' ' || e.key === 'Spacebar') {
+        e.preventDefault();
+        shootFromShip();
+    }
 
-                  if (e.key === 'ArrowLeft') {
-                      shipX -= 18;
-                  }
-                  if (e.key === 'ArrowRight') {
-                      shipX += 18;
-                  }
-                  if (e.key === ' ' || e.key === 'Spacebar') {
-                      e.preventDefault();
-                      shootFromShip();
-                  }
+    shipX = constrain(shipX, 30, width - 30);
+});
 
-                  shipX = constrain(shipX, 30, width - 30);
-              });
+let mouseControlActive = false;
 
-              // Mouse controls (click to focus then move + click to shoot)
-              let mouseControlActive = false;
+document.addEventListener('click', function(e) {
+    if (!spaceshipActive) return;
 
-              document.addEventListener('click', function(e) {
-                  if (!spaceshipActive) return;
+    const rect = document.querySelector('canvas').getBoundingClientRect();
+    if (e.clientX > rect.left && e.clientX < rect.right && e.clientY > rect.top && e.clientY < rect.bottom) {
+        mouseControlActive = true;
+        shootFromShip();
+    }
+});
 
-                  const rect = document.querySelector('canvas').getBoundingClientRect();
-                  if (e.clientX > rect.left && e.clientX < rect.right && e.clientY > rect.top && e.clientY < rect.bottom) {
-                      mouseControlActive = true;
-                      shootFromShip();
-                  }
-              });
+document.addEventListener('mousemove', function(e) {
+    if (!spaceshipActive || !mouseControlActive) return;
 
-              document.addEventListener('mousemove', function(e) {
-                  if (!spaceshipActive || !mouseControlActive) return;
+    const rect = document.querySelector('canvas').getBoundingClientRect();
+    shipX = e.clientX - rect.left;
+    shipX = constrain(shipX, 30, width - 30);
+});
 
-                  const rect = document.querySelector('canvas').getBoundingClientRect();
-                  shipX = e.clientX - rect.left;
-                  shipX = constrain(shipX, 30, width - 30);
-              });
+function shootFromShip() {
+    if (!spaceshipActive) return;
+    const now = Date.now();
 
-              function shootFromShip() {
-                  if (!spaceshipActive) return;
-                  const now = Date.now();
+    if (now - lastShotTime < 130) return;
 
-                  if (now - lastShotTime < 130) return; // machine gun fire rate
+    lastShotTime = now;
+    bullets.push({ x: shipX - 7, y: shipY - 12, vx: 0, vy: -12 });
+    bullets.push({ x: shipX + 7, y: shipY - 12, vx: 0, vy: -12 });
 
-                  lastShotTime = now;
-                  bullets.push({ x: shipX - 7, y: shipY - 12, vx: 0, vy: -12 });
-                  bullets.push({ x: shipX + 7, y: shipY - 12, vx: 0, vy: -12 });
+    playShipShootSound();
+}
 
-                  // Firing sound
-                  playShipShootSound();
-              }
+// ==================== BULLET EXPLOSION AoE ====================
+function createBulletExplosion(x, y) {
+    explosions.push(new Explosion(x, y));
 
-              // ==================== BULLET EXPLOSION AoE ====================
-              function createBulletExplosion(x, y) {
-                  // Visual explosion
-                  explosions.push(new Explosion(x, y));
+    for (let c of creatures) {
+        let d = dist(c.x, c.y, x, y);
+        if (d < 55) {
+            let falloff = map(d, 0, 55, 1.0, 0.3);
 
-                  // AoE effect on nearby creatures
-                  for (let c of creatures) {
-                      let d = dist(c.x, c.y, x, y);
-                      if (d < 55) {
-                          let falloff = map(d, 0, 55, 1.0, 0.3);
+            c.energy -= 35 * falloff;
+            c.damageFlash = 65;
+            c.purpleFlash = max(c.purpleFlash || 0, 110);
+            c.vx *= (0.4 + falloff * 0.3);
+            c.vy *= (0.4 + falloff * 0.3);
 
-                          // Extra damage from explosion
-                          c.energy -= 35 * falloff;
-                          c.damageFlash = 65;
+            let dx = c.x - x;
+            let dy = c.y - y;
+            let len = sqrt(dx*dx + dy*dy) || 1;
+            let knock = map(d, 0, 55, 4.5, 1.2);
+            c.vx += (dx / len) * knock;
+            c.vy += (dy / len) * knock;
 
-                          // Strong purple + slow
-                          c.purpleFlash = max(c.purpleFlash || 0, 110);
-                          c.vx *= (0.4 + falloff * 0.3);
-                          c.vy *= (0.4 + falloff * 0.3);
+            if (c.energy > 5 && c.energy < 35 && !c.isPredator && random() < 0.38) {
+                c.isPredator = true;
+                c.currentThought = "Blown into predator";
+            }
+        }
+    }
 
-                          // Knockback
-                          let dx = c.x - x;
-                          let dy = c.y - y;
-                          let len = sqrt(dx*dx + dy*dy) || 1;
-                          let knock = map(d, 0, 55, 4.5, 1.2);
-                          c.vx += (dx / len) * knock;
-                          c.vy += (dy / len) * knock;
+    playExplosionSound();
+}
 
-                          // Chance to turn into predator if they survive
-                          if (c.energy > 5 && c.energy < 35 && !c.isPredator && random() < 0.38) {
-                              c.isPredator = true;
-                              c.currentThought = "Blown into predator";
-                          }
-                      }
-                  }
+// ==================== EXTRACT TO EGG MODAL ====================
+function showExtractEggModal() {
+    const modal = document.getElementById('extract-egg-modal');
+    const listContainer = document.getElementById('extract-egg-list');
+    if (!modal || !listContainer) return;
 
-                  // Extra explosion sound
-                  playExplosionSound();
-              }
+    listContainer.innerHTML = '';
 
-      function showExtractEggModal() {
-          const modal = document.getElementById('extract-egg-modal');
-          const listContainer = document.getElementById('extract-egg-list');
-          if (!modal || !listContainer) return;
+    const balanceDiv = document.createElement('div');
+    balanceDiv.className = 'mb-4 px-1 flex justify-between items-center text-sm border-b border-white/10 pb-3';
+    balanceDiv.innerHTML = `
+        <span class="text-white/60">Your Balance</span>
+        <span class="font-mono text-2xl text-violet-400 font-semibold">${formatScore(totalScore)}</span>
+    `;
+    listContainer.appendChild(balanceDiv);
 
-          listContainer.innerHTML = '';
+    let sorted = [...creatures].sort((a, b) => {
+        let scoreA = (a.modules?.length || 0) * 3 + (a.killCount || 0) * 2 + (a.childrenCount || 0);
+        let scoreB = (b.modules?.length || 0) * 3 + (b.killCount || 0) * 2 + (b.childrenCount || 0);
+        return scoreB - scoreA;
+    }).slice(0, 10);
 
-          // Live balance
-          const balanceDiv = document.createElement('div');
-          balanceDiv.className = 'mb-4 px-1 flex justify-between items-center text-sm border-b border-white/10 pb-3';
-          balanceDiv.innerHTML = `
-              <span class="text-white/60">Your Balance</span>
-              <span class="font-mono text-2xl text-violet-400 font-semibold">${formatScore(totalScore)}</span>
-          `;
-          listContainer.appendChild(balanceDiv);
+    if (sorted.length === 0) {
+        listContainer.innerHTML += `<div class="text-center text-white/60 py-8">No creatures available yet.</div>`;
+    } else {
+        sorted.forEach(creature => {
+            const div = document.createElement('div');
+            div.className = 'flex items-center justify-between bg-white/5 hover:bg-white/10 rounded-2xl px-4 py-3 cursor-pointer transition-colors mb-1';
+            div.innerHTML = `
+                <div>
+                    <div class="font-semibold text-emerald-400">${creature.name}</div>
+                    <div class="text-xs text-white/60">Gen ${creature.generation} • ${creature.modules?.length || 0} modules • ${creature.killCount || 0} kills</div>
+                </div>
+                <button class="px-4 py-1.5 text-sm rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-medium">Extract</button>
+            `;
+            div.onclick = () => extractCreatureToEgg(creature);
+            listContainer.appendChild(div);
+        });
+    }
 
-          // Fresh top 10
-          let sorted = [...creatures].sort((a, b) => {
-              let scoreA = (a.modules?.length || 0) * 3 + (a.killCount || 0) * 2 + (a.childrenCount || 0);
-              let scoreB = (b.modules?.length || 0) * 3 + (b.killCount || 0) * 2 + (b.childrenCount || 0);
-              return scoreB - scoreA;
-          }).slice(0, 10);
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
 
-          if (sorted.length === 0) {
-              listContainer.innerHTML += `<div class="text-center text-white/60 py-8">No creatures available yet.</div>`;
-          } else {
-              sorted.forEach(creature => {
-                  const div = document.createElement('div');
-                  div.className = 'flex items-center justify-between bg-white/5 hover:bg-white/10 rounded-2xl px-4 py-3 cursor-pointer transition-colors mb-1';
-                  div.innerHTML = `
-                      <div>
-                          <div class="font-semibold text-emerald-400">${creature.name}</div>
-                          <div class="text-xs text-white/60">Gen ${creature.generation} • ${creature.modules?.length || 0} modules • ${creature.killCount || 0} kills</div>
-                      </div>
-                      <button class="px-4 py-1.5 text-sm rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-medium">Extract</button>
-                  `;
-                  div.onclick = () => extractCreatureToEgg(creature);
-                  listContainer.appendChild(div);
-              });
-          }
+function hideExtractEggModal() {
+    const modal = document.getElementById('extract-egg-modal');
+    if (modal) {
+        modal.classList.remove('flex');
+        modal.classList.add('hidden');
+    }
+}
 
-          modal.classList.remove('hidden');
-          modal.classList.add('flex');
-      }
+function extractCreatureToEgg(creature) {
+    if (eggs.length >= MAX_EGGS) {
+        alert(`Your Egg Inventory is full (${MAX_EGGS} max).`);
+        return;
+    }
+    if (totalScore < 250000) {
+        alert("You need 250,000 High Roller Points.");
+        return;
+    }
 
+    totalScore -= 250000;
+    updateMainStats();
+    updateEggCountBadge();
 
-      function hideExtractEggModal() {
-          const modal = document.getElementById('extract-egg-modal');
-          if (modal) {
-              modal.classList.remove('flex');
-              modal.classList.add('hidden');
-          }
-      }
+    addFloatingText(creature.x, creature.y - 30, "-250,000", '#fbbf24');
+    playTone(620, 'sine', 0.18, 0.6);
+    setTimeout(() => playTone(880, 'sine', 0.12, 0.4), 110);
 
-      function extractCreatureToEgg(creature) {
-          if (eggs.length >= MAX_EGGS) {
-              alert(`Your Egg Inventory is full (${MAX_EGGS} max).`);
-              return;
-          }
+    const eggData = {
+        name: creature.name,
+        generation: creature.generation,
+        modules: JSON.parse(JSON.stringify(creature.modules)),
+        killCount: creature.killCount || 0,
+        childrenCount: creature.childrenCount || 0,
+        traits: JSON.parse(JSON.stringify(creature.traits || {}))
+    };
+    eggs.push(eggData);
 
-          if (totalScore < 250000) {
-              alert("You need 250,000 High Roller Points.");
-              return;
-          }
+    const index = creatures.indexOf(creature);
+    if (index > -1) creatures.splice(index, 1);
 
-          // Deduct points
-          totalScore -= 250000;
-          updateMainStats();
-          updateEggCountBadge();
+    if (selectedCreature === creature) {
+        deselectCreature();
+    }
 
-          // Visual + audio feedback
-          addFloatingText(creature.x, creature.y - 30, "-250,000", '#fbbf24');
-          playTone(620, 'sine', 0.18, 0.6);
-          setTimeout(() => playTone(880, 'sine', 0.12, 0.4), 110);
+    showExtractEggModal();
+}
 
-          // Create egg
-          const eggData = {
-              name: creature.name,
-              generation: creature.generation,
-              modules: JSON.parse(JSON.stringify(creature.modules)),
-              killCount: creature.killCount || 0,
-              childrenCount: creature.childrenCount || 0,
-              traits: JSON.parse(JSON.stringify(creature.traits || {}))
-          };
-          eggs.push(eggData);
-
-          // Remove creature from world
-          const index = creatures.indexOf(creature);
-          if (index > -1) creatures.splice(index, 1);
-
-          if (selectedCreature === creature) {
-              deselectCreature();
-          }
-
-          // === KEY CHANGE: Refresh the modal instead of closing it ===
-          showExtractEggModal(); // Re-opens and refreshes the list + balance
-      }
-              // ==================== v2.11.2+: Egg Inventory System ====================
-      function updateEggCountBadge() {
+// ==================== EGG INVENTORY SYSTEM ====================
+function updateEggCountBadge() {
     const badge = document.getElementById('egg-count-badge');
     if (badge) {
         const total = eggs.length + incubatingEggs.length;
         badge.innerText = `${total}/${MAX_EGGS}`;
     }
 }
-
 function showEggInventory() {
     const modal = document.getElementById('egg-inventory-modal');
     const list = document.getElementById('egg-inventory-list');
