@@ -1934,63 +1934,72 @@ let flameReactivity     = 1.15;     // Master multiplier for audio response
 function drawMusicVisualizer() {
     if (!musicVisualizerActive || !currentMusicMode) return;
 
+    // Force clean state
+    push();
+    resetMatrix();           // ensures we are in screen coordinates
+    colorMode(RGB, 255);
+    ellipseMode(CENTER);
+    noFill();
+
     const cx = width / 2;
     const cy = height / 2;
 
-    // === MODE COLORS ===
-    let coreColor;
-    if (currentMusicMode === 'prune')      coreColor = color(255, 50, 70);
-    else if (currentMusicMode === 'replicate') coreColor = color(40, 255, 120);
-    else                                   coreColor = color(255, 230, 60);
+    // Mode color
+    let r, g, b;
+    if (currentMusicMode === 'prune')      { r=255; g=60;  b=80;  }
+    else if (currentMusicMode === 'replicate') { r=40;  g=255; b=130; }
+    else                                   { r=255; g=220; b=70;  }
 
-    // === STRONG CENTRAL GLOW (always visible) ===
+    // === VERY STRONG CENTRAL GLOW (always visible) ===
     noStroke();
-    fill(red(coreColor), green(coreColor), blue(coreColor), 85);
-    ellipse(cx, cy, 620, 620);
-
+    fill(r, g, b, 110);
+    ellipse(cx, cy, 680, 680);
     fill(255, 255, 240, 55);
-    ellipse(cx, cy, 420, 420);
+    ellipse(cx, cy, 460, 460);
 
-    // === FLAMES ===
-    const flameCount = 96;
-    const innerR = 155;
-    const maxLength = 420;
+    // === 110 BRIGHT FLAMES (base + reactive) ===
+    const count = 110;
+    const inner = 165;
 
-    for (let i = 0; i < flameCount; i++) {
-        const angle = map(i, 0, flameCount, 0, TWO_PI);
+    for (let i = 0; i < count; i++) {
+        const angle = map(i, 0, count, 0, TWO_PI);
 
-        // Audio reactivity (with safe fallback)
-        let intensity = 0.55; // base visibility when no audio
+        // Strong base length + some audio boost if available
+        let len = 140 + sin(frameCount * 0.03 + i) * 25;
         if (freqData && freqData.length > 0) {
-            const bin = Math.floor(map(i, 0, flameCount, 0, freqData.length * 0.9));
-            intensity = 0.45 + ((freqData[bin] || 0) / 255) * 1.65;
+            const bin = Math.floor(map(i, 0, count, 0, freqData.length * 0.85));
+            const audio = (freqData[bin] || 0) / 255;
+            len += audio * 380;
         }
 
-        const flameLength = 90 + (intensity * maxLength);
+        const x1 = cx + cos(angle) * inner;
+        const y1 = cy + sin(angle) * inner;
+        const x2 = cx + cos(angle) * (inner + len);
+        const y2 = cy + sin(angle) * (inner + len);
 
-        const x1 = cx + cos(angle) * innerR;
-        const y1 = cy + sin(angle) * innerR;
-        const x2 = cx + cos(angle) * (innerR + flameLength);
-        const y2 = cy + sin(angle) * (innerR + flameLength);
-
-        // Main colored flame
-        stroke(red(coreColor), green(coreColor), blue(coreColor));
-        strokeWeight(7.5);
+        // Main flame
+        stroke(r, g, b);
+        strokeWeight(8);
         line(x1, y1, x2, y2);
 
-        // Bright white/yellow tip when audio is strong
-        if (intensity > 0.75) {
-            stroke(255, 255, 235);
-            strokeWeight(9);
-            line(x1, y1, x2, y2);
+        // Bright white tip on stronger audio
+        if (freqData && freqData.length > 0) {
+            const bin = Math.floor(map(i, 0, count, 0, freqData.length * 0.85));
+            if ((freqData[bin] || 0) > 60) {
+                stroke(255, 255, 235);
+                strokeWeight(11);
+                line(x1, y1, x2, y2);
+            }
         }
     }
 
-    // === BIG MODE LABEL (very useful for debugging) ===
+    // Big obvious label
     fill(255);
-    textSize(26);
+    textSize(24);
     textAlign(CENTER, CENTER);
-    text("MUSIC MODE: " + currentMusicMode.toUpperCase(), cx, cy - 310);
+    text("MUSIC: " + currentMusicMode.toUpperCase(), cx, cy - 320);
+
+    pop();
 }
 // ==================== SLIDER INITIALIZATION ====================
 // ==================== FLAME VISUALIZER SLIDERS ====================
