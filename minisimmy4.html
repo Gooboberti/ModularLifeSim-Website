@@ -1481,241 +1481,162 @@ Start of Chunk 2
               // === VERSIONING (for future updates) ===
       const GAME_VERSION = "v2.01 - Fixed crash: isFilterMode scope error during wall drawing";
 
-              // Audio
-              let masterVolume = 0.12;
-              let effectsVolume = 0.65;
-              let ambientVolume = 1.6;
-              let pitchShift = 0.98;
-              let soundDensity = 1.55;
-              let defaultWaveform = 'triangle';
+// ==================== AUDIO SYSTEM ====================
+let audioCtx;
+let masterGain;
 
+let soundVolumes = {
+    death: 0.75,
+    explosion: 0.65,
+    eat: 0.55,
+    birth: 0.7,
+    deposit: 0.5,
+    predatorFeed: 0.6,
+    shipShoot: 0.55,
+    bulletImpact: 0.65,
+    absorb: 0.6,
+    wallBreak: 0.7,
+    spawn: 0.65,
+    cursorHum: 0.35
+};
 
-              let masterFilter;
-// === Sound Calibration (Expanded) ===
-let deathVolume = 0.038;
-let deathAttack = 0.02;
-let deathRelease = 0.42;
-let deathLowFreq = 220;
-let deathHighFreq = 175;
-let explosionVolume = 0.16;
+function initAudio() {
+    if (audioCtx) return;
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = audioCtx.createGain();
+    masterGain.gain.value = 0.12; // Master volume
+    masterGain.connect(audioCtx.destination);
+}
 
-      
-let eatVolume = 0.032;
-let birthVolume = 0.04;
-let otherFxVolume = 0.03;     // deposit, predator feed, etc.
+function playSound(key, volume = 1.0) {
+    if (!audioCtx) initAudio();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
 
+    const baseVol = soundVolumes[key] || 0.6;
+    const finalVol = baseVol * volume * masterGain.gain.value;
 
-      
-              let audioCtx;
-              let masterGain;
-              let compressor;
-              let activeVoices = 0;
-              const MAX_VOICES = 26; // increased for higher populations
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    const filter = audioCtx.createBiquadFilter();
 
-              let cursorHumOsc = null;
-              let cursorHumGain = null;
-              let cursorHumFilter = null;
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(masterGain);
 
-              // Currency & Unlocks
-              let totalScore = 0;
-              let totalPredatorKills = 0;
-              let lastScoreUpdate = 0;
-              let unlockedSpeeds = {2: true, 4: true}; // 2x and 4x are free and always unlocked; 8x removed completely
-              let redHazardsUnlocked = false;
-              let cursorHazardUnlocked = false;
-              let persistentHazard = { x: 0, y: 0, active: false };
-              let placedHazards = []; // {x, y, timer: 420 (~7s), shakeTimer: 0, exploding: false}
-              let beamCharge = 0;
-              let maxPlacedHazards = 3;
-              let freeMode = false;
-      
-// ==================== MUSIC MODAL + MODES (CLEAN VERSION) ====================
+    switch (key) {
+        case 'birth':
+        case 'spawn':
+            osc.type = 'sine';
+            osc.frequency.value = 880;
+            filter.type = 'lowpass';
+            filter.frequency.value = 1400;
+            gain.gain.value = finalVol;
+            gain.gain.linearRampToValueAtTime(0.0001, audioCtx.currentTime + 0.65);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.7);
+            break;
 
+        case 'death':
+            osc.type = 'sawtooth';
+            osc.frequency.value = 160;
+            filter.type = 'lowpass';
+            filter.frequency.value = 550;
+            gain.gain.value = finalVol * 0.85;
+            gain.gain.linearRampToValueAtTime(0.0001, audioCtx.currentTime + 0.85);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.9);
+            break;
+
+        case 'eat':
+            osc.type = 'triangle';
+            osc.frequency.value = 480;
+            filter.type = 'lowpass';
+            filter.frequency.value = 950;
+            gain.gain.value = finalVol;
+            gain.gain.linearRampToValueAtTime(0.0001, audioCtx.currentTime + 0.32);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.38);
+            break;
+
+        case 'absorb':
+        case 'deposit':
+            osc.type = 'sine';
+            osc.frequency.value = 540;
+            filter.type = 'lowpass';
+            filter.frequency.value = 1150;
+            gain.gain.value = finalVol;
+            gain.gain.linearRampToValueAtTime(0.0001, audioCtx.currentTime + 0.48);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.52);
+            break;
+
+        case 'wallBreak':
+            osc.type = 'sawtooth';
+            osc.frequency.value = 210;
+            filter.type = 'lowpass';
+            filter.frequency.value = 750;
+            gain.gain.value = finalVol * 0.8;
+            gain.gain.linearRampToValueAtTime(0.0001, audioCtx.currentTime + 0.42);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.48);
+            break;
+
+        default:
+            osc.type = 'sine';
+            osc.frequency.value = 680;
+            gain.gain.value = finalVol * 0.65;
+            gain.gain.linearRampToValueAtTime(0.0001, audioCtx.currentTime + 0.38);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.42);
+    }
+}
+
+function setMasterVolume(v) {
+    if (masterGain) masterGain.gain.value = v;
+}
+
+// ==================== MUSIC SYSTEM ====================
 let musicEnabled = false;
 let currentMusicMode = null;
-
 let musicData = { bass: 0, mids: 0, highs: 0 };
 
 let pruneAudio = new Audio('Track_Prune.mp3');
 let replicateAudio = new Audio('Track_Replicate.mp3');
 let evolveAudio = new Audio('Track_Evolve.mp3');
-
 pruneAudio.loop = true;
 replicateAudio.loop = true;
 evolveAudio.loop = true;
 
-// ==================== REAL AUDIO ANALYSIS (MODE SWITCHING FIXED) ====================
-let audioContext;
+let audioContext; // For music analysis
 let analyser;
 let currentSource = null;
 let currentAudioEl = null;
 let freqData = new Uint8Array(128);
-
 let pruneSource = null;
 let replicateSource = null;
 let evolveSource = null;
 
 function getOrCreateSource(audioEl) {
     if (audioEl === pruneAudio) {
-        if (!pruneSource) {
-            pruneSource = audioContext.createMediaElementSource(audioEl);
-        }
+        if (!pruneSource) pruneSource = audioContext.createMediaElementSource(audioEl);
         return pruneSource;
     }
     if (audioEl === replicateAudio) {
-        if (!replicateSource) {
-            replicateSource = audioContext.createMediaElementSource(audioEl);
-        }
+        if (!replicateSource) replicateSource = audioContext.createMediaElementSource(audioEl);
         return replicateSource;
     }
     if (audioEl === evolveAudio) {
-        if (!evolveSource) {
-            evolveSource = audioContext.createMediaElementSource(audioEl);
-        }
+        if (!evolveSource) evolveSource = audioContext.createMediaElementSource(audioEl);
         return evolveSource;
     }
     return null;
 }
 
-// ==================== SOUND CALIBRATION SLIDERS (FULL) ====================
-function setupSoundCalibrationSliders() {
-    // === Global Effects Volume ===
-    const effectsSlider = document.getElementById('sound-effects-vol-slider');
-    const effectsVal = document.getElementById('sound-effects-vol-value');
-    if (effectsSlider && effectsVal) {
-        effectsSlider.oninput = () => {
-            effectsVolume = parseFloat(effectsSlider.value);
-            effectsVal.textContent = effectsVolume.toFixed(2);
-        };
-        effectsSlider.value = effectsVolume;
-        effectsVal.textContent = effectsVolume.toFixed(2);
-    }
-
-    // === Death Volume ===
-    const deathVolSlider = document.getElementById('sound-death-vol-slider');
-    const deathVolVal = document.getElementById('sound-death-vol-value');
-    if (deathVolSlider && deathVolVal) {
-        deathVolSlider.oninput = () => {
-            deathVolume = parseFloat(deathVolSlider.value);
-            deathVolVal.textContent = deathVolume.toFixed(3);
-        };
-        deathVolSlider.value = deathVolume;
-        deathVolVal.textContent = deathVolume.toFixed(3);
-    }
-
-    // === Death Attack ===
-    const attackSlider = document.getElementById('sound-death-attack-slider');
-    const attackVal = document.getElementById('sound-death-attack-value');
-    if (attackSlider && attackVal) {
-        attackSlider.oninput = () => {
-            deathAttack = parseFloat(attackSlider.value);
-            attackVal.textContent = deathAttack.toFixed(3);
-        };
-        attackSlider.value = deathAttack;
-        attackVal.textContent = deathAttack.toFixed(3);
-    }
-
-    // === Death Release ===
-    const releaseSlider = document.getElementById('sound-death-release-slider');
-    const releaseVal = document.getElementById('sound-death-release-value');
-    if (releaseSlider && releaseVal) {
-        releaseSlider.oninput = () => {
-            deathRelease = parseFloat(releaseSlider.value);
-            releaseVal.textContent = deathRelease.toFixed(3);
-        };
-        releaseSlider.value = deathRelease;
-        releaseVal.textContent = deathRelease.toFixed(3);
-    }
-
-    // === Death Low Freq ===
-    const lowSlider = document.getElementById('sound-death-low-slider');
-    const lowVal = document.getElementById('sound-death-low-value');
-    if (lowSlider && lowVal) {
-        lowSlider.oninput = () => {
-            deathLowFreq = parseFloat(lowSlider.value);
-            lowVal.textContent = Math.round(deathLowFreq);
-        };
-        lowSlider.value = deathLowFreq;
-        lowVal.textContent = Math.round(deathLowFreq);
-    }
-
-    // === Death High Freq ===
-    const highSlider = document.getElementById('sound-death-high-slider');
-    const highVal = document.getElementById('sound-death-high-value');
-    if (highSlider && highVal) {
-        highSlider.oninput = () => {
-            deathHighFreq = parseFloat(highSlider.value);
-            highVal.textContent = Math.round(deathHighFreq);
-        };
-        highSlider.value = deathHighFreq;
-        highVal.textContent = Math.round(deathHighFreq);
-    }
-
-    // === Explosion Volume ===
-    const expSlider = document.getElementById('sound-explosion-vol-slider');
-    const expVal = document.getElementById('sound-explosion-vol-value');
-    if (expSlider && expVal) {
-        expSlider.oninput = () => {
-            explosionVolume = parseFloat(expSlider.value);
-            expVal.textContent = explosionVolume.toFixed(2);
-        };
-        expSlider.value = explosionVolume;
-        expVal.textContent = explosionVolume.toFixed(2);
-    }
-
-    // === Eat Volume ===
-    const eatSlider = document.getElementById('sound-eat-vol-slider');
-    const eatVal = document.getElementById('sound-eat-vol-value');
-    if (eatSlider && eatVal) {
-        eatSlider.oninput = () => {
-            eatVolume = parseFloat(eatSlider.value);
-            eatVal.textContent = eatVolume.toFixed(3);
-        };
-        eatSlider.value = eatVolume;
-        eatVal.textContent = eatVolume.toFixed(3);
-    }
-
-    // === Birth Volume ===
-    const birthSlider = document.getElementById('sound-birth-vol-slider');
-    const birthVal = document.getElementById('sound-birth-vol-value');
-    if (birthSlider && birthVal) {
-        birthSlider.oninput = () => {
-            birthVolume = parseFloat(birthSlider.value);
-            birthVal.textContent = birthVolume.toFixed(3);
-        };
-        birthSlider.value = birthVolume;
-        birthVal.textContent = birthVolume.toFixed(3);
-    }
-
-    // === Other Effects Volume (Deposit / Predator Feed) ===
-    const otherSlider = document.getElementById('sound-other-vol-slider');
-    const otherVal = document.getElementById('sound-other-vol-value');
-    if (otherSlider && otherVal) {
-        otherSlider.oninput = () => {
-            otherFxVolume = parseFloat(otherSlider.value);
-            otherVal.textContent = otherFxVolume.toFixed(3);
-        };
-        otherSlider.value = otherFxVolume;
-        otherVal.textContent = otherFxVolume.toFixed(3);
-    }
-}
-
-// Safe auto-initialization
-setTimeout(() => {
-    if (typeof setupSoundCalibrationSliders === 'function') {
-        setupSoundCalibrationSliders();
-    }
-}, 900);
-      
-
 function startMusicAnalysis(audioEl) {
     if (!audioContext) {
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
     }
-
-    if (audioContext.state === 'suspended') {
-        audioContext.resume();
-    }
+    if (audioContext.state === 'suspended') audioContext.resume();
 
     if (currentSource) {
         try { currentSource.disconnect(); } catch(e){}
@@ -1742,7 +1663,6 @@ function startMusicAnalysis(audioEl) {
 
 function updateMusicDataLoop() {
     if (!analyser) return;
-
     analyser.getByteFrequencyData(freqData);
 
     const len = freqData.length;
@@ -1751,13 +1671,9 @@ function updateMusicDataLoop() {
 
     for (let i = 0; i < len; i++) {
         const val = freqData[i];
-        if (i < 14) {
-            bass += val; bassCount++;
-        } else if (i < 45) {
-            mids += val; midCount++;
-        } else {
-            highs += val; highCount++;
-        }
+        if (i < 14) { bass += val; bassCount++; }
+        else if (i < 45) { mids += val; midCount++; }
+        else { highs += val; highCount++; }
     }
 
     musicData.bass = bassCount ? (bass / bassCount) / 255 : 0;
@@ -1766,8 +1682,8 @@ function updateMusicDataLoop() {
 
     requestAnimationFrame(updateMusicDataLoop);
 }
-      
 
+// Music mode state
 let originalMusicSettings = {
     vortexMultiplier: null,
     reproductionChance: null,
@@ -1776,145 +1692,12 @@ let originalMusicSettings = {
 };
 let originalRedHazardsEnabled = false;
 let originalRedHazardIntensity = 1;
-
 let evolveEnvTimer = 0;
 let evolveEnvPhaseIndex = 0;
 const evolveEnvPhases = ['Fertile', 'Normal', 'Drought'];
 
-// === MUSIC VISUALIZER RING ===
 let musicVisualizerActive = false;
 let musicVisualizerColor = [255, 50, 70];
-
-
-function showMusicModal() {
-    const modal = document.getElementById('music-modal');
-    if (!modal) {
-        console.warn("Music modal element not found in HTML");
-        return;
-    }
-    if (modal.parentElement !== document.body) {
-        document.body.appendChild(modal);
-    }
-    modal.classList.remove('hidden');
-    modal.classList.add('flex');
-    modal.style.display = 'flex';
-    modal.style.zIndex = '999999';
-}
-
-function hideMusicModal() {
-    const modal = document.getElementById('music-modal');
-    if (modal) {
-        modal.classList.remove('flex');
-        modal.classList.add('hidden');
-        modal.style.display = 'none';
-    }
-}
-
-function activateMusicMode(mode) {
-    stopMusicMode();
-
-    musicEnabled = true;
-    currentMusicMode = mode;
-    evolveEnvTimer = 0;
-
-    // Save original settings
-    originalMusicSettings.vortexMultiplier = settings.vortexMultiplier;
-    originalMusicSettings.reproductionChance = settings.reproductionChance;
-    originalMusicSettings.energyDrain = settings.energyDrain;
-    originalMusicSettings.particleFoodValue = settings.particleFoodValue;
-    originalRedHazardsEnabled = redHazardsEnabled;
-    originalRedHazardIntensity = redHazardIntensity;
-
-    addFloatingText(width / 2, 70, `${mode.toUpperCase()} MODE`, '#34d399');
-
-    // Set speed + visualizer defaults
-    if (mode === 'prune') {
-        setTimeScale(4);
-        musicVisualizerColor = [255, 40, 70];
-        musicVisualizerRadius = 380;
-    } else if (mode === 'replicate') {
-        setTimeScale(4);
-        musicVisualizerColor = [30, 230, 120];
-        musicVisualizerRadius = 370;
-    } else if (mode === 'evolve') {
-        setTimeScale(4);
-        musicVisualizerColor = [255, 210, 50];
-        musicVisualizerRadius = 375;
-    }
-
-    musicVisualizerActive = true;
-
-    if (mode === 'replicate') {
-        forceEnvironmentalPhase('Fertile');
-        replicateAudio.currentTime = 0;
-        replicateAudio.play().catch(() => {});
-        startMusicAnalysis(replicateAudio);
-        applyReplicateModifiers();
-    } 
-    else if (mode === 'prune') {
-        forceEnvironmentalPhase('Drought');
-        pruneAudio.currentTime = 0;
-        pruneAudio.play().catch(() => {});
-        startMusicAnalysis(pruneAudio);
-        applyPruneModifiers();
-    } 
-    else if (mode === 'evolve') {
-        evolveEnvPhaseIndex = 0;
-        forceEnvironmentalPhase(evolveEnvPhases[0]);
-        evolveAudio.currentTime = 0;
-        evolveAudio.play().catch(() => {});
-        startMusicAnalysis(evolveAudio);
-        applyEvolveModifiers();
-    }
-
-    updateEnvBarVisibility(true);
-}
-
-function stopMusicMode() {
-    if (!musicEnabled) return;
-
-    musicEnabled = false;
-    currentMusicMode = null;
-    musicVisualizerActive = false;
-
-    // Stop all audio
-    if (pruneAudio) pruneAudio.pause();
-    if (replicateAudio) replicateAudio.pause();
-    if (evolveAudio) evolveAudio.pause();
-
-    // Disconnect current source (fixed variable name)
-    if (currentSource) {
-        try { currentSource.disconnect(); } catch(e){}
-        currentSource = null;
-    }
-    currentAudioEl = null;
-    analyser = null;
-
-    // Reset data
-    musicData = { bass: 0, mids: 0, highs: 0 };
-    freqData = new Uint8Array(128);
-
-    // Restore original game settings (keep your existing restore code)
-    if (originalMusicSettings.vortexMultiplier !== null) {
-        settings.vortexMultiplier = originalMusicSettings.vortexMultiplier;
-    }
-    if (originalMusicSettings.reproductionChance !== null) {
-        settings.reproductionChance = originalMusicSettings.reproductionChance;
-    }
-    if (originalMusicSettings.energyDrain !== null) {
-        settings.energyDrain = originalMusicSettings.energyDrain;
-    }
-    if (originalMusicSettings.particleFoodValue !== null) {
-        settings.particleFoodValue = originalMusicSettings.particleFoodValue;
-    }
-
-    redHazardsEnabled = originalRedHazardsEnabled;
-    redHazardIntensity = originalRedHazardIntensity || 1;
-
-    evolveEnvTimer = 0;
-
-    addFloatingText(width / 2, 70, "Music Stopped", '#f87171');
-}
 
 // ==================== HELPER FUNCTIONS ====================
 
@@ -9929,41 +9712,6 @@ function confirmExtractToEgg() {
 }
 
       
-// ==================== SOUND DEBUG LOGGING ====================
-// This old debug wrapper for playTone has been disabled.
-// We are now using the new playSound() system with real audio files.
-// You can add debug logging to playSound() later if needed.
-// const originalPlayTone = playTone;
-// playTone = function(freq, type = 'sine', duration = 0.3, volume = 0.5, detune = 0, attack = 0.02, release = 0.3) {
-//     console.log(`[SOUND] playTone called`, { freq, type, duration, volume, detune, attack, release });
-//     return originalPlayTone.apply(this, arguments);
-// };
-
-// Add logging to the main named sound functions
-const soundFunctions = [
-    'playBirthSound',
-    'playDeathSound',
-    'playEatSound',
-    'playDepositSound',
-    'playPredatorFeedSound',
-    'playExplosionSound',
-    'playWallBreakSound',
-    'playShipShootSound',
-    'playBulletImpactSound',
-    'playAbsorbSound',
-    'playCursorDamageSound',
-    'startCursorHum'
-];
-
-soundFunctions.forEach(name => {
-    if (typeof window[name] === 'function') {
-        const original = window[name];
-        window[name] = function(...args) {
-            console.log(`[SOUND] ${name} called`, args);
-            return original.apply(this, args);
-        };
-    }
-});
 
 console.log('%c[Sound Debug] Logging enabled. Watch this console when sounds play.', 'color: #4ade80');
 
