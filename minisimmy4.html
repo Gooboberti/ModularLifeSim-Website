@@ -1934,68 +1934,64 @@ let flameReactivity     = 1.15;     // Master multiplier for audio response
 function drawMusicVisualizer() {
     if (!musicVisualizerActive || !currentMusicMode) return;
 
-    push();
-    noStroke();
-    ellipseMode(CENTER);
-
     const cx = width / 2;
     const cy = height / 2;
 
-    // === VERY VISIBLE SETTINGS ===
-    const baseRadius = 260;
-    const flameCount = 90;
-    const maxFlameLength = 380;
-    const flameThickness = 7;
-
+    // === MODE COLORS ===
     let coreColor;
-    if (currentMusicMode === 'prune')      coreColor = color(255, 40, 60);
-    else if (currentMusicMode === 'replicate') coreColor = color(30, 255, 100);
-    else                                   coreColor = color(255, 220, 40);
+    if (currentMusicMode === 'prune')      coreColor = color(255, 50, 70);
+    else if (currentMusicMode === 'replicate') coreColor = color(40, 255, 120);
+    else                                   coreColor = color(255, 230, 60);
 
-    // Strong central glow (easy to see)
-    fill(red(coreColor), green(coreColor), blue(coreColor), 70);
-    ellipse(cx, cy, baseRadius * 2.4, baseRadius * 2.4);
+    // === STRONG CENTRAL GLOW (always visible) ===
+    noStroke();
+    fill(red(coreColor), green(coreColor), blue(coreColor), 85);
+    ellipse(cx, cy, 620, 620);
 
-    fill(255, 255, 220, 45);
-    ellipse(cx, cy, baseRadius * 1.6, baseRadius * 1.6);
+    fill(255, 255, 240, 55);
+    ellipse(cx, cy, 420, 420);
 
-    const innerR = baseRadius * 0.55;
+    // === FLAMES ===
+    const flameCount = 96;
+    const innerR = 155;
+    const maxLength = 420;
 
     for (let i = 0; i < flameCount; i++) {
         const angle = map(i, 0, flameCount, 0, TWO_PI);
-        
-        // Get audio intensity for this flame
-        let intensity = 0.4; // base visibility
+
+        // Audio reactivity (with safe fallback)
+        let intensity = 0.55; // base visibility when no audio
         if (freqData && freqData.length > 0) {
-            const bin = Math.floor(map(i, 0, flameCount, 0, freqData.length * 0.85));
-            intensity = 0.35 + ((freqData[bin] || 0) / 255) * 1.4;
+            const bin = Math.floor(map(i, 0, flameCount, 0, freqData.length * 0.9));
+            intensity = 0.45 + ((freqData[bin] || 0) / 255) * 1.65;
         }
 
-        const audioBoost = intensity * maxFlameLength * 1.1;
-        const finalLength = 70 + audioBoost;
+        const flameLength = 90 + (intensity * maxLength);
 
         const x1 = cx + cos(angle) * innerR;
         const y1 = cy + sin(angle) * innerR;
-        const x2 = cx + cos(angle) * (innerR + finalLength);
-        const y2 = cy + sin(angle) * (innerR + finalLength);
+        const x2 = cx + cos(angle) * (innerR + flameLength);
+        const y2 = cy + sin(angle) * (innerR + flameLength);
 
-        // Main flame
+        // Main colored flame
         stroke(red(coreColor), green(coreColor), blue(coreColor));
-        strokeWeight(flameThickness);
+        strokeWeight(7.5);
         line(x1, y1, x2, y2);
 
-        // Bright white tip when audio is strong
-        if (intensity > 0.6) {
-            stroke(255, 255, 230);
-            strokeWeight(flameThickness * 2.2);
+        // Bright white/yellow tip when audio is strong
+        if (intensity > 0.75) {
+            stroke(255, 255, 235);
+            strokeWeight(9);
             line(x1, y1, x2, y2);
         }
     }
 
-    pop();
+    // === BIG MODE LABEL (very useful for debugging) ===
+    fill(255);
+    textSize(26);
+    textAlign(CENTER, CENTER);
+    text("MUSIC MODE: " + currentMusicMode.toUpperCase(), cx, cy - 310);
 }
-// ==================== END HYBRID FLAME VISUALIZER ====================
-
 // ==================== SLIDER INITIALIZATION ====================
 // ==================== FLAME VISUALIZER SLIDERS ====================
 function initVisualizerSliders() {
