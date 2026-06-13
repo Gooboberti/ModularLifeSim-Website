@@ -7657,7 +7657,7 @@ if (currentMusicMode === 'prune' && purpleInfectParticles.length > 0) {
             if (dist(p.x, p.y, width/2, height/2) < 35) {
                 let newPred = null;
                 if (geneVaultSlots[0]) {
-                    newPred = new Creature(width/2 + random(-35,35), height/2 + random(-35,35), 
+                    newPred = new Creature(width/2 + random(-35,35), height/2 + random(-35,35),
                                            geneVaultSlots[0].modules, geneVaultSlots[0].generation || 3);
                     newPred.isPredator = true;
                 } else {
@@ -7672,25 +7672,106 @@ if (currentMusicMode === 'prune' && purpleInfectParticles.length > 0) {
     }
 }
 
-    drawMusicModeTintAndBorder();
-    drawMusicVisualizer();
-    updateEvolveEnvironmentalCycle();
+// EVOLVE - Module Particles
+if (currentMusicMode === 'evolve') {
+    if (frameCount % 28 === 0 && moduleParticles.length < 14) {
+        moduleParticles.push(new ModuleParticle());
+    }
+    for (let i = moduleParticles.length - 1; i >= 0; i--) {
+        let mp = moduleParticles[i];
+        mp.update();
+        mp.draw();
 
-    // === EMERGENCY DIAGNOSTIC (remove later) ===
-    if (musicVisualizerActive) {
-        push();
-        noStroke();
-        fill(255, 0, 0, 90);
-        rect(0, 0, width, 60);
-        fill(255);
-        textSize(22);
-        textAlign(LEFT, CENTER);
-        text("MUSIC VISUALIZER IS RUNNING", 20, 32);
-        pop();
+        for (let c of creatures) {
+            if (!c.isPredator && dist(mp.x, mp.y, c.x, c.y) < 24 && c.modules.length < 13) {
+                const newMod = { type: mp.type, tier: 1, color: '#fbbf24' };
+                c.modules.push(newMod);
+                mp.collected = true;
+                addFloatingText(c.x, c.y - 26, `+${mp.type}`, '#fbbf24');
+                c.updateSpecialization();
+                break;
+            }
+        }
+        if (mp.isDead()) {
+            moduleParticles.splice(i, 1);
+        }
     }
 }
 
-    // Reset UI stats
+// Visualizer + Tint + Diagnostic (end of draw)
+drawMusicModeTintAndBorder();
+drawMusicVisualizer();
+updateEvolveEnvironmentalCycle();
+
+// === EMERGENCY DIAGNOSTIC (remove later) ===
+if (musicVisualizerActive) {
+    push();
+    noStroke();
+    fill(255, 0, 0, 90);
+    rect(0, 0, width, 60);
+    fill(255);
+    textSize(22);
+    textAlign(LEFT, CENTER);
+    text("MUSIC VISUALIZER IS RUNNING", 20, 32);
+    pop();
+}
+}   // ← This closes draw()
+
+// ==================== RESET SIM ====================
+function resetSim() {
+    creatures = [];
+    vortexParticles = [];
+    pheromones = [];
+    foodBlooms = [];
+    staticFoodPatches = [];
+    energyOrbs = [];
+    redHazards = [];
+    redBeams = [];
+    explosions = [];
+    spawnEffects = [];
+    floatingTexts = [];
+    energyWalls = [];
+    evolutionHistory = [];
+
+    graphData = {
+        pop: [],
+        modules: [],
+        predators: [],
+        greenFood: [],
+        blueFood: []
+    };
+
+    greenZone.food = 320;
+    blueZone.food = 320;
+    globalReproCooldown = 0;
+    selectedCreature = null;
+    paused = false;
+    timeScale = 1;
+    simTime = 0;
+    zoomLevel = 1.0;
+
+    const zoomEl = document.getElementById('zoom-level');
+    if (zoomEl) zoomEl.innerText = '100%';
+
+    const timeEl = document.getElementById('sim-time');
+    if (timeEl) timeEl.innerText = '00:00';
+
+    const pauseBtn = document.getElementById('pause-btn');
+    const pauseText = document.getElementById('pause-text');
+    if (pauseBtn && pauseText) {
+        pauseBtn.classList.remove('bg-red-500/80', 'text-white');
+        pauseBtn.classList.add('bg-white/10');
+        pauseText.innerHTML = 'Pause';
+    }
+
+    document.querySelectorAll('[id^="speed-"]').forEach(el => el.classList.remove('active', 'bg-emerald-500', 'text-[#0a0a0f]'));
+    const speed1 = document.getElementById('speed-1');
+    if (speed1) speed1.classList.add('active', 'bg-emerald-500', 'text-[#0a0a0f]');
+
+    deselectCreature();
+    totalScore = 0;
+    totalPredatorKills = 0;
+
     const scoreEl = document.getElementById('vegas-score');
     if (scoreEl) scoreEl.innerText = '0';
 
@@ -7710,14 +7791,12 @@ if (currentMusicMode === 'prune' && purpleInfectParticles.length > 0) {
     envPhaseProgress = 0;
     if (envLabelElement) envLabelElement.classList.add('hidden');
 
-    // Respawn creatures and particles
     for (let i = 0; i < 9; i++) {
         creatures.push(new Creature(random(width), random(height)));
     }
     for (let i = 0; i < 110; i++) {
         vortexParticles.push(new VortexParticle());
     }
-    // Start with some Red Hazards
     for (let i = 0; i < 6; i++) {
         redHazards.push(new RedHazard());
     }
@@ -7725,206 +7804,188 @@ if (currentMusicMode === 'prune' && purpleInfectParticles.length > 0) {
     if (miniChartCtx) drawMiniChart();
     updateMainStats();
 }
-              // ==================== SPACESHIP CONTROLS ====================
 
-              document.addEventListener('keydown', function(e) {
-                  if (!spaceshipActive) return;
+// ==================== SPACESHIP CONTROLS ====================
+document.addEventListener('keydown', function(e) {
+    if (!spaceshipActive) return;
 
-                  if (e.key === 'ArrowLeft') {
-                      shipX -= 18;
-                  }
-                  if (e.key === 'ArrowRight') {
-                      shipX += 18;
-                  }
-                  if (e.key === ' ' || e.key === 'Spacebar') {
-                      e.preventDefault();
-                      shootFromShip();
-                  }
+    if (e.key === 'ArrowLeft') {
+        shipX -= 18;
+    }
+    if (e.key === 'ArrowRight') {
+        shipX += 18;
+    }
+    if (e.key === ' ' || e.key === 'Spacebar') {
+        e.preventDefault();
+        shootFromShip();
+    }
 
-                  shipX = constrain(shipX, 30, width - 30);
-              });
+    shipX = constrain(shipX, 30, width - 30);
+});
 
-              // Mouse controls (click to focus then move + click to shoot)
-              let mouseControlActive = false;
+let mouseControlActive = false;
 
-              document.addEventListener('click', function(e) {
-                  if (!spaceshipActive) return;
+document.addEventListener('click', function(e) {
+    if (!spaceshipActive) return;
 
-                  const rect = document.querySelector('canvas').getBoundingClientRect();
-                  if (e.clientX > rect.left && e.clientX < rect.right && e.clientY > rect.top && e.clientY < rect.bottom) {
-                      mouseControlActive = true;
-                      shootFromShip();
-                  }
-              });
+    const rect = document.querySelector('canvas').getBoundingClientRect();
+    if (e.clientX > rect.left && e.clientX < rect.right && e.clientY > rect.top && e.clientY < rect.bottom) {
+        mouseControlActive = true;
+        shootFromShip();
+    }
+});
 
-              document.addEventListener('mousemove', function(e) {
-                  if (!spaceshipActive || !mouseControlActive) return;
+document.addEventListener('mousemove', function(e) {
+    if (!spaceshipActive || !mouseControlActive) return;
 
-                  const rect = document.querySelector('canvas').getBoundingClientRect();
-                  shipX = e.clientX - rect.left;
-                  shipX = constrain(shipX, 30, width - 30);
-              });
+    const rect = document.querySelector('canvas').getBoundingClientRect();
+    shipX = e.clientX - rect.left;
+    shipX = constrain(shipX, 30, width - 30);
+});
 
-              function shootFromShip() {
-                  if (!spaceshipActive) return;
-                  const now = Date.now();
+function shootFromShip() {
+    if (!spaceshipActive) return;
+    const now = Date.now();
 
-                  if (now - lastShotTime < 130) return; // machine gun fire rate
+    if (now - lastShotTime < 130) return;
 
-                  lastShotTime = now;
-                  bullets.push({ x: shipX - 7, y: shipY - 12, vx: 0, vy: -12 });
-                  bullets.push({ x: shipX + 7, y: shipY - 12, vx: 0, vy: -12 });
+    lastShotTime = now;
+    bullets.push({ x: shipX - 7, y: shipY - 12, vx: 0, vy: -12 });
+    bullets.push({ x: shipX + 7, y: shipY - 12, vx: 0, vy: -12 });
 
-                  // Firing sound
-                  playShipShootSound();
-              }
+    playShipShootSound();
+}
 
-              // ==================== BULLET EXPLOSION AoE ====================
-              function createBulletExplosion(x, y) {
-                  // Visual explosion
-                  explosions.push(new Explosion(x, y));
+// ==================== BULLET EXPLOSION AoE ====================
+function createBulletExplosion(x, y) {
+    explosions.push(new Explosion(x, y));
 
-                  // AoE effect on nearby creatures
-                  for (let c of creatures) {
-                      let d = dist(c.x, c.y, x, y);
-                      if (d < 55) {
-                          let falloff = map(d, 0, 55, 1.0, 0.3);
+    for (let c of creatures) {
+        let d = dist(c.x, c.y, x, y);
+        if (d < 55) {
+            let falloff = map(d, 0, 55, 1.0, 0.3);
 
-                          // Extra damage from explosion
-                          c.energy -= 35 * falloff;
-                          c.damageFlash = 65;
+            c.energy -= 35 * falloff;
+            c.damageFlash = 65;
+            c.purpleFlash = max(c.purpleFlash || 0, 110);
+            c.vx *= (0.4 + falloff * 0.3);
+            c.vy *= (0.4 + falloff * 0.3);
 
-                          // Strong purple + slow
-                          c.purpleFlash = max(c.purpleFlash || 0, 110);
-                          c.vx *= (0.4 + falloff * 0.3);
-                          c.vy *= (0.4 + falloff * 0.3);
+            let dx = c.x - x;
+            let dy = c.y - y;
+            let len = sqrt(dx*dx + dy*dy) || 1;
+            let knock = map(d, 0, 55, 4.5, 1.2);
+            c.vx += (dx / len) * knock;
+            c.vy += (dy / len) * knock;
 
-                          // Knockback
-                          let dx = c.x - x;
-                          let dy = c.y - y;
-                          let len = sqrt(dx*dx + dy*dy) || 1;
-                          let knock = map(d, 0, 55, 4.5, 1.2);
-                          c.vx += (dx / len) * knock;
-                          c.vy += (dy / len) * knock;
+            if (c.energy > 5 && c.energy < 35 && !c.isPredator && random() < 0.38) {
+                c.isPredator = true;
+                c.currentThought = "Blown into predator";
+            }
+        }
+    }
 
-                          // Chance to turn into predator if they survive
-                          if (c.energy > 5 && c.energy < 35 && !c.isPredator && random() < 0.38) {
-                              c.isPredator = true;
-                              c.currentThought = "Blown into predator";
-                          }
-                      }
-                  }
+    playExplosionSound();
+}
 
-                  // Extra explosion sound
-                  playExplosionSound();
-              }
+// ==================== EXTRACT TO EGG MODAL ====================
+function showExtractEggModal() {
+    const modal = document.getElementById('extract-egg-modal');
+    const listContainer = document.getElementById('extract-egg-list');
+    if (!modal || !listContainer) return;
 
-      function showExtractEggModal() {
-          const modal = document.getElementById('extract-egg-modal');
-          const listContainer = document.getElementById('extract-egg-list');
-          if (!modal || !listContainer) return;
+    listContainer.innerHTML = '';
 
-          listContainer.innerHTML = '';
+    const balanceDiv = document.createElement('div');
+    balanceDiv.className = 'mb-4 px-1 flex justify-between items-center text-sm border-b border-white/10 pb-3';
+    balanceDiv.innerHTML = `
+        <span class="text-white/60">Your Balance</span>
+        <span class="font-mono text-2xl text-violet-400 font-semibold">${formatScore(totalScore)}</span>
+    `;
+    listContainer.appendChild(balanceDiv);
 
-          // Live balance
-          const balanceDiv = document.createElement('div');
-          balanceDiv.className = 'mb-4 px-1 flex justify-between items-center text-sm border-b border-white/10 pb-3';
-          balanceDiv.innerHTML = `
-              <span class="text-white/60">Your Balance</span>
-              <span class="font-mono text-2xl text-violet-400 font-semibold">${formatScore(totalScore)}</span>
-          `;
-          listContainer.appendChild(balanceDiv);
+    let sorted = [...creatures].sort((a, b) => {
+        let scoreA = (a.modules?.length || 0) * 3 + (a.killCount || 0) * 2 + (a.childrenCount || 0);
+        let scoreB = (b.modules?.length || 0) * 3 + (b.killCount || 0) * 2 + (b.childrenCount || 0);
+        return scoreB - scoreA;
+    }).slice(0, 10);
 
-          // Fresh top 10
-          let sorted = [...creatures].sort((a, b) => {
-              let scoreA = (a.modules?.length || 0) * 3 + (a.killCount || 0) * 2 + (a.childrenCount || 0);
-              let scoreB = (b.modules?.length || 0) * 3 + (b.killCount || 0) * 2 + (b.childrenCount || 0);
-              return scoreB - scoreA;
-          }).slice(0, 10);
+    if (sorted.length === 0) {
+        listContainer.innerHTML += `<div class="text-center text-white/60 py-8">No creatures available yet.</div>`;
+    } else {
+        sorted.forEach(creature => {
+            const div = document.createElement('div');
+            div.className = 'flex items-center justify-between bg-white/5 hover:bg-white/10 rounded-2xl px-4 py-3 cursor-pointer transition-colors mb-1';
+            div.innerHTML = `
+                <div>
+                    <div class="font-semibold text-emerald-400">${creature.name}</div>
+                    <div class="text-xs text-white/60">Gen ${creature.generation} • ${creature.modules?.length || 0} modules • ${creature.killCount || 0} kills</div>
+                </div>
+                <button class="px-4 py-1.5 text-sm rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-medium">Extract</button>
+            `;
+            div.onclick = () => extractCreatureToEgg(creature);
+            listContainer.appendChild(div);
+        });
+    }
 
-          if (sorted.length === 0) {
-              listContainer.innerHTML += `<div class="text-center text-white/60 py-8">No creatures available yet.</div>`;
-          } else {
-              sorted.forEach(creature => {
-                  const div = document.createElement('div');
-                  div.className = 'flex items-center justify-between bg-white/5 hover:bg-white/10 rounded-2xl px-4 py-3 cursor-pointer transition-colors mb-1';
-                  div.innerHTML = `
-                      <div>
-                          <div class="font-semibold text-emerald-400">${creature.name}</div>
-                          <div class="text-xs text-white/60">Gen ${creature.generation} • ${creature.modules?.length || 0} modules • ${creature.killCount || 0} kills</div>
-                      </div>
-                      <button class="px-4 py-1.5 text-sm rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-medium">Extract</button>
-                  `;
-                  div.onclick = () => extractCreatureToEgg(creature);
-                  listContainer.appendChild(div);
-              });
-          }
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
 
-          modal.classList.remove('hidden');
-          modal.classList.add('flex');
-      }
+function hideExtractEggModal() {
+    const modal = document.getElementById('extract-egg-modal');
+    if (modal) {
+        modal.classList.remove('flex');
+        modal.classList.add('hidden');
+    }
+}
 
+function extractCreatureToEgg(creature) {
+    if (eggs.length >= MAX_EGGS) {
+        alert(`Your Egg Inventory is full (${MAX_EGGS} max).`);
+        return;
+    }
+    if (totalScore < 250000) {
+        alert("You need 250,000 High Roller Points.");
+        return;
+    }
 
-      function hideExtractEggModal() {
-          const modal = document.getElementById('extract-egg-modal');
-          if (modal) {
-              modal.classList.remove('flex');
-              modal.classList.add('hidden');
-          }
-      }
+    totalScore -= 250000;
+    updateMainStats();
+    updateEggCountBadge();
 
-      function extractCreatureToEgg(creature) {
-          if (eggs.length >= MAX_EGGS) {
-              alert(`Your Egg Inventory is full (${MAX_EGGS} max).`);
-              return;
-          }
+    addFloatingText(creature.x, creature.y - 30, "-250,000", '#fbbf24');
+    playTone(620, 'sine', 0.18, 0.6);
+    setTimeout(() => playTone(880, 'sine', 0.12, 0.4), 110);
 
-          if (totalScore < 250000) {
-              alert("You need 250,000 High Roller Points.");
-              return;
-          }
+    const eggData = {
+        name: creature.name,
+        generation: creature.generation,
+        modules: JSON.parse(JSON.stringify(creature.modules)),
+        killCount: creature.killCount || 0,
+        childrenCount: creature.childrenCount || 0,
+        traits: JSON.parse(JSON.stringify(creature.traits || {}))
+    };
+    eggs.push(eggData);
 
-          // Deduct points
-          totalScore -= 250000;
-          updateMainStats();
-          updateEggCountBadge();
+    const index = creatures.indexOf(creature);
+    if (index > -1) creatures.splice(index, 1);
 
-          // Visual + audio feedback
-          addFloatingText(creature.x, creature.y - 30, "-250,000", '#fbbf24');
-          playTone(620, 'sine', 0.18, 0.6);
-          setTimeout(() => playTone(880, 'sine', 0.12, 0.4), 110);
+    if (selectedCreature === creature) {
+        deselectCreature();
+    }
 
-          // Create egg
-          const eggData = {
-              name: creature.name,
-              generation: creature.generation,
-              modules: JSON.parse(JSON.stringify(creature.modules)),
-              killCount: creature.killCount || 0,
-              childrenCount: creature.childrenCount || 0,
-              traits: JSON.parse(JSON.stringify(creature.traits || {}))
-          };
-          eggs.push(eggData);
+    showExtractEggModal();
+}
 
-          // Remove creature from world
-          const index = creatures.indexOf(creature);
-          if (index > -1) creatures.splice(index, 1);
-
-          if (selectedCreature === creature) {
-              deselectCreature();
-          }
-
-          // === KEY CHANGE: Refresh the modal instead of closing it ===
-          showExtractEggModal(); // Re-opens and refreshes the list + balance
-      }
-              // ==================== v2.11.2+: Egg Inventory System ====================
-      function updateEggCountBadge() {
+// ==================== EGG INVENTORY SYSTEM ====================
+function updateEggCountBadge() {
     const badge = document.getElementById('egg-count-badge');
     if (badge) {
         const total = eggs.length + incubatingEggs.length;
         badge.innerText = `${total}/${MAX_EGGS}`;
     }
 }
-
 function showEggInventory() {
     const modal = document.getElementById('egg-inventory-modal');
     const list = document.getElementById('egg-inventory-list');
