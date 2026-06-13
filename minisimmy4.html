@@ -2222,157 +2222,38 @@ function convertDustToCrystals() {
                   const suffixes = ['-9','-12','ara','ith','on','yx','ar','en','os','ix','ael','or'];
                   return prefixes[Math.floor(Math.random()*prefixes.length)] + suffixes[Math.floor(Math.random()*suffixes.length)];
               }
+// ==================== AUDIO SYSTEM (CLEANED) ====================
+
 function getAudioContext() {
     if (!audioCtx) {
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-
         masterGain = audioCtx.createGain();
-        compressor = audioCtx.createDynamicsCompressor();
-        masterFilter = audioCtx.createBiquadFilter();   // ← NEW global filter
-
-        compressor.threshold.value = -18;
-        compressor.knee.value = 8;
-        compressor.ratio.value = 12;
-        compressor.attack.value = 0.003;
-        compressor.release.value = 0.25;
-
-        // Master filter settings (low-pass to tame harshness)
-        masterFilter.type = 'lowpass';
-        masterFilter.frequency.value = 2200;   // default = fairly bright
-
-        masterGain.gain.value = masterVolume;
-
-        // Connection order: masterGain → masterFilter → compressor → speakers
-        masterGain.connect(masterFilter);
-        masterFilter.connect(compressor);
-        compressor.connect(audioCtx.destination);
+        masterGain.gain.value = 0.12;
+        masterGain.connect(audioCtx.destination);
     }
-
     if (audioCtx.state === 'suspended') {
         audioCtx.resume();
     }
     return audioCtx;
 }
 
+// ==================== CURSOR HUM (SIMPLIFIED) ====================
+// We can improve this later. For now it's disabled to avoid conflicts.
+
 function startCursorHum() {
-    const ctx = getAudioContext();
-    if (cursorHumOsc) return;
-
-    cursorHumOsc = ctx.createOscillator();
-    cursorHumGain = ctx.createGain();
-    cursorHumFilter = ctx.createBiquadFilter();
-
-    cursorHumOsc.type = 'sine';
-    cursorHumOsc.frequency.value = 48;
-    cursorHumFilter.type = 'lowpass';
-    cursorHumFilter.frequency.value = 180;
-    cursorHumGain.gain.value = 0;
-
-    cursorHumOsc.connect(cursorHumFilter);
-    cursorHumFilter.connect(cursorHumGain);
-    cursorHumGain.connect(masterGain);
-    cursorHumOsc.start();
-
-    const targetVol = 0.015 * effectsVolume;
-    cursorHumGain.gain.linearRampToValueAtTime(targetVol, ctx.currentTime + 0.8);
+    // Disabled for now — using new playSound() system
+    // We can re-enable a clean version later if needed
 }
 
 function stopCursorHum() {
-    if (!cursorHumOsc || !cursorHumGain) return;
-    const ctx = getAudioContext();
-    cursorHumGain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.6);
-
-    setTimeout(() => {
-        try { if (cursorHumOsc) cursorHumOsc.stop(); } catch(e) {}
-        cursorHumOsc = null;
-        cursorHumGain = null;
-        cursorHumFilter = null;
-    }, 700);
+    // Disabled for now
 }
 
+// ==================== CURSOR DAMAGE SOUND (SIMPLIFIED) ====================
+// This used to be very complex. Now we just use the new playSound() system.
+
 function playCursorDamageSound(creature) {
-    if (activeVoices > MAX_VOICES) return;
-    activeVoices++;
-
-    const ctx = getAudioContext();
-
-    const osc1 = ctx.createOscillator();
-    const gain1 = ctx.createGain();
-    const filter1 = ctx.createBiquadFilter();
-
-    osc1.type = 'sawtooth';
-    osc1.frequency.value = 95 + Math.random() * 25;
-    filter1.type = 'lowpass';
-    filter1.frequency.value = 420;
-
-    gain1.gain.value = 0.18 * effectsVolume;
-    gain1.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.35);
-
-    osc1.connect(filter1);
-    filter1.connect(gain1);
-    gain1.connect(masterGain);
-    osc1.start();
-
-    setTimeout(() => {
-        try { osc1.stop(); } catch(e){}
-        activeVoices = Math.max(0, activeVoices - 1);
-    }, 400);
-
-    setTimeout(() => {
-        if (activeVoices > MAX_VOICES) return;
-        activeVoices++;
-
-        const osc2 = ctx.createOscillator();
-        const gain2 = ctx.createGain();
-        const filter2 = ctx.createBiquadFilter();
-
-        osc2.type = 'square';
-        osc2.frequency.value = 185 + Math.random() * 40;
-        filter2.type = 'bandpass';
-        filter2.frequency.value = 680;
-        filter2.Q.value = 2.2;
-
-        gain2.gain.value = 0.08 * effectsVolume;
-        gain2.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.22);
-
-        osc2.connect(filter2);
-        filter2.connect(gain2);
-        gain2.connect(masterGain);
-        osc2.start();
-
-        setTimeout(() => {
-            try { osc2.stop(); } catch(e){}
-            activeVoices = Math.max(0, activeVoices - 1);
-        }, 280);
-    }, 25);
-
-    const noise = ctx.createBufferSource();
-    const noiseGain = ctx.createGain();
-    const noiseFilter = ctx.createBiquadFilter();
-
-    const buffer = ctx.createBuffer(1, ctx.sampleRate * 0.18, ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < data.length; i++) {
-        data[i] = Math.random() * 2 - 1;
-    }
-    noise.buffer = buffer;
-
-    noiseFilter.type = 'bandpass';
-    noiseFilter.frequency.value = 1200;
-    noiseFilter.Q.value = 1.6;
-
-    noiseGain.gain.value = 0.06 * effectsVolume;
-    noiseGain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.18);
-
-    noise.connect(noiseFilter);
-    noiseFilter.connect(noiseGain);
-    noiseGain.connect(masterGain);
-    noise.start();
-
-    setTimeout(() => {
-        try { noise.stop(); } catch(e){}
-        activeVoices = Math.max(0, activeVoices - 1);
-    }, 220);
+    playSound('absorb', 1.0);
 }
 
 // ==================== OLD playTone FUNCTION (DISABLED) ====================
@@ -2407,257 +2288,68 @@ function playCursorDamageSound(creature) {
     // }, (duration + 0.12) * 1000);
 }
 
-// ==================== UPDATED SOUND FUNCTIONS ====================
-function playBirthSound() {
-    console.log(`[SOUND] playBirthSound called`);
-    if (window.soundDisabled) return;
+// ==================== UPDATED SOUND FUNCTIONS (CLEAN) ====================
 
+function playBirthSound() {
+    if (window.soundDisabled) return;
     playSound('birth');
 }
 
 function playEatSound(isGreenZone = true) {
-    console.log(`[SOUND] playEatSound called`, isGreenZone);
     if (window.soundDisabled) return;
-    if (activeVoices > MAX_VOICES - 4) return;
     if (creatures.length > 90 && Math.random() > 0.25) return;
-    if (Math.random() > soundDensity * 0.55) return;
-
+    if (Math.random() > 0.65) return; // simple density control
     playSound('eat');
 }
 
 function playDeathSound() {
-    console.log(`[SOUND] playDeathSound called`);
     if (window.soundDisabled) return;
     if (creatures.length > 110 && Math.random() > 0.4) return;
-
     playSound('death');
 }
 
-// ==================== OTHER SOUND FUNCTIONS ====================
 function playDepositSound() {
-    console.log(`[SOUND] playDepositSound called`);
     if (window.soundDisabled) return;
-
     playSound('deposit');
 }
 
 function playPredatorFeedSound() {
-    console.log(`[SOUND] playPredatorFeedSound called`);
     if (window.soundDisabled) return;
-
     playSound('predatorFeed');
 }
 
 function playAmbientPulse(isDay) {
     if (window.soundDisabled) return;
-
-    // This one is a continuous low pulse — we'll improve it later
-    // For now it uses the old system or you can map it to a looping sound
-    console.log(`[SOUND] playAmbientPulse called (isDay: ${isDay})`);
+    // Placeholder — can be improved later with a looping low tone
+    // For now it does nothing to avoid conflicts
 }
+
 function playExplosionSound() {
-    if (activeVoices > MAX_VOICES + 1) return;
-
-    const ctx = getAudioContext();
-
-    const osc1 = ctx.createOscillator();
-    const gain1 = ctx.createGain();
-    const filter1 = ctx.createBiquadFilter();
-
-    osc1.type = 'sawtooth';
-    osc1.frequency.value = 85;
-    filter1.type = 'lowpass';
-    filter1.frequency.value = 420;
-
-    gain1.gain.value = 0.16 * effectsVolume;
-    gain1.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.65);
-
-    osc1.connect(filter1);
-    filter1.connect(gain1);
-    gain1.connect(masterGain);
-    osc1.start();
-
-    setTimeout(() => { try { osc1.stop(); } catch(e){} }, 720);
-
-    setTimeout(() => {
-        const osc2 = ctx.createOscillator();
-        const gain2 = ctx.createGain();
-        const noise = ctx.createBufferSource();
-        const noiseFilter = ctx.createBiquadFilter();
-        const noiseGain = ctx.createGain();
-
-        osc2.type = 'square';
-        osc2.frequency.value = 180;
-
-        const buffer = ctx.createBuffer(1, ctx.sampleRate * 0.4, ctx.sampleRate);
-        const data = buffer.getChannelData(0);
-        for (let i = 0; i < data.length; i++) {
-            data[i] = Math.random() * 2 - 1;
-        }
-        noise.buffer = buffer;
-
-        noiseFilter.type = 'bandpass';
-        noiseFilter.frequency.value = 1200;
-        noiseFilter.Q.value = 1.8;
-
-        noiseGain.gain.value = 0.08 * effectsVolume;
-        noiseGain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.45);
-
-        osc2.connect(noiseFilter);
-        noise.connect(noiseFilter);
-        noiseFilter.connect(noiseGain);
-        noiseGain.connect(masterGain);
-
-        osc2.start();
-        noise.start();
-
-        setTimeout(() => {
-            try { osc2.stop(); noise.stop(); } catch(e){}
-        }, 500);
-    }, 32);
+    if (window.soundDisabled) return;
+    playSound('explosion');
 }
 
 function playWallBreakSound(sizeMult = 1) {
-    if (activeVoices > MAX_VOICES + 2) return;
-    activeVoices++;
-
-    const ctx = getAudioContext();
-
-    const noise = ctx.createBufferSource();
-    const noiseFilter = ctx.createBiquadFilter();
-    const noiseGain = ctx.createGain();
-
-    const buffer = ctx.createBuffer(1, ctx.sampleRate * 0.55, ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < data.length; i++) {
-        data[i] = Math.random() * 2 - 1;
-    }
-    noise.buffer = buffer;
-
-    noiseFilter.type = 'bandpass';
-    noiseFilter.frequency.value = 2650 + sizeMult * 350;
-    noiseFilter.Q.value = 4.2;
-
-    noiseGain.gain.value = 0.26 * effectsVolume * Math.min(sizeMult, 1.7);
-    noiseGain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.48);
-
-    noise.connect(noiseFilter);
-    noiseFilter.connect(noiseGain);
-    noiseGain.connect(masterGain);
-    noise.start();
-
-    setTimeout(() => {
-        try { noise.stop(); } catch(e){}
-        activeVoices = Math.max(0, activeVoices - 1);
-    }, 550);
-
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    const filter = ctx.createBiquadFilter();
-
-    osc.type = 'sine';
-    osc.frequency.value = 1720 + sizeMult * 280;
-
-    filter.type = 'highpass';
-    filter.frequency.value = 1350;
-
-    gain.gain.value = 0.19 * effectsVolume;
-    gain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.28);
-
-    osc.connect(filter);
-    filter.connect(gain);
-    gain.connect(masterGain);
-    osc.start();
-
-    setTimeout(() => {
-        try { osc.stop(); } catch(e){}
-    }, 340);
+    if (window.soundDisabled) return;
+    playSound('wallBreak');
 }
 
 function playShipShootSound() {
-    if (activeVoices > MAX_VOICES + 2) return;
-
-    const ctx = getAudioContext();
-
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    const filter = ctx.createBiquadFilter();
-
-    osc.type = 'sawtooth';
-    osc.frequency.value = 920;
-
-    filter.type = 'lowpass';
-    filter.frequency.value = 2200;
-
-    gain.gain.value = 0.22 * effectsVolume;
-    gain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.16);
-
-    osc.connect(filter);
-    filter.connect(gain);
-    gain.connect(masterGain);
-    osc.start();
-
-    setTimeout(() => {
-        try { osc.stop(); } catch(e){}
-    }, 200);
+    if (window.soundDisabled) return;
+    playSound('shipShoot');
 }
 
 function playBulletImpactSound() {
-    if (activeVoices > MAX_VOICES + 1) return;
-
-    const ctx = getAudioContext();
-
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    const filter = ctx.createBiquadFilter();
-
-    osc.type = 'square';
-    osc.frequency.value = 620;
-
-    filter.type = 'bandpass';
-    filter.frequency.value = 1100;
-    filter.Q.value = 2.5;
-
-    gain.gain.value = 0.18 * effectsVolume;
-    gain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.22);
-
-    osc.connect(filter);
-    filter.connect(gain);
-    gain.connect(masterGain);
-    osc.start();
-
-    setTimeout(() => {
-        try { osc.stop(); } catch(e){}
-    }, 280);
+    if (window.soundDisabled) return;
+    playSound('bulletImpact');
 }
 
 function playAbsorbSound() {
-    if (activeVoices > MAX_VOICES - 1) return;
+    if (window.soundDisabled) return;
+    playSound('absorb');
+}
 
-    const ctx = getAudioContext();
-
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    const filter = ctx.createBiquadFilter();
-
-    osc.type = 'sine';
-    osc.frequency.value = 420;
-
-    filter.type = 'lowpass';
-    filter.frequency.value = 900;
-
-    gain.gain.value = 0.16 * effectsVolume;
-    gain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.35);
-
-    osc.connect(filter);
-    filter.connect(gain);
-    gain.connect(masterGain);
-    osc.start();
-
-    setTimeout(() => {
-        try { osc.stop(); } catch(e){}
-    }, 400);
-}// ==================== FLOATING TEXT ====================
+// ==================== FLOATING TEXT ====================
 class FloatingText {
     constructor(x, y, text, color = '#34d399') {
         this.x = x;
@@ -2690,53 +2382,51 @@ function addFloatingText(x, y, text, color = '#34d399') {
     floatingTexts.push(new FloatingText(x, y, text, color));
 }
 
+// Enhanced Extract to Egg modal (kept as-is)
+function showExtractEggModal() {
+    const modal = document.getElementById('extract-egg-modal');
+    const listContainer = document.getElementById('extract-egg-list');
+    if (!modal || !listContainer) return;
 
-      
-      // Enhanced Extract to Egg modal with live balance + top 10
-      function showExtractEggModal() {
-          const modal = document.getElementById('extract-egg-modal');
-          const listContainer = document.getElementById('extract-egg-list');
-          if (!modal || !listContainer) return;
+    listContainer.innerHTML = '';
 
-          listContainer.innerHTML = '';
+    // Live balance header
+    const balanceDiv = document.createElement('div');
+    balanceDiv.className = 'mb-4 px-1 flex justify-between items-center text-sm border-b border-white/10 pb-3';
+    balanceDiv.innerHTML = `
+        <span class="text-white/60">Your Balance</span>
+        <span class="font-mono text-2xl text-violet-400 font-semibold">${totalScore.toLocaleString()}</span>
+    `;
+    listContainer.appendChild(balanceDiv);
 
-          // Live balance header
-          const balanceDiv = document.createElement('div');
-          balanceDiv.className = 'mb-4 px-1 flex justify-between items-center text-sm border-b border-white/10 pb-3';
-          balanceDiv.innerHTML = `
-              <span class="text-white/60">Your Balance</span>
-              <span class="font-mono text-2xl text-violet-400 font-semibold">${totalScore.toLocaleString()}</span>
-          `;
-          listContainer.appendChild(balanceDiv);
+    // Get current top 10
+    let sorted = [...creatures].sort((a, b) => {
+        let scoreA = (a.modules?.length || 0) * 3 + (a.killCount || 0) * 2 + (a.childrenCount || 0);
+        let scoreB = (b.modules?.length || 0) * 3 + (b.killCount || 0) * 2 + (b.childrenCount || 0);
+        return scoreB - scoreA;
+    }).slice(0, 10);
 
-          // Get current top 10
-          let sorted = [...creatures].sort((a, b) => {
-              let scoreA = (a.modules?.length || 0) * 3 + (a.killCount || 0) * 2 + (a.childrenCount || 0);
-              let scoreB = (b.modules?.length || 0) * 3 + (b.killCount || 0) * 2 + (b.childrenCount || 0);
-              return scoreB - scoreA;
-          }).slice(0, 10);
+    if (sorted.length === 0) {
+        listContainer.innerHTML += `<div class="text-center text-white/60 py-8">No creatures available yet.</div>`;
+    } else {
+        sorted.forEach(creature => {
+            const div = document.createElement('div');
+            div.className = 'flex items-center justify-between bg-white/5 hover:bg-white/10 rounded-2xl px-4 py-3 cursor-pointer transition-colors mb-1';
+            div.innerHTML = `
+                <div>
+                    <div class="font-semibold text-emerald-400">${creature.name}</div>
+                    <div class="text-xs text-white/60">Gen ${creature.generation} • ${creature.modules?.length || 0} modules • ${creature.killCount || 0} kills</div>
+                </div>
+                <button class="px-4 py-1.5 text-sm rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-medium">Extract</button>
+            `;
+            div.onclick = () => extractCreatureToEgg(creature);
+            listContainer.appendChild(div);
+        });
+    }
 
-          if (sorted.length === 0) {
-              listContainer.innerHTML += `<div class="text-center text-white/60 py-8">No creatures available yet.</div>`;
-          } else {
-              sorted.forEach(creature => {
-                  const div = document.createElement('div');
-                  div.className = 'flex items-center justify-between bg-white/5 hover:bg-white/10 rounded-2xl px-4 py-3 cursor-pointer transition-colors mb-1';
-                  div.innerHTML = `
-                      <div>
-                          <div class="font-semibold text-emerald-400">${creature.name}</div>
-                          <div class="text-xs text-white/60">Gen ${creature.generation} • ${creature.modules?.length || 0} modules • ${creature.killCount || 0} kills</div>
-                      </div>
-                      <button class="px-4 py-1.5 text-sm rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-medium">Extract</button>
-                  `;
-                  div.onclick = () => extractCreatureToEgg(creature);
-                  listContainer.appendChild(div);
-              });
-          }
-
-          modal.classList.remove('hidden');
-          modal.classList.add('flex');
-      }
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
 
 function showTopCreaturesModal() {
     console.log("Top 10 button clicked");
@@ -2820,27 +2510,22 @@ function hideTopCreaturesModal() {
         modal.classList.add('hidden');
     }
 }
-// ==================== SOUND EDITOR ====================
-let soundSettings = {
-    death: { volume: 0.038, waveform: 'sawtooth', attack: 0.020, release: 0.42, lowFreq: 220, highFreq: 175 },
-    explosion: { volume: 0.16, waveform: 'sawtooth', attack: 0.01, release: 0.65, lowFreq: 85, highFreq: 180 },
-    eat: { volume: 0.032, waveform: 'triangle', attack: 0.006, release: 0.18, lowFreq: 620, highFreq: 930 },
-    birth: { volume: 0.040, waveform: 'sine', attack: 0.02, release: 0.32, lowFreq: 880, highFreq: 1320 },
-    deposit: { volume: 0.028, waveform: 'sine', attack: 0.012, release: 0.22, lowFreq: 540, highFreq: 680 },
-    predatorFeed: { volume: 0.042, waveform: 'sawtooth', attack: 0.01, release: 0.20, lowFreq: 165, highFreq: 210 },
-    shipShoot: { volume: 0.22, waveform: 'sawtooth', attack: 0.005, release: 0.16, lowFreq: 920, highFreq: 920 },
-    bulletImpact: { volume: 0.18, waveform: 'square', attack: 0.005, release: 0.22, lowFreq: 620, highFreq: 1100 },
-    absorb: { volume: 0.16, waveform: 'sine', attack: 0.01, release: 0.35, lowFreq: 420, highFreq: 420 },
-    wallBreak: { volume: 0.26, waveform: 'sawtooth', attack: 0.01, release: 0.48, lowFreq: 1720, highFreq: 2650 },
-    spawn: { volume: 0.12, waveform: 'sine', attack: 0.015, release: 0.45, lowFreq: 880, highFreq: 1320 },
-    cursorHum: { volume: 0.0, waveform: 'sine', attack: 0.8, release: 0.6, lowFreq: 48, highFreq: 48 },
+// ==================== SOUND EDITOR (CLEANED) ====================
 
-    // Master Effects (global controls)
-    masterFilterFreq: 2200,
-    masterVolume: 0.7,
-    masterWaveform: 'sawtooth',
-    masterAttack: 1.0,
-    masterRelease: 1.0
+// Only volumes matter now with the new playSound() system
+let soundSettings = {
+    death:        { volume: 0.75 },
+    explosion:    { volume: 0.65 },
+    eat:          { volume: 0.55 },
+    birth:        { volume: 0.70 },
+    deposit:      { volume: 0.50 },
+    predatorFeed: { volume: 0.60 },
+    shipShoot:    { volume: 0.55 },
+    bulletImpact: { volume: 0.65 },
+    absorb:       { volume: 0.60 },
+    wallBreak:    { volume: 0.70 },
+    spawn:        { volume: 0.65 },
+    cursorHum:    { volume: 0.35 }
 };
 
 let currentSoundKey = 'death';
@@ -2848,64 +2533,52 @@ let currentSoundKey = 'death';
 function loadSoundIntoEditor(key) {
     const s = soundSettings[key];
     if (!s) return;
+
     currentSoundKey = key;
 
     const select = document.getElementById('sound-select');
-    const vol = document.getElementById('sound-vol-slider');
-    const wave = document.getElementById('sound-waveform');
-    const attack = document.getElementById('sound-attack-slider');
-    const release = document.getElementById('sound-release-slider');
-    const low = document.getElementById('sound-low-slider');
-    const high = document.getElementById('sound-high-slider');
+    const volSlider = document.getElementById('sound-vol-slider');
+    const volValue = document.getElementById('sound-vol-value');
 
     if (select) select.value = key;
-    if (vol) vol.value = s.volume;
-    if (wave) wave.value = s.waveform;
-    if (attack) attack.value = s.attack;
-    if (release) release.value = s.release;
-    if (low) low.value = s.lowFreq;
-    if (high) high.value = s.highFreq;
 
-    updateSoundEditorDisplays();
+    if (volSlider && volValue) {
+        volSlider.value = s.volume;
+        volValue.textContent = s.volume.toFixed(3);
+    }
+
+    // Hide or disable unused controls (waveform, attack, release, freq)
+    const unusedControls = [
+        'sound-waveform',
+        'sound-attack-slider', 'sound-attack-value',
+        'sound-release-slider', 'sound-release-value',
+        'sound-low-slider', 'sound-low-value',
+        'sound-high-slider', 'sound-high-value'
+    ];
+    unusedControls.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.opacity = '0.3';
+    });
 }
 
 function updateSoundEditorDisplays() {
-    const pairs = [
-        ['sound-vol-slider', 'sound-vol-value'],
-        ['sound-attack-slider', 'sound-attack-value'],
-        ['sound-release-slider', 'sound-release-value'],
-        ['sound-low-slider', 'sound-low-value'],
-        ['sound-high-slider', 'sound-high-value']
-    ];
-    pairs.forEach(([sliderId, valueId]) => {
-        const slider = document.getElementById(sliderId);
-        const valEl = document.getElementById(valueId);
-        if (slider && valEl) {
-            valEl.textContent = parseFloat(slider.value).toFixed(3);
-        }
-    });
+    const volSlider = document.getElementById('sound-vol-slider');
+    const volValue = document.getElementById('sound-vol-value');
+    if (volSlider && volValue) {
+        volValue.textContent = parseFloat(volSlider.value).toFixed(3);
+    }
 }
 
 function saveCurrentSoundSettings() {
     const key = currentSoundKey;
     if (!soundSettings[key]) return;
 
-    const vol = document.getElementById('sound-vol-slider');
-    const wave = document.getElementById('sound-waveform');
-    const attack = document.getElementById('sound-attack-slider');
-    const release = document.getElementById('sound-release-slider');
-    const low = document.getElementById('sound-low-slider');
-    const high = document.getElementById('sound-high-slider');
-
-    if (vol) soundSettings[key].volume = parseFloat(vol.value);
-    if (wave) soundSettings[key].waveform = wave.value;
-    if (attack) soundSettings[key].attack = parseFloat(attack.value);
-    if (release) soundSettings[key].release = parseFloat(release.value);
-    if (low) soundSettings[key].lowFreq = parseFloat(low.value);
-    if (high) soundSettings[key].highFreq = parseFloat(high.value);
+    const volSlider = document.getElementById('sound-vol-slider');
+    if (volSlider) {
+        soundSettings[key].volume = parseFloat(volSlider.value);
+    }
 }
 
-// Updated to use real audio files
 function testSelectedSound() {
     saveCurrentSoundSettings();
     const key = currentSoundKey;
@@ -2916,143 +2589,14 @@ function testSelectedSound() {
 }
 
 function disableAllSounds() {
-    if (typeof masterGain !== 'undefined' && masterGain) {
+    if (masterGain) {
         masterGain.gain.value = 0;
-    }
-    if (typeof stopSound === 'function') {
-        stopSound('cursorHum');
     }
     window.soundDisabled = true;
     console.log('[Sound] All sounds disabled');
 }
 
-// ==================== MASTER EFFECTS ====================
-function updateMasterFilter() {
-    if (typeof masterFilter !== 'undefined' && masterFilter && soundSettings.masterFilterFreq) {
-        masterFilter.frequency.value = soundSettings.masterFilterFreq;
-    }
-}
-
-function addMasterToneSection(attempt = 0) {
-    let container = document.getElementById('sound-editor-content');
-    if (!container) {
-        container = document.querySelector('.rounded-2xl.border.border-white\\/10.bg-\\[\\#0a0a0f\\].p-3');
-    }
-    if (!container) {
-        if (attempt < 8) {
-            setTimeout(() => addMasterToneSection(attempt + 1), 400);
-        }
-        return;
-    }
-    if (document.getElementById('master-effects-section')) return;
-
-    const section = document.createElement('div');
-    section.id = 'master-effects-section';
-    section.style.marginTop = '18px';
-    section.style.paddingTop = '14px';
-    section.style.borderTop = '1px solid #555';
-
-    section.innerHTML = `
-        <div style="font-weight:700; margin-bottom:12px; color:#ccc; font-size:14px;">Master Effects</div>
-
-        <!-- Master Volume -->
-        <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
-            <label style="width:100px; font-size:13px;">Master Volume</label>
-            <input type="range" id="master-vol-slider" min="0" max="1" step="0.01" style="flex:1;">
-            <span id="master-vol-value" style="width:45px; text-align:right; font-size:13px;"></span>
-        </div>
-
-        <!-- Brightness -->
-        <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
-            <label style="width:100px; font-size:13px;">Brightness</label>
-            <input type="range" id="master-tone-slider" min="600" max="8000" step="50" style="flex:1;">
-            <span id="master-tone-value" style="width:55px; text-align:right; font-size:13px;"></span>
-        </div>
-
-        <!-- Master Waveform -->
-        <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
-            <label style="width:100px; font-size:13px;">Waveform</label>
-            <select id="master-waveform" style="flex:1; background:#111; color:#ddd; border:1px solid #444; padding:2px 6px; border-radius:4px;">
-                <option value="sine">Sine (smooth)</option>
-                <option value="triangle">Triangle</option>
-                <option value="sawtooth">Sawtooth</option>
-                <option value="square">Square</option>
-            </select>
-        </div>
-
-        <!-- Master Attack Scale -->
-        <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
-            <label style="width:100px; font-size:13px;">Attack Scale</label>
-            <input type="range" id="master-attack-slider" min="0.2" max="3" step="0.1" style="flex:1;">
-            <span id="master-attack-value" style="width:45px; text-align:right; font-size:13px;"></span>
-        </div>
-
-        <!-- Master Release Scale -->
-        <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
-            <label style="width:100px; font-size:13px;">Release Scale</label>
-            <input type="range" id="master-release-slider" min="0.2" max="3" step="0.1" style="flex:1;">
-            <span id="master-release-value" style="width:45px; text-align:right; font-size:13px;"></span>
-        </div>
-    `;
-
-    container.appendChild(section);
-
-    // Master Volume
-    const volSlider = document.getElementById('master-vol-slider');
-    const volValue = document.getElementById('master-vol-value');
-    volSlider.value = soundSettings.masterVolume;
-    volValue.innerText = soundSettings.masterVolume.toFixed(2);
-    volSlider.oninput = () => {
-        soundSettings.masterVolume = parseFloat(volSlider.value);
-        volValue.innerText = soundSettings.masterVolume.toFixed(2);
-        if (typeof masterGain !== 'undefined' && masterGain) {
-            masterGain.gain.value = soundSettings.masterVolume;
-        }
-    };
-
-    // Brightness
-    const toneSlider = document.getElementById('master-tone-slider');
-    const toneValue = document.getElementById('master-tone-value');
-    toneSlider.value = soundSettings.masterFilterFreq;
-    toneValue.innerText = soundSettings.masterFilterFreq + ' Hz';
-    toneSlider.oninput = () => {
-        soundSettings.masterFilterFreq = parseFloat(toneSlider.value);
-        toneValue.innerText = soundSettings.masterFilterFreq + ' Hz';
-        updateMasterFilter();
-    };
-
-    // Waveform
-    const waveSelect = document.getElementById('master-waveform');
-    waveSelect.value = soundSettings.masterWaveform;
-    waveSelect.onchange = () => {
-        soundSettings.masterWaveform = waveSelect.value;
-    };
-
-    // Attack Scale
-    const attackSlider = document.getElementById('master-attack-slider');
-    const attackValue = document.getElementById('master-attack-value');
-    attackSlider.value = soundSettings.masterAttack;
-    attackValue.innerText = soundSettings.masterAttack.toFixed(1) + 'x';
-    attackSlider.oninput = () => {
-        soundSettings.masterAttack = parseFloat(attackSlider.value);
-        attackValue.innerText = soundSettings.masterAttack.toFixed(1) + 'x';
-    };
-
-    // Release Scale
-    const releaseSlider = document.getElementById('master-release-slider');
-    const releaseValue = document.getElementById('master-release-value');
-    releaseSlider.value = soundSettings.masterRelease;
-    releaseValue.innerText = soundSettings.masterRelease.toFixed(1) + 'x';
-    releaseSlider.oninput = () => {
-        soundSettings.masterRelease = parseFloat(releaseSlider.value);
-        releaseValue.innerText = soundSettings.masterRelease.toFixed(1) + 'x';
-    };
-
-    updateMasterFilter();
-    console.log('[Sound] Master Effects section added');
-}
-
-// Initialize Sound Editor
+// ==================== SOUND EDITOR INITIALIZATION ====================
 document.addEventListener('DOMContentLoaded', () => {
     const select = document.getElementById('sound-select');
     if (select) {
@@ -3062,10 +2606,13 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Initialize with Death sound
     setTimeout(() => {
         loadSoundIntoEditor('death');
-        addMasterToneSection();
-    }, 800);
+
+        // Optional: Add a simple Master Volume control later if needed
+        // For now we keep it simple
+    }, 600);
 });
       //================================================================================
       //CHUNK 3 of 3  —  RUNTIME LOOP + DRAW + HANDLERS
