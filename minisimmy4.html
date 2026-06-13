@@ -1715,32 +1715,29 @@ function drawMusicModeTintAndBorder() {
                         currentMusicMode === 'replicate' ? [30, 240, 140] :
                         [255, 215, 60];
 
-    let pulse = sin(frameCount * 0.08) * 0.5 + 1.0; // pulsating effect
+// ==================== MUSIC VISUALIZER DEBUG VARIABLES ====================
+let musicVisualizerRadius = 380;
+let musicVisualizerGlow = 1.0;
+let musicVisualizerThickness = 6;
 
-    for (let i = 7; i >= 1; i--) {
-        let alpha = (28 * i) * pulse;
-        stroke(borderColor[0], borderColor[1], borderColor[2], alpha);
-        strokeWeight(12 + i * 5);
-        noFill();
-        rect(0, 0, width, height);
-    }
-
-    // Core bright border
-    stroke(borderColor[0], borderColor[1], borderColor[2], 240);
-    strokeWeight(5);
+// ==================== PULSATING BORDER (existing code) ====================
+let pulse = sin(frameCount * 0.08) * 0.5 + 1.0; // pulsating effect
+for (let i = 7; i >= 1; i--) {
+    let alpha = (28 * i) * pulse;
+    stroke(borderColor[0], borderColor[1], borderColor[2], alpha);
+    strokeWeight(12 + i * 5);
+    noFill();
     rect(0, 0, width, height);
-    pop();
 }
+// Core bright border
+stroke(borderColor[0], borderColor[1], borderColor[2], 240);
+strokeWeight(5);
+rect(0, 0, width, height);
+pop();
 
-// ==================== MUSIC VISUALIZER RING (Improved) ====================
-let musicVisualizerRadius = 380;   // ← Tweak this value (380–420 is usually good)
-
+// ==================== MUSIC VISUALIZER RING (with live sliders) ====================
 function drawMusicVisualizer() {
     if (!musicVisualizerActive || !currentMusicMode) return;
-
-    if (frameCount % 60 === 0) {
-        console.log("%c[Visualizer] Drawing ring - Mode: " + currentMusicMode, "color:#34d399");
-    }
 
     push();
     translate(width / 2, height / 2);
@@ -1748,47 +1745,97 @@ function drawMusicVisualizer() {
 
     const c = musicVisualizerColor;
     const baseR = musicVisualizerRadius;
+    const glow = musicVisualizerGlow;
+    const thickness = musicVisualizerThickness;
 
-    // Strong outer glow
+    // Outer glow layers
     for (let i = 8; i >= 1; i--) {
-        const alpha = 18 * i;
+        const alpha = (18 * i) * glow;
         stroke(c[0], c[1], c[2], alpha);
-        strokeWeight(10 + i * 4);
+        strokeWeight((thickness + 4) + i * 3.5);
         circle(0, 0, baseR * 2 + i * 8);
     }
 
     // Main ring
     stroke(c[0], c[1], c[2], 230);
-    strokeWeight(6);
+    strokeWeight(thickness);
     circle(0, 0, baseR * 2);
 
     // Inner highlight
-    stroke(c[0], c[1], c[2], 120);
-    strokeWeight(3);
+    stroke(c[0], c[1], c[2], 110);
+    strokeWeight(Math.max(2, thickness * 0.5));
     circle(0, 0, baseR * 2 - 12);
 
     pop();
 }
-      // ==================== AETHERIUM RESOURCES + FURNACE ====================
-      let aetheriumCrystals = 0;     // Stackable crystals in inventory (max 999)
-      let aetheriumDust = 0;         // Dust in oz (max 999)
 
-      // Furnace system
-      let burningCrystals = 0;       // Number of crystals currently burning in furnace
-      let furnaceEndTime = 0;        // Timestamp when current burn ends
+// ==================== SLIDER INITIALIZATION (connects HTML sliders) ====================
+function initVisualizerSliders() {
+    // Ring Radius
+    const radiusSlider = document.getElementById('viz-radius-slider');
+    const radiusValue = document.getElementById('viz-radius-value');
 
- function formatDust(mg) {
-    if (mg >= 1e11) { 
-        // 100,000+ tons → use scientific notation in tons
+    if (radiusSlider && radiusValue) {
+        radiusSlider.value = musicVisualizerRadius;
+        radiusValue.innerText = musicVisualizerRadius;
+
+        radiusSlider.oninput = function() {
+            musicVisualizerRadius = parseInt(this.value);
+            radiusValue.innerText = musicVisualizerRadius;
+        };
+    }
+
+    // Glow Intensity
+    const glowSlider = document.getElementById('viz-glow-slider');
+    const glowValue = document.getElementById('viz-glow-value');
+
+    if (glowSlider && glowValue) {
+        glowSlider.value = musicVisualizerGlow;
+        glowValue.innerText = musicVisualizerGlow.toFixed(1);
+
+        glowSlider.oninput = function() {
+            musicVisualizerGlow = parseFloat(this.value);
+            glowValue.innerText = musicVisualizerGlow.toFixed(1);
+        };
+    }
+
+    // Ring Thickness
+    const thicknessSlider = document.getElementById('viz-thickness-slider');
+    const thicknessValue = document.getElementById('viz-thickness-value');
+
+    if (thicknessSlider && thicknessValue) {
+        thicknessSlider.value = musicVisualizerThickness;
+        thicknessValue.innerText = musicVisualizerThickness;
+
+        thicknessSlider.oninput = function() {
+            musicVisualizerThickness = parseInt(this.value);
+            thicknessValue.innerText = musicVisualizerThickness;
+        };
+    }
+}
+
+// Auto-initialize sliders when page loads
+window.addEventListener('load', () => {
+    setTimeout(() => {
+        initVisualizerSliders();
+        console.log("%c[Music Visualizer] Debug sliders initialized", "color:#34d399");
+    }, 700);
+});
+
+// ==================== AETHERIUM RESOURCES + FURNACE ====================
+let aetheriumCrystals = 0; // Stackable crystals in inventory (max 999)
+let aetheriumDust = 0;     // Dust in mg (milligrams)
+let burningCrystals = 0;   // Number of crystals currently burning in furnace
+let furnaceEndTime = 0;    // Timestamp when current burn ends
+
+function formatDust(mg) {
+    if (mg >= 1e11) {
         return (mg / 1e9).toExponential(2) + " t";
     } else if (mg >= 1e9) {
-        // 1,000+ tons
         return (mg / 1e9).toFixed(2) + " t";
     } else if (mg >= 1_000_000) {
-        // Metric tons
         return (mg / 1_000_000).toFixed(2) + " t";
     } else if (mg >= 100_000) {
-        // 100+ kg
         return (mg / 1000).toFixed(1) + " kg";
     } else if (mg >= 1000) {
         return (mg / 1000).toFixed(2) + " kg";
@@ -1800,7 +1847,6 @@ function drawMusicVisualizer() {
         return (mg * 1_000_000).toFixed(0) + " µg";
     }
 }
-
 
 function formatLargeNumber(n) {
     if (n >= 1e12) {
