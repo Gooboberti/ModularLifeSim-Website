@@ -1854,64 +1854,94 @@ function drawMusicModeTintAndBorder() {
 }
 
 // ==================== MUSIC VISUALIZER (CLEAN FINAL VERSION) ====================
-let musicVisualizerRadius = 380;
-let musicVisualizerGlow = 1.0;
-let musicVisualizerThickness = 6;
+let musicVisualizerRadius = 210;
+let musicVisualizerGlow = 0.3;
+let musicVisualizerThickness = 2;
+let musicVisualizerOpacity = 0.45;
 
-// === NEW CONTROLS ===
-let musicVisualizerOpacity = 1.0;        // Master opacity
-let musicVisualizerBassReact = 1.0;      // How strongly bass affects outer ring
-let musicVisualizerMidReact = 1.0;       // How strongly mids affect middle ring
-let musicVisualizerHighReact = 1.0;      // How strongly highs affect inner ring
-let musicVisualizerCenterGlow = 1.0;     // Strength of the central glow
+let musicVisualizerBassReact = 3.00;
+let musicVisualizerMidReact = 3.00;
+let musicVisualizerHighReact = 2.95;
+let musicVisualizerCenterGlow = 0.3;
 
 
 // ==================== MUSIC VISUALIZER (FINAL VERSION) ====================
 // ==================== MUSIC VISUALIZER (FORCED CLEAN MATRIX VERSION) ====================
 // ==================== MUSIC VISUALIZER (AGGRESSIVE BYPASS VERSION) ====================
+// ==================== CIRCULAR FLAME VISUALIZER ====================
 function drawMusicVisualizer() {
     if (!musicVisualizerActive || !currentMusicMode) return;
 
-    console.log("%c[VISUALIZER] REACHED DRAWING CODE - Mode: " + currentMusicMode, "color: lime; font-weight: bold");
-
-    // Force reset p5 drawing state as much as possible
     push();
-    drawingContext.save();           // extra safety
+    drawingContext.save();
     resetMatrix();
     colorMode(RGB, 255);
     ellipseMode(CENTER);
-    noFill();
 
-    let r = musicVisualizerRadius || 280;
+    const centerX = width / 2;
+    const centerY = height / 2;
 
-    // Extremely obvious - large bright rings + text
-    // Outer ring - thick bright yellow
-    stroke(255, 255, 0);
-    strokeWeight(22);
-    ellipse(width/2, height/2, r * 2.2, r * 2.2);
+    const baseR = musicVisualizerRadius || 210;
+    const opacity = musicVisualizerOpacity || 0.45;
+    const glow = musicVisualizerGlow || 0.3;
 
-    // Middle ring - thick magenta
-    stroke(255, 0, 255);
-    strokeWeight(14);
-    ellipse(width/2, height/2, r * 1.6, r * 1.6);
+    const bassReact = musicVisualizerBassReact || 3.0;
+    const midReact  = musicVisualizerMidReact  || 3.0;
+    const highReact = musicVisualizerHighReact || 2.95;
 
-    // Inner ring - thick cyan
-    stroke(0, 255, 255);
-    strokeWeight(8);
-    ellipse(width/2, height/2, r * 1.0, r * 1.0);
+    const numFlames = 68;                    // Number of flame bars
+    const flameBaseRadius = baseR * 0.65;
 
-    // Big obvious text in the exact center
-    fill(255);
+    // Draw central soft glow
     noStroke();
-    textAlign(CENTER, CENTER);
-    textSize(42);
-    text("VISUALIZER ACTIVE", width/2, height/2 - 20);
-    textSize(28);
-    text(currentMusicMode.toUpperCase() + " MODE", width/2, height/2 + 25);
+    fill(255, 180, 40, 18 * glow * musicVisualizerCenterGlow);
+    ellipse(centerX, centerY, baseR * 1.1, baseR * 1.1);
+    fill(255, 120, 30, 12 * glow * musicVisualizerCenterGlow);
+    ellipse(centerX, centerY, baseR * 0.75, baseR * 0.75);
+
+    // Main flame bars
+    for (let i = 0; i < numFlames; i++) {
+        const angle = map(i, 0, numFlames, 0, TWO_PI);
+        const bin = Math.floor(map(i, 0, numFlames, 0, freqData.length * 0.9));
+        let intensity = (freqData[bin] || 0) / 255;
+
+        // Apply reactivity (we can refine this later)
+        intensity *= (bassReact + midReact + highReact) / 3;
+
+        // Flame length
+        const flameLength = intensity * 95 * glow;
+
+        const x1 = centerX + cos(angle) * flameBaseRadius;
+        const y1 = centerY + sin(angle) * flameBaseRadius;
+        const x2 = centerX + cos(angle) * (flameBaseRadius + flameLength);
+        const y2 = centerY + sin(angle) * (flameBaseRadius + flameLength);
+
+        // Flame color gradient (yellow core → red tips)
+        let flameColor;
+        if (intensity > 0.65) {
+            flameColor = color(255, 255, 80);      // Bright yellow
+        } else if (intensity > 0.4) {
+            flameColor = color(255, 180, 40);      // Orange
+        } else {
+            flameColor = color(255, 80, 30);       // Red
+        }
+
+        stroke(flameColor);
+        strokeWeight(2.2);
+        line(x1, y1, x2, y2);
+
+        // Extra glow on stronger flames
+        if (intensity > 0.5) {
+            stroke(255, 200, 60, 60 * intensity * glow);
+            strokeWeight(4.5);
+            line(x1, y1, x2, y2);
+        }
+    }
 
     drawingContext.restore();
     pop();
 }
+// ==================== END FLAME VISUALIZER ====================
 
 // ==================== SLIDER INITIALIZATION ====================
 function initVisualizerSliders() {
