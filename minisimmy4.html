@@ -2442,6 +2442,81 @@ setInterval(() => {
     }
 }, 1000);
 
+  // ==================== FURNACE + DUST/CRYSTAL CONVERSION (RESTORED) ====================
+
+function updateFurnaceUI() {
+    const dustEl = document.getElementById('furnace-inv-dust');
+    const burningEl = document.getElementById('furnace-burning');
+    const timeEl = document.getElementById('furnace-time');
+
+    if (dustEl) dustEl.innerText = formatDust(aetheriumDust);
+
+    if (burningEl) {
+        burningEl.innerText = burningCrystals > 0
+            ? `${formatDust(burningCrystals)} dust`
+            : `0 mg dust`;
+    }
+
+    if (timeEl) {
+        if (burningCrystals > 0 && furnaceEndTime > Date.now()) {
+            const remaining = Math.max(0, Math.floor((furnaceEndTime - Date.now()) / 1000));
+            const min = Math.floor(remaining / 60);
+            const sec = remaining % 60;
+            timeEl.innerText = `${min}:${sec.toString().padStart(2, '0')}`;
+        } else {
+            timeEl.innerText = "--:--";
+        }
+    }
+
+    if (typeof updateTopFurnaceUI === 'function') {
+        updateTopFurnaceUI();
+    }
+}
+
+function addDustToFurnace(amountMg) {
+    if (aetheriumDust < amountMg) {
+        addFloatingText(width/2, 100, "Not enough dust!", '#f87171');
+        return;
+    }
+    aetheriumDust -= amountMg;
+    burningCrystals += amountMg;
+    furnaceEndTime = Date.now() + (5 * 60 * 1000);   // 5 minutes
+
+    // Furnace start sound
+    playTone(420, 'sawtooth', 0.6, 0.5, 0, 0.1, 0.5);
+
+    updateFurnaceUI();
+    updateAetheriumUI();
+}
+
+function convertCrystalsToDust() {
+    if (aetheriumCrystals <= 0) return;
+    aetheriumDust += aetheriumCrystals * 1000000;   // 1 Crystal = 1 kg = 1,000,000 mg
+    aetheriumCrystals = 0;
+
+    playTone(620, 'sine', 0.18, 0.5);
+    addFloatingText(width/2, 90, `Crushed to Dust`, '#f59e0b');
+    updateAetheriumUI();
+    showInventory();
+}
+
+function convertDustToCrystals() {
+    const kg = Math.floor(aetheriumDust / 1000000); // 1,000,000 mg = 1 kg = 1 Crystal
+    if (kg < 1) {
+        addFloatingText(width/2, 100, "Need at least 1 kg of dust!", '#f87171');
+        return;
+    }
+    aetheriumCrystals += kg;
+    aetheriumDust -= kg * 1000000;
+
+    playTone(720, 'sine', 0.22, 0.5);
+    addFloatingText(width/2, 90, `+${kg} Crystal${kg > 1 ? 's' : ''}`, '#f472b6');
+    updateAetheriumUI();
+    showInventory();
+}
+
+// ==================== END FURNACE + CONVERSION ====================
+
 // ==================== PERFORMANCE & ENVIRONMENT ====================
 let frameCountForFPS = 0;
 let lastFPSUpdate = 0;
