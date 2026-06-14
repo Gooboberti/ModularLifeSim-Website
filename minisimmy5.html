@@ -1000,7 +1000,7 @@
                 </div>
                 <div class="flex h-20 flex-col items-center justify-center rounded-xl border border-white/10 bg-black/30 text-center">
                     <i class="fa-solid fa-lock mb-1 text-xl text-amber-400"></i>
-                    <div class="text-xs text-white/70">Unlock for <span class="font-mono text-amber-400">5</span> Crystals</div>
+                    <div class="text-xs text-white/70">Unlock for <span class="font-mono text-amber-400">50</span> Crystals</div>
                     <button onclick="event.stopImmediatePropagation(); purchaseGeneVaultSlot(2)"
                             class="mt-1.5 rounded-lg bg-amber-600 px-3 py-0.5 text-[10px] text-white hover:bg-amber-500">
                         Purchase
@@ -2619,6 +2619,7 @@ function setupSliders() {
 }
 
 // ==================== MODALS (Extract Egg, Top Creatures, etc.) ====================
+// ==================== EXTRACT TO EGG MODAL ====================
 function showExtractEggModal() {
     const modal = document.getElementById('extract-egg-modal');
     const listContainer = document.getElementById('extract-egg-list');
@@ -2662,9 +2663,61 @@ function showExtractEggModal() {
     modal.classList.add('flex');
 }
 
-function showTopCreaturesModal() {
-    console.log("Top 10 button clicked");
+function extractCreatureToEgg(creature) {
+    if (eggs.length >= MAX_EGGS) {
+        alert(`Your Egg Inventory is full (${MAX_EGGS} max).`);
+        return;
+    }
+    if (totalScore < 250000) {
+        alert("You need 250,000 High Roller Points.");
+        return;
+    }
 
+    totalScore -= 250000;
+    updateMainStats();
+    updateEggCountBadge();
+
+    addFloatingText(creature.x, creature.y - 30, "-250,000", '#fbbf24');
+    playTone(620, 'sine', 0.18, 0.6);
+    setTimeout(() => playTone(880, 'sine', 0.12, 0.4), 110);
+
+    // === Save full brain data ===
+    let brainData = null;
+    if (creature.brain) {
+        brainData = {
+            weightsIH: JSON.parse(JSON.stringify(creature.brain.weightsIH)),
+            weightsHO: JSON.parse(JSON.stringify(creature.brain.weightsHO)),
+            biasH: [...creature.brain.biasH],
+            biasO: [...creature.brain.biasO],
+            connectionStrengthIH: JSON.parse(JSON.stringify(creature.brain.connectionStrengthIH || [])),
+            connectionStrengthHO: JSON.parse(JSON.stringify(creature.brain.connectionStrengthHO || []))
+        };
+    }
+
+    const eggData = {
+        name: creature.name,
+        generation: creature.generation,
+        modules: JSON.parse(JSON.stringify(creature.modules)),
+        killCount: creature.killCount || 0,
+        childrenCount: creature.childrenCount || 0,
+        traits: JSON.parse(JSON.stringify(creature.traits || {})),
+        brain: brainData
+    };
+
+    eggs.push(eggData);
+
+    const index = creatures.indexOf(creature);
+    if (index > -1) creatures.splice(index, 1);
+
+    if (selectedCreature === creature) {
+        deselectCreature();
+    }
+
+    showExtractEggModal();
+}
+
+// ==================== TOP 10 CREATURES MODAL (with body previews) ====================
+function showTopCreaturesModal() {
     const modal = document.getElementById('top-creatures-modal');
     if (!modal) {
         console.error("Modal not found");
@@ -2707,12 +2760,15 @@ function showTopCreaturesModal() {
     } else {
         sorted.forEach(creature => {
             const div = document.createElement('div');
-            div.className = 'flex items-center justify-between bg-white/5 hover:bg-white/10 rounded-2xl px-4 py-3 cursor-pointer transition-colors';
+            div.className = 'flex items-center gap-3 bg-white/5 hover:bg-white/10 rounded-2xl px-3 py-2.5 cursor-pointer transition-colors';
 
             const tierTotal = creature.modules.reduce((sum, m) => sum + (m.tier || 1), 0);
+            const canvasId = `top10-preview-${creature.name.replace(/\s+/g, '')}-${Date.now()}`;
 
             div.innerHTML = `
-                <div>
+                <canvas id="${canvasId}" width="52" height="52"
+                        class="rounded-xl border border-white/10 bg-[#111113] flex-shrink-0"></canvas>
+                <div class="flex-1 min-w-0">
                     <div class="font-semibold text-emerald-400">${creature.name}</div>
                     <div class="text-xs text-white/60">
                         Gen ${creature.generation} • ${creature.modules.length} modules (T${tierTotal}) • ${creature.killCount || 0} kills
@@ -2729,6 +2785,14 @@ function showTopCreaturesModal() {
             };
 
             listContainer.appendChild(div);
+
+            // Draw creature body preview
+            setTimeout(() => {
+                const canvas = document.getElementById(canvasId);
+                if (canvas && typeof drawCreaturePreview === 'function') {
+                    drawCreaturePreview(creature, canvas);
+                }
+            }, 10);
         });
     }
 }
@@ -8599,7 +8663,11 @@ function purchaseGeneVaultSlot(slotNumber) {
         3: 500,
         4: 5000,
         5: 50000,
-        6: 1000000000   // 1 billion crystals
+        6: 500000,
+        7: 5000000,
+        8: 50000000,
+        9: 500000000,
+        10: 1000000000   // 1 billion crystals
     };
 
     const cost = costs[slotNumber];
@@ -8689,7 +8757,7 @@ function updateVaultSlotDisplay(slotNumber) {
 }
 
 function renderAllGeneVaultSlots() {
-    for (let i = 1; i <= 6; i++) {
+    for (let i = 1; i <= 10; i++) {
         updateVaultSlotDisplay(i);
     }
 }
