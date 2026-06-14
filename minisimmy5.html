@@ -4500,23 +4500,6 @@ function draw() {
         drawMusicModeTintAndBorder();
     }
     updateEvolveEnvironmentalCycle();
-
-    // =====================================================
-    // VORTEX PARTICLES + CREATURES + ENERGY WALLS
-    // (Rest of your original logic continues here)
-    // =====================================================
-
-    // ... (your existing vortexParticles, creatures update, energyWalls, etc. go here)
-
-    pop(); // End of zoom transform
-
-    // Day/Night label
-    fill(255, 255, 255, 190);
-    textAlign(LEFT);
-    textSize(12);
-    textFont('Inter, system-ui');
-    text(isDay ? 'DAY' : 'NIGHT', 16, 24);
-}
 // =====================================================
 // LIVE MUSIC DEBUG DISPLAY
 // =====================================================
@@ -4525,13 +4508,13 @@ if (musicEnabled && musicData) {
     textSize(10);
     textAlign(LEFT);
 
-    const subBass = (musicData.subBass ?? 0) * 100;
-    const bass    = (musicData.bass    ?? 0) * 100;
-    const lowMids = (musicData.lowMids ?? 0) * 100;
-    const mids    = (musicData.mids    ?? 0) * 100;
+    const subBass  = (musicData.subBass  ?? 0) * 100;
+    const bass     = (musicData.bass     ?? 0) * 100;
+    const lowMids  = (musicData.lowMids  ?? 0) * 100;
+    const mids     = (musicData.mids     ?? 0) * 100;
     const highMids = (musicData.highMids ?? 0) * 100;
-    const highs   = (musicData.highs   ?? 0) * 100;
-    const vol     = (musicData.volume  ?? 0) * 100;
+    const highs    = (musicData.highs    ?? 0) * 100;
+    const vol      = (musicData.volume   ?? 0) * 100;
 
     text(
         `Sub: ${subBass.toFixed(0)} ` +
@@ -4546,15 +4529,12 @@ if (musicEnabled && musicData) {
 }
 
 // =====================================================
-// LIVE TRENDS CHART UPDATE
+// LIVE TRENDS CHART + UI UPDATES
 // =====================================================
 if (frameCount % 6 === 0 && typeof drawMiniChart === 'function' && miniChartCtx) {
     drawMiniChart();
 }
 
-// =====================================================
-// UI & STATS UPDATES
-// =====================================================
 if (typeof updateVegasScore === 'function') {
     updateVegasScore();
 }
@@ -4563,9 +4543,7 @@ updateMainStats();
 updatePrestigePreview();
 updatePrestigeButtonGlow();
 
-// =====================================================
-// AUTO-TRACK CURRENT ALPHA CREATURE
-// =====================================================
+// Auto-track current Alpha creature
 if (trackAlpha && frameCount % 60 === 0) {
     const alpha = getCurrentAlpha();
     if (alpha) {
@@ -4638,7 +4616,6 @@ function spawnVaultEchoCreature(x, y) {
     clone.energy = 85;
 
     creatures.push(clone);
-
     addFloatingText(x, y - 25, "Vault Echo", '#c084fc');
     playTone(880, 'sine', 0.25, 0.6);
 }
@@ -4678,7 +4655,6 @@ function getCurrentAlpha() {
             best = c;
         }
     }
-
     return best;
 }
 
@@ -4753,7 +4729,7 @@ function recordEvolutionStats() {
 }
 
 // =====================================================
-// BASIC WORLD DRAWING (Fallback)
+// BASIC WORLD DRAWING (Fallback when paused)
 // =====================================================
 function drawWorld() {
     background(12, 14, 22);
@@ -4776,7 +4752,6 @@ function drawWorld() {
 // MOUSE INTERACTION HANDLERS
 // =====================================================
 function handleMousePress() {
-    // Select creature
     for (let c of creatures) {
         if (dist(mouseX, mouseY, c.x, c.y) < 13) {
             trackAlpha = false;
@@ -4785,7 +4760,6 @@ function handleMousePress() {
         }
     }
 
-    // Delete Energy Wall on left click
     if (mouseButton === LEFT && energyWalls.length > 0) {
         let closestDist = 18;
         let closestIndex = -1;
@@ -4804,7 +4778,6 @@ function handleMousePress() {
         }
     }
 
-    // Cursor Hazard placement
     if (cursorHazardActive) {
         let nearCreature = creatures.some(c => dist(mouseX, mouseY, c.x, c.y) < 18);
 
@@ -4819,7 +4792,6 @@ function handleMousePress() {
                 });
                 if (beamCharge > 0) beamCharge--;
             } else if (placedHazards.length > 0) {
-                // Move oldest hazard
                 let oldest = placedHazards.shift();
                 placedHazards.push({
                     x: mouseX,
@@ -4838,9 +4810,7 @@ function handleMousePress() {
 // ENERGY WALL DRAWING SYSTEM
 // =====================================================
 function mousePressed() {
-    // Right Click
     if (mouseButton === RIGHT) {
-        // Remove placed hazard
         for (let i = placedHazards.length - 1; i >= 0; i--) {
             let h = placedHazards[i];
             if (dist(mouseX, mouseY, h.x, h.y) < 25) {
@@ -4850,7 +4820,6 @@ function mousePressed() {
             }
         }
 
-        // Cycle wall filter mode
         for (let w of energyWalls) {
             let d = distToLineSegment(mouseX, mouseY, w.x1, w.y1, w.x2, w.y2);
             if (d < 18) {
@@ -4866,7 +4835,6 @@ function mousePressed() {
 
     if (!energyWallMode) return;
 
-    // Don't start wall if clicking on creature
     if (creatures.some(c => dist(mouseX, mouseY, c.x, c.y) < 14)) return;
 
     isDrawingWall = true;
@@ -4937,25 +4905,28 @@ function mouseReleased() {
     isDrawingWall = false;
     currentWallPreview = null;
 }
-              // v1.74: Quick filter mode selection with number keys (when Energy Wall mode is active)
-              function keyPressed() {
-                  if (!energyWallMode) return;
 
-                  if (key === '1') {
-                      currentWallFilterMode = "repel_all";
-                      addFloatingText(mouseX || width/2, mouseY || 100, "Filter: Repel All", '#f87171');
-                  } else if (key === '2') {
-                      currentWallFilterMode = "allow_harvesters";
-                      addFloatingText(mouseX || width/2, mouseY || 100, "Filter: Allow Harvesters", '#34d399');
-                  } else if (key === '3') {
-                      currentWallFilterMode = "allow_low_energy";
-                      addFloatingText(mouseX || width/2, mouseY || 100, "Filter: Allow Low Energy", '#fbbf24');
-                  } else if (key === '4') {
-                      currentWallFilterMode = "allow_predators";
-                      addFloatingText(mouseX || width/2, mouseY || 100, "Filter: Allow Predators", '#c026ff');
-                  }
-              }
-// ==================== VORTEX PARTICLES ====================
+function keyPressed() {
+    if (!energyWallMode) return;
+
+    if (key === '1') {
+        currentWallFilterMode = "repel_all";
+        addFloatingText(mouseX || width/2, mouseY || 100, "Filter: Repel All", '#f87171');
+    } else if (key === '2') {
+        currentWallFilterMode = "allow_harvesters";
+        addFloatingText(mouseX || width/2, mouseY || 100, "Filter: Allow Harvesters", '#34d399');
+    } else if (key === '3') {
+        currentWallFilterMode = "allow_low_energy";
+        addFloatingText(mouseX || width/2, mouseY || 100, "Filter: Allow Low Energy", '#fbbf24');
+    } else if (key === '4') {
+        currentWallFilterMode = "allow_predators";
+        addFloatingText(mouseX || width/2, mouseY || 100, "Filter: Allow Predators", '#c026ff');
+    }
+}
+
+// =====================================================
+// VORTEX PARTICLE CLASS
+// =====================================================
 class VortexParticle {
     constructor(fromEdge = false) {
         if (fromEdge) {
@@ -4969,8 +4940,8 @@ class VortexParticle {
         }
         this.life = 9999;
         this.size = random(1.6, 2.8);
-
         this.isSpecial = Math.random() < 0.03;
+
         if (this.isSpecial) {
             this.size = random(3.2, 4.5);
             this.pulse = random(TWO_PI);
@@ -4981,10 +4952,16 @@ class VortexParticle {
         let dx = this.x - centerX;
         let dy = this.y - centerY;
         let distToCenter = sqrt(dx * dx + dy * dy) || 1;
-        if (distToCenter < 3.5) { this.life = 0; return; }
 
-        let tangentX = -dy, tangentY = dx;
+        if (distToCenter < 3.5) {
+            this.life = 0;
+            return;
+        }
+
+        let tangentX = -dy;
+        let tangentY = dx;
         let len = sqrt(tangentX * tangentX + tangentY * tangentY) || 1;
+
         this.x += (tangentX / len) * 1.25 * vortexStrength * vortexDir;
         this.y += (tangentY / len) * 1.25 * vortexStrength * vortexDir;
 
@@ -4997,6 +4974,7 @@ class VortexParticle {
             this.x += random(-jerk, jerk);
             this.y += random(-jerk, jerk);
         }
+
         if (this.isSpecial) {
             this.pulse = (this.pulse || 0) + 0.08;
         }
@@ -5022,7 +5000,9 @@ class VortexParticle {
     }
 }
 
-// ==================== PRUNE MODE: Purple Infect Particles ====================
+// =====================================================
+// MUSIC MODE PARTICLE CLASSES
+// =====================================================
 class PurpleInfectParticle {
     constructor() {
         this.x = random(width);
@@ -5079,7 +5059,6 @@ class PurpleInfectParticle {
     }
 }
 
-// ==================== EVOLVE MODE: Yellow Glowing Particle ====================
 class YellowGlowingParticle {
     constructor() {
         this.x = random(width);
@@ -5136,7 +5115,6 @@ class YellowGlowingParticle {
     }
 }
 
-// ==================== EVOLVE MODE: Module Particles ====================
 class ModuleParticle {
     constructor(isFloating = false) {
         const types = ['Harvester', 'Sensor', 'Mover', 'Resistant', 'Explorer', 'Communicator'];
@@ -5199,9 +5177,10 @@ class ModuleParticle {
     }
 }
 
-// ==================== PARTICLE EATING LOGIC ====================
+// =====================================================
+// MUSIC MODE PARTICLE HANDLING
+// =====================================================
 function handleParticleEating(creature) {
-    // Purple Infect Particle (Prune)
     for (let i = purpleInfectParticles.length - 1; i >= 0; i--) {
         let p = purpleInfectParticles[i];
         if (dist(creature.x, creature.y, p.x, p.y) < 18) {
@@ -5214,7 +5193,6 @@ function handleParticleEating(creature) {
         }
     }
 
-    // Yellow Glowing Particle (Evolve)
     for (let i = yellowGlowingParticles.length - 1; i >= 0; i--) {
         let p = yellowGlowingParticles[i];
         if (dist(creature.x, creature.y, p.x, p.y) < 18) {
@@ -5228,7 +5206,6 @@ function handleParticleEating(creature) {
         }
     }
 
-    // Module Particle (Evolve)
     for (let i = moduleParticles.length - 1; i >= 0; i--) {
         let p = moduleParticles[i];
         if (dist(creature.x, creature.y, p.x, p.y) < 16) {
@@ -5241,9 +5218,7 @@ function handleParticleEating(creature) {
     }
 }
 
-// ==================== VORTEX ARRIVAL LOGIC ====================
 function handleParticleVortexArrival() {
-    // Purple Infect Particle → Spawn 3 predators
     for (let i = purpleInfectParticles.length - 1; i >= 0; i--) {
         let p = purpleInfectParticles[i];
         if (p.isDead() && dist(p.x, p.y, width/2, height/2) < 35) {
@@ -5255,7 +5230,6 @@ function handleParticleVortexArrival() {
         }
     }
 
-    // Yellow Glowing Particle → Popcorn into 3 attractive modules
     for (let i = yellowGlowingParticles.length - 1; i >= 0; i--) {
         let p = yellowGlowingParticles[i];
         if (p.isDead() && dist(p.x, p.y, width/2, height/2) < 35) {
@@ -5267,7 +5241,6 @@ function handleParticleVortexArrival() {
         }
     }
 
-    // Module Particle reaching vortex → Popcorn into 3 modules if floating
     for (let i = moduleParticles.length - 1; i >= 0; i--) {
         let p = moduleParticles[i];
         if (p.isFloating && p.isDead() && dist(p.x, p.y, width/2, height/2) < 32) {
@@ -5280,16 +5253,12 @@ function handleParticleVortexArrival() {
     }
 }
 
-// ==================== PHASE SPAWNING LOGIC ====================
 function updateMusicModeParticles() {
     if (!currentMusicMode) return;
 
     if (currentMusicMode === 'prune') {
         if (random() < 0.032 && purpleInfectParticles.length < 7) {
             purpleInfectParticles.push(new PurpleInfectParticle());
-        }
-        if (random() < 0.022 && redParticles.length < 14) {
-            // Add extra red hazard spawning here if desired
         }
     }
 
@@ -5303,30 +5272,21 @@ function updateMusicModeParticles() {
     }
 
     if (currentMusicMode === 'replicate') {
-        if (random() < 0.04) {
-            // Spawn extra white or special white particles here
-        }
-        if (random() < 0.014) {
-            // Spawn honey/food deposits here
-        }
+        // Add replicate mode logic here if needed later
     }
 }
-// =====================================================
-// CLEAN WALL ARCHITECTURE v1.95
-// =====================================================
 
+// =====================================================
+// CLEAN WALL ARCHITECTURE
+// =====================================================
 function creatureMatchesWallFilter(creature, wall) {
     const isFilterWall = wall.wallType === "filter" || wall.filterMode === "custom_filter";
-    if (!isFilterWall || !wall.filterSettings) {
-        return false;
-    }
+    if (!isFilterWall || !wall.filterSettings) return false;
 
     const types = wall.filterSettings.types || [];
     if (types.length === 0) return false;
 
-    if (types.includes('white') || types.includes('red')) {
-        return false;
-    }
+    if (types.includes('white') || types.includes('red')) return false;
 
     const moduleCount = creature.modules ? creature.modules.length : 0;
     const isActualPredator = creature.isPredator === true;
@@ -5341,7 +5301,7 @@ function creatureMatchesWallFilter(creature, wall) {
 }
 
 // =====================================================
-// NEURAL NET CLASS (Upgraded with Connection Strength)
+// NEURAL NET CLASS
 // =====================================================
 class NeuralNet {
     constructor() {
@@ -5354,7 +5314,6 @@ class NeuralNet {
         this.biasH = this.randomArray(this.hiddenSize, 0.1);
         this.biasO = this.randomArray(this.outputSize, 0.1);
 
-        // Connection Strength Tracking (learned experience / visual learning)
         this.connectionStrengthIH = this.zeroMatrix(this.hiddenSize, this.inputSize);
         this.connectionStrengthHO = this.zeroMatrix(this.outputSize, this.hiddenSize);
     }
@@ -5374,8 +5333,7 @@ class NeuralNet {
     zeroMatrix(rows, cols) {
         let m = [];
         for (let i = 0; i < rows; i++) {
-            let row = new Array(cols).fill(0);
-            m.push(row);
+            m.push(new Array(cols).fill(0));
         }
         return m;
     }
@@ -5399,8 +5357,6 @@ class NeuralNet {
             let sum = this.biasH[i];
             for (let j = 0; j < this.inputSize; j++) {
                 sum += inputs[j] * this.weightsIH[i][j];
-
-                // Strengthen connection if input is meaningfully active
                 if (Math.abs(inputs[j]) > 0.2) {
                     this.connectionStrengthIH[i][j] = Math.min(1, this.connectionStrengthIH[i][j] + 0.0035);
                 }
@@ -5414,8 +5370,6 @@ class NeuralNet {
             let sum = this.biasO[i];
             for (let j = 0; j < this.hiddenSize; j++) {
                 sum += hidden[j] * this.weightsHO[i][j];
-
-                // Strengthen connection if hidden neuron is meaningfully active
                 if (Math.abs(hidden[j]) > 0.2) {
                     this.connectionStrengthHO[i][j] = Math.min(1, this.connectionStrengthHO[i][j] + 0.0035);
                 }
@@ -5428,16 +5382,12 @@ class NeuralNet {
 
     copy() {
         let newBrain = new NeuralNet();
-
         newBrain.weightsIH = JSON.parse(JSON.stringify(this.weightsIH));
         newBrain.weightsHO = JSON.parse(JSON.stringify(this.weightsHO));
         newBrain.biasH = [...this.biasH];
         newBrain.biasO = [...this.biasO];
-
-        // Copy learned connection strengths
         newBrain.connectionStrengthIH = JSON.parse(JSON.stringify(this.connectionStrengthIH));
         newBrain.connectionStrengthHO = JSON.parse(JSON.stringify(this.connectionStrengthHO));
-
         return newBrain;
     }
 
@@ -5449,7 +5399,6 @@ class NeuralNet {
             return val;
         };
 
-        // Mutate weights
         for (let i = 0; i < this.weightsIH.length; i++) {
             for (let j = 0; j < this.weightsIH[i].length; j++) {
                 this.weightsIH[i][j] = mutateValue(this.weightsIH[i][j]);
@@ -5462,15 +5411,9 @@ class NeuralNet {
             }
         }
 
-        // Mutate biases
-        for (let i = 0; i < this.biasH.length; i++) {
-            this.biasH[i] = mutateValue(this.biasH[i]);
-        }
-        for (let i = 0; i < this.biasO.length; i++) {
-            this.biasO[i] = mutateValue(this.biasO[i]);
-        }
+        for (let i = 0; i < this.biasH.length; i++) this.biasH[i] = mutateValue(this.biasH[i]);
+        for (let i = 0; i < this.biasO.length; i++) this.biasO[i] = mutateValue(this.biasO[i]);
 
-        // Lightly decay connection strengths on mutation (makes learning more meaningful)
         for (let i = 0; i < this.connectionStrengthIH.length; i++) {
             for (let j = 0; j < this.connectionStrengthIH[i].length; j++) {
                 this.connectionStrengthIH[i][j] *= 0.92;
@@ -5484,8 +5427,10 @@ class NeuralNet {
         }
     }
 }
-// ==================== MISSING CLASSES (Explosion, RedHazard, RedBeam, SpawnEffect) ====================
 
+// =====================================================
+// SUPPORTING CLASSES
+// =====================================================
 class Explosion {
     constructor(x, y) {
         this.x = x;
@@ -5496,8 +5441,7 @@ class Explosion {
         this.particles = [];
         for (let i = 0; i < 10; i++) {
             this.particles.push({
-                x: 0,
-                y: 0,
+                x: 0, y: 0,
                 vx: random(-2.8, 2.8),
                 vy: random(-2.8, 2.8),
                 life: random(10, 18)
@@ -5564,6 +5508,7 @@ class RedHazard {
         this.vy += (centerY - this.y) * pull / (distToCenter + 6);
         this.x += this.vx;
         this.y += this.vy;
+
         if (musicEnabled && musicData.highs > 0.4) {
             let jerk = (musicData.highs - 0.4) * 3.2;
             this.vx += random(-jerk, jerk);
@@ -5621,9 +5566,7 @@ class RedBeam {
                     let len = sqrt(dx*dx + dy*dy) || 1;
                     c.vx += (dx / len) * 1.7;
                     c.vy += (dy / len) * 1.7;
-                    if (c.energy > 15) {
-                        c.currentThought = "Hit by beam!";
-                    }
+                    if (c.energy > 15) c.currentThought = "Hit by beam!";
                 }
             }
             this.damageApplied = true;
@@ -5670,17 +5613,26 @@ class SpawnEffect {
         }
     }
 }
-  
-// ==================== CREATURE CLASS ====================
+
+// =====================================================
+// CREATURE CLASS (FULL - NO SUMMARIES)
+// =====================================================
 class Creature {
     constructor(x, y, parentModules = null, generation = 1, parentTraits = null) {
-        this.x = x; this.y = y;
-        this.vx = random(-0.4, 0.4); this.vy = random(-0.4, 0.4);
+        this.x = x;
+        this.y = y;
+        this.vx = random(-0.4, 0.4);
+        this.vy = random(-0.4, 0.4);
         this.energy = parentModules ? 39 : 50 + random(18);
         this.name = generateSciFiName();
-        this.isPredator = false; this.honey = 0;
-        this.generation = generation; this.children = []; this.childrenCount = 0;
-        this.killCount = 0; this.reproCooldown = 0; this.currentThought = "Exploring...";
+        this.isPredator = false;
+        this.honey = 0;
+        this.generation = generation;
+        this.children = [];
+        this.childrenCount = 0;
+        this.killCount = 0;
+        this.reproCooldown = 0;
+        this.currentThought = "Exploring...";
         this.damageFlash = 0;
         this.purpleFlash = 0;
         this.mustEatWhite = false;
@@ -5709,7 +5661,14 @@ class Creature {
         }
 
         let types = ['harvester', 'sensor', 'mover', 'resistant', 'explorer', 'communicator'];
-        let colors = { 'harvester': '#34d399', 'sensor': '#38bdf8', 'mover': '#a78bfa', 'resistant': '#f472b6', 'explorer': '#fbbf24', 'communicator': '#c084fc' };
+        let colors = {
+            'harvester': '#34d399',
+            'sensor': '#38bdf8',
+            'mover': '#a78bfa',
+            'resistant': '#f472b6',
+            'explorer': '#fbbf24',
+            'communicator': '#c084fc'
+        };
 
         if (parentModules) {
             this.modules = parentModules.map(m => ({ ...m }));
@@ -5728,7 +5687,9 @@ class Creature {
         this.updateSpecialization();
     }
 
-    getModuleCount(type) { return this.modules.filter(m => m.type === type).length; }
+    getModuleCount(type) {
+        return this.modules.filter(m => m.type === type).length;
+    }
 
     getTieredModuleCount(type) {
         return this.modules.filter(m => m.type === type).reduce((sum, m) => sum + (m.tier || 1), 0);
@@ -5773,7 +5734,7 @@ class Creature {
         const dangerRadius = 130;
         for (let h of redHazards) {
             let d = dist(this.x, this.y, h.x, h.y);
-            if (dangerRadius) nearbyCount++;
+            if (d < dangerRadius) nearbyCount++;
             if (d < nearestDist) {
                 nearestDist = d;
                 nearestAngle = atan2(h.y - this.y, h.x - this.y);
@@ -5942,13 +5903,11 @@ class Creature {
         let effectiveHazardDist = hazardInfo.dist * detectionQuality;
         let dodgedThisFrame = false;
 
-        // ==================== NEURAL BRAIN EXECUTION ====================
         if (frameCount % 2 === 0 && this.brain) {
             const inputs = this.getBrainInputs(hazardInfo, effectiveHazardDist, isDay);
             this.brainOutputs = this.brain.forward(inputs);
         }
 
-        // Get brain outputs (with safe defaults)
         let brain = this.brainOutputs || [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5];
         let brainFoodDrive     = brain[0] || 0.5;
         let brainVortexEscape  = brain[1] || 0.5;
@@ -5957,13 +5916,11 @@ class Creature {
         let brainExploration   = brain[4] || 0.5;
         let brainReproWill     = brain[5] || 0.5;
         let brainPredatorTend  = brain[6] || 0.5;
-        // ============================================================
 
         if (effectiveHazardDist > 0.14) {
             let avoidAngle = hazardInfo.angle + PI;
             let avoidStrength = effectiveHazardDist * 2.6;
 
-            // Brain influence on hazard avoidance
             avoidStrength *= (0.6 + brainHazardAvoid * 1.4);
 
             if (effectiveHazardDist > 0.62) {
@@ -6023,7 +5980,6 @@ class Creature {
             let predictive = sin(frameCount * 0.07) * 0.55;
             avoidAngle += predictive * 0.35;
 
-            // Brain hazard avoidance influence
             avoidStrength *= (0.7 + brainHazardAvoid * 1.3);
 
             this.vx += cos(avoidAngle) * avoidStrength * 0.038 * timeScale;
@@ -6065,7 +6021,6 @@ class Creature {
             let len = sqrt(dx*dx + dy*dy) || 1;
             let escape = (tieredMover * 0.025 + tieredExpl * 0.02) * timeScale;
 
-            // Brain vortex escape influence
             escape *= (0.6 + brainVortexEscape * 1.6);
 
             this.vx += (dx / len) * escape;
@@ -6082,7 +6037,6 @@ class Creature {
             if (dist(this.x, this.y, centerX, centerY) < 170) {
                 let escapeForce = (tieredMover * 0.023 + tieredExpl * 0.016) * timeScale;
 
-                // Brain vortex escape influence
                 escapeForce *= (0.65 + brainVortexEscape * 1.5);
 
                 let dx = this.x - centerX;
@@ -6170,7 +6124,6 @@ class Creature {
                 let hungerFactor = map(this.energy, 0, 58, 1.5, 0.88);
                 let pull = settings.zonePullStrength * hungerFactor + this.getModuleCount('harvester') * 0.022;
 
-                // Brain food drive influence
                 pull *= (0.7 + brainFoodDrive * 1.3);
 
                 this.vx += (dx / d) * pull * timeScale;
@@ -6213,7 +6166,6 @@ class Creature {
                     avgY /= count;
 
                     let alignStrength = 0.032 * Math.min(similarNeighbors / 3, 1.4) * timeScale;
-                    // Brain social alignment influence
                     alignStrength *= (0.6 + brainSocialAlign * 1.5);
 
                     this.vx += (avgVx - this.vx) * alignStrength;
@@ -6263,7 +6215,6 @@ class Creature {
                 let vForce = 0.68 * vortexStrength * vortexDir * (1 - socialResist);
                 vForce *= (1 - (this.traits.vortexResistance - 1) * 0.32);
 
-                // Brain vortex escape influence
                 vForce *= (0.65 + brainVortexEscape * 1.4);
 
                 this.vx += (tx / tlen) * vForce * timeScale;
@@ -6275,7 +6226,6 @@ class Creature {
             }
 
             if (cdist < 140) {
-                // Brain exploration influence
                 let exploreForce = (0.6 + brainExploration * 1.2);
                 this.vx += random(-0.78, 0.78) * 0.44 * exploreForce * timeScale;
                 this.vy += random(-0.78, 0.78) * 0.44 * exploreForce * timeScale;
@@ -6325,7 +6275,6 @@ class Creature {
                 if (groupSize > 12) pressureChance *= 1.4;
                 if (groupSize > 18) pressureChance *= 1.5;
 
-                // Brain predator tendency influence
                 if (brainPredatorTend > 0.65) pressureChance *= 1.6;
 
                 if (random() < pressureChance) {
@@ -6349,8 +6298,7 @@ class Creature {
             const isFilterMode = currentWallFilterMode === "custom_filter" && settings && settings.types && settings.types.length > 0;
             const targetTypes = isFilterMode ? settings.types : null;
 
-            if (isFilterMode && (targetTypes.includes('white') || targetTypes.includes('red'))) {
-            } else {
+            if (!(isFilterMode && (targetTypes.includes('white') || targetTypes.includes('red')))) {
                 let d = distToLineSegment(this.x, this.y, wallStartX, wallStartY, mouseX, mouseY);
                 if (d < 28) {
                     let shouldAffect = true;
@@ -6369,7 +6317,7 @@ class Creature {
 
                     if (shouldAffect) {
                         let mx = (wallStartX + mouseX) / 2;
-                        let my = (wallStartY + mouseY) / 2;
+                        let my = (wallStartY + mouseX) / 2;
                         let dx = this.x - mx;
                         let dy = this.y - my;
                         let len = sqrt(dx*dx + dy*dy) || 1;
@@ -6658,8 +6606,7 @@ class Creature {
         }
         pop();
     }
-}
-// =====================================================
+}// =====================================================
 // RESET SIMULATION
 // =====================================================
 function resetSim() {
