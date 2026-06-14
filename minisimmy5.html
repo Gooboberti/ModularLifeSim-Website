@@ -6268,7 +6268,7 @@ function creatureMatchesWallFilter(creature, wall) {
 }
 
 // =====================================================
-// NEURAL NET CLASS
+// NEURAL NET CLASS (Upgraded with Connection Strength)
 // =====================================================
 class NeuralNet {
     constructor() {
@@ -6280,6 +6280,10 @@ class NeuralNet {
         this.weightsHO = this.randomMatrix(this.outputSize, this.hiddenSize);
         this.biasH = this.randomArray(this.hiddenSize, 0.1);
         this.biasO = this.randomArray(this.outputSize, 0.1);
+
+        // === NEW: Connection Strength Tracking (for visual learning) ===
+        this.connectionStrengthIH = this.zeroMatrix(this.hiddenSize, this.inputSize);
+        this.connectionStrengthHO = this.zeroMatrix(this.outputSize, this.hiddenSize);
     }
 
     randomMatrix(rows, cols) {
@@ -6289,6 +6293,15 @@ class NeuralNet {
             for (let j = 0; j < cols; j++) {
                 row.push((Math.random() * 2 - 1) * 0.6);
             }
+            m.push(row);
+        }
+        return m;
+    }
+
+    zeroMatrix(rows, cols) {
+        let m = [];
+        for (let i = 0; i < rows; i++) {
+            let row = new Array(cols).fill(0);
             m.push(row);
         }
         return m;
@@ -6325,6 +6338,23 @@ class NeuralNet {
             outputs.push(this.sigmoid(sum));
         }
 
+        // === NEW: Slowly strengthen connections based on activity ===
+        for (let i = 0; i < this.inputSize; i++) {
+            for (let j = 0; j < this.hiddenSize; j++) {
+                if (Math.abs(inputs[i]) > 0.25) {
+                    this.connectionStrengthIH[j][i] = Math.min(1, this.connectionStrengthIH[j][i] + 0.0035);
+                }
+            }
+        }
+
+        for (let j = 0; j < this.hiddenSize; j++) {
+            for (let k = 0; k < this.outputSize; k++) {
+                if (Math.abs(hidden[j]) > 0.25) {
+                    this.connectionStrengthHO[k][j] = Math.min(1, this.connectionStrengthHO[k][j] + 0.0035);
+                }
+            }
+        }
+
         return outputs;
     }
 
@@ -6334,6 +6364,11 @@ class NeuralNet {
         newBrain.weightsHO = JSON.parse(JSON.stringify(this.weightsHO));
         newBrain.biasH = [...this.biasH];
         newBrain.biasO = [...this.biasO];
+
+        // === NEW: Copy connection strength as well ===
+        newBrain.connectionStrengthIH = JSON.parse(JSON.stringify(this.connectionStrengthIH));
+        newBrain.connectionStrengthHO = JSON.parse(JSON.stringify(this.connectionStrengthHO));
+
         return newBrain;
     }
 
@@ -6363,9 +6398,20 @@ class NeuralNet {
         for (let i = 0; i < this.biasO.length; i++) {
             this.biasO[i] = mutateValue(this.biasO[i]);
         }
+
+        // Optional: slightly decay connection strength on mutation (makes learning meaningful)
+        for (let i = 0; i < this.connectionStrengthIH.length; i++) {
+            for (let j = 0; j < this.connectionStrengthIH[i].length; j++) {
+                this.connectionStrengthIH[i][j] *= 0.92;
+            }
+        }
+        for (let i = 0; i < this.connectionStrengthHO.length; i++) {
+            for (let j = 0; j < this.connectionStrengthHO[i].length; j++) {
+                this.connectionStrengthHO[i][j] *= 0.92;
+            }
+        }
     }
 }
-
 // ==================== MISSING CLASSES (Explosion, RedHazard, RedBeam, SpawnEffect) ====================
 
 class Explosion {
