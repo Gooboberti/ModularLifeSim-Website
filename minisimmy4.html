@@ -9260,7 +9260,7 @@ function hideInventory() {
           document.head.appendChild(style);
       }
 
-// ==================== SAVE MANAGER (CORRECTED) ====================
+// ==================== SAVE MANAGER (Inventory + Vault + Incubator Only) ====================
 
 function showSaveManager() {
     const modal = document.getElementById('save-manager-modal');
@@ -9268,14 +9268,11 @@ function showSaveManager() {
         console.warn("Save manager modal not found");
         return;
     }
-
     if (modal.parentElement !== document.body) {
         document.body.appendChild(modal);
     }
-
     modal.classList.remove('hidden');
     modal.classList.add('flex');
-
     updateManualSavesList();
     updateAutoSavesList();
 }
@@ -9296,26 +9293,25 @@ function quickSave() {
         saveName = `Quick Save - ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
     }
 
+    // Only save inventories, currencies, vault, and incubator — NOT creatures or map state
     const saveData = {
         name: saveName,
         timestamp: Date.now(),
-        version: "2.1",
+        version: "2.2-inventory-only",
 
-        creatures: JSON.parse(JSON.stringify(creatures)),
-        settings: JSON.parse(JSON.stringify(settings)),
-
+        // Currencies & Score
         totalScore: totalScore,
         aetheriumCrystals: aetheriumCrystals,
         aetheriumDust: aetheriumDust,
         highRollerPoints: highRollerPoints,
 
-        greenFood: greenZone ? greenZone.food : 320,
-        blueFood: blueZone ? blueZone.food : 320,
-
+        // Gene Vault
         geneVaultSlots: JSON.parse(JSON.stringify(geneVaultSlots)),
+
+        // Egg Inventory
         eggs: JSON.parse(JSON.stringify(eggs)),
 
-        // === NEW: Save incubator state ===
+        // Incubation Chamber
         incubatingEggs: JSON.parse(JSON.stringify(incubatingEggs)),
         nextIncubationId: nextIncubationId
     };
@@ -9327,7 +9323,6 @@ function quickSave() {
 
     addFloatingText(width / 2, 80, `Saved: ${saveName}`, '#34d399');
     if (nameInput) nameInput.value = '';
-
     updateManualSavesList();
 }
 
@@ -9386,36 +9381,14 @@ function loadSave(index) {
     const save = saves[index];
     if (!save) return;
 
-    if (!confirm(`Load "${save.name}"?\nCurrent progress will be lost.`)) return;
+    if (!confirm(`Load "${save.name}"?\nThis will replace your current inventories, vault, and incubator.\nCreatures on the map will NOT be affected.`)) return;
 
-    // === Revive creatures properly ===
-    creatures = (save.creatures || []).map(data => {
-        const c = new Creature(data.x || 0, data.y || 0, data.modules || [], data.generation || 1, data.traits || null);
-        Object.assign(c, data);
-        c.energy = data.energy || 50;
-        c.honey = data.honey || 0;
-        c.killCount = data.killCount || 0;
-        c.childrenCount = data.childrenCount || 0;
-        c.reproCooldown = data.reproCooldown || 0;
-        c.damageFlash = 0;
-        c.purpleFlash = 0;
-        c.updateSpecialization();
-        return c;
-    });
-
-    // === Restore settings and economy ===
-    settings = save.settings || settings;
-
+    // === Only restore inventories, currencies, vault, and incubator ===
     totalScore = save.totalScore || 0;
     aetheriumCrystals = save.aetheriumCrystals || 0;
     aetheriumDust = save.aetheriumDust || 0;
     highRollerPoints = save.highRollerPoints || 0;
 
-    // === Restore zones ===
-    if (greenZone && save.greenFood) greenZone.food = save.greenFood;
-    if (blueZone && save.blueFood) blueZone.food = save.blueFood;
-
-    // === Restore Gene Vault + Eggs + Incubator ===
     if (save.geneVaultSlots) geneVaultSlots = save.geneVaultSlots;
     if (save.eggs) eggs = save.eggs;
     if (save.incubatingEggs) incubatingEggs = save.incubatingEggs;
@@ -9424,14 +9397,14 @@ function loadSave(index) {
     addFloatingText(width / 2, 80, `Loaded: ${save.name}`, '#34d399');
     hideSaveManager();
 
-    // === Force refresh all UI ===
+    // Refresh all relevant UI
     updateMainStats();
-    updateAetheriumUI();           // This updates top bar + inventory
+    updateAetheriumUI();
     updateEggCountBadge();
-    updatePrestigePreview?.();     // Updates prestige dust preview
-    updateTopFurnaceUI?.();        // Updates furnace timer/bonus if visible
+    updatePrestigePreview?.();
+    updateTopFurnaceUI?.();
 
-    // Refresh Gene Vault if it's currently open
+    // Refresh Gene Vault if it's open
     const vaultModal = document.getElementById('gene-vault-modal');
     if (vaultModal && vaultModal.style.display !== 'none') {
         setTimeout(() => {
@@ -9440,6 +9413,8 @@ function loadSave(index) {
         }, 80);
     }
 }
+
+// ==================== END SAVE MANAGER ====================
 
       
 function confirmExtractToEgg() {
