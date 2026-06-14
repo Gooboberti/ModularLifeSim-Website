@@ -6374,6 +6374,193 @@ class NeuralNet {
     }
 }
 
+// ==================== MISSING CLASSES (Explosion, RedHazard, RedBeam, SpawnEffect) ====================
+
+class Explosion {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.life = 20;
+        this.maxLife = 20;
+        this.radius = 6;
+        this.particles = [];
+        for (let i = 0; i < 10; i++) {
+            this.particles.push({
+                x: 0,
+                y: 0,
+                vx: random(-2.8, 2.8),
+                vy: random(-2.8, 2.8),
+                life: random(10, 18)
+            });
+        }
+    }
+    update() {
+        this.life--;
+        this.radius += 2.4;
+        for (let p of this.particles) {
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vx *= 0.9;
+            p.vy *= 0.9;
+            p.life--;
+        }
+    }
+    show() {
+        let alpha = map(this.life, 0, this.maxLife, 0, 200);
+        noStroke();
+        fill(251, 146, 60, alpha * 0.5);
+        circle(this.x, this.y, this.radius * 1.5);
+        fill(239, 68, 68, alpha);
+        circle(this.x, this.y, this.radius);
+        fill(255, 240, 200, alpha * 1.1);
+        circle(this.x, this.y, this.radius * 0.4);
+        for (let p of this.particles) {
+            if (p.life > 0) {
+                let pAlpha = map(p.life, 0, 16, 0, 180);
+                fill(251, 146, 60, pAlpha);
+                circle(this.x + p.x, this.y + p.y, 3);
+            }
+        }
+    }
+}
+
+class RedHazard {
+    constructor() {
+        let angle = random(TWO_PI);
+        let d = random(400, 560);
+        this.x = centerX + cos(angle) * d;
+        this.y = centerY + sin(angle) * d;
+        this.vx = random(-0.6, 0.6);
+        this.vy = random(-0.6, 0.6);
+        this.size = random(5, 8);
+        this.pulse = random(TWO_PI);
+    }
+    update(vortexDir, vortexStrength) {
+        let dx = this.x - centerX;
+        let dy = this.y - centerY;
+        let distToCenter = sqrt(dx * dx + dy * dy) || 1;
+        if (distToCenter < 7) {
+            this.explode();
+            return;
+        }
+        let tangentX = -dy;
+        let tangentY = dx;
+        let len = sqrt(tangentX * tangentX + tangentY * tangentY) || 1;
+        let rotForce = 1.4 * vortexStrength * vortexDir;
+        this.vx += (tangentX / len) * rotForce;
+        this.vy += (tangentY / len) * rotForce;
+        let pull = 0.95 * vortexStrength;
+        this.vx += (centerX - this.x) * pull / (distToCenter + 6);
+        this.vy += (centerY - this.y) * pull / (distToCenter + 6);
+        this.x += this.vx;
+        this.y += this.vy;
+        if (musicEnabled && musicData.highs > 0.4) {
+            let jerk = (musicData.highs - 0.4) * 3.2;
+            this.vx += random(-jerk, jerk);
+            this.vy += random(-jerk, jerk);
+        }
+        this.vx *= 0.86;
+        this.vy *= 0.86;
+        this.pulse += 0.08;
+    }
+    explode() {
+        for (let i = 0; i < 4; i++) {
+            let angle = random(TWO_PI);
+            redBeams.push(new RedBeam(this.x, this.y, angle));
+        }
+    }
+    show() {
+        let alpha = 190 + sin(this.pulse) * 45;
+        fill(239, 68, 68, alpha);
+        noStroke();
+        circle(this.x, this.y, this.size);
+        fill(239, 68, 68, 55);
+        circle(this.x, this.y, this.size * 2);
+        fill(255, 225, 225, 230);
+        circle(this.x, this.y, this.size * 0.4);
+    }
+}
+
+class RedBeam {
+    constructor(x, y, angle) {
+        this.x = x;
+        this.y = y;
+        this.angle = angle;
+        this.vx = cos(angle) * 4.5;
+        this.vy = sin(angle) * 4.5;
+        this.life = 44;
+        this.width = 6.5;
+        this.damageApplied = false;
+    }
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.life--;
+        if (!this.damageApplied) {
+            for (let c of creatures) {
+                let d = dist(this.x, this.y, c.x, c.y);
+                if (d < 36) {
+                    let sensorBonus = c.getModuleCount('sensor') * 0.32;
+                    let damage = 20 + random(3, 8) - sensorBonus;
+                    c.energy = max(0, c.energy - damage);
+                    c.damageFlash = 42;
+                    c.purpleFlash = max(c.purpleFlash || 0, 38);
+                    c.hazardDamageTaken = (c.hazardDamageTaken || 0) + damage;
+                    let dx = c.x - this.x;
+                    let dy = c.y - this.x;
+                    let len = sqrt(dx*dx + dy*dy) || 1;
+                    c.vx += (dx / len) * 1.7;
+                    c.vy += (dy / len) * 1.7;
+                    if (c.energy > 15) {
+                        c.currentThought = "Hit by beam!";
+                    }
+                }
+            }
+            this.damageApplied = true;
+        }
+    }
+    show() {
+        if (this.life <= 0) return;
+        let alpha = map(this.life, 0, 44, 0, 190);
+        stroke(239, 68, 68, alpha);
+        strokeWeight(this.width);
+        line(this.x - this.vx * 2.5, this.y - this.vy * 2.5, this.x, this.y);
+        stroke(239, 68, 68, alpha * 0.3);
+        strokeWeight(this.width * 1.7);
+        line(this.x - this.vx * 7, this.y - this.vy * 7, this.x - this.vx * 1.5, this.y - this.vy * 1.5);
+    }
+}
+
+class SpawnEffect {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.life = 36;
+        this.maxLife = 36;
+        this.rings = [];
+        for (let i = 0; i < 3; i++) {
+            this.rings.push({ radius: 7 + i * 5, alpha: 210 });
+        }
+    }
+    update() {
+        this.life--;
+        for (let r of this.rings) {
+            r.radius += 1.7;
+            r.alpha = map(this.life, 0, this.maxLife, 0, 210);
+        }
+    }
+    show() {
+        for (let r of this.rings) {
+            if (r.alpha > 5) {
+                stroke(52, 211, 153, r.alpha);
+                strokeWeight(1.8);
+                noFill();
+                circle(this.x, this.y, r.radius);
+            }
+        }
+    }
+}
+  
 // ==================== CREATURE CLASS ====================
 class Creature {
     constructor(x, y, parentModules = null, generation = 1, parentTraits = null) {
