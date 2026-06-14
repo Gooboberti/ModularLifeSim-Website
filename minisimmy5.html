@@ -2069,6 +2069,113 @@ function forceEnvironmentalPhase(phase) {
     }
 }
 
+// =====================================================
+// LIVE NEURAL NET VISUALIZER
+// =====================================================
+function drawNeuralNet(creature) {
+    const canvas = document.getElementById('neural-net-canvas');
+    if (!canvas || !creature || !creature.brainOutputs) return;
+
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const w = canvas.width;
+    const h = canvas.height;
+
+    const inputs = 12;
+    const hidden = 12;
+    const outputs = 7;
+
+    const leftX = 35;
+    const midX = 120;
+    const rightX = 205;
+
+    const getY = (index, total, height) => {
+        const spacing = height / (total + 1);
+        return spacing * (index + 1);
+    };
+
+    // Draw connections (faint)
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.lineWidth = 1;
+
+    // Input → Hidden
+    for (let i = 0; i < inputs; i++) {
+        const y1 = getY(i, inputs, h);
+        for (let j = 0; j < hidden; j++) {
+            const y2 = getY(j, hidden, h);
+            ctx.beginPath();
+            ctx.moveTo(leftX, y1);
+            ctx.lineTo(midX, y2);
+            ctx.stroke();
+        }
+    }
+
+    // Hidden → Output
+    for (let i = 0; i < hidden; i++) {
+        const y1 = getY(i, hidden, h);
+        for (let j = 0; j < outputs; j++) {
+            const y2 = getY(j, outputs, h);
+            ctx.beginPath();
+            ctx.moveTo(midX, y1);
+            ctx.lineTo(rightX, y2);
+            ctx.stroke();
+        }
+    }
+
+    // === Draw Input Layer (static blue) ===
+    ctx.fillStyle = '#38bdf8';
+    for (let i = 0; i < inputs; i++) {
+        const y = getY(i, inputs, h);
+        ctx.beginPath();
+        ctx.arc(leftX, y, 5, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // === Draw Hidden Layer (purple) ===
+    ctx.fillStyle = '#a78bfa';
+    for (let i = 0; i < hidden; i++) {
+        const y = getY(i, hidden, h);
+        ctx.beginPath();
+        ctx.arc(midX, y, 5.5, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // === Draw Output Layer (live activity) ===
+    const brainOutputs = creature.brainOutputs || Array(outputs).fill(0.5);
+
+    for (let i = 0; i < outputs; i++) {
+        const y = getY(i, outputs, h);
+        const value = brainOutputs[i] || 0.5;
+
+        // Size and brightness based on output value
+        const size = 5 + value * 6;
+        const alpha = 0.4 + value * 0.6;
+
+        ctx.fillStyle = `rgba(52, 211, 153, ${alpha})`;
+        ctx.beginPath();
+        ctx.arc(rightX, y, size, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Glow for high activation
+        if (value > 0.65) {
+            ctx.strokeStyle = `rgba(52, 211, 153, ${value * 0.5})`;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(rightX, y, size + 3, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+    }
+
+    // Layer labels
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.font = '9px sans-serif';
+    ctx.fillText('I', leftX - 18, 12);
+    ctx.fillText('H', midX - 5, 12);
+    ctx.fillText('O', rightX + 8, 12);
+}
+
+  
 function formatScore(num) {
     if (num >= 10000000) {
         // Switch to exponential notation earlier (10 million+)
@@ -3797,600 +3904,88 @@ for (let c of creatures) {
               }
           }
       }
-
-      // ==================== Inspector Update (Clean) ====================
-      function updateInspector() {
-          if (!selectedCreature) return;
-          const c = selectedCreature;
-
-          // Draw the creature preview
-          const previewCanvas = document.getElementById('inspect-creature-preview');
-          if (previewCanvas) {
-              drawCreaturePreview(c, previewCanvas);
-          }
-
-          // Name + Alpha badge
-          const nameEl = document.getElementById('inspect-name');
-          if (nameEl) nameEl.innerText = c.name;
-          if (typeof updateInspectorAlphaBadge === 'function') {
-              updateInspectorAlphaBadge(c);
-          }
-
-          // Basic stats
-          const genEl = document.getElementById('inspect-gen');
-          if (genEl) genEl.innerText = c.generation;
-
-          const kidsEl = document.getElementById('inspect-kids');
-          if (kidsEl) kidsEl.innerText = c.childrenCount;
-
-          const killsEl = document.getElementById('inspect-kills');
-          if (killsEl) killsEl.innerText = c.killCount;
-
-          // Thought / Role
-          const thoughtEl = document.getElementById('inspect-thought');
-          if (thoughtEl) {
-              thoughtEl.innerText = (c.currentThought || '–') + (c.role ? ' • ' + c.role : '');
-          }
-
-          // Energy bar
-          const energyPct = Math.max(0, Math.min(100, c.energy));
-          const energyBar = document.getElementById('inspect-energy-bar');
-          if (energyBar) energyBar.style.width = energyPct + '%';
-
-          const energyText = document.getElementById('inspect-energy-text');
-          if (energyText) energyText.innerText = Math.floor(c.energy) + '%';
-
-              // Modules list
-          const modulesList = document.getElementById('inspect-modules-list');
-          if (modulesList) {
-              modulesList.innerHTML = '';
-
-              if (c.modules.length === 0) {
-                  const empty = document.createElement('div');
-                  empty.className = 'text-white/40 text-xs italic';
-                  empty.innerText = 'No modules yet';
-                  modulesList.appendChild(empty);
-              } else {
-                  for (let m of c.modules) {
-                      const tier = m.tier || 1;
-                      const div = document.createElement('div');
-                      div.className = 'flex items-center gap-x-2 text-xs py-0.5';
-                      div.innerHTML = `
-                          <div class="w-2 h-2 rounded-full flex-shrink-0" style="background-color: ${m.color}"></div>
-                          <div class="flex-1 truncate">${m.type}</div>
-                          <div class="font-mono text-white/50 text-[10px]">T${tier}</div>
-                      `;
-                      modulesList.appendChild(div);
-                  }
-              }
-          }
-
-          // ==================== Neural Net Visualization ====================
-          let netContainer = document.getElementById('neural-net-container');
-          if (!netContainer) {
-              netContainer = document.createElement('div');
-              netContainer.id = 'neural-net-container';
-              netContainer.className = 'mt-4 pt-3 border-t border-white/10';
-              netContainer.innerHTML = `
-          <div class="text-[10px] text-slate-400 mb-1 flex items-center gap-x-2">
-              <span>NEURAL NET</span>
-              <span class="text-[9px] text-amber-400/60">(v2.11.1)</span>
-          </div>
-          <canvas id="neural-net-canvas" width="260" height="130"
-                  class="bg-[#0a0a0f] border border-white/10 rounded-xl w-full"></canvas>
-
-          <div class="mt-2 text-[9px] text-white/50 leading-tight">
-              <div><span class="text-emerald-400">I</span> = Input (Energy, Hazards, Social, Vortex)</div>
-              <div><span class="text-sky-400">H</span> = Hidden Layer (Processing)</div>
-              <div><span class="text-amber-400">O</span> = Output (Movement, Eating, Reproduction)</div>
-          </div>
-      `;
-              if (modulesList && modulesList.parentNode) {
-                  modulesList.parentNode.appendChild(netContainer);
-              }
-          }
-
-          // Draw neural net
-          setTimeout(() => {
-              if (selectedCreature && typeof drawCreatureNeuralNet === 'function') {
-                  drawCreatureNeuralNet(selectedCreature);
-              }
-          }, 30);
-      }
-
-      // ==================== Neural Net Visualization (Improved Labels) ====================
-      function drawCreatureNeuralNet(creature) {
-          const canvas = document.getElementById('neural-net-canvas');
-          if (!canvas || !creature) return;
-
-          const ctx = canvas.getContext('2d');
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-          const w = canvas.width;
-          const h = canvas.height;
-
-          const inputCount = 4;
-          const hiddenCount = 5;
-          const outputCount = 3;
-
-          const layerX = [58, 138, 218];
-          const nodeRadius = 9;
-          const time = Date.now() / 320;
-          const activity = Math.min(1, (creature.energy / 70) + (creature.modules.length * 0.1));
-
-          // Base connections
-          ctx.strokeStyle = '#1e3a5f';
-          ctx.lineWidth = 2.8;
-
-          for (let i = 0; i < inputCount; i++) {
-              for (let j = 0; j < hiddenCount; j++) {
-                  const y1 = 30 + (i * ((h - 60) / (inputCount - 1 || 1)));
-                  const y2 = 24 + (j * ((h - 48) / (hiddenCount - 1 || 1)));
-                  ctx.beginPath();
-                  ctx.moveTo(layerX[0], y1);
-                  ctx.lineTo(layerX[1], y2);
-                  ctx.stroke();
-              }
-          }
-
-          for (let j = 0; j < hiddenCount; j++) {
-              for (let k = 0; k < outputCount; k++) {
-                  const y1 = 24 + (j * ((h - 48) / (hiddenCount - 1 || 1)));
-                  const y2 = 40 + (k * ((h - 80) / (outputCount - 1 || 1)));
-                  ctx.beginPath();
-                  ctx.moveTo(layerX[1], y1);
-                  ctx.lineTo(layerX[2], y2);
-                  ctx.stroke();
-              }
-          }
-
-          // Active pulsing lines
-          ctx.strokeStyle = `rgba(52, 211, 153, ${0.6 + activity * 0.4})`;
-          ctx.lineWidth = 1.8;
-
-          for (let i = 0; i < inputCount; i++) {
-              for (let j = 0; j < hiddenCount; j++) {
-                  const y1 = 30 + (i * ((h - 60) / (inputCount - 1 || 1)));
-                  const y2 = 24 + (j * ((h - 48) / (hiddenCount - 1 || 1)));
-                  ctx.beginPath();
-                  ctx.moveTo(layerX[0], y1);
-                  ctx.lineTo(layerX[1], y2);
-                  ctx.stroke();
-              }
-          }
-
-          // Draw nodes + offset labels
-          const drawLayer = (count, x, labelPrefix, offsetX = 0, isOutput = false) => {
-              for (let i = 0; i < count; i++) {
-                  const y = (isOutput ? 40 : 24) + (i * ((h - (isOutput ? 80 : 48)) / (count - 1 || 1)));
-
-                  // Node
-                  ctx.fillStyle = '#0a0a0f';
-                  ctx.strokeStyle = '#64748b';
-                  ctx.lineWidth = 1.5;
-                  ctx.beginPath();
-                  ctx.arc(x, y, nodeRadius, 0, Math.PI * 2);
-                  ctx.fill();
-                  ctx.stroke();
-
-                  // Pulsing activity
-                  const pulse = Math.sin(time + i) * 0.5 + 0.5;
-                  ctx.fillStyle = `rgba(52, 211, 153, ${pulse * activity})`;
-                  ctx.beginPath();
-                  ctx.arc(x, y, nodeRadius * 0.6, 0, Math.PI * 2);
-                  ctx.fill();
-
-                  // Offset label
-                  ctx.fillStyle = '#94a3b8';
-                  ctx.font = '9px monospace';
-                  ctx.textAlign = offsetX > 0 ? 'left' : 'right';
-                  ctx.fillText(labelPrefix + (i + 1), x + offsetX, y + 3);
-              }
-          };
-
-          // Input labels on the left
-          drawLayer(inputCount, layerX[0], 'I', -16);
-          // Hidden labels on the right
-          drawLayer(hiddenCount, layerX[1], 'H', 16);
-          // Output labels on the right
-          drawLayer(outputCount, layerX[2], 'O', 16, true);
-      }
-
-
-              function showLegendModal() {
-                  document.getElementById('legend-modal').classList.remove('hidden');
-                  document.getElementById('legend-modal').classList.add('flex');
-              }
-
-              function hideLegendModal() {
-                  const modal = document.getElementById('legend-modal');
-                  modal.classList.remove('flex');
-                  modal.classList.add('hidden');
-              }
-
-              // === v1.4 Analytics Modal ===
-              function showAnalyticsModal() {
-                  const modal = document.getElementById('analytics-modal');
-                  modal.classList.remove('hidden');
-                  modal.classList.add('flex');
-                  analyticsModalOpen = true;
-
-                  // Populate current stats
-                  updateAnalyticsStats();
-
-                  // Draw initial chart
-                  setTimeout(() => {
-                      updateAnalyticsChart();
-                  }, 50);
-              }
-
-              function hideAnalyticsModal() {
-                  const modal = document.getElementById('analytics-modal');
-                  modal.classList.remove('flex');
-                  modal.classList.add('hidden');
-                  analyticsModalOpen = false;
-
-                  // Sync mini chart visibility with modal toggles
-                  miniChartVisible.pop = document.getElementById('toggle-pop')?.checked ?? true;
-                  miniChartVisible.predators = document.getElementById('toggle-pred')?.checked ?? true;
-                  // miniChartVisible.hr removed (High Roller tracking disabled in Analytics for now)
-                  miniChartVisible.modules = document.getElementById('toggle-modules')?.checked ?? true;
-                  miniChartVisible.greenFood = document.getElementById('toggle-green')?.checked ?? true;
-                  miniChartVisible.blueFood = document.getElementById('toggle-blue')?.checked ?? true;
-
-                  // Redraw mini chart with new selection
-                  if (miniChartCtx) drawMiniChart();
-              }
-
-              // Robust getter for High Roller Points (fixes scope issues between main UI and Analytics modal)
-              function getHighRollerPoints() {
-                  if (typeof window !== 'undefined' && typeof window.highRollerPoints === 'number') {
-                      return window.highRollerPoints;
-                  }
-                  if (typeof highRollerPoints === 'number') {
-                      return highRollerPoints;
-                  }
-                  return 0;
-              }
-
-              function updateAnalyticsStats() {
-                  const popEl = document.getElementById('modal-pop');
-                  const predEl = document.getElementById('modal-pred');
-                  const hrEl = document.getElementById('modal-hr');
-                  const modEl = document.getElementById('modal-modules');
-                  const greenEl = document.getElementById('modal-green');
-                  const blueEl = document.getElementById('modal-blue');
-
-                  if (popEl) popEl.textContent = creatures.length;
-
-                  // Compute predator count locally for consistency with the chart (fixes "0" display while line moves)
-                  let totalModules = 0;
-                  let predatorCount = 0;
-                  for (let c of creatures) {
-                      totalModules += (c.modules && c.modules.length) ? c.modules.length : 0;
-                      if (c.isPredator) predatorCount++;
-                  }
-                  if (predEl) predEl.textContent = predatorCount;
-
-                  if (hrEl) hrEl.textContent = getHighRollerPoints().toLocaleString();
-
-                  const currentAvgModules = creatures.length > 0 ? (totalModules / creatures.length) : 0;
-
-                  if (modEl) modEl.textContent = currentAvgModules > 0 ? currentAvgModules.toFixed(1) : '—';
-                  if (greenEl) greenEl.textContent = (greenZone && typeof greenZone.food === 'number') ? greenZone.food.toFixed(0) : '—';
-                  if (blueEl) blueEl.textContent = (blueZone && typeof blueZone.food === 'number') ? blueZone.food.toFixed(0) : '—';
-              }
-
-              let analyticsChartCtx = null;
-
-              function updateAnalyticsChart() {
-                  const canvas = document.getElementById('analytics-chart');
-                  if (!canvas || !graphData.pop || graphData.pop.length < 2) return;
-
-                  if (!analyticsChartCtx) {
-                      analyticsChartCtx = canvas.getContext('2d');
-                  }
-
-                  const ctx = analyticsChartCtx;
-                  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-                  const padding = 50;
-                  const plotW = canvas.width - padding * 2;
-                  const plotH = canvas.height - padding * 1.5;
-
-                  // Background grid
-                  ctx.strokeStyle = '#ffffff15';
-                  ctx.lineWidth = 1;
-                  for (let i = 0; i <= 4; i++) {
-                      const y = padding + (i * plotH / 4);
-                      ctx.beginPath();
-                      ctx.moveTo(padding, y);
-                      ctx.lineTo(canvas.width - padding * 0.6, y);
-                      ctx.stroke();
-                  }
-
-                  const dataLen = graphData.pop.length;
-                  if (dataLen < 2) return;
-
-                  const showPop = document.getElementById('toggle-pop')?.checked ?? true;
-                  const showPred = document.getElementById('toggle-pred')?.checked ?? true;
-                  // const showHR removed (High Roller tracking disabled in Analytics for now)
-                  const showModules = document.getElementById('toggle-modules')?.checked ?? true;
-                  const showGreen = document.getElementById('toggle-green')?.checked ?? true;
-                  const showBlue = document.getElementById('toggle-blue')?.checked ?? true;
-
-                  ctx.lineWidth = 2.2;
-                  ctx.lineJoin = 'round';
-
-                  // === Per-line independent scaling (prevents one high-value series from collapsing others) ===
-                  const drawLine = (data, color, minVal = 0) => {
-                      if (!data || data.length < 2) return;
-                      const maxVal = Math.max(minVal, ...data) * 1.15 || 1;
-                      const getY = (val) => padding + plotH - (val / maxVal) * plotH;
-
-                      ctx.strokeStyle = color;
-                      ctx.beginPath();
-                      for (let i = 0; i < dataLen; i++) {
-                          const x = padding + (i / (dataLen - 1)) * plotW;
-                          const y = getY(data[i]);
-                          if (i === 0) ctx.moveTo(x, y);
-                          else ctx.lineTo(x, y);
-                      }
-                      ctx.stroke();
-                  };
-
-                  // Draw each line with its own scale
-                  if (showPop)      drawLine(graphData.pop,       CHART_COLORS.pop, 10);
-                  if (showPred)     drawLine(graphData.predators, CHART_COLORS.predators, 1);
-                  if (showModules)  drawLine(graphData.modules,   CHART_COLORS.modules, 1);
-                  if (showGreen)    drawLine(graphData.greenFood, CHART_COLORS.greenFood, 10);
-                  if (showBlue)     drawLine(graphData.blueFood,  CHART_COLORS.blueFood, 10);
-              }
-
-              function resetMiniGraphSelection() {
-                  // Reset mini graph to show all default lines
-                  const toggles = ['toggle-pop', 'toggle-pred', 'toggle-modules', 'toggle-green', 'toggle-blue'];
-                  toggles.forEach(id => {
-                      const el = document.getElementById(id);
-                      if (el) el.checked = true;
-                  });
-
-                  // Reset miniChartVisible state
-                  miniChartVisible = {
-                      pop: true, predators: true, hr: true,
-                      modules: true, greenFood: true, blueFood: true
-                  };
-
-                  // Redraw both charts
-                  updateAnalyticsChart();
-                  if (miniChartCtx) drawMiniChart();
-
-                  // Give feedback
-                  const btn = event.currentTarget;
-                  if (btn) btn.textContent = "Reset!";
-                  setTimeout(() => {
-                      hideAnalyticsModal();
-                  }, 600);
-              }
-
-              class Explosion {
-                  constructor(x, y) {
-                      this.x = x;
-                      this.y = y;
-                      this.life = 20;
-                      this.maxLife = 20;
-                      this.radius = 6;
-                      this.particles = [];
-
-                      for (let i = 0; i < 10; i++) {
-                          this.particles.push({
-                              x: 0,
-                              y: 0,
-                              vx: random(-2.8, 2.8),
-                              vy: random(-2.8, 2.8),
-                              life: random(10, 18)
-                          });
-                      }
-                  }
-
-                  update() {
-                      this.life--;
-                      this.radius += 2.4;
-
-                      for (let p of this.particles) {
-                          p.x += p.vx;
-                          p.y += p.vy;
-                          p.vx *= 0.9;
-                          p.vy *= 0.9;
-                          p.life--;
-                      }
-                  }
-
-                  show() {
-                      let alpha = map(this.life, 0, this.maxLife, 0, 200);
-
-                      noStroke();
-                      fill(251, 146, 60, alpha * 0.5);
-                      circle(this.x, this.y, this.radius * 1.5);
-
-                      fill(239, 68, 68, alpha);
-                      circle(this.x, this.y, this.radius);
-
-                      fill(255, 240, 200, alpha * 1.1);
-                      circle(this.x, this.y, this.radius * 0.4);
-
-                      for (let p of this.particles) {
-                          if (p.life > 0) {
-                              let pAlpha = map(p.life, 0, 16, 0, 180);
-                              fill(251, 146, 60, pAlpha);
-                              circle(this.x + p.x, this.y + p.y, 3);
-                          }
-                      }
-                  }
-              }
-
-              class RedHazard {
-                  constructor() {
-                      let angle = random(TWO_PI);
-                      let d = random(400, 560);
-                      this.x = centerX + cos(angle) * d;
-                      this.y = centerY + sin(angle) * d;
-
-                      this.vx = random(-0.6, 0.6);
-                      this.vy = random(-0.6, 0.6);
-                      this.size = random(5, 8);
-                      this.pulse = random(TWO_PI);
-                  }
-
-                  update(vortexDir, vortexStrength) {
-                      let dx = this.x - centerX;
-                      let dy = this.y - centerY;
-                      let distToCenter = sqrt(dx * dx + dy * dy) || 1;
-
-                      if (distToCenter < 7) {
-                          this.explode();
-                          return;
-                      }
-
-                      let tangentX = -dy;
-                      let tangentY = dx;
-                      let len = sqrt(tangentX * tangentX + tangentY * tangentY) || 1;
-
-                      let rotForce = 1.4 * vortexStrength * vortexDir;
-                      this.vx += (tangentX / len) * rotForce;
-                      this.vy += (tangentY / len) * rotForce;
-
-                      let pull = 0.95 * vortexStrength;
-                      this.vx += (centerX - this.x) * pull / (distToCenter + 6);
-                      this.vy += (centerY - this.y) * pull / (distToCenter + 6);
-
-                      this.x += this.vx;
-                      this.y += this.vy;
-
-                      // Music-reactive jerky motion on red hazards
-                      if (musicEnabled && musicData.highs > 0.4) {
-                          let jerk = (musicData.highs - 0.4) * 3.2;
-                          this.vx += random(-jerk, jerk);
-                          this.vy += random(-jerk, jerk);
-                      }
-
-                      this.vx *= 0.86;
-                      this.vy *= 0.86;
-
-                      this.pulse += 0.08;
-                  }
-
-                  explode() {
-                      for (let i = 0; i < 4; i++) {
-                          let angle = random(TWO_PI);
-                          redBeams.push(new RedBeam(this.x, this.y, angle));
-                      }
-                  }
-
-                  show() {
-                      let alpha = 190 + sin(this.pulse) * 45;
-                      fill(239, 68, 68, alpha);
-                      noStroke();
-                      circle(this.x, this.y, this.size);
-
-                      fill(239, 68, 68, 55);
-                      circle(this.x, this.y, this.size * 2);
-
-                      fill(255, 225, 225, 230);
-                      circle(this.x, this.y, this.size * 0.4);
-                  }
-              }
-
-              class RedBeam {
-                  constructor(x, y, angle) {
-                      this.x = x;
-                      this.y = y;
-                      this.angle = angle;
-                      this.vx = cos(angle) * 4.5;
-                      this.vy = sin(angle) * 4.5;
-                      this.life = 44;
-                      this.width = 6.5;
-                      this.damageApplied = false;
-                  }
-
-                  update() {
-                      this.x += this.vx;
-                      this.y += this.vy;
-                      this.life--;
-
-                      if (!this.damageApplied) {
-                          for (let c of creatures) {
-                              let d = dist(this.x, this.y, c.x, c.y);
-                              if (d < 36) {
-                                  let sensorBonus = c.getModuleCount('sensor') * 0.32;
-                                  let damage = 20 + random(3, 8) - sensorBonus;
-
-                                  c.energy = max(0, c.energy - damage);
-                                  c.damageFlash = 42;
-                                  c.purpleFlash = max(c.purpleFlash || 0, 38);
-                                  c.hazardDamageTaken = (c.hazardDamageTaken || 0) + damage;
-
-                                  let dx = c.x - this.x;
-                                  let dy = c.y - this.x;
-                                  let len = sqrt(dx*dx + dy*dy) || 1;
-                                  c.vx += (dx / len) * 1.7;
-                                  c.vy += (dy / len) * 1.7;
-
-                                  if (c.energy > 15) {
-                                      c.currentThought = "Hit by beam!";
-                                  }
-                              }
-                          }
-                          this.damageApplied = true;
-                      }
-                  }
-
-                  show() {
-                      if (this.life <= 0) return;
-
-                      let alpha = map(this.life, 0, 44, 0, 190);
-                      stroke(239, 68, 68, alpha);
-                      strokeWeight(this.width);
-                      line(this.x - this.vx * 2.5, this.y - this.vy * 2.5, this.x, this.y);
-
-                      stroke(239, 68, 68, alpha * 0.3);
-                      strokeWeight(this.width * 1.7);
-                      line(this.x - this.vx * 7, this.y - this.vy * 7, this.x - this.vx * 1.5, this.y - this.vy * 1.5);
-                  }
-              }
-
-              class SpawnEffect {
-                  constructor(x, y) {
-                      this.x = x;
-                      this.y = y;
-                      this.life = 36;
-                      this.maxLife = 36;
-                      this.rings = [];
-                      for (let i = 0; i < 3; i++) {
-                          this.rings.push({ radius: 7 + i * 5, alpha: 210 });
-                      }
-                  }
-
-                  update() {
-                      this.life--;
-                      for (let r of this.rings) {
-                          r.radius += 1.7;
-                          r.alpha = map(this.life, 0, this.maxLife, 0, 210);
-                      }
-                  }
-
-                  show() {
-                      for (let r of this.rings) {
-                          if (r.alpha > 5) {
-                              stroke(52, 211, 153, r.alpha);
-                              strokeWeight(1.8);
-                              noFill();
-                              circle(this.x, this.y, r.radius);
-                          }
-                      }
-                  }
-              }
-
+// ==================== Inspector Update (Clean + Neural Net) ====================
+function updateInspector() {
+    if (!selectedCreature) return;
+    const c = selectedCreature;
+
+    // Draw the creature preview
+    const previewCanvas = document.getElementById('inspect-creature-preview');
+    if (previewCanvas) {
+        drawCreaturePreview(c, previewCanvas);
+    }
+
+    // Name + Alpha badge
+    const nameEl = document.getElementById('inspect-name');
+    if (nameEl) nameEl.innerText = c.name;
+
+    if (typeof updateInspectorAlphaBadge === 'function') {
+        updateInspectorAlphaBadge(c);
+    }
+
+    // Basic stats
+    const genEl = document.getElementById('inspect-gen');
+    if (genEl) genEl.innerText = c.generation;
+
+    const kidsEl = document.getElementById('inspect-kids');
+    if (kidsEl) kidsEl.innerText = c.childrenCount;
+
+    const killsEl = document.getElementById('inspect-kills');
+    if (killsEl) killsEl.innerText = c.killCount;
+
+    // Thought / Role
+    const thoughtEl = document.getElementById('inspect-thought');
+    if (thoughtEl) {
+        thoughtEl.innerText = (c.currentThought || '–') + (c.role ? ' • ' + c.role : '');
+    }
+
+    // Energy bar
+    const energyPct = Math.max(0, Math.min(100, c.energy));
+    const energyBar = document.getElementById('inspect-energy-bar');
+    if (energyBar) energyBar.style.width = energyPct + '%';
+
+    const energyText = document.getElementById('inspect-energy-text');
+    if (energyText) energyText.innerText = Math.floor(c.energy) + '%';
+
+    // Modules list
+    const modulesList = document.getElementById('inspect-modules-list');
+    if (modulesList) {
+        modulesList.innerHTML = '';
+        if (c.modules.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'text-white/40 text-xs italic';
+            empty.innerText = 'No modules yet';
+            modulesList.appendChild(empty);
+        } else {
+            for (let m of c.modules) {
+                const tier = m.tier || 1;
+                const div = document.createElement('div');
+                div.className = 'flex items-center gap-x-2 text-xs py-0.5';
+                div.innerHTML = `
+                    <div class="w-2 h-2 rounded-full flex-shrink-0" style="background-color: ${m.color}"></div>
+                    <div class="flex-1 truncate">${m.type}</div>
+                    <div class="font-mono text-white/50 text-[10px]">T${tier}</div>
+                `;
+                modulesList.appendChild(div);
+            }
+        }
+    }
+
+    // ==================== NEURAL NET VISUALIZER ====================
+    // Draw the live 12 → 12 → 7 neural network
+    if (typeof drawNeuralNet === 'function') {
+        drawNeuralNet(c);
+    }
+
+    // Update the 7 brain output text values
+    const brainOutputs = c.brainOutputs || [];
+    for (let i = 0; i < 7; i++) {
+        const el = document.getElementById('brain-' + i);
+        if (el) {
+            el.innerText = (brainOutputs[i] ?? 0.5).toFixed(2);
+        }
+    }
+}
 // =====================================================
 // SCORE MULTIPLIER SYSTEM (Updated with smart formatting)
 // =====================================================
