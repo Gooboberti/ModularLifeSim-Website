@@ -7934,73 +7934,59 @@ class Creature {
     }
 }
 // ==================== MUSIC MODE SPECIAL PARTICLES + VISUALIZER ====================
+// ==================== MUSIC MODE SPECIAL PARTICLES ====================
 
-if (currentMusicMode === 'prune' && purpleInfectParticles.length > 0) {
+// Update and draw music mode particles + handle eating
+if (currentMusicMode) {
+    // Purple Infect Particles (Prune)
     for (let i = purpleInfectParticles.length - 1; i >= 0; i--) {
         let p = purpleInfectParticles[i];
         p.update();
         p.draw();
 
-        for (let c of creatures) {
-            if (dist(p.x, p.y, c.x, c.y) < p.size + 20 && !c.isPredator) {
-                c.purpleFlash = max(c.purpleFlash || 0, 160);
-                c.energy -= 9;
-                p.life = 0;
-
-                if (c.energy < 32 && random() < 0.38) {
-                    c.isPredator = true;
-                    c.currentThought = "Infected - Turned predator";
-                }
-                break;
-            }
-        }
-
         if (p.isDead()) {
-            if (dist(p.x, p.y, width/2, height/2) < 35) {
-                let newPred = null;
-                if (geneVaultSlots[0]) {
-                    newPred = new Creature(width/2 + random(-35,35), height/2 + random(-35,35),
-                                           geneVaultSlots[0].modules, geneVaultSlots[0].generation || 3);
-                    newPred.isPredator = true;
-                } else {
-                    newPred = new Creature(width/2 + random(-30,30), height/2 + random(-30,30));
-                    newPred.isPredator = true;
-                }
-                creatures.push(newPred);
-                addFloatingText(newPred.x, newPred.y - 22, "PREDATOR SPAWNED", '#c026ff');
-            }
             purpleInfectParticles.splice(i, 1);
         }
     }
-}
 
-if (currentMusicMode === 'evolve') {
-    if (frameCount % 28 === 0 && moduleParticles.length < 14) {
-        moduleParticles.push(new ModuleParticle());
+    // Yellow Glowing Particles (Evolve)
+    for (let i = yellowGlowingParticles.length - 1; i >= 0; i--) {
+        let p = yellowGlowingParticles[i];
+        p.update();
+        p.draw();
+
+        if (p.isDead()) {
+            yellowGlowingParticles.splice(i, 1);
+        }
     }
+
+    // Module Particles (Evolve)
     for (let i = moduleParticles.length - 1; i >= 0; i--) {
         let mp = moduleParticles[i];
         mp.update();
         mp.draw();
-        for (let c of creatures) {
-            if (!c.isPredator && dist(mp.x, mp.y, c.x, c.y) < 24 && c.modules.length < 13) {
-                const newMod = { type: mp.type, tier: 1, color: '#fbbf24' };
-                c.modules.push(newMod);
-                mp.collected = true;
-                addFloatingText(c.x, c.y - 26, `+${mp.type}`, '#fbbf24');
-                c.updateSpecialization();
-                break;
-            }
-        }
+
         if (mp.isDead()) {
             moduleParticles.splice(i, 1);
         }
     }
+
+    // Handle creature eating these particles (Prune + Evolve)
+    for (let c of creatures) {
+        if (!c.isPredator) {
+            handleParticleEating(c);
+        }
+    }
 }
+
+// Vortex arrival effects (predator spawning from purple, module popcorn from yellow/modules)
+handleParticleVortexArrival();
+
+// Phase-based spawning (more particles during music modes)
+updateMusicModeParticles();
 
 drawMusicModeTintAndBorder();
 updateEvolveEnvironmentalCycle();
-
 if (musicVisualizerActive && currentMusicMode) {
     console.log("%c[DIRECT] Attempting to draw visualizer NOW", "color: lime; font-size: 14px");
 
