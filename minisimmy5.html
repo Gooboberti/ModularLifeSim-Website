@@ -6889,7 +6889,6 @@ class Creature {
 
         return child;
     }
-
     update(isDay, vortexDir, vortexStrength, timeScale = 1, envMods = null) {
         if (this.reproCooldown > 0) this.reproCooldown--;
         if (!this.isPredator && this.energy < 14) this.isPredator = true;
@@ -6897,15 +6896,12 @@ class Creature {
         let baseDrain = settings.energyDrain - this.getEfficiencyBonus();
         let finalDrain = baseDrain;
         if (envMods) finalDrain *= envMods.drainMult;
-
         this.energy -= Math.max(0.004, finalDrain * timeScale);
 
         let hazardInfo = this.getNearestHazardInfo();
         let sensorLevel = this.getTieredModuleCount('sensor');
-
         let detectionQuality = 0.58 + (sensorLevel * 0.11);
         let effectiveHazardDist = hazardInfo.dist * detectionQuality;
-
         let dodgedThisFrame = false;
 
         if (effectiveHazardDist > 0.14) {
@@ -6956,6 +6952,14 @@ class Creature {
         if (effectiveHazardDist > 0.07 && effectiveHazardDist < 0.52) {
             this.adaptationLevel = min(11, (this.adaptationLevel || 0) + 0.007 * timeScale);
         }
+
+        // ==================== NEURAL BRAIN EXECUTION ====================
+        // Runs every 2 frames for performance. Outputs are stored in this.brainOutputs
+        if (frameCount % 2 === 0 && this.brain) {
+            const inputs = this.getBrainInputs(hazardInfo, effectiveHazardDist, isDay);
+            this.brainOutputs = this.brain.forward(inputs);
+        }
+        // ============================================================
 
         const tieredSensor = this.getTieredModuleCount('sensor');
         const tieredMover = this.getTieredModuleCount('mover');
@@ -7056,7 +7060,6 @@ class Creature {
                 }
             }
         }
-
         if (this.isPredator) {
             let target = null;
             let lowest = Infinity;
