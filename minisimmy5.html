@@ -521,7 +521,7 @@
             <!-- ========== NEURAL NET ========== -->
             <div class="border-t border-white/10 pt-2.5">
                 <div class="flex items-center justify-between mb-1">
-                    <div class="text-xs font-semibold text-white/70">NEURAL NET <span class="text-[10px] text-white/40">(12 → 12 → 7)</span></div>
+                    <div class="text-xs font-semibold text-white/70">NEURAL NET</div>
                 </div>
 
                 <!-- Live Neural Network Canvas -->
@@ -2062,7 +2062,7 @@ function forceEnvironmentalPhase(phase) {
 }
 
 // =====================================================
-// LIVE NEURAL NET VISUALIZER (Final Version)
+// LIVE NEURAL NET VISUALIZER (Cleaner Version)
 // =====================================================
 function drawNeuralNet(creature) {
     const canvas = document.getElementById('neural-net-canvas');
@@ -2082,36 +2082,41 @@ function drawNeuralNet(creature) {
     const hiddenCount = 12;
     const outputCount = 7;
 
-    const leftX = 38;
+    const leftX = 42;
     const midX = 120;
-    const rightX = 202;
+    const rightX = 198;
 
-    // Elder factor (makes old/strong brains look more developed)
+    // Elder factor
     const elderFactor = Math.min(1,
         ((creature.generation || 1) * 0.07) +
         ((creature.killCount || 0) * 0.012) +
         ((creature.adaptationLevel || 0) * 0.05)
     );
 
-    const getY = (index, total, height) => {
-        const spacing = height / (total + 1);
-        return spacing * (index + 1);
+    const getY = (index, total) => {
+        return 14 + (index * ((h - 28) / (total - 1)));
     };
 
-    // ==================== DRAW CONNECTIONS (with strength) ====================
+    // ==================== CONNECTIONS ====================
+    ctx.lineJoin = 'round';
+
+    // Input → Hidden
     for (let i = 0; i < inputCount; i++) {
-        const y1 = getY(i, inputCount, h);
+        const y1 = getY(i, inputCount);
         for (let j = 0; j < hiddenCount; j++) {
-            const y2 = getY(j, hiddenCount, h);
+            const y2 = getY(j, hiddenCount);
 
             const strength = brain.connectionStrengthIH?.[j]?.[i] || 0;
             const weight = brain.weightsIH[j][i] || 0;
 
-            const alpha = 0.12 + (strength * 0.6) + (Math.abs(weight) * 0.2);
-            const thickness = 0.9 + (strength * 1.8) + (elderFactor * 0.7);
+            // Only draw stronger connections more visibly
+            if (strength < 0.08 && Math.abs(weight) < 0.35) continue;
 
-            ctx.strokeStyle = `rgba(148, 163, 184, ${Math.min(0.9, alpha)})`;
-            ctx.lineWidth = Math.min(3.5, thickness);
+            const alpha = 0.15 + (strength * 0.65) + (Math.abs(weight) * 0.18);
+            const thickness = 0.7 + (strength * 2.1) + (elderFactor * 0.5);
+
+            ctx.strokeStyle = `rgba(148, 163, 184, ${Math.min(0.88, alpha)})`;
+            ctx.lineWidth = Math.min(3.2, thickness);
             ctx.beginPath();
             ctx.moveTo(leftX, y1);
             ctx.lineTo(midX, y2);
@@ -2119,19 +2124,22 @@ function drawNeuralNet(creature) {
         }
     }
 
+    // Hidden → Output
     for (let j = 0; j < hiddenCount; j++) {
-        const y1 = getY(j, hiddenCount, h);
+        const y1 = getY(j, hiddenCount);
         for (let k = 0; k < outputCount; k++) {
-            const y2 = getY(k, outputCount, h);
+            const y2 = getY(k, outputCount);
 
             const strength = brain.connectionStrengthHO?.[k]?.[j] || 0;
             const weight = brain.weightsHO[k][j] || 0;
 
-            const alpha = 0.12 + (strength * 0.6) + (Math.abs(weight) * 0.2);
-            const thickness = 0.9 + (strength * 1.8) + (elderFactor * 0.7);
+            if (strength < 0.08 && Math.abs(weight) < 0.35) continue;
 
-            ctx.strokeStyle = `rgba(148, 163, 184, ${Math.min(0.9, alpha)})`;
-            ctx.lineWidth = Math.min(3.5, thickness);
+            const alpha = 0.15 + (strength * 0.65) + (Math.abs(weight) * 0.18);
+            const thickness = 0.7 + (strength * 2.1) + (elderFactor * 0.5);
+
+            ctx.strokeStyle = `rgba(148, 163, 184, ${Math.min(0.88, alpha)})`;
+            ctx.lineWidth = Math.min(3.2, thickness);
             ctx.beginPath();
             ctx.moveTo(midX, y1);
             ctx.lineTo(rightX, y2);
@@ -2139,69 +2147,62 @@ function drawNeuralNet(creature) {
         }
     }
 
-    // ==================== DRAW NODES ====================
-    const drawNodeLayer = (count, x, labelPrefix, values, isOutput = false) => {
+    // ==================== NODES + LABELS + VALUES ====================
+    const drawLayer = (count, x, prefix, values, isOutput = false) => {
         for (let i = 0; i < count; i++) {
-            const y = getY(i, count, h);
+            const y = getY(i, count);
             const val = values[i] ?? 0.5;
 
-            // Node base
+            // Node
             ctx.fillStyle = '#0a0a0f';
             ctx.strokeStyle = '#64748b';
-            ctx.lineWidth = 1.4;
+            ctx.lineWidth = 1.3;
             ctx.beginPath();
-            ctx.arc(x, y, 6.5, 0, Math.PI * 2);
+            ctx.arc(x, y, 6, 0, Math.PI * 2);
             ctx.fill();
             ctx.stroke();
 
             // Activity glow
-            const intensity = Math.abs(val - 0.5) * 1.7 + 0.25;
+            const intensity = Math.abs(val - 0.5) * 1.6 + 0.3;
             ctx.fillStyle = `rgba(52, 211, 153, ${Math.min(0.95, intensity)})`;
             ctx.beginPath();
-            ctx.arc(x, y, 4.2, 0, Math.PI * 2);
+            ctx.arc(x, y, 3.8, 0, Math.PI * 2);
             ctx.fill();
 
-            // Elder glow ring
-            if (elderFactor > 0.35) {
-                ctx.strokeStyle = `rgba(52, 211, 153, ${elderFactor * 0.4})`;
-                ctx.lineWidth = 1.8;
+            // Elder glow
+            if (elderFactor > 0.4) {
+                ctx.strokeStyle = `rgba(52, 211, 153, ${elderFactor * 0.35})`;
+                ctx.lineWidth = 1.6;
                 ctx.beginPath();
-                ctx.arc(x, y, 9.5, 0, Math.PI * 2);
+                ctx.arc(x, y, 8.5, 0, Math.PI * 2);
                 ctx.stroke();
             }
 
-            // Node label (I1, H3, O2, etc.)
+            // Label
             ctx.fillStyle = '#94a3b8';
-            ctx.font = '8.5px monospace';
+            ctx.font = '8px monospace';
             ctx.textAlign = x < 100 ? 'right' : 'left';
-            const labelOffset = x < 100 ? -12 : 12;
-            ctx.fillText(`${labelPrefix}${i + 1}`, x + labelOffset, y + 2.5);
+            const labelX = x + (x < 100 ? -10 : 10);
+            ctx.fillText(`${prefix}${i + 1}`, labelX, y + 2.5);
 
-            // Show numeric value (left of inputs, right of outputs)
-            if (!isOutput || i < 7) {
-                ctx.fillStyle = '#e0e7ff';
-                ctx.font = '8px monospace';
-                ctx.textAlign = isOutput ? 'left' : 'right';
-                const valueOffset = isOutput ? 14 : -14;
-                ctx.fillText(val.toFixed(2), x + valueOffset, y + 2.5);
-            }
+            // Value
+            ctx.fillStyle = '#e0e7ff';
+            ctx.font = '7.5px monospace';
+            ctx.textAlign = isOutput ? 'left' : 'right';
+            const valX = isOutput ? x + 12 : x - 12;
+            ctx.fillText(val.toFixed(2), valX, y + 2.5);
         }
     };
 
-    // Input layer
-    drawNodeLayer(inputCount, leftX, 'I', brainInputs);
-
-    // Hidden layer
-    drawNodeLayer(hiddenCount, midX, 'H', Array(hiddenCount).fill(0.5));
-
-    // Output layer
-    drawNodeLayer(outputCount, rightX, 'O', brainOutputs, true);
+    drawLayer(inputCount, leftX, 'I', brainInputs);
+    drawLayer(hiddenCount, midX, 'H', Array(hiddenCount).fill(0.5));
+    drawLayer(outputCount, rightX, 'O', brainOutputs, true);
 
     // ==================== FOOTER NOTE ====================
     ctx.fillStyle = '#64748b';
-    ctx.font = '7.5px Inter, system-ui, sans-serif';
+    ctx.font = '7px Inter, system-ui, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('Line brightness = connection strength  •  Elder brains develop stronger pathways', w / 2, h - 5);
+    ctx.fillText('Brighter lines = stronger learned connections   •   Elders develop clearer pathways', w / 2, h - 4);
 }
   
 function formatScore(num) {
