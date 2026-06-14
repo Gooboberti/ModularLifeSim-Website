@@ -8273,14 +8273,14 @@ function showReleaseChoiceModal(incubationId) {
     };
 }
 
-      function actuallyReleaseIncubatedEgg(incubationId, isEarly = false, destination = 'inventory') {
+function actuallyReleaseIncubatedEgg(incubationId, isEarly = false, destination = 'inventory') {
     const index = incubatingEggs.findIndex(e => e.id === incubationId);
     if (index === -1) return;
 
     const inc = incubatingEggs[index];
     const eggData = inc.eggData;
 
-    // Spawn the creature
+    // Create creature
     const newCreature = new Creature(
         random(width * 0.3, width * 0.7),
         random(height * 0.3, height * 0.7),
@@ -8288,19 +8288,30 @@ function showReleaseChoiceModal(incubationId) {
         eggData.generation || 1
     );
 
+    // Restore saved data
     if (eggData.traits) newCreature.traits = JSON.parse(JSON.stringify(eggData.traits));
     newCreature.name = eggData.name;
     newCreature.killCount = eggData.killCount || 0;
     newCreature.childrenCount = eggData.childrenCount || 0;
     newCreature.currentThought = isEarly ? "Released early from Incubator" : "Released from Incubator";
 
+    // === Restore the brain if it exists in the egg ===
+    if (eggData.brain && newCreature.brain) {
+        const b = eggData.brain;
+        newCreature.brain.weightsIH = JSON.parse(JSON.stringify(b.weightsIH));
+        newCreature.brain.weightsHO = JSON.parse(JSON.stringify(b.weightsHO));
+        newCreature.brain.biasH = [...b.biasH];
+        newCreature.brain.biasO = [...b.biasO];
+        newCreature.brain.connectionStrengthIH = JSON.parse(JSON.stringify(b.connectionStrengthIH || []));
+        newCreature.brain.connectionStrengthHO = JSON.parse(JSON.stringify(b.connectionStrengthHO || []));
+    }
+
     creatures.push(newCreature);
     spawnEffects.push(new SpawnEffect(newCreature.x, newCreature.y));
 
-    // Handle the copy
+    // Handle copy logic (inventory or vault)
     if (!isEarly && inc.progress >= 100) {
         if (destination === 'vault') {
-            // Try to put into first empty Gene Vault slot
             const emptySlot = geneVaultSlots.findIndex(slot => slot === null);
             if (emptySlot !== -1) {
                 geneVaultSlots[emptySlot] = JSON.parse(JSON.stringify(eggData));
@@ -8317,7 +8328,6 @@ function showReleaseChoiceModal(incubationId) {
         addFloatingText(newCreature.x, newCreature.y - 25, "Released (Progress Lost)", '#f87171');
     }
 
-    // Cleanup
     incubatingEggs.splice(index, 1);
     updateEggCountBadge();
     showEggInventory();
