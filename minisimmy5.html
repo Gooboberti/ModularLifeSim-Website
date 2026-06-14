@@ -6788,6 +6788,141 @@ class SpawnEffect {
         }
     }
 }
+
+  // =====================================================
+// NEURAL NET CLASS (Upgraded with Connection Strength)
+// =====================================================
+class NeuralNet {
+    constructor() {
+        this.inputSize = 12;
+        this.hiddenSize = 12;
+        this.outputSize = 7;
+
+        this.weightsIH = this.randomMatrix(this.hiddenSize, this.inputSize);
+        this.weightsHO = this.randomMatrix(this.outputSize, this.hiddenSize);
+        this.biasH = this.randomArray(this.hiddenSize, 0.1);
+        this.biasO = this.randomArray(this.outputSize, 0.1);
+
+        // Connection Strength Tracking (learned experience)
+        this.connectionStrengthIH = this.zeroMatrix(this.hiddenSize, this.inputSize);
+        this.connectionStrengthHO = this.zeroMatrix(this.outputSize, this.hiddenSize);
+    }
+
+    randomMatrix(rows, cols) {
+        let m = [];
+        for (let i = 0; i < rows; i++) {
+            let row = [];
+            for (let j = 0; j < cols; j++) {
+                row.push((Math.random() * 2 - 1) * 0.6);
+            }
+            m.push(row);
+        }
+        return m;
+    }
+
+    zeroMatrix(rows, cols) {
+        let m = [];
+        for (let i = 0; i < rows; i++) {
+            let row = new Array(cols).fill(0);
+            m.push(row);
+        }
+        return m;
+    }
+
+    randomArray(size, scale = 0.1) {
+        let arr = [];
+        for (let i = 0; i < size; i++) {
+            arr.push((Math.random() * 2 - 1) * scale);
+        }
+        return arr;
+    }
+
+    sigmoid(x) {
+        return 1 / (1 + Math.exp(-x));
+    }
+
+    forward(inputs) {
+        let hidden = [];
+        for (let i = 0; i < this.hiddenSize; i++) {
+            let sum = this.biasH[i];
+            for (let j = 0; j < this.inputSize; j++) {
+                sum += inputs[j] * this.weightsIH[i][j];
+                if (Math.abs(inputs[j]) > 0.2) {
+                    this.connectionStrengthIH[i][j] = Math.min(1, this.connectionStrengthIH[i][j] + 0.0035);
+                }
+            }
+            hidden.push(this.sigmoid(sum));
+        }
+
+        let outputs = [];
+        for (let i = 0; i < this.outputSize; i++) {
+            let sum = this.biasO[i];
+            for (let j = 0; j < this.hiddenSize; j++) {
+                sum += hidden[j] * this.weightsHO[i][j];
+                if (Math.abs(hidden[j]) > 0.2) {
+                    this.connectionStrengthHO[i][j] = Math.min(1, this.connectionStrengthHO[i][j] + 0.0035);
+                }
+            }
+            outputs.push(this.sigmoid(sum));
+        }
+        return outputs;
+    }
+
+    copy() {
+        let newBrain = new NeuralNet();
+        newBrain.weightsIH = JSON.parse(JSON.stringify(this.weightsIH));
+        newBrain.weightsHO = JSON.parse(JSON.stringify(this.weightsHO));
+        newBrain.biasH = [...this.biasH];
+        newBrain.biasO = [...this.biasO];
+        newBrain.connectionStrengthIH = JSON.parse(JSON.stringify(this.connectionStrengthIH));
+        newBrain.connectionStrengthHO = JSON.parse(JSON.stringify(this.connectionStrengthHO));
+        return newBrain;
+    }
+
+    mutate(mutationRate = 0.08, mutationStrength = 0.35) {
+        const mutateValue = (val) => {
+            if (Math.random() < mutationRate) {
+                return val + (Math.random() * 2 - 1) * mutationStrength;
+            }
+            return val;
+        };
+
+        for (let i = 0; i < this.weightsIH.length; i++) {
+            for (let j = 0; j < this.weightsIH[i].length; j++) {
+                this.weightsIH[i][j] = mutateValue(this.weightsIH[i][j]);
+            }
+        }
+
+        for (let i = 0; i < this.weightsHO.length; i++) {
+            for (let j = 0; j < this.weightsHO[i].length; j++) {
+                this.weightsHO[i][j] = mutateValue(this.weightsHO[i][j]);
+            }
+        }
+
+        for (let i = 0; i < this.biasH.length; i++) {
+            this.biasH[i] = mutateValue(this.biasH[i]);
+        }
+
+        for (let i = 0; i < this.biasO.length; i++) {
+            this.biasO[i] = mutateValue(this.biasO[i]);
+        }
+
+        // Lightly decay connection strengths
+        for (let i = 0; i < this.connectionStrengthIH.length; i++) {
+            for (let j = 0; j < this.connectionStrengthIH[i].length; j++) {
+                this.connectionStrengthIH[i][j] *= 0.92;
+            }
+        }
+
+        for (let i = 0; i < this.connectionStrengthHO.length; i++) {
+            for (let j = 0; j < this.connectionStrengthHO[i].length; j++) {
+                this.connectionStrengthHO[i][j] *= 0.92;
+            }
+        }
+    }
+}
+
+  
 // ==================== CREATURE CLASS ====================
 class Creature {
     constructor(x, y, parentModules = null, generation = 1, parentTraits = null) {
