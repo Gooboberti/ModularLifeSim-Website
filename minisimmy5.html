@@ -4140,11 +4140,12 @@ function updateInspector() {
     }
 }
 // =====================================================
-// SCORE MULTIPLIER SYSTEM
+// SCORE MULTIPLIER SYSTEM (Updated with smart formatting)
 // =====================================================
 function updateScoreMultipliers() {
     if (!creatures || creatures.length === 0) return;
 
+    // === Calculate base values ===
     const pop = creatures.length;
     const predatorCount = creatures.filter(c => c.isPredator).length;
     const totalModules = creatures.reduce((sum, c) => sum + c.modules.length, 0);
@@ -4159,7 +4160,7 @@ function updateScoreMultipliers() {
         }
     }
 
-    // === Calculate Multipliers ===
+    // === Define Multipliers ===
     const popMult = 1 + Math.min(pop / 180, 1.8);
     const predMult = 1 + Math.min(predatorCount / 45, 1.6);
     const avgModMult = 1 + (avgModules * 0.38);
@@ -4176,6 +4177,7 @@ function updateScoreMultipliers() {
     tierMult *= 1 + (tierCounts[9] * 0.019);
     tierMult *= 1 + (tierCounts[10] * 0.032);
 
+    // Final total multiplier
     let totalMult = popMult * predMult * avgModMult * tierMult;
     totalMult = Math.max(0.6, Math.min(totalMult, 12));
 
@@ -4183,6 +4185,7 @@ function updateScoreMultipliers() {
     const scoreEl = document.getElementById('vegas-score');
     const multEl = document.getElementById('score-multiplier');
 
+    // Smart score formatting (exponential earlier to prevent overlap)
     if (scoreEl) {
         let displayScore;
         if (totalScore >= 10000000) {
@@ -4197,7 +4200,7 @@ function updateScoreMultipliers() {
 
     if (multEl) multEl.innerText = totalMult.toFixed(2);
 
-    // Update individual multiplier displays
+    // Update individual multipliers
     const setMult = (id, value) => {
         const el = document.getElementById(id);
         if (el) el.innerText = '×' + value.toFixed(2);
@@ -4208,7 +4211,7 @@ function updateScoreMultipliers() {
     setMult('mult-avgmod', avgModMult);
 
     for (let t = 1; t <= 10; t++) {
-        let tierMultValue = 1;
+        let tierMultValue;
         if (t === 1) tierMultValue = 1 + (tierCounts[1] * 0.0015);
         else if (t === 2) tierMultValue = 1 + (tierCounts[2] * 0.0022);
         else if (t === 3) tierMultValue = 1 + (tierCounts[3] * 0.0030);
@@ -4226,78 +4229,80 @@ function updateScoreMultipliers() {
 
     window.currentScoreMultiplier = totalMult;
 }
+  
+              function draw() {
+    // ==================== DEBUG ====================
+    if (frameCount % 60 === 0) {
+        console.log("%c[DEBUG] draw() is running | currentMusicMode =", "color:#f87171", currentMusicMode);
+        console.log("%c[DEBUG] musicVisualizerActive =", "color:#f87171", musicVisualizerActive);
+    }
+    // ===============================================
 
-// =====================================================
-// DRAW FUNCTION - MAIN RENDER + UPDATE LOOP
-// =====================================================
-function draw() {
     background(12, 14, 22);
 
-    // =====================================================
-    // MUSIC VISUALIZER (Real-time Audio Reactive)
-    // =====================================================
-    if (musicVisualizerActive && currentMusicMode) {
-        push();
-        drawingContext.save();
-        resetMatrix();
-        colorMode(RGB, 255);
-        ellipseMode(CENTER);
-        noFill();
+// ==================== MUSIC VISUALIZER (Real Audio Reactive) ====================
+if (musicVisualizerActive && currentMusicMode) {
+    push();
+    drawingContext.save();
+    resetMatrix();
+    colorMode(RGB, 255);
+    ellipseMode(CENTER);
+    noFill();
 
-        const baseR = musicVisualizerRadius || 280;
-        const glow = musicVisualizerGlow || 1.0;
-        const thickness = musicVisualizerThickness || 6;
+    let baseR = musicVisualizerRadius || 280;
+    let glow = musicVisualizerGlow || 1.0;
+    let thickness = musicVisualizerThickness || 6;
 
-        const bass = musicData.bass || 0;
-        const mids = musicData.mids || 0;
-        const highs = musicData.highs || 0;
+    // === REAL AUDIO DATA ===
+    const bass = musicData.bass || 0;
+    const mids = musicData.mids || 0;
+    const highs = musicData.highs || 0;
 
-        let rOuter = baseR * (1.0 + bass * 0.45);
-        let rMid   = baseR * (1.0 + mids * 0.35);
-        let rInner = baseR * (1.0 + highs * 0.55);
+    // Dynamic radius per band
+    let rOuter = baseR * (1.0 + bass * 0.45);
+    let rMid   = baseR * (1.0 + mids * 0.35);
+    let rInner = baseR * (1.0 + highs * 0.55);
 
-        const col = currentMusicMode === 'prune' 
-            ? { r: 255, g: 40, b: 70 }
-            : currentMusicMode === 'replicate' 
-                ? { r: 30, g: 230, b: 120 }
-                : { r: 255, g: 210, b: 50 };
+    // Mode color
+    let col = currentMusicMode === 'prune'   ? {r:255, g:40,  b:70} :
+              currentMusicMode === 'replicate'? {r:30,  g:230, b:120} :
+                                               {r:255, g:210, b:50};
 
-        // Outer ring (Bass)
-        stroke(col.r, col.g, col.b, 200 * glow);
-        strokeWeight(thickness * 3.5 * (0.7 + bass * 1.8));
-        ellipse(width / 2, height / 2, rOuter * 2.35, rOuter * 2.35);
+    // === OUTER RING (Bass) ===
+    stroke(col.r, col.g, col.b, 200 * glow);
+    strokeWeight(thickness * 3.5 * (0.7 + bass * 1.8));
+    ellipse(width/2, height/2, rOuter * 2.35, rOuter * 2.35);
 
-        stroke(col.r, col.g, col.b, 50 * glow);
-        strokeWeight(thickness * 6);
-        ellipse(width / 2, height / 2, rOuter * 2.55, rOuter * 2.55);
+    // Soft glow
+    stroke(col.r, col.g, col.b, 50 * glow);
+    strokeWeight(thickness * 6);
+    ellipse(width/2, height/2, rOuter * 2.55, rOuter * 2.55);
 
-        // Middle ring (Mids)
-        stroke(col.r * 0.85, col.g * 0.95, col.b, 210 * glow);
-        strokeWeight(thickness * 2.2 * (0.8 + mids * 1.6));
-        ellipse(width / 2, height / 2, rMid * 1.7, rMid * 1.7);
+    // === MIDDLE RING (Mids) ===
+    stroke(col.r * 0.85, col.g * 0.95, col.b, 210 * glow);
+    strokeWeight(thickness * 2.2 * (0.8 + mids * 1.6));
+    ellipse(width/2, height/2, rMid * 1.7, rMid * 1.7);
 
-        // Inner ring (Highs)
-        stroke(255, 255, 255, 230 * glow);
-        strokeWeight(thickness * 1.3 * (0.6 + highs * 2.2));
-        ellipse(width / 2, height / 2, rInner * 1.1, rInner * 1.1);
+    // === INNER RING (Highs) ===
+    stroke(255, 255, 255, 230 * glow);
+    strokeWeight(thickness * 1.3 * (0.6 + highs * 2.2));
+    ellipse(width/2, height/2, rInner * 1.1, rInner * 1.1);
 
-        // Central pulse
-        const energy = (bass + mids + highs) / 3;
-        const coreSize = baseR * 0.5 * (0.85 + energy * 0.6);
-        fill(col.r, col.g, col.b, 45 * glow);
-        noStroke();
-        ellipse(width / 2, height / 2, coreSize * 2.1, coreSize * 2.1);
+    // === CENTRAL PULSE (overall energy) ===
+    let energy = (bass + mids + highs) / 3;
+    let coreSize = baseR * 0.5 * (0.85 + energy * 0.6);
+    fill(col.r, col.g, col.b, 45 * glow);
+    noStroke();
+    ellipse(width/2, height/2, coreSize * 2.1, coreSize * 2.1);
 
-        fill(255, 255, 255, 140 * glow);
-        ellipse(width / 2, height / 2, coreSize * 1.1, coreSize * 1.1);
+    fill(255, 255, 255, 140 * glow);
+    ellipse(width/2, height/2, coreSize * 1.1, coreSize * 1.1);
 
-        drawingContext.restore();
-        pop();
-    }
+    drawingContext.restore();
+    pop();
+}
+// ==================== END MUSIC VISUALIZER ====================
 
-    // =====================================================
-    // MAIN GAME UPDATE LOOP
-    // =====================================================
     if (paused) {
         try {
             drawWorld();
@@ -4309,257 +4314,1557 @@ function draw() {
         return;
     }
 
-    // --- Incubation Progress ---
-    if (incubatingEggs.length > 0) {
-        for (let i = incubatingEggs.length - 1; i >= 0; i--) {
-            let inc = incubatingEggs[i];
-            inc.progress = Math.min(100, inc.progress + 0.016 * timeScale);
+                  if (paused) {
+                      drawWorld();
+                      updateMainStats();
 
-            if (inc.progress >= 100 && !inc.completed) {
-                inc.completed = true;
-                addFloatingText(width / 2, 80, "Incubation Complete!", '#a78bfa');
-                playIncubationCompleteSound?.();
-            }
+                          updateMainStats();
+
+          // Live trends graph update
+          if (frameCount % 25 === 0 && miniChartCtx) {
+              drawMiniChart();
+          }
+
+          fill(255, 255, 255, 190);
+          textAlign(LEFT);
+          textSize(12);
+          textFont('Inter, system-ui');
+          if (isDay) {
+              text('DAY', 16, 24);
+          } else {
+              text('NIGHT', 16, 24);
+          }
+
+                      if (miniChartCtx) drawMiniChart();
+                      return;
+                  }
+
+                  simTime += (1 / 60) * timeScale;
+
+
+// === Incubation Progress Tick ===
+if (!paused && incubatingEggs.length > 0) {
+    for (let i = incubatingEggs.length - 1; i >= 0; i--) {
+        let inc = incubatingEggs[i];
+        let progressGain = 0.016 * timeScale; // ~1% per second at 1x speed
+        inc.progress = Math.min(100, inc.progress + progressGain);
+
+        if (inc.progress >= 100 && !inc.completed) {
+            inc.completed = true;
+            addFloatingText(width/2, 80, "Incubation Complete!", '#a78bfa');
         }
     }
+}
 
-    // --- Time & UI ---
-    simTime += (1 / 60) * timeScale;
+                
+                  const timeEl = document.getElementById('sim-time');
+                  if (timeEl) timeEl.innerText = formatSimTime(simTime);
 
-    const timeEl = document.getElementById('sim-time');
-    if (timeEl) timeEl.innerText = formatSimTime(simTime);
 
-    // FPS
-    frameCountForFPS++;
-    const now = Date.now();
-    if (now - lastFPSUpdate > 500) {
-        currentFPS = Math.round((frameCountForFPS * 1000) / (now - lastFPSUpdate));
-        const fpsEl = document.getElementById('fps-counter');
-        if (fpsEl) {
-            fpsEl.innerText = currentFPS;
-            fpsEl.style.color = currentFPS >= 50 ? '#34d399' 
-                              : currentFPS >= 30 ? '#fbbf24' 
-                              : '#f87171';
+                  // FPS calculation
+                  frameCountForFPS++;
+                  const now = Date.now();
+                  if (now - lastFPSUpdate > 500) {
+                      currentFPS = Math.round((frameCountForFPS * 1000) / (now - lastFPSUpdate));
+                      const fpsEl = document.getElementById('fps-counter');
+                      if (fpsEl) {
+                          fpsEl.innerText = currentFPS;
+                          // Color code performance
+                          if (currentFPS >= 50) fpsEl.style.color = '#34d399';
+                          else if (currentFPS >= 30) fpsEl.style.color = '#fbbf24';
+                          else fpsEl.style.color = '#f87171';
+                      }
+                      frameCountForFPS = 0;
+                      lastFPSUpdate = now;
+                  }
+
+                  if (globalReproCooldown > 0) globalReproCooldown--;
+
+                  envPhaseProgress += timeScale;
+                  if (envPhaseProgress >= envCycleLength) {
+                      envPhaseProgress = 0;
+                      environmentPhase = (environmentPhase + 1) % 3;
+                      updateEnvLabel(environmentPhase);
+                  }
+
+                  timeOfDay = (frameCount * timeScale % dayLength) / dayLength;
+                  let isDay = timeOfDay < 0.5;
+
+                  if (isDay !== lastIsDay) {
+                      if (isDay) greenZone.food = Math.min(greenZone.maxFood, greenZone.food + 150);
+                      else blueZone.food = Math.min(blueZone.maxFood, blueZone.food + 150);
+                      lastIsDay = isDay;
+
+                      if (Math.random() < 0.55 * soundDensity) playAmbientPulse(isDay);
+                  }
+
+                  let env = getEnvironmentModifiers();
+                  if (environmentPhase === 0) {
+                      fill(16, 48, 32, 22);
+                  } else if (environmentPhase === 1) {
+                      fill(18, 22, 28, 18);
+                  } else {
+                      fill(48, 28, 18, 26);
+                  }
+                  rect(0, 0, width, height);
+
+                  let vortexPhase = (timeOfDay + 0.25) % 1;
+                  let vortexStrength = sin(vortexPhase * TWO_PI) * 0.5 + 0.5;
+                  vortexStrength *= settings.vortexMultiplier;
+
+                  // Environmental modifier on vortex
+                  let envMods = getEnvironmentModifiers();
+                  vortexStrength *= envMods.vortexMult || 1.0;
+
+
+
+let vortexDir = cos(vortexPhase * TWO_PI);
+                
+                  stroke(255, 255, 255, 5);
+                  strokeWeight(1);
+                  noFill();
+                  for (let r = 42; r < 460; r += 38) {
+                      ellipse(centerX, centerY, r * 2, r * 2);
+                  }
+
+                  fill(16, 18, 26);
+                  stroke(50, 55, 70);
+                  strokeWeight(3.5);
+                  circle(centerX, centerY, 22);
+                  noStroke();
+                  fill(70, 75, 85, 42);
+                  circle(centerX - 4, centerY - 4, 8);
+
+                  push();
+                  translate(width / 2, height / 2);
+                  scale(zoomLevel);
+                  translate(-width / 2, -height / 2);
+
+                  const pulseG = sin(frameCount * 0.11) * 0.05 + 1;
+                  const pulseB = sin(frameCount * 0.1 + 1.1) * 0.05 + 1;
+
+                  // Environmental phase strongly affects zone size
+                  let envSizeMult = 1.0;
+                  if (environmentPhase === 0) envSizeMult = 1.82;     // Fertile - large, reaches middle but less overlap
+                  else if (environmentPhase === 2) envSizeMult = 0.32; // Drought - barely visible
+
+                  let greenDisplayR = Math.max(greenZone.minR * (environmentPhase === 2 ? 0.6 : 1),
+                                               greenZone.baseR * (greenZone.food / greenZone.maxFood) * pulseG * envSizeMult);
+                  let blueDisplayR = Math.max(blueZone.minR * (environmentPhase === 2 ? 0.6 : 1),
+                                              blueZone.baseR * (blueZone.food / blueZone.maxFood) * pulseB * envSizeMult);
+
+
+                  fill(16, 185, 129, isDay ? 90 : 32);
+                  circle(greenZone.x, greenZone.y, greenDisplayR * 2);
+                  fill(16, 185, 129, isDay ? 50 : 18);
+                  circle(greenZone.x, greenZone.y, greenDisplayR * 2.2);
+
+                  fill(56, 189, 248, isDay ? 32 : 90);
+                  circle(blueZone.x, blueZone.y, blueDisplayR * 2);
+                  fill(56, 189, 248, isDay ? 18 : 50);
+                  circle(blueZone.x, blueZone.y, blueDisplayR * 2.2);
+
+                  for (let i = redBeams.length - 1; i >= 0; i--) {
+                      let b = redBeams[i];
+                      b.update();
+                      b.show();
+
+                      if (b.life <= 0) {
+                          redBeams.splice(i, 1);
+                      }
+                  }
+
+                  if (redHazardsEnabled) {
+                      for (let i = redHazards.length - 1; i >= 0; i--) {
+                          let h = redHazards[i];
+                          h.update(vortexDir, vortexStrength);
+
+                          if (dist(h.x, h.y, centerX, centerY) < 7) {
+                              explosions.push(new Explosion(h.x, h.y));
+                              playExplosionSound();
+                              redHazards.splice(i, 1);
+                              continue;
+                          }
+
+                          h.show();
+
+                          for (let c of creatures) {
+                              let d = dist(h.x, h.y, c.x, c.y);
+                              if (d < h.size + 6) {
+                                  let sensorBonus = c.getModuleCount('sensor') * 0.38;
+                                  let baseDamage = 26 + random(4, 10) - sensorBonus;
+
+                                  c.energy = max(0, c.energy - baseDamage);
+                                  c.damageFlash = 50;
+                                  c.purpleFlash = max(c.purpleFlash || 0, 48);
+                                  c.hazardDamageTaken = (c.hazardDamageTaken || 0) + baseDamage;
+
+                                  let dx = c.x - h.x;
+                                  let dy = c.y - h.x;
+                                  let len = sqrt(dx*dx + dy*dy) || 1;
+                                  c.vx += (dx / len) * 2.2;
+                                  c.vy += (dy / len) * 2.2;
+
+                                  if (c.energy > 15) {
+                                      c.currentThought = "Hit!";
+                                  }
+
+                                  for (let other of creatures) {
+                                      if (other === c) continue;
+                                      let od = dist(h.x, h.y, other.x, other.y);
+                                      if (od < 48) {
+                                          let oSensor = other.getModuleCount('sensor') * 0.32;
+                                          let oDamage = 12 + random(2, 5) - oSensor;
+                                          other.energy = max(0, other.energy - oDamage);
+                                          other.damageFlash = max(other.damageFlash || 0, 35);
+                                          other.hazardDamageTaken = (other.hazardDamageTaken || 0) + oDamage;
+
+                                          let odx = other.x - h.x;
+                                          let ody = other.y - h.x;
+                                          let olen = sqrt(odx*odx + ody*ody) || 1;
+                                          other.vx += (odx / olen) * 1;
+                                          other.vy += (ody / olen) * 1;
+                                      }
+                                  }
+
+                                  explosions.push(new Explosion(h.x, h.y));
+                                  playExplosionSound();
+
+                                  redHazards.splice(i, 1);
+                                  break;
+                              }
+                          }
+                      }
+
+                     const targetRedCount = 8;
+if (redHazards.length < targetRedCount) {
+    let spawnChance = (targetRedCount - redHazards.length) * 0.11;
+
+   
+
+    if (random() < spawnChance) {
+        redHazards.push(new RedHazard());
+    }
+}
+                  }
+
+                  for (let i = explosions.length - 1; i >= 0; i--) {
+                      let ex = explosions[i];
+                      ex.update();
+                      ex.show();
+
+                      if (ex.life <= 0) {
+                          explosions.splice(i, 1);
+                      }
+                  }
+
+                  for (let i = spawnEffects.length - 1; i >= 0; i--) {
+                      let se = spawnEffects[i];
+                      se.update();
+                      se.show();
+
+                      if (se.life <= 0) {
+                          spawnEffects.splice(i, 1);
+                      }
+                  }
+
+                  // Draw floating texts (in world space)
+                  if (showDamageNumbers) {
+                      for (let ft of floatingTexts) {
+                          ft.show();
+                      }
+                  }
+
+                  // === Draw Energy Walls (with splitting behavior) ===
+                  for (let i = energyWalls.length - 1; i >= 0; i--) {
+                      let w = energyWalls[i];
+
+                      // Check immunity first
+                      let isImmune = w.immuneUntil && frameCount < w.immuneUntil;
+
+                      if (!isImmune) {
+                          // Very slow passive decay only when vulnerable
+                          w.life -= 0.35;
+
+                          // Red particle absorption + empowerment (only for offensive walls)
+                          if (w.offensive) {
+                              for (let j = redHazards.length - 1; j >= 0; j--) {
+                                  let r = redHazards[j];
+                                  if (distToLineSegment(r.x, r.y, w.x1, w.y1, w.x2, w.y2) < 22) {
+                                      redHazards.splice(j, 1);
+
+                                      if (!w.empowered) {
+                                          w.redHits = (w.redHits || 0) + 1;
+                                          w.shakeTimer = 12 + (w.redHits * 4);
+
+                                          if (w.redHits >= 5) {
+                                              w.empowered = true;
+                                          }
+                                      }
+
+                                      // Offensive walls become temporarily vortex-vulnerable when hit by red
+                                      w.vortexImmune = false;
+                                      w.vortexVulnerableUntil = frameCount + 600;
+
+                                      playAbsorbSound();
+
+                                      // Visual explosion feedback
+                                      explosions.push(new Explosion(r.x, r.y));
+                                      for (let k = 0; k < 2; k++) {
+                                          explosions.push(new Explosion(r.x + random(-12, 12), r.y + random(-12, 12)));
+                                      }
+                                  }
+                              }
+                          }
+                      }
+
+                      if (w.life <= 0) {
+                          let length = w.originalLength || dist(w.x1, w.y1, w.x2, w.y2);
+
+                          // Split cleanly down the middle if long enough and not immune
+                          if (length > 42 && !isImmune) {
+                              let mx = (w.x1 + w.x2) / 2;
+                              let my = (w.y1 + w.y2) / 2;
+
+                              let newLife = Math.max(140, length * 2.0);
+
+                              // Left piece - becomes immune for 1 second
+                              energyWalls.push({
+                                  x1: w.x1,
+                                  y1: w.y1,
+                                  x2: mx,
+                                  y2: my,
+                                  life: newLife,
+                                  maxLife: newLife,
+                                  hitFlash: 0,
+                                  vx: w.vx - 1.2,
+                                  vy: w.vy - 1.2,
+                                  originalLength: length * 0.5,
+                                  immuneUntil: frameCount + 60,
+                                  redHits: 0,
+                                  empowered: false,
+                                  shakeTimer: 0
+                              });
+
+                              // Right piece - becomes immune for 1 second
+                              energyWalls.push({
+                                  x1: mx,
+                                  y1: my,
+                                  x2: w.x2,
+                                  y2: w.y2,
+                                  life: newLife,
+                                  maxLife: newLife,
+                                  hitFlash: 0,
+                                  vx: w.vx + 1.2,
+                                  vy: w.vy + 1.2,
+                                  originalLength: length * 0.5,
+                                  immuneUntil: frameCount + 60,
+                                  redHits: 0,
+                                  empowered: false,
+                                  shakeTimer: 0
+                              });
+
+                              explosions.push(new Explosion(mx, my));
+                              playWallBreakSound(0.6);
+
+                              energyWalls.splice(i, 1);
+                              continue;
+
+                          } else {
+                              // Final break (too small or was immune)
+                              let explodeX = (w.x1 + w.x2) / 2;
+                              let explodeY = (w.y1 + w.y2) / 2;
+
+                              playWallBreakSound(0.4);
+                              playExplosionSound();
+                              explosions.push(new Explosion(explodeX, explodeY));
+
+                              for (let c of creatures) {
+                                  let d = dist(c.x, c.y, explodeX, explodeY);
+                                  if (d < 40) {
+                                      c.energy = max(0, c.energy - 20);
+                                      c.purpleFlash = max(c.purpleFlash || 0, 60);
+                                  }
+                              }
+
+                              energyWalls.splice(i, 1);
+                              continue;
+                          }
+                      }
+
+                      // === v1.85: Solid + Filter walls deflect white/red particles when selected ===
+                      const isSolid = !w.filterMode || w.filterMode === "repel_all";
+                      const filterTypes = (w.filterSettings && w.filterSettings.types) || [];
+
+                      const deflectsWhite = isSolid || filterTypes.includes('white');
+                      const deflectsRed = isSolid || filterTypes.includes('red');
+
+                      if (deflectsWhite || deflectsRed) {
+                          // White particles - match red particle wall behavior (strong stop + bounce)
+                          if (deflectsWhite) {
+                              const isWhiteFilterWall = filterTypes.includes('white');
+
+                              for (let p of vortexParticles) {
+                                  let d = distToLineSegment(p.x, p.y, w.x1, w.y1, w.x2, w.y2);
+                                  if (d < 26) {
+                                      let mx = (w.x1 + w.x2) / 2;
+                                      let my = (w.y1 + w.y2) / 2;
+                                      let dx = p.x - mx;
+                                      let dy = p.y - my;
+                                      let len = sqrt(dx*dx + dy*dy) || 1;
+
+                                      if (isWhiteFilterWall) {
+                                          // Strong stop + bounce back (matching red filter behavior)
+                                          p.x += (dx / len) * 5.5;
+                                          p.y += (dy / len) * 5.5;
+
+                                          p.vx = -(p.vx || 0) * 0.9;
+                                          p.vy = -(p.vy || 0) * 0.9;
+
+                                          p.vx *= 0.3;
+                                          p.vy *= 0.3;
+                                      } else {
+                                          // Normal solid barrier behavior
+                                          p.x += (dx / len) * 2.4;
+                                          p.y += (dy / len) * 2.4;
+                                          p.vx = (p.vx || 0) * 0.45;
+                                          p.vy = (p.vy || 0) * 0.45;
+                                      }
+                                  }
+                              }
+                          }
+
+                          // Red particles - special strong behavior on red filter walls
+                          if (deflectsRed) {
+                              const isRedFilterWall = filterTypes.includes('red');
+
+                              for (let r of redHazards) {
+                                  let d = distToLineSegment(r.x, r.y, w.x1, w.y1, w.x2, w.y2);
+                                  if (d < 26) {
+                                      let mx = (w.x1 + w.x2) / 2;
+                                      let my = (w.y1 + w.y2) / 2;
+                                      let dx = r.x - mx;
+                                      let dy = r.y - my;
+                                      let len = sqrt(dx*dx + dy*dy) || 1;
+
+                                      if (isRedFilterWall) {
+                                          // Strong stop + bounce back (user request)
+                                          r.x += (dx / len) * 5.5;
+                                          r.y += (dy / len) * 5.5;
+
+                                          // Reverse velocity and heavily dampen
+                                          r.vx = -(r.vx || 0) * 0.9;
+                                          r.vy = -(r.vy || 0) * 0.9;
+
+                                          // Extra stop force
+                                          r.vx *= 0.3;
+                                          r.vy *= 0.3;
+                                      } else {
+                                          // Normal solid barrier behavior
+                                          r.x += (dx / len) * 3.0;
+                                          r.y += (dy / len) * 3.0;
+                                          r.vx = (r.vx || 0) * 0.4;
+                                          r.vy = (r.vy || 0) * 0.4;
+                                      }
+                                  }
+                              }
+                          }
+                      }
+
+                      // Vortex influence on walls (v1.72: immune by default, temporarily vulnerable after damage)
+                      const isVulnerable = w.vortexVulnerableUntil && frameCount <= w.vortexVulnerableUntil;
+                      const shouldApplyVortex = !w.vortexImmune || isVulnerable;
+
+                      if (shouldApplyVortex) {
+                          let mx = (w.x1 + w.x2) / 2;
+                          let my = (w.y1 + w.y2) / 2;
+                          let dx = mx - centerX;
+                          let dy = my - centerY;
+                          let distToCenter = sqrt(dx * dx + dy * dy) || 1;
+
+                          let vortexSpeedMult = w.empowered ? 0.25 : 1.0;
+
+                          // Tangential (rotational) force
+                          let tangentX = -dy;
+                          let tangentY = dx;
+                          let tlen = sqrt(tangentX * tangentX + tangentY * tangentY) || 1;
+
+                          let vortexDir = cos((timeOfDay + 0.25) * TWO_PI);
+                          let rotForce = 0.12 * settings.vortexMultiplier * vortexDir * vortexSpeedMult;
+
+                          w.vx += (tangentX / tlen) * rotForce;
+                          w.vy += (tangentY / tlen) * rotForce;
+
+                          // Inward pull
+                          let pull = 0.07 * settings.vortexMultiplier * vortexSpeedMult;
+                          w.vx += (centerX - mx) * pull / (distToCenter + 20);
+                          w.vy += (centerY - my) * pull / (distToCenter + 20);
+                      }
+
+                      // Apply velocity to both endpoints (keeps wall rigid-ish)
+                      w.x1 += w.vx;
+                      w.y1 += w.vy;
+                      w.x2 += w.vx;
+                      w.y2 += w.vy;
+
+                      // Drag so they don't fly forever
+                      w.vx *= 0.92;
+                      w.vy *= 0.92;
+
+                      // Energy Wall sweeps up white particles and honey as it moves
+                      const sweepRadius = 18;
+                      const wallMidX = (w.x1 + w.x2) / 2;
+                      const wallMidY = (w.y1 + w.y2) / 2;
+
+                      // Sweep vortex particles
+                      for (let j = vortexParticles.length - 1; j >= 0; j--) {
+                          let p = vortexParticles[j];
+                          if (dist(p.x, p.y, wallMidX, wallMidY) < sweepRadius) {
+                              vortexParticles.splice(j, 1);
+                          }
+                      }
+
+                      // Sweep honey blooms
+                      for (let j = foodBlooms.length - 1; j >= 0; j--) {
+                          let b = foodBlooms[j];
+                          if (dist(b.x, b.y, wallMidX, wallMidY) < sweepRadius) {
+                              foodBlooms.splice(j, 1);
+                          }
+                      }
+
+                      // Sweep static honey patches
+                      for (let j = staticFoodPatches.length - 1; j >= 0; j--) {
+                          let p = staticFoodPatches[j];
+                          if (dist(p.x, p.y, wallMidX, wallMidY) < sweepRadius + 8) {
+                              staticFoodPatches.splice(j, 1);
+                          }
+                      }
+
+                      let lifeRatio = w.life / w.maxLife;
+                      let alpha = map(lifeRatio, 0, 1, 45, 220);
+                      let thickness = map(lifeRatio, 0, 1, 3, 9);
+
+                      // === v1.96: Strong visual distinction by wall type + filter ===
+                      let wallColor;
+
+                      const isFilter = w.wallType === "filter" || w.filterMode === "custom_filter";
+                      const types = (w.filterSettings && w.filterSettings.types) || [];
+
+                      if (!isFilter) {
+                          // Solid Barrier - classic glassy blue
+                          wallColor = { r: 180, g: 210, b: 255 };
+                      } else if (types.includes('predator')) {
+                          wallColor = { r: 239, g: 68, b: 68 };      // Strong red
+                      } else if (types.includes('white')) {
+                          wallColor = { r: 245, g: 245, b: 255 };    // Bright white / light blue-white
+                      } else if (types.includes('red')) {
+                          wallColor = { r: 249, g: 115, b: 22 };     // Orange
+                      } else if (types.includes('high_module')) {
+                          wallColor = { r: 192, g: 192, b: 210 };    // Light silver / cool gray
+                      } else if (types.includes('low_module')) {
+                          wallColor = { r: 120, g: 120, b: 140 };    // Darker silver / steel
+                      } else {
+                          wallColor = { r: 140, g: 200, b: 255 };    // Default filter blue
+                      }
+
+                      // v1.73: Visual indicator for vortex-vulnerable state
+                      const wallIsVulnerable = w.vortexVulnerableUntil && frameCount <= w.vortexVulnerableUntil;
+                      if (wallIsVulnerable) {
+                          // Pulsing warning glow when temporarily vulnerable to vortex
+                          let pulse = sin(frameCount * 0.15) * 0.5 + 0.5;
+                          push();
+                          stroke(255, 140, 60, 40 + pulse * 60);
+                          strokeWeight(thickness * 3.2);
+                          strokeCap(ROUND);
+                          line(w.x1, w.y1, w.x2, w.y2);
+                          pop();
+                      }
+
+                      // === Glass perimeter + Acid inside effect ===
+                      // mx and my already declared above in vortex section - reuse them
+
+                      // Soft blue hit flash (when creatures are breaking the glass)
+                      if (w.hitFlash > 0) {
+                          w.hitFlash--;
+                          push();
+                          stroke(120, 200, 255, 130 + w.hitFlash * 5);
+                          strokeWeight(thickness * 2.4);
+                          strokeCap(ROUND);
+                          line(w.x1, w.y1, w.x2, w.y2);
+                          pop();
+                      }
+
+                      // Outer glass edge (color-coded by filter)
+                      push();
+                      stroke(wallColor.r, wallColor.g, wallColor.b, alpha * 0.95);
+                      strokeWeight(thickness * 0.7);
+                      strokeCap(ROUND);
+                      line(w.x1, w.y1, w.x2, w.y2);
+                      pop();
+
+                      // Inner "filter field" color (slightly darker version of wall color)
+                      push();
+                      stroke(
+                          Math.max(20, wallColor.r - 80),
+                          Math.max(20, wallColor.g - 60),
+                          Math.max(30, wallColor.b - 40),
+                          alpha * 0.65
+                      );
+                      strokeWeight(thickness * 0.95);
+                      strokeCap(ROUND);
+                      line(w.x1, w.y1, w.x2, w.y2);
+                      pop();
+
+                      // Shake effect when absorbing red particles
+                      if (w.shakeTimer > 0) {
+                          w.shakeTimer--;
+                          let shake = w.shakeTimer * 0.6;
+                          w.x1 += random(-shake, shake);
+                          w.y1 += random(-shake, shake);
+                          w.x2 += random(-shake, shake);
+                          w.y2 += random(-shake, shake);
+                      }
+
+                      // Color shift based on red particle absorption / empowerment (more obvious build-up)
+                      let redTint = Math.min((w.redHits || 0) * 38, 180); // Stronger and faster color shift
+                      let baseRed = 167 + redTint * 0.75;
+                      let baseGreen = 139 - redTint * 0.55;
+                      let baseBlue = 250 - redTint * 1.35;
+
+                      if (w.empowered) {
+                          baseRed = 255;
+                          baseGreen = 60;
+                          baseBlue = 60;
+                      }
+
+                      // Enhanced outer glow that gets brighter as it absorbs more
+                      let glowAlpha = map(lifeRatio, 0, 1, 15, 70) + (w.redHits || 0) * 8;
+                      push();
+                      stroke(baseRed, baseGreen, baseBlue, glowAlpha);
+                      strokeWeight(thickness * 1.9);
+                      strokeCap(ROUND);
+                      line(w.x1, w.y1, w.x2, w.y2);
+                      pop();
+
+                      // Extra bright core when building up empowerment
+                      if ((w.redHits || 0) > 0 && !w.empowered) {
+                          push();
+                          stroke(255, 120, 80, (w.redHits || 0) * 12);
+                          strokeWeight(thickness * 0.8);
+                          line(w.x1, w.y1, w.x2, w.y2);
+                          pop();
+                      }
+                  }
+
+                  // Preview line while drawing
+                  if (currentWallPreview) {
+                      stroke(167, 139, 250, 160);
+                      strokeWeight(5);
+                      strokeCap(ROUND);
+                      line(currentWallPreview.x1, currentWallPreview.y1, currentWallPreview.x2, currentWallPreview.y2);
+                  }
+
+                  for (let i = vortexParticles.length - 1; i >= 0; i--) {
+                      let p = vortexParticles[i];
+                      p.update(vortexDir, vortexStrength);
+                      p.show();
+
+                      if (dist(p.x, p.y, centerX, centerY) < 4) {
+    if (p.isSpecial) {
+        // === SPECIAL: Spawn clone from Gene Vault ===
+        spawnVaultEchoCreature(p.x, p.y);
+    } else if (p.isPurple) {
+        let predator = new Creature(p.x, p.y);
+        predator.isPredator = true;
+        creatures.push(predator);
+    } else {
+        spawnCreatureFromVortexCenter(p.x, p.y, vortexDir, vortexStrength);
+    }
+    vortexParticles.splice(i, 1);
+    continue;
+}
+
+                      for (let c of creatures) {
+                          let harvesterBonus = c.getTieredModuleCount('harvester') * 4.5;
+                          let pickupRange = 14 + harvesterBonus; // increased across the board
+if (dist(p.x, p.y, c.x, c.y) < pickupRange) {
+    c.energy = min(100, c.energy + settings.particleFoodValue * timeScale);
+    if (Math.random() < 0.11 * soundDensity) playEatSound(isDay);
+
+    // Floating points for eating particles
+    addFloatingText(c.x, c.y - 12, `+${Math.floor(settings.particleFoodValue)}`, '#a3e635');
+
+    // =====================================================
+    // NEW: Special Vault Echo Particle logic
+    // =====================================================
+    if (p.isSpecial) {
+        // Turn creature into a clone of a random Gene Vault creature
+        let filledSlots = geneVaultSlots.filter(slot => slot !== null);
+        if (filledSlots.length > 0) {
+            let vaultData = random(filledSlots);
+            if (vaultData.modules) c.modules = [...vaultData.modules];
+            if (vaultData.generation) c.generation = vaultData.generation;
+            c.currentThought = "Echo Infected";
+            c.energy = max(c.energy, 70);
         }
-        frameCountForFPS = 0;
-        lastFPSUpdate = now;
+
+        // Apply strong purple DoT infection
+        c.mustEatWhite = true;
+        c.purpleFlash = 420;      // Long duration
+        c.damageFlash = 420;
+        c.currentThought = "Infected - Must Feed";
+
+        addFloatingText(c.x, c.y - 30, "VAULT ECHO", '#c026d3');
+        playTone(420, 'sawtooth', 0.3, 0.7);
     }
 
-    // Environment & Day/Night
-    if (globalReproCooldown > 0) globalReproCooldown--;
-
-    envPhaseProgress += timeScale;
-    if (envPhaseProgress >= envCycleLength) {
-        envPhaseProgress = 0;
-        environmentPhase = (environmentPhase + 1) % 3;
-        updateEnvLabel(environmentPhase);
+    // Existing cleanse mechanic (keep this)
+    if (c.mustEatWhite) {
+        c.ateWhiteParticle = true;
+        c.purpleFlash = Math.max(0, c.purpleFlash - 40);
+        c.currentThought = "Cleansed";
     }
 
-    timeOfDay = (frameCount * timeScale % dayLength) / dayLength;
-    let isDay = timeOfDay < 0.5;
+    p.life = 0;
+}
+                      }
+                  }
 
-    if (isDay !== lastIsDay) {
-        if (isDay) greenZone.food = Math.min(greenZone.maxFood, greenZone.food + 150);
-        else blueZone.food = Math.min(blueZone.maxFood, blueZone.food + 150);
-        lastIsDay = isDay;
-        if (Math.random() < 0.55 * soundDensity) playAmbientPulse(isDay);
-    }
+                  // Dynamic particle throttling (performance-aware) - restored
+                  let maxVortexParticles = 130;
+                  if (currentFPS < 45) maxVortexParticles = 80;
+                  if (currentFPS < 30) maxVortexParticles = 50;
+                  if (creatures.length > 120) maxVortexParticles = Math.min(maxVortexParticles, 70);
 
-    // =====================================================
-    // VORTEX + ENVIRONMENT
-    // =====================================================
-    let env = getEnvironmentModifiers();
-    let vortexPhase = (timeOfDay + 0.25) % 1;
-    let vortexStrength = (sin(vortexPhase * TWO_PI) * 0.5 + 0.5) * settings.vortexMultiplier;
-    vortexStrength *= env.vortexMult || 1.0;
-    let vortexDir = cos(vortexPhase * TWO_PI);
+                  if (frameCount % Math.max(1, Math.floor(2 / timeScale)) === 0 && vortexParticles.length < maxVortexParticles) {
+                      vortexParticles.push(new VortexParticle(true));
+                  }
 
-    // Background
-    if (environmentPhase === 0) fill(16, 48, 32, 22);
-    else if (environmentPhase === 1) fill(18, 22, 28, 18);
-    else fill(48, 28, 18, 26);
-    rect(0, 0, width, height);
+                  for (let c of creatures) {
+                      if (c.damageFlash > 0) {
+                          c.damageFlash--;
 
-    // Vortex rings + core
-    stroke(255, 255, 255, 5);
-    strokeWeight(1);
-    noFill();
-    for (let r = 42; r < 460; r += 38) ellipse(centerX, centerY, r * 2, r * 2);
+                          if (frameCount % 7 === 0) {
+                              let dot = 0.75;
+                              c.energy = max(0, c.energy - dot);
+                          }
 
-    fill(16, 18, 26);
-    stroke(50, 55, 70);
-    strokeWeight(3.5);
-    circle(centerX, centerY, 22);
-    noStroke();
-    fill(70, 75, 85, 42);
-    circle(centerX - 4, centerY - 4, 8);
+                          if (c.energy <= 15 && !c.isPredator) {
+                              c.isPredator = true;
+                              c.damageFlash = 0;
+                              c.currentThought = "Just fed";
+                          }
+                      }
 
-    // =====================================================
-    // ZOOM TRANSFORM + ZONES
-    // =====================================================
-    push();
-    translate(width / 2, height / 2);
-    scale(zoomLevel);
-    translate(-width / 2, -height / 2);
+                      if (c.purpleFlash > 0) {
+                          c.purpleFlash--;
+                          // Very strong purple DoT + severe slow
+                          c.vx *= 0.42;
+                          c.vy *= 0.42;
 
-    const pulseG = sin(frameCount * 0.11) * 0.05 + 1;
-    const pulseB = sin(frameCount * 0.1 + 1.1) * 0.05 + 1;
-    let envSizeMult = (environmentPhase === 0) ? 1.82 : (environmentPhase === 2) ? 0.32 : 1.0;
+                          if (frameCount % 3 === 0) {
+                              c.energy = max(0, c.energy - 7.5 * timeScale);
+                          }
+                      } else if (c.mustEatWhite) {
+                          // Purple window ended
+                          if (!c.ateWhiteParticle && !c.isPredator) {
+                              // Failed to eat white particle in time → become predator
+                              c.isPredator = true;
+                              c.currentThought = "Starved for white...";
+                              c.mustEatWhite = false;
+                          } else {
+                              c.mustEatWhite = false;
+                          }
+                          c.ateWhiteParticle = false;
+                      }
+                  }
 
-    // Green Zone
-    let greenDisplayR = Math.max(
-        greenZone.minR * (environmentPhase === 2 ? 0.6 : 1),
-        greenZone.baseR * (greenZone.food / greenZone.maxFood) * pulseG * envSizeMult
-    );
-    fill(16, 185, 129, isDay ? 90 : 32);
-    circle(greenZone.x, greenZone.y, greenDisplayR * 2);
-    fill(16, 185, 129, isDay ? 50 : 18);
-    circle(greenZone.x, greenZone.y, greenDisplayR * 2.2);
+                  for (let i = pheromones.length - 1; i >= 0; i--) {
+                      let ph = pheromones[i];
+                      ph.life -= 1.1 * timeScale;
+                      if (ph.life <= 0) { pheromones.splice(i, 1); continue; }
 
-    // Blue Zone
-    let blueDisplayR = Math.max(
-        blueZone.minR * (environmentPhase === 2 ? 0.6 : 1),
-        blueZone.baseR * (blueZone.food / blueZone.maxFood) * pulseB * envSizeMult
-    );
-    fill(56, 189, 248, isDay ? 32 : 90);
-    circle(blueZone.x, blueZone.y, blueDisplayR * 2);
-    fill(56, 189, 248, isDay ? 18 : 50);
-    circle(blueZone.x, blueZone.y, blueDisplayR * 2.2);
+                      let alpha = map(ph.life, 0, 200, 0, 150);
+                      let size = 4.5 + (ph.life / 50);
 
-    // =====================================================
-    // RED HAZARDS + BEAMS
-    // =====================================================
-    for (let i = redBeams.length - 1; i >= 0; i--) {
-        let b = redBeams[i];
-        b.update();
-        b.show();
-        if (b.life <= 0) redBeams.splice(i, 1);
-    }
+                      if (ph.isHazardWarning) {
+                          fill(239, 68, 68, alpha * 1.2);
+                          noStroke();
+                          circle(ph.x, ph.y, size * 1.2);
+                          fill(251, 146, 60, alpha * 0.55);
+                          circle(ph.x, ph.y, size * 1.9);
+                      } else {
+                          fill(ph.isGreen ? [52, 211, 153, alpha] : [56, 189, 248, alpha]);
+                          noStroke();
+                          circle(ph.x, ph.y, size);
+                          fill(ph.isGreen ? [52, 211, 153, alpha * 0.28] : [56, 189, 248, alpha * 0.28]);
+                          circle(ph.x, ph.y, size * 1.5);
+                      }
 
-    if (redHazardsEnabled) {
-        // ... (red hazard logic stays the same as your original)
-    }
+                      for (let c of creatures) {
+                          if (!c.isPredator) {
+                              let d = dist(c.x, c.y, ph.x, ph.y);
+                              if (d < 48 && d > 2) {
+                                  let correctZone = (ph.isGreen === isDay);
+                                  let force = correctZone ? 0.035 : 0.011;
+                                  if (c.getModuleCount('communicator') > 0) force *= 1.35;
 
-    // Explosions, Spawn Effects, Floating Text
-    for (let i = explosions.length - 1; i >= 0; i--) {
-        let ex = explosions[i];
-        ex.update();
-        ex.show();
-        if (ex.life <= 0) explosions.splice(i, 1);
-    }
+                                  force *= (settings.pheromoneDeposit / 3.0);
 
-    for (let i = spawnEffects.length - 1; i >= 0; i--) {
-        let se = spawnEffects[i];
-        se.update();
-        se.show();
-        if (se.life <= 0) spawnEffects.splice(i, 1);
-    }
+                                  if (ph.isHazardWarning) {
+                                      force *= 2;
+                                      let warnAngle = atan2(ph.y - c.y, ph.x - c.x) + PI;
+                                      c.vx += cos(warnAngle) * force * 0.85 * timeScale;
+                                      c.vy += sin(warnAngle) * force * 0.85 * timeScale;
+                                      if (c.getModuleCount('communicator') > 0) {
+                                          c.currentThought = "Heeding warning";
+                                      }
+                                  }
 
-    if (showDamageNumbers) {
-        for (let ft of floatingTexts) ft.show();
-    }
+                                  let dx = ph.x - c.x;
+                                  let dy = ph.y - c.y;
+                                  c.vx += (dx / d) * force * timeScale;
+                                  c.vy += (dy / d) * force * timeScale;
+                              }
+                          }
+                      }
+                  }
 
-    // =====================================================
-    // MUSIC MODE PARTICLES (Prune / Evolve)
-    // =====================================================
-    if (currentMusicMode) {
-        // Purple Infect Particles
-        for (let i = purpleInfectParticles.length - 1; i >= 0; i--) {
-            let p = purpleInfectParticles[i];
-            p.update();
-            p.draw();
-            if (p.isDead()) purpleInfectParticles.splice(i, 1);
-        }
+                  for (let i = foodBlooms.length - 1; i >= 0; i--) {
+                      let b = foodBlooms[i];
+                      b.life -= timeScale;
+                      b.age = (b.age || 0) + timeScale;
 
-        // Yellow Glowing Particles
-        for (let i = yellowGlowingParticles.length - 1; i >= 0; i--) {
-            let p = yellowGlowingParticles[i];
-            p.update();
-            p.draw();
-            if (p.isDead()) yellowGlowingParticles.splice(i, 1);
-        }
+                      let dx = b.x - centerX;
+                      let dy = b.y - centerY;
+                      let distToCenter = sqrt(dx * dx + dy * dy) || 1;
 
-        // Module Particles
-        for (let i = moduleParticles.length - 1; i >= 0; i--) {
-            let mp = moduleParticles[i];
-            mp.update();
-            mp.draw();
-            if (mp.isDead()) moduleParticles.splice(i, 1);
-        }
+                      if (distToCenter > 7) {
+                          let tangentX = -dy;
+                          let tangentY = dx;
+                          let len = sqrt(tangentX * tangentX + tangentY * tangentY) || 1;
 
-        // Creatures eating particles
-        for (let c of creatures) {
-            if (!c.isPredator) handleParticleEating(c);
-        }
+                          let rotForce = 0.78 * vortexStrength * vortexDir;
+                          b.x += (tangentX / len) * rotForce * timeScale;
+                          b.y += (tangentY / len) * rotForce * timeScale;
 
-        handleParticleVortexArrival();
-        updateMusicModeParticles();
-    }
+                          let pull = 0.22 * vortexStrength;
+                          b.x += (centerX - b.x) * pull / (distToCenter + 16) * timeScale;
+                          b.y += (centerY - b.y) * pull / (distToCenter + 16) * timeScale;
+                      }
 
-    if (currentMusicMode) {
-        drawMusicModeTintAndBorder();
-    }
-    updateEvolveEnvironmentalCycle();
-// =====================================================
-// LIVE MUSIC DEBUG DISPLAY
-// =====================================================
-if (musicEnabled && musicData) {
+                      let target = b.targetIsGreen ? greenZone : blueZone;
+                      let tdx = target.x - b.x;
+                      let tdy = target.y - b.y;
+                      let tdist = sqrt(tdx*tdx + tdy*tdy) || 1;
+
+                      let moveSpeed = 0.5;
+                      b.x += (tdx / tdist) * moveSpeed * timeScale;
+                      b.y += (tdy / tdist) * moveSpeed * timeScale;
+
+                      let progress = constrain(b.age / 380, 0, 1);
+                      let r = lerp(255, 135, progress);
+                      let g = lerp(215, 85, progress);
+                      let blue = lerp(95, 40, progress);
+
+                      let alpha = map(b.life, 0, 340, 0, 200);
+                      fill(r, g, blue, alpha);
+                      noStroke();
+                      circle(b.x, b.y, b.radius);
+                      fill(r, g, blue, alpha * 0.38);
+                      circle(b.x, b.y, b.radius * 0.55);
+
+                      if (tdist < 16 || b.life <= 0) {
+                          if (b.life > 0) {
+                              if (b.targetIsGreen) greenZone.food = min(greenZone.maxFood, greenZone.food + 16);
+                              else blueZone.food = min(blueZone.maxFood, blueZone.food + 16);
+                              playDepositSound();
+
+                              // Points for successful deposit
+                              addFloatingText(b.x, b.y - 10, '+12', '#fbbf24');
+                          } else {
+                              staticFoodPatches.push({
+                                  x: b.x,
+                                  y: b.y,
+                                  life: 480,
+                                  foodValue: 14,
+                                  radius: 12,
+                                  signalStrength: 0.95
+                              });
+                          }
+                          foodBlooms.splice(i, 1);
+                      }
+                  }
+
+                  for (let i = staticFoodPatches.length - 1; i >= 0; i--) {
+                      let p = staticFoodPatches[i];
+                      p.life -= timeScale;
+                      p.radius = max(3.5, p.radius * 0.982);
+
+                      if (frameCount % 13 === 0 && random() < 0.72) {
+                          pheromones.push({
+                              x: p.x,
+                              y: p.y,
+                              life: 165,
+                              isGreen: isDay,
+                              isHazardWarning: false
+                          });
+                      }
+
+                      let alpha = map(p.life, 0, 480, 0, 210);
+                      fill(175, 135, 55, alpha);
+                      noStroke();
+                      circle(p.x, p.y, p.radius);
+                      fill(205, 165, 75, alpha * 0.38);
+                      circle(p.x, p.y, p.radius * 0.55);
+
+                      for (let c of creatures) {
+                          if (!c.isPredator && dist(c.x, c.y, p.x, p.y) < 14) {
+                              c.energy = min(100, c.energy + 1 * timeScale);
+                              if (Math.random() < 0.16 * soundDensity) playEatSound(isDay);
+                              p.life -= 5;
+                          }
+                      }
+
+                      if (p.life <= 0) {
+                          staticFoodPatches.splice(i, 1);
+                      }
+                  }
+
+                  for (let i = energyOrbs.length - 1; i >= 0; i--) {
+                      let o = energyOrbs[i];
+                      o.life -= timeScale;
+
+                      let dx = o.x - centerX;
+                      let dy = o.y - centerY;
+                      let distToCenter = sqrt(dx * dx + dy * dy) || 1;
+
+                      if (distToCenter > 5) {
+                          let tangentX = -dy;
+                          let tangentY = dx;
+                          let len = sqrt(tangentX * tangentX + tangentY * tangentY) || 1;
+
+                          let rotForce = 0.65 * vortexStrength * vortexDir;
+                          o.x += (tangentX / len) * rotForce * timeScale;
+                          o.y += (tangentY / len) * rotForce * timeScale;
+
+                          let pull = 0.4 * vortexStrength;
+                          o.x += (centerX - o.x) * pull / (distToCenter + 9) * timeScale;
+                          o.y += (centerY - o.y) * pull / (distToCenter + 9) * timeScale;
+                      }
+
+                      let target = o.targetIsGreen ? greenZone : blueZone;
+                      let dx2 = target.x - o.x;
+                      let dy2 = target.y - o.y;
+                      let distToTarget = sqrt(dx2*dx2 + dy2*dy2) || 1;
+
+                      o.x += (dx2 / distToTarget) * 1.75 * timeScale;
+                      o.y += (dy2 / distToTarget) * 1.75 * timeScale;
+                      o.radius = max(1.8, o.radius * 0.955);
+
+                      let alpha = map(o.life, 0, 240, 0, 190);
+                      fill(135, 255, 175, alpha);
+                      noStroke();
+                      circle(o.x, o.y, o.radius);
+                      fill(175, 255, 195, alpha * 0.32);
+                      circle(o.x, o.y, o.radius * 1.3);
+
+                      if (distToTarget < 11 || o.life <= 0) {
+                          if (o.targetIsGreen) greenZone.food = min(greenZone.maxFood, greenZone.food + o.energy);
+                          else blueZone.food = min(blueZone.maxFood, blueZone.food + o.energy);
+                          playEatSound(o.targetIsGreen);
+
+                          // Floating points when orb is absorbed
+                          addFloatingText(o.x, o.y - 8, `+${Math.floor(o.energy * 0.8)}`, '#4ade80');
+
+                          energyOrbs.splice(i, 1);
+                      }
+                  }
+
+                  if (frameCount % 24 === 0) {
+                      updateGraphData();
+                      if (analyticsModalOpen) {
+                          updateAnalyticsStats();
+                          updateAnalyticsChart();
+                      }
+                  }
+
+                  let readyCount = 0;
+
+                  for (let i = creatures.length - 1; i >= 0; i--) {
+                      let c = creatures[i];
+                      c.update(isDay, vortexDir, vortexStrength, timeScale, envMods);
+
+                      const energyReady = c.energy > 60;
+                      const cooldownsReady = c.reproCooldown <= 0 && globalReproCooldown <= 0;
+                      const isReady = energyReady && cooldownsReady;
+
+                      if (isReady) readyCount++;
+
+                      if (isReady) {
+                          let chance = settings.reproductionChance * envMods.reproMult;
+
+                          let avoidanceBonus = 1 + (c.hazardsAvoided || 0) * 0.0035;
+                          if ((c.hazardDamageTaken || 0) > 48) avoidanceBonus *= 0.68;
+                          chance *= avoidanceBonus;
+
+                          if (c.energy > 78) {
+                              chance *= 4.2;
+                          } else if (c.energy > 68) {
+                              chance *= 2.35;
+                          }
+
+                          const roll = random();
+                          const effectiveChance = chance * timeScale;
+
+                          if (roll < effectiveChance) {
+                              let offspring = c.reproduce();
+                              if (offspring) {
+                                  creatures.push(offspring);
+                                  globalReproCooldown = 2;
+                                  c.reproCooldown = 16;
+                                  c.energy -= 5.5;
+                                  c.children.push(offspring.name);
+                                  c.childrenCount++;
+                                  playBirthSound();
+
+                                  addFloatingText(c.x, c.y - 14, '+8', '#c084fc');
+                              }
+                          }
+                      }
+
+                      if (c.energy < 24 && random() < 0.009 * timeScale) {
+                          playTone(195, 'sawtooth', 0.12, 0.016);
+                          c.currentThought = "Hungry";
+                      }
+
+                      if (c.energy <= 0) {
+                          let targetIsGreen = isDay;
+                          let releasedEnergy = Math.max(7, Math.floor(c.energy * -0.55) + 11);
+                          energyOrbs.push({ x: c.x, y: c.y, radius: 11, life: 240, energy: releasedEnergy, targetIsGreen, age: 0 });
+                          playDeathSound();
+
+                          // === NEW: Inspector death handling (v2.11.1) ===
+                          if (selectedCreature === c) {
+                              let replacement = null;
+
+                              // Check if a predator is very close (likely killed it)
+                              for (let other of creatures) {
+                                  if (other.isPredator && dist(c.x, c.y, other.x, other.y) < 45) {
+                                      replacement = other;
+                                      break;
+                                  }
+                              }
+
+                              // If no predator nearby, switch to current Alpha
+                              if (!replacement) {
+                                  replacement = getCurrentAlpha();
+                              }
+
+                              if (replacement && replacement !== c) {
+                                  selectCreature(replacement);
+                              } else {
+                                  deselectCreature();
+                              }
+                          }
+
+                          creatures.splice(i, 1);
+                      } else {
+                          c.show();
+                      }
+                  }
+
+                  let pressure = Math.max(0, (creatures.length - 11) * 0.005);
+
+
+                  for (let c of creatures) c.energy -= pressure * timeScale;
+
+                  if (frameCount % Math.max(1, Math.floor(55 / timeScale)) === 0 && creatures.length > 0) {
+                      recordEvolutionStats();
+                  }
+
+                  pop();
+
+                  if (cursorHazardActive) {
+                      let mx = mouseX;
+                      let my = mouseY;
+
+                      push();
+                      translate(mx, my);
+
+                      fill(239, 68, 68, 38);
+                      noStroke();
+                      circle(0, 0, 62);
+
+                      fill(239, 68, 68, 215);
+                      circle(0, 0, 35);
+
+                      fill(255, 200, 200, 255);
+                      circle(0, 0, 15);
+
+                      fill(255, 255, 255, 175);
+                      circle(-5, -5, 7);
+
+                      pop();
+
+                      for (let c of creatures) {
+                          let d = dist(mx, my, c.x, c.y);
+                          if (d < 38) {
+                              // Stronger direct contact damage + scaling with closeness
+                              let baseDamage = 4.5;
+                              if (d < 25) baseDamage = 7.5;
+                              if (d < 15) baseDamage = 11.0;
+
+                              // Closer = more damage
+                              let proximityBonus = map(d, 0, 38, 6.5, 0);
+                              let damage = baseDamage + proximityBonus + random(0.5, 2.0);
+
+                              c.energy = max(0, c.energy - damage * timeScale);
+                              c.damageFlash = max(c.damageFlash || 0, 38);
+                              c.purpleFlash = max(c.purpleFlash || 0, 45);
+
+                              playCursorDamageSound(c);
+
+                              if (d > 2) {
+                                  let dx = c.x - mx;
+                                  let dy = c.y - my;
+                                  let len = sqrt(dx*dx + dy*dy) || 1;
+                                  c.vx += (dx / len) * 2.6 * timeScale;
+                                  c.vy += (dy / len) * 2.6 * timeScale;
+                              }
+
+                              c.currentThought = "Burning!";
+                          }
+
+                          if (d < 88 && d > 7) {
+                              let repelStrength = map(d, 7, 88, 1.65, 0.28);
+                              let dx = c.x - mx;
+                              let dy = c.y - my;
+                              let len = sqrt(dx*dx + dy*dy) || 1;
+
+                              c.vx += (dx / len) * repelStrength * 0.85 * timeScale;
+                              c.vy += (dy / len) * repelStrength * 0.85 * timeScale;
+
+                              if (random() < 0.035 * timeScale) {
+                                  c.currentThought = "Get away!";
+                              }
+                          }
+                      }
+
+                      if (frameCount % 3 === 0 && random() < 0.82) {
+                          pheromones.push({
+                              x: mx + random(-16, 16),
+                              y: my + random(-16, 16),
+                              life: 60,
+                              isGreen: false,
+                              isHazardWarning: true
+                          });
+                      }
+
+                      // Red Cursor Hazard wipes away honey trails it runs over (more aggressive)
+                      if (cursorHazardActive) {
+                          // Wipe static honey patches
+                          for (let i = staticFoodPatches.length - 1; i >= 0; i--) {
+                              let p = staticFoodPatches[i];
+                              if (dist(mx, my, p.x, p.y) < 45) {
+                                  staticFoodPatches.splice(i, 1);
+                              }
+                          }
+
+                          // Wipe moving honey blooms (larger radius to clear trails)
+                          for (let i = foodBlooms.length - 1; i >= 0; i--) {
+                              let b = foodBlooms[i];
+                              if (dist(mx, my, b.x, b.y) < 38) {
+                                  foodBlooms.splice(i, 1);
+                              }
+                          }
+
+                          // Wipe white vortex particles on contact
+                          for (let i = vortexParticles.length - 1; i >= 0; i--) {
+                              let p = vortexParticles[i];
+                              if (dist(mx, my, p.x, p.y) < 32) {
+                                  vortexParticles.splice(i, 1);
+                              }
+                          }
+
+                          // Hazard Cursor absorbs red particles on contact (with sound)
+                          for (let i = redHazards.length - 1; i >= 0; i--) {
+                              let r = redHazards[i];
+                              if (dist(mx, my, r.x, r.y) < 28) {
+                                  redHazards.splice(i, 1);
+                                  playAbsorbSound();
+                              }
+                          }
+                      }
+
+                      // Persistent placed Hazard Cursor (long-term damage field you can leave on the map)
+                      if (persistentHazard.active) {
+                          for (let c of creatures) {
+                              let d = dist(persistentHazard.x, persistentHazard.y, c.x, c.y);
+                              if (d < 42) {
+                                  let damage = 2.8 + random(0.3, 1.2);
+                                  c.energy = max(0, c.energy - damage * timeScale);
+                                  c.damageFlash = max(c.damageFlash || 0, 35);
+                                  c.purpleFlash = max(c.purpleFlash || 0, 50);
+
+                                  // Gentle repel so creatures don't camp in it
+                                  if (d > 3) {
+                                      let dx = c.x - persistentHazard.x;
+                                      let dy = c.y - persistentHazard.y;
+                                      let len = sqrt(dx*dx + dy*dy) || 1;
+                                      c.vx += (dx / len) * 1.8 * timeScale;
+                                      c.vy += (dy / len) * 1.8 * timeScale;
+                                  }
+                              }
+                          }
+
+                          // Visual indicator for the placed hazard
+                          push();
+                          translate(persistentHazard.x, persistentHazard.y);
+                          fill(239, 68, 68, 45);
+                          noStroke();
+                          circle(0, 0, 58);
+                          fill(239, 68, 68, 180);
+                          circle(0, 0, 28);
+                          pop();
+                      }
+
+                      // === ENERGY BEAM SYSTEM (connects placed hazard to cursor only) ===
+                      if (cursorHazardActive && placedHazards.length > 0) {
+                          let cx = mouseX;
+                          let cy = mouseY;
+
+                          // Draw BLUE energy beam ONLY between cursor and each placed hazard
+                          stroke(80, 180, 255, 220); // Blue beam
+                          strokeWeight(4);
+                          noFill();
+
+                          for (let h of placedHazards) {
+                              line(cx, cy, h.x, h.y);
+
+                              // Draw visible hazard orb at placed location
+                              push();
+                              translate(h.x, h.y);
+
+                              // Outer glow (red orb)
+                              fill(255, 80, 80, 70);
+                              circle(0, 0, 46);
+
+                              // Main red orb
+                              fill(239, 68, 68);
+                              circle(0, 0, 28);
+
+                              // Inner white core
+                              fill(255, 220, 220);
+                              circle(0, 0, 13);
+
+                              pop();
+                          }
+
+                          // Blue beam absorbs red particles (with traveling visual + sound + timer reset)
+                          for (let i = redHazards.length - 1; i >= 0; i--) {
+                              let r = redHazards[i];
+                              let hitBeam = false;
+
+                              for (let h of placedHazards) {
+                                  if (distToLineSegment(r.x, r.y, cx, cy, h.x, h.y) < 12) {
+                                      hitBeam = true;
+                                      break;
+                                  }
+                              }
+
+                              if (hitBeam) {
+                                  redHazards.splice(i, 1);
+
+                                  // Visual traveling down the beam toward cursor
+                                  for (let k = 0; k < 6; k++) {
+                                      let t = k / 5;
+                                      let px = lerp(r.x, cx, t);
+                                      let py = lerp(r.y, cy, t);
+                                      explosions.push(new Explosion(px, py));
+                                  }
+
+                                  playAbsorbSound();
+                                  beamCharge = min(beamCharge + 1, 5);
+
+                                  // Reset timer on all placed hazards
+                                  for (let h of placedHazards) {
+                                      h.timer = 420;
+                                      h.shakeTimer = 0;
+                                      h.exploding = false;
+                                  }
+                              }
+                          }
+
+                          // Creatures touching the blue beam get purple DoT
+                          for (let c of creatures) {
+                              for (let h of placedHazards) {
+                                  if (distToLineSegment(c.x, c.y, cx, cy, h.x, h.y) < 9) {
+                                      c.purpleFlash = max(c.purpleFlash || 0, 55);
+                                      c.energy = max(0, c.energy - 1.8 * timeScale);
+                                      // Gentle repel from beam
+                                      let dx = c.x - cx;
+                                      let dy = c.y - cy;
+                                      let len = sqrt(dx*dx + dy*dy) || 1;
+                                      c.vx += (dx / len) * 1.2 * timeScale;
+                                      c.vy += (dy / len) * 1.2 * timeScale;
+                                  }
+                              }
+                          }
+
+                          // Update timers and explosions for placed hazards
+                          for (let i = placedHazards.length - 1; i >= 0; i--) {
+                              let h = placedHazards[i];
+                              if (!h.exploding) {
+                                  h.timer--;
+                                  if (h.timer < 120) h.shakeTimer = max(h.shakeTimer || 0, 8);
+
+                                  if (h.timer <= 0) {
+                                      h.exploding = true;
+                                      // Explode: turn nearby creatures purple
+                                      for (let c of creatures) {
+                                          if (dist(c.x, c.y, h.x, h.y) < 65) {
+                                              c.purpleFlash = max(c.purpleFlash || 0, 140);
+                                              c.energy = max(0, c.energy - 25);
+                                          }
+                                      }
+                                      explosions.push(new Explosion(h.x, h.y));
+                                      playExplosionSound();
+                                      placedHazards.splice(i, 1);
+                                  }
+                              }
+                          }
+                      }
+                  }
+
+                  // ==================== SPACESHIP + BULLETS ====================
+                  if (spaceshipActive) {
+                      // Draw improved spaceship
+                      push();
+                      translate(shipX, shipY);
+
+                      // Main body - sleek fighter style
+                      fill(60, 200, 140);
+                      noStroke();
+                      beginShape();
+                      vertex(0, -22);      // nose
+                      vertex(-11, -4);
+                      vertex(-16, 8);
+                      vertex(-8, 14);
+                      vertex(8, 14);
+                      vertex(16, 8);
+                      vertex(11, -4);
+                      endShape(CLOSE);
+
+                      // Cockpit
+                      fill(30, 60, 90);
+                      ellipse(0, -6, 9, 7);
+                      fill(100, 200, 255, 180);
+                      ellipse(0, -6, 5, 4);
+
+                      // Wing details
+                      fill(40, 160, 110);
+                      triangle(-16, 8, -8, 14, -20, 12);
+                      triangle(16, 8, 8, 14, 20, 12);
+
+                      // Engine glow
+                      fill(100, 255, 200, 200);
+                      ellipse(-7, 12, 7, 5);
+                      ellipse(7, 12, 7, 5);
+
+                      // Engine core
+                      fill(200, 255, 255);
+                      ellipse(-7, 12, 3, 2);
+                      ellipse(7, 12, 3, 2);
+
+                      pop();
+
+                      // Update and draw bullets
+                      for (let i = bullets.length - 1; i >= 0; i--) {
+                          let b = bullets[i];
+                          b.x += b.vx;
+                          b.y += b.vy;
+
+                          // Improved machine gun bullet - glowing energy bolt
+                          fill(180, 255, 220, 200);
+                          ellipse(b.x, b.y, 5, 5);
+                          fill(255, 255, 255);
+                          rect(b.x - 1.2, b.y - 8, 2.4, 16);
+                          fill(150, 255, 200, 180);
+                          ellipse(b.x, b.y - 10, 3, 3);
+
+                          // Remove if off screen
+                          if (b.y < -20) {
+                              bullets.splice(i, 1);
+                              continue;
+                          }
+
+                          // === v1.97: Bullet deflects off Energy Walls into vortex projectiles ===
+                          let hitWall = false;
+                          for (let w of energyWalls) {
+                              if (distToLineSegment(b.x, b.y, w.x1, w.y1, w.x2, w.y2) < 14) {
+                                  hitWall = true;
+
+                                  // Spawn a vortex projectile that spirals in
+                                  vortexProjectiles.push({
+                                      x: b.x,
+                                      y: b.y,
+                                      vx: random(-1.5, 1.5),
+                                      vy: random(-1.5, 1.5),
+                                      life: 220 + random(40),
+                                      damage: 6.5,
+                                      size: 5
+                                  });
+
+                                  // Small impact effect
+                                  explosions.push(new Explosion(b.x, b.y));
+                                  playBulletImpactSound();
+
+                                  bullets.splice(i, 1);
+                                  break;
+                              }
+                          }
+                          if (hitWall) continue;
+
+                          // Bullet collision with creatures - high damage + strong purple DoT
+                          for (let j = creatures.length - 1; j >= 0; j--) {
+                              let c = creatures[j];
+
+                              if (dist(b.x, b.y, c.x, c.y) < 12) {
+                                  // High damage - designed for 1-2 shot kills
+                                  c.energy -= 82;
+                                  c.damageFlash = 70;
+                                  c.purpleFlash = max(c.purpleFlash || 0, 95);
+
+                                  // Create obvious explosion with AoE + knockback
+                                  createBulletExplosion(b.x, b.y);
+
+                                  // Impact sound
+                                  playBulletImpactSound();
+
+                                  bullets.splice(i, 1);
+                                  break;
+                              }
+                          }
+                      }
+                  }
+
+                  // === v1.97: Update & Draw Vortex Projectiles (deflected bullets spiraling in) ===
+                  for (let i = vortexProjectiles.length - 1; i >= 0; i--) {
+                      let p = vortexProjectiles[i];
+                      p.life--;
+
+                      if (p.life <= 0) {
+                          vortexProjectiles.splice(i, 1);
+                          continue;
+                      }
+
+                      // Apply vortex forces (spiral in)
+                      let dx = p.x - centerX;
+                      let dy = p.y - centerY;
+                      let distToCenter = sqrt(dx * dx + dy * dy) || 1;
+
+                      if (distToCenter > 5) {
+                          // Tangential force
+                          let tangentX = -dy;
+                          let tangentY = dx;
+                          let tlen = sqrt(tangentX * tangentX + tangentY * tangentY) || 1;
+
+                          let rotForce = 0.95 * vortexStrength * vortexDir;
+                          p.x += (tangentX / tlen) * rotForce;
+                          p.y += (tangentY / tlen) * rotForce;
+
+                          // Inward pull
+                          let pull = 0.65 * vortexStrength;
+                          p.x += (centerX - p.x) * pull / (distToCenter + 12);
+                          p.y += (centerY - p.y) * pull / (distToCenter + 12);
+                      }
+
+                      // Damage creatures it passes near
+                      for (let c of creatures) {
+                          if (dist(p.x, p.y, c.x, c.y) < 11) {
+                              c.energy = max(0, c.energy - p.damage * timeScale);
+                              c.damageFlash = max(c.damageFlash || 0, 35);
+                              c.purpleFlash = max(c.purpleFlash || 0, 40);
+                          }
+                      }
+
+                      // Visual - glowing spiraling projectile
+                      let alpha = map(p.life, 0, 220, 40, 220);
+                      fill(180, 255, 220, alpha);
+                      noStroke();
+                      circle(p.x, p.y, p.size);
+
+                      // Inner bright core
+                      fill(255, 255, 255, alpha * 0.7);
+                      circle(p.x, p.y, p.size * 0.5);
+                  }
+
+                  // Draw floating texts again on top (screen space for better visibility)
+                  if (showDamageNumbers) {
+                      for (let ft of floatingTexts) {
+                          ft.show();
+                      }
+                  }
+
+                  fill(255, 255, 255, 190);
+                  textAlign(LEFT);
+                  textSize(12);
+                  textFont('Inter, system-ui');
+                  if (isDay) {
+                      text('DAY', 16, 24);
+                  } else {
+                      text('NIGHT', 16, 24);
+                  }
+
+
+
+
+ // Live Music Debug - Improved frequency bands
+if (musicEnabled) {
     fill(180, 255, 200, 210);
     textSize(10);
-    textAlign(LEFT);
-
-    const subBass  = (musicData.subBass  ?? 0) * 100;
-    const bass     = (musicData.bass     ?? 0) * 100;
-    const lowMids  = (musicData.lowMids  ?? 0) * 100;
-    const mids     = (musicData.mids     ?? 0) * 100;
-    const highMids = (musicData.highMids ?? 0) * 100;
-    const highs    = (musicData.highs    ?? 0) * 100;
-    const vol      = (musicData.volume   ?? 0) * 100;
-
     text(
-        `Sub: ${subBass.toFixed(0)} ` +
-        `Bass: ${bass.toFixed(0)} ` +
-        `LowM: ${lowMids.toFixed(0)} ` +
-        `Mids: ${mids.toFixed(0)} ` +
-        `HiM: ${highMids.toFixed(0)} ` +
-        `High: ${highs.toFixed(0)} | ` +
-        `Vol: ${vol.toFixed(0)}`,
+        `Sub: ${(musicData.subBass * 100).toFixed(0)}  ` +
+        `Bass: ${(musicData.bass * 100).toFixed(0)}  ` +
+        `LowM: ${(musicData.lowMids * 100).toFixed(0)}  ` +
+        `Mids: ${(musicData.mids * 100).toFixed(0)}  ` +
+        `HiM: ${(musicData.highMids * 100).toFixed(0)}  ` +
+        `High: ${(musicData.highs * 100).toFixed(0)}  |  ` +
+        `Vol: ${(musicData.volume * 100).toFixed(0)}`,
         16, height - 10
     );
 }
 
-// =====================================================
-// LIVE TRENDS CHART + UI UPDATES
-// =====================================================
+// === Live Trends Chart Update (every ~6 frames) ===
 if (frameCount % 6 === 0 && typeof drawMiniChart === 'function' && miniChartCtx) {
     drawMiniChart();
 }
 
+// Make sure score and UI keep updating
 if (typeof updateVegasScore === 'function') {
     updateVegasScore();
 }
-
 updateMainStats();
 updatePrestigePreview();
 updatePrestigeButtonGlow();
 
-// Auto-track current Alpha creature
-if (trackAlpha && frameCount % 60 === 0) {
+    // ==================== AUTO-TRACK CURRENT ALPHA ====================
+if (trackAlpha && frameCount % 60 === 0) {   // Check every ~1 second
     const alpha = getCurrentAlpha();
     if (alpha) {
-        selectCreature(alpha);
+        selectCreature(alpha);   // This keeps the inspector showing the current best creature
     }
+}            
+                
 }
 
-// =====================================================
-// VORTEX SPAWN FUNCTIONS
-// =====================================================
-function spawnCreatureFromVortexCenter(x, y) {
+function spawnCreatureFromVortexCenter(x, y, vortexDir, vortexStrength) {
     let newCreature = new Creature(x, y);
     newCreature.modules = [];
 
-    const types = ['harvester', 'sensor', 'mover', 'resistant', 'explorer', 'communicator'];
-    const colors = {
+    let types = ['harvester', 'sensor', 'mover', 'resistant', 'explorer', 'communicator'];
+    let colors = {
         'harvester': '#34d399',
         'sensor': '#38bdf8',
         'mover': '#a78bfa',
@@ -4568,9 +5873,9 @@ function spawnCreatureFromVortexCenter(x, y) {
         'communicator': '#c084fc'
     };
 
-    const randomType = random(types);
-    const ang = random(TWO_PI);
-    const di = random(5, 9);
+    let randomType = random(types);
+    let ang = random(TWO_PI);
+    let di = random(5, 9);
 
     newCreature.modules.push({
         type: randomType,
@@ -4584,9 +5889,9 @@ function spawnCreatureFromVortexCenter(x, y) {
     newCreature.energy = 36;
     newCreature.currentThought = "Born from the vortex";
 
-    const dx = x - centerX;
-    const dy = y - centerY;
-    const len = sqrt(dx * dx + dy * dy) || 1;
+    let dx = x - centerX;
+    let dy = y - centerY;
+    let len = sqrt(dx * dx + dy * dy) || 1;
 
     newCreature.vx = (dx / len) * 0.6;
     newCreature.vy = (dy / len) * 0.6;
@@ -4598,335 +5903,333 @@ function spawnCreatureFromVortexCenter(x, y) {
 }
 
 function spawnVaultEchoCreature(x, y) {
-    const filledSlots = geneVaultSlots.filter(slot => slot !== null);
-
+    // Get all filled Gene Vault slots
+    let filledSlots = geneVaultSlots.filter(slot => slot !== null);
+    
     if (filledSlots.length === 0) {
-        spawnCreatureFromVortexCenter(x, y);
+        // Fallback: spawn normal creature if vault is empty
+        spawnCreatureFromVortexCenter(x, y, 1, 1);
         return;
     }
 
-    const vaultData = random(filledSlots);
-    const clone = new Creature(x, y);
-
+    // Pick a random vault creature
+    let vaultData = random(filledSlots);
+    
+    // Create a new creature based on vault data
+    let clone = new Creature(x, y);
+    
+    // Apply vault creature's traits (you can expand this)
     if (vaultData.generation) clone.generation = vaultData.generation;
-    if (vaultData.modules)   clone.modules   = [...vaultData.modules];
+    if (vaultData.modules) clone.modules = [...vaultData.modules];
     if (vaultData.killCount) clone.killCount = Math.floor(vaultData.killCount * 0.6);
-
+    
     clone.currentThought = "Echo";
     clone.energy = 85;
-
+    
     creatures.push(clone);
+    
+    // Visual + sound feedback
     addFloatingText(x, y - 25, "Vault Echo", '#c084fc');
     playTone(880, 'sine', 0.25, 0.6);
 }
 
-// =====================================================
-// UTILITY FUNCTIONS
-// =====================================================
+
+      
 function formatSimTime(seconds) {
     const min = Math.floor(seconds / 60);
     const sec = Math.floor(seconds % 60);
     return String(min).padStart(2, '0') + ':' + String(sec).padStart(2, '0');
 }
+      // ==================== Alpha / Best Creature Tracking (v2.11.1) ====================
+      function getCurrentAlpha() {
+          if (creatures.length === 0) return null;
 
-// =====================================================
-// ALPHA / BEST CREATURE TRACKING
-// =====================================================
-function getCurrentAlpha() {
-    if (creatures.length === 0) return null;
+          let best = null;
+          let bestScore = -Infinity;
 
-    let best = null;
-    let bestScore = -Infinity;
+          for (let c of creatures) {
+              let score = (c.modules.length * 2.5) +
+                          (c.killCount * 4) +
+                          (c.childrenCount * 3) +
+                          (c.energy * 0.6);
 
-    for (let c of creatures) {
-        let score = (c.modules.length * 2.5) +
-                    (c.killCount * 4) +
-                    (c.childrenCount * 3) +
-                    (c.energy * 0.6);
+              let tierBonus = 0;
+              for (let m of c.modules) {
+                  tierBonus += (m.tier || 1) * 1.2;
+              }
+              score += tierBonus;
 
-        let tierBonus = 0;
-        for (let m of c.modules) {
-            tierBonus += (m.tier || 1) * 1.2;
-        }
-        score += tierBonus;
+              if (score > bestScore) {
+                  bestScore = score;
+                  best = c;
+              }
+          }
+          return best;
+      }
 
-        if (score > bestScore) {
-            bestScore = score;
-            best = c;
-        }
-    }
-    return best;
-}
+      // ==================== Alpha Inspector Functions (v2.11.1) ====================
+      function selectCurrentAlpha() {
+          const alpha = getCurrentAlpha();
+          if (alpha) {
+              selectCreature(alpha);
+          }
+      }
 
-function selectCurrentAlpha() {
-    const alpha = getCurrentAlpha();
-    if (alpha) {
-        selectCreature(alpha);
-    }
-}
+      function updateInspectorAlphaBadge(c) {
+          const nameEl = document.getElementById('inspect-name');
+          if (!nameEl) return;
 
-function updateInspectorAlphaBadge(c) {
-    const nameEl = document.getElementById('inspect-name');
-    if (!nameEl) return;
+          const currentAlpha = getCurrentAlpha();
+          const isAlpha = currentAlpha && currentAlpha === c;
 
-    const currentAlpha = getCurrentAlpha();
-    const isAlpha = currentAlpha && currentAlpha === c;
+          if (isAlpha) {
+              nameEl.style.color = '#facc15'; // Yellow
+              nameEl.innerHTML = `${c.name} <span class="text-yellow-400 text-xs font-bold ml-1">★ CURRENT ALPHA</span>`;
+          } else {
+              nameEl.style.color = '#34d399'; // Default emerald
+              nameEl.innerHTML = c.name;
+          }
+      }
 
-    if (isAlpha) {
-        nameEl.style.color = '#facc15';
-        nameEl.innerHTML = `${c.name} <span class="text-yellow-400 text-xs font-bold ml-1">★ CURRENT ALPHA</span>`;
-    } else {
-        nameEl.style.color = '#34d399';
-        nameEl.innerHTML = c.name;
-    }
-}
+              // Distance from point to line segment (for Energy Wall collision)
+              function distToLineSegment(px, py, x1, y1, x2, y2) {
+                  const dx = x2 - x1;
+                  const dy = y2 - y1;
+                  const lenSq = dx*dx + dy*dy;
+                  if (lenSq === 0) return dist(px, py, x1, y1);
+                  let t = ((px - x1) * dx + (py - y1) * dy) / lenSq;
+                  t = constrain(t, 0, 1);
+                  const projX = x1 + t * dx;
+                  const projY = y1 + t * dy;
+                  return dist(px, py, projX, projY);
+              }
 
-// =====================================================
-// HELPER: Distance from point to line segment
-// =====================================================
-function distToLineSegment(px, py, x1, y1, x2, y2) {
-    const dx = x2 - x1;
-    const dy = y2 - y1;
-    const lenSq = dx * dx + dy * dy;
+              function recordEvolutionStats() {
+                  if (!graphData || creatures.length === 0) return;
+                  if (creatures.length === 0) return;
+                  let totalModules = 0, totalEnergy = 0, explorerCount = 0;
+                  for (let c of creatures) {
+                      totalModules += c.modules.length;
+                      totalEnergy += c.energy;
+                      if (c.getModuleCount('explorer') > 0) explorerCount++;
+                  }
+                  evolutionHistory.push({
+                      frame: frameCount,
+                      avgModules: totalModules / creatures.length,
+                      avgEnergy: totalEnergy / creatures.length,
+                      explorerPercent: (explorerCount / creatures.length) * 100
+                  });
+                  if (evolutionHistory.length > 100) evolutionHistory.shift();
+              }
 
-    if (lenSq === 0) return dist(px, py, x1, y1);
+              function drawWorld() {
+                  background(12, 14, 22);
+                  let greenR = Math.max(greenZone.minR, greenZone.baseR * (greenZone.food / greenZone.maxFood));
+                  let blueR = Math.max(blueZone.minR, blueZone.baseR * (blueZone.food / blueZone.maxFood));
+                  fill(16, 185, 129, 65);
+                  circle(greenZone.x, greenZone.y, greenR * 2);
+                  fill(56, 189, 248, 65);
+                  circle(blueZone.x, blueZone.y, blueR * 2);
+                  for (let c of creatures) c.show();
+              }
 
-    let t = ((px - x1) * dx + (py - y1) * dy) / lenSq;
-    t = constrain(t, 0, 1);
+              function handleMousePress() {
+                  for (let c of creatures) {
+                      if (dist(mouseX, mouseY, c.x, c.y) < 13) {
+                        trackAlpha = false;
+                        selectCreature(c);
+                          return;
+                      }
+                  }
+                
 
-    const projX = x1 + t * dx;
-    const projY = y1 + t * dy;
+                  // Click on Energy Wall to delete it (only on left click)
+                  if (mouseButton === LEFT && energyWalls.length > 0) {
+                      let closestDist = 18;
+                      let closestIndex = -1;
 
-    return dist(px, py, projX, projY);
-}
+                      for (let i = 0; i < energyWalls.length; i++) {
+                          let w = energyWalls[i];
+                          let d = distToLineSegment(mouseX, mouseY, w.x1, w.y1, w.x2, w.y2);
+                          if (d < closestDist) {
+                              closestDist = d;
+                              closestIndex = i;
+                          }
+                      }
 
-// =====================================================
-// EVOLUTION HISTORY RECORDING
-// =====================================================
-function recordEvolutionStats() {
-    if (!graphData || creatures.length === 0) return;
+                      if (closestIndex !== -1) {
+                          energyWalls.splice(closestIndex, 1);
+                          return; // consumed the click
+                      }
+                  }
 
-    let totalModules = 0;
-    let totalEnergy = 0;
-    let explorerCount = 0;
+                  // Click to place / move Hazard spots (new chain system)
+                  if (cursorHazardActive) {
+                      let nearCreature = false;
+                      for (let c of creatures) {
+                          if (dist(mouseX, mouseY, c.x, c.y) < 18) {
+                              nearCreature = true;
+                              break;
+                          }
+                      }
+                      if (!nearCreature) {
+                          // Always allow placing up to maxPlacedHazards (3 total)
+                          if (placedHazards.length < maxPlacedHazards) {
+                              // Place new hazard orb
+                              placedHazards.push({
+                                  x: mouseX,
+                                  y: mouseY,
+                                  timer: 99999, // Permanent until manually removed
+                                  shakeTimer: 0,
+                                  exploding: false
+                              });
+                              if (beamCharge > 0) beamCharge--;
+                          } else {
+                              // Move the oldest one if already at max
+                              if (placedHazards.length > 0) {
+                                  let oldest = placedHazards.shift();
+                                  placedHazards.push({
+                                      x: mouseX,
+                                      y: mouseY,
+                                      timer: 99999,
+                                      shakeTimer: 0,
+                                      exploding: false
+                                  });
+                                  if (beamCharge > 0) beamCharge--;
+                              }
+                          }
+                      }
+                  }
+              }
 
-    for (let c of creatures) {
-        totalModules += c.modules.length;
-        totalEnergy += c.energy;
-        if (c.getModuleCount('explorer') > 0) explorerCount++;
-    }
+              // === Energy Wall Drawing (click + drag) ===
+              function mousePressed() {
+                  // Right-click handling
+                  if (mouseButton === RIGHT) {
+                      // Remove placed hazard if clicking near one
+                      for (let i = placedHazards.length - 1; i >= 0; i--) {
+                          let h = placedHazards[i];
+                          if (dist(mouseX, mouseY, h.x, h.y) < 25) {
+                              placedHazards.splice(i, 1);
+                              addFloatingText(mouseX, mouseY, "Hazard removed", '#f87171');
+                              return;
+                          }
+                      }
 
-    evolutionHistory.push({
-        frame: frameCount,
-        avgModules: totalModules / creatures.length,
-        avgEnergy: totalEnergy / creatures.length,
-        explorerPercent: (explorerCount / creatures.length) * 100
-    });
+                      // Right-click on a wall to cycle its filter mode (existing)
+                      for (let w of energyWalls) {
+                          let d = distToLineSegment(mouseX, mouseY, w.x1, w.y1, w.x2, w.y2);
+                          if (d < 18) {
+                              const modes = ["repel_all", "allow_harvesters", "allow_low_energy", "allow_predators"];
+                              let currentIndex = modes.indexOf(w.filterMode || "repel_all");
+                              w.filterMode = modes[(currentIndex + 1) % modes.length];
+                              addFloatingText(mouseX, mouseY - 20, w.filterMode.replace("_", " "), '#a5b4fc');
+                              return;
+                          }
+                      }
+                      return;
+                  }
 
-    if (evolutionHistory.length > 100) {
-        evolutionHistory.shift();
-    }
-}
+                  if (!energyWallMode) return;
 
-// =====================================================
-// BASIC WORLD DRAWING (Fallback when paused)
-// =====================================================
-function drawWorld() {
-    background(12, 14, 22);
+                  // Only start drawing if not clicking on a creature
+                  for (let c of creatures) {
+                      if (dist(mouseX, mouseY, c.x, c.y) < 14) return;
+                  }
 
-    const greenR = Math.max(greenZone.minR, greenZone.baseR * (greenZone.food / greenZone.maxFood));
-    const blueR  = Math.max(blueZone.minR,  blueZone.baseR  * (blueZone.food  / blueZone.maxFood));
+                  isDrawingWall = true;
+                  wallStartX = mouseX;
+                  wallStartY = mouseY;
+                  currentWallPreview = { x1: wallStartX, y1: wallStartY, x2: mouseX, y2: mouseY };
+              }
 
-    fill(16, 185, 129, 65);
-    circle(greenZone.x, greenZone.y, greenR * 2);
+              function mouseDragged() {
+                  if (!energyWallMode || !isDrawingWall) return;
+                  currentWallPreview = { x1: wallStartX, y1: wallStartY, x2: mouseX, y2: mouseY };
+              }
 
-    fill(56, 189, 248, 65);
-    circle(blueZone.x, blueZone.y, blueR * 2);
+              function mouseReleased() {
+                  if (!energyWallMode || !isDrawingWall) return;
 
-    for (let c of creatures) {
-        c.show();
-    }
-}
+                  const dx = mouseX - wallStartX;
+                  const dy = mouseY - wallStartY;
+                  const length = sqrt(dx*dx + dy*dy);
 
-// =====================================================
-// MOUSE INTERACTION HANDLERS
-// =====================================================
-function handleMousePress() {
-    for (let c of creatures) {
-        if (dist(mouseX, mouseY, c.x, c.y) < 13) {
-            trackAlpha = false;
-            selectCreature(c);
-            return;
-        }
-    }
+                  // Only create wall if drag was long enough (avoid accidental clicks)
+                  if (length > 18) {
+                      // Make walls expensive to draw
+                      const baseCost = 220;
+                      const lengthCost = Math.floor(length * 0.9);
+                      const totalCost = baseCost + lengthCost;
 
-    if (mouseButton === LEFT && energyWalls.length > 0) {
-        let closestDist = 18;
-        let closestIndex = -1;
+                      if (totalScore >= totalCost) {
+                          totalScore -= totalCost;
+                          addFloatingText(wallStartX, wallStartY - 15, `-${totalCost}`, '#c026ff');
 
-        for (let i = 0; i < energyWalls.length; i++) {
-            let w = energyWalls[i];
-            let d = distToLineSegment(mouseX, mouseY, w.x1, w.y1, w.x2, w.y2);
-            if (d < closestDist) {
-                closestDist = d;
-                closestIndex = i;
-            }
-        }
+                          const length = sqrt((mouseX - wallStartX)**2 + (mouseY - wallStartY)**2);
+                          // v1.95 Clean creation
+                          const isFilter = currentWallFilterMode === "custom_filter";
+                          energyWalls.push({
+                              x1: wallStartX,
+                              y1: wallStartY,
+                              x2: mouseX,
+                              y2: mouseY,
+                              life: 1800 + length * 1.8,
+                              maxLife: 1800 + length * 1.8,
+                              hitFlash: 0,
+                              vx: 0,
+                              vy: 0,
+                              originalLength: length,
+                              immuneUntil: frameCount + 30,
+                              redHits: 0,
+                              wallType: isFilter ? "filter" : "solid",
+                              filterSettings: isFilter && window.currentFilterWallSettings
+                                  ? JSON.parse(JSON.stringify(window.currentFilterWallSettings))
+                                  : null,
+                              offensive: isFilter && window.currentFilterWallSettings
+                                  ? !!window.currentFilterWallSettings.offensive
+                                  : false,
+                              empowered: false,
+                              shakeTimer: 0,
+                              vortexImmune: true,
+                              vortexVulnerableUntil: 0
+                          });
 
-        if (closestIndex !== -1) {
-            energyWalls.splice(closestIndex, 1);
-        }
-    }
+                          // Debug feedback - shows exactly what was placed
+                          let debugText = isFilter
+                              ? `Filter: ${window.currentFilterWallSettings?.types?.[0] || 'Unknown'}`
+                              : "Solid Barrier";
+                          if (window.currentFilterWallSettings?.offensive) debugText += " (Offensive)";
+                          addFloatingText(wallStartX, wallStartY - 25, debugText, isFilter ? '#60a5fa' : '#a78bfa');
+                      } else {
+                          // Not enough points - flash warning
+                          addFloatingText(wallStartX, wallStartY - 15, "Not enough points!", '#f87171');
+                      }
+                  }
 
-    if (cursorHazardActive) {
-        let nearCreature = creatures.some(c => dist(mouseX, mouseY, c.x, c.y) < 18);
+                  isDrawingWall = false;
+                  currentWallPreview = null;
+              }
 
-        if (!nearCreature) {
-            if (placedHazards.length < maxPlacedHazards) {
-                placedHazards.push({
-                    x: mouseX,
-                    y: mouseY,
-                    timer: 99999,
-                    shakeTimer: 0,
-                    exploding: false
-                });
-                if (beamCharge > 0) beamCharge--;
-            } else if (placedHazards.length > 0) {
-                let oldest = placedHazards.shift();
-                placedHazards.push({
-                    x: mouseX,
-                    y: mouseY,
-                    timer: 99999,
-                    shakeTimer: 0,
-                    exploding: false
-                });
-                if (beamCharge > 0) beamCharge--;
-            }
-        }
-    }
-}
+              // v1.74: Quick filter mode selection with number keys (when Energy Wall mode is active)
+              function keyPressed() {
+                  if (!energyWallMode) return;
 
-// =====================================================
-// ENERGY WALL DRAWING SYSTEM
-// =====================================================
-function mousePressed() {
-    if (mouseButton === RIGHT) {
-        for (let i = placedHazards.length - 1; i >= 0; i--) {
-            let h = placedHazards[i];
-            if (dist(mouseX, mouseY, h.x, h.y) < 25) {
-                placedHazards.splice(i, 1);
-                addFloatingText(mouseX, mouseY, "Hazard removed", '#f87171');
-                return;
-            }
-        }
-
-        for (let w of energyWalls) {
-            let d = distToLineSegment(mouseX, mouseY, w.x1, w.y1, w.x2, w.y2);
-            if (d < 18) {
-                const modes = ["repel_all", "allow_harvesters", "allow_low_energy", "allow_predators"];
-                let currentIndex = modes.indexOf(w.filterMode || "repel_all");
-                w.filterMode = modes[(currentIndex + 1) % modes.length];
-                addFloatingText(mouseX, mouseY - 20, w.filterMode.replace("_", " "), '#a5b4fc');
-                return;
-            }
-        }
-        return;
-    }
-
-    if (!energyWallMode) return;
-
-    if (creatures.some(c => dist(mouseX, mouseY, c.x, c.y) < 14)) return;
-
-    isDrawingWall = true;
-    wallStartX = mouseX;
-    wallStartY = mouseY;
-    currentWallPreview = { x1: wallStartX, y1: wallStartY, x2: mouseX, y2: mouseY };
-}
-
-function mouseDragged() {
-    if (!energyWallMode || !isDrawingWall) return;
-    currentWallPreview = { x1: wallStartX, y1: wallStartY, x2: mouseX, y2: mouseY };
-}
-
-function mouseReleased() {
-    if (!energyWallMode || !isDrawingWall) return;
-
-    const length = dist(wallStartX, wallStartY, mouseX, mouseY);
-
-    if (length > 18) {
-        const baseCost = 220;
-        const lengthCost = Math.floor(length * 0.9);
-        const totalCost = baseCost + lengthCost;
-
-        if (totalScore >= totalCost) {
-            totalScore -= totalCost;
-            addFloatingText(wallStartX, wallStartY - 15, `-${totalCost}`, '#c026ff');
-
-            const isFilter = currentWallFilterMode === "custom_filter";
-
-            energyWalls.push({
-                x1: wallStartX,
-                y1: wallStartY,
-                x2: mouseX,
-                y2: mouseY,
-                life: 1800 + length * 1.8,
-                maxLife: 1800 + length * 1.8,
-                hitFlash: 0,
-                vx: 0,
-                vy: 0,
-                originalLength: length,
-                immuneUntil: frameCount + 30,
-                redHits: 0,
-                wallType: isFilter ? "filter" : "solid",
-                filterSettings: isFilter && window.currentFilterWallSettings
-                    ? JSON.parse(JSON.stringify(window.currentFilterWallSettings))
-                    : null,
-                offensive: isFilter && window.currentFilterWallSettings
-                    ? !!window.currentFilterWallSettings.offensive
-                    : false,
-                empowered: false,
-                shakeTimer: 0,
-                vortexImmune: true,
-                vortexVulnerableUntil: 0
-            });
-
-            let debugText = isFilter
-                ? `Filter: ${window.currentFilterWallSettings?.types?.[0] || 'Unknown'}`
-                : "Solid Barrier";
-
-            if (window.currentFilterWallSettings?.offensive) debugText += " (Offensive)";
-
-            addFloatingText(wallStartX, wallStartY - 25, debugText, isFilter ? '#60a5fa' : '#a78bfa');
-        } else {
-            addFloatingText(wallStartX, wallStartY - 15, "Not enough points!", '#f87171');
-        }
-    }
-
-    isDrawingWall = false;
-    currentWallPreview = null;
-}
-
-function keyPressed() {
-    if (!energyWallMode) return;
-
-    if (key === '1') {
-        currentWallFilterMode = "repel_all";
-        addFloatingText(mouseX || width/2, mouseY || 100, "Filter: Repel All", '#f87171');
-    } else if (key === '2') {
-        currentWallFilterMode = "allow_harvesters";
-        addFloatingText(mouseX || width/2, mouseY || 100, "Filter: Allow Harvesters", '#34d399');
-    } else if (key === '3') {
-        currentWallFilterMode = "allow_low_energy";
-        addFloatingText(mouseX || width/2, mouseY || 100, "Filter: Allow Low Energy", '#fbbf24');
-    } else if (key === '4') {
-        currentWallFilterMode = "allow_predators";
-        addFloatingText(mouseX || width/2, mouseY || 100, "Filter: Allow Predators", '#c026ff');
-    }
-}
-
-// =====================================================
-// VORTEX PARTICLE CLASS
-// =====================================================
+                  if (key === '1') {
+                      currentWallFilterMode = "repel_all";
+                      addFloatingText(mouseX || width/2, mouseY || 100, "Filter: Repel All", '#f87171');
+                  } else if (key === '2') {
+                      currentWallFilterMode = "allow_harvesters";
+                      addFloatingText(mouseX || width/2, mouseY || 100, "Filter: Allow Harvesters", '#34d399');
+                  } else if (key === '3') {
+                      currentWallFilterMode = "allow_low_energy";
+                      addFloatingText(mouseX || width/2, mouseY || 100, "Filter: Allow Low Energy", '#fbbf24');
+                  } else if (key === '4') {
+                      currentWallFilterMode = "allow_predators";
+                      addFloatingText(mouseX || width/2, mouseY || 100, "Filter: Allow Predators", '#c026ff');
+                  }
+              }
+// ==================== VORTEX PARTICLES ====================
 class VortexParticle {
     constructor(fromEdge = false) {
         if (fromEdge) {
@@ -4940,8 +6243,8 @@ class VortexParticle {
         }
         this.life = 9999;
         this.size = random(1.6, 2.8);
-        this.isSpecial = Math.random() < 0.03;
 
+        this.isSpecial = Math.random() < 0.03;
         if (this.isSpecial) {
             this.size = random(3.2, 4.5);
             this.pulse = random(TWO_PI);
@@ -4952,16 +6255,10 @@ class VortexParticle {
         let dx = this.x - centerX;
         let dy = this.y - centerY;
         let distToCenter = sqrt(dx * dx + dy * dy) || 1;
+        if (distToCenter < 3.5) { this.life = 0; return; }
 
-        if (distToCenter < 3.5) {
-            this.life = 0;
-            return;
-        }
-
-        let tangentX = -dy;
-        let tangentY = dx;
+        let tangentX = -dy, tangentY = dx;
         let len = sqrt(tangentX * tangentX + tangentY * tangentY) || 1;
-
         this.x += (tangentX / len) * 1.25 * vortexStrength * vortexDir;
         this.y += (tangentY / len) * 1.25 * vortexStrength * vortexDir;
 
@@ -4974,7 +6271,6 @@ class VortexParticle {
             this.x += random(-jerk, jerk);
             this.y += random(-jerk, jerk);
         }
-
         if (this.isSpecial) {
             this.pulse = (this.pulse || 0) + 0.08;
         }
@@ -5000,9 +6296,7 @@ class VortexParticle {
     }
 }
 
-// =====================================================
-// MUSIC MODE PARTICLE CLASSES
-// =====================================================
+// ==================== PRUNE MODE: Purple Infect Particles ====================
 class PurpleInfectParticle {
     constructor() {
         this.x = random(width);
@@ -5059,6 +6353,7 @@ class PurpleInfectParticle {
     }
 }
 
+// ==================== EVOLVE MODE: Yellow Glowing Particle ====================
 class YellowGlowingParticle {
     constructor() {
         this.x = random(width);
@@ -5115,6 +6410,7 @@ class YellowGlowingParticle {
     }
 }
 
+// ==================== EVOLVE MODE: Module Particles ====================
 class ModuleParticle {
     constructor(isFloating = false) {
         const types = ['Harvester', 'Sensor', 'Mover', 'Resistant', 'Explorer', 'Communicator'];
@@ -5177,10 +6473,9 @@ class ModuleParticle {
     }
 }
 
-// =====================================================
-// MUSIC MODE PARTICLE HANDLING
-// =====================================================
+// ==================== PARTICLE EATING LOGIC ====================
 function handleParticleEating(creature) {
+    // Purple Infect Particle (Prune)
     for (let i = purpleInfectParticles.length - 1; i >= 0; i--) {
         let p = purpleInfectParticles[i];
         if (dist(creature.x, creature.y, p.x, p.y) < 18) {
@@ -5193,6 +6488,7 @@ function handleParticleEating(creature) {
         }
     }
 
+    // Yellow Glowing Particle (Evolve)
     for (let i = yellowGlowingParticles.length - 1; i >= 0; i--) {
         let p = yellowGlowingParticles[i];
         if (dist(creature.x, creature.y, p.x, p.y) < 18) {
@@ -5206,6 +6502,7 @@ function handleParticleEating(creature) {
         }
     }
 
+    // Module Particle (Evolve)
     for (let i = moduleParticles.length - 1; i >= 0; i--) {
         let p = moduleParticles[i];
         if (dist(creature.x, creature.y, p.x, p.y) < 16) {
@@ -5218,7 +6515,9 @@ function handleParticleEating(creature) {
     }
 }
 
+// ==================== VORTEX ARRIVAL LOGIC ====================
 function handleParticleVortexArrival() {
+    // Purple Infect Particle → Spawn 3 predators
     for (let i = purpleInfectParticles.length - 1; i >= 0; i--) {
         let p = purpleInfectParticles[i];
         if (p.isDead() && dist(p.x, p.y, width/2, height/2) < 35) {
@@ -5230,6 +6529,7 @@ function handleParticleVortexArrival() {
         }
     }
 
+    // Yellow Glowing Particle → Popcorn into 3 attractive modules
     for (let i = yellowGlowingParticles.length - 1; i >= 0; i--) {
         let p = yellowGlowingParticles[i];
         if (p.isDead() && dist(p.x, p.y, width/2, height/2) < 35) {
@@ -5241,6 +6541,7 @@ function handleParticleVortexArrival() {
         }
     }
 
+    // Module Particle reaching vortex → Popcorn into 3 modules if floating
     for (let i = moduleParticles.length - 1; i >= 0; i--) {
         let p = moduleParticles[i];
         if (p.isFloating && p.isDead() && dist(p.x, p.y, width/2, height/2) < 32) {
@@ -5253,12 +6554,16 @@ function handleParticleVortexArrival() {
     }
 }
 
+// ==================== PHASE SPAWNING LOGIC ====================
 function updateMusicModeParticles() {
     if (!currentMusicMode) return;
 
     if (currentMusicMode === 'prune') {
         if (random() < 0.032 && purpleInfectParticles.length < 7) {
             purpleInfectParticles.push(new PurpleInfectParticle());
+        }
+        if (random() < 0.022 && redParticles.length < 14) {
+            // Add extra red hazard spawning here if desired
         }
     }
 
@@ -5272,21 +6577,30 @@ function updateMusicModeParticles() {
     }
 
     if (currentMusicMode === 'replicate') {
-        // Add replicate mode logic here if needed later
+        if (random() < 0.04) {
+            // Spawn extra white or special white particles here
+        }
+        if (random() < 0.014) {
+            // Spawn honey/food deposits here
+        }
     }
 }
+// =====================================================
+// CLEAN WALL ARCHITECTURE v1.95
+// =====================================================
 
-// =====================================================
-// CLEAN WALL ARCHITECTURE
-// =====================================================
 function creatureMatchesWallFilter(creature, wall) {
     const isFilterWall = wall.wallType === "filter" || wall.filterMode === "custom_filter";
-    if (!isFilterWall || !wall.filterSettings) return false;
+    if (!isFilterWall || !wall.filterSettings) {
+        return false;
+    }
 
     const types = wall.filterSettings.types || [];
     if (types.length === 0) return false;
 
-    if (types.includes('white') || types.includes('red')) return false;
+    if (types.includes('white') || types.includes('red')) {
+        return false;
+    }
 
     const moduleCount = creature.modules ? creature.modules.length : 0;
     const isActualPredator = creature.isPredator === true;
@@ -5301,7 +6615,7 @@ function creatureMatchesWallFilter(creature, wall) {
 }
 
 // =====================================================
-// NEURAL NET CLASS
+// NEURAL NET CLASS (Upgraded with Connection Strength)
 // =====================================================
 class NeuralNet {
     constructor() {
@@ -5314,6 +6628,7 @@ class NeuralNet {
         this.biasH = this.randomArray(this.hiddenSize, 0.1);
         this.biasO = this.randomArray(this.outputSize, 0.1);
 
+        // Connection Strength Tracking (learned experience / visual learning)
         this.connectionStrengthIH = this.zeroMatrix(this.hiddenSize, this.inputSize);
         this.connectionStrengthHO = this.zeroMatrix(this.outputSize, this.hiddenSize);
     }
@@ -5333,7 +6648,8 @@ class NeuralNet {
     zeroMatrix(rows, cols) {
         let m = [];
         for (let i = 0; i < rows; i++) {
-            m.push(new Array(cols).fill(0));
+            let row = new Array(cols).fill(0);
+            m.push(row);
         }
         return m;
     }
@@ -5357,6 +6673,8 @@ class NeuralNet {
             let sum = this.biasH[i];
             for (let j = 0; j < this.inputSize; j++) {
                 sum += inputs[j] * this.weightsIH[i][j];
+
+                // Strengthen connection if input is meaningfully active
                 if (Math.abs(inputs[j]) > 0.2) {
                     this.connectionStrengthIH[i][j] = Math.min(1, this.connectionStrengthIH[i][j] + 0.0035);
                 }
@@ -5370,6 +6688,8 @@ class NeuralNet {
             let sum = this.biasO[i];
             for (let j = 0; j < this.hiddenSize; j++) {
                 sum += hidden[j] * this.weightsHO[i][j];
+
+                // Strengthen connection if hidden neuron is meaningfully active
                 if (Math.abs(hidden[j]) > 0.2) {
                     this.connectionStrengthHO[i][j] = Math.min(1, this.connectionStrengthHO[i][j] + 0.0035);
                 }
@@ -5382,12 +6702,16 @@ class NeuralNet {
 
     copy() {
         let newBrain = new NeuralNet();
+
         newBrain.weightsIH = JSON.parse(JSON.stringify(this.weightsIH));
         newBrain.weightsHO = JSON.parse(JSON.stringify(this.weightsHO));
         newBrain.biasH = [...this.biasH];
         newBrain.biasO = [...this.biasO];
+
+        // Copy learned connection strengths
         newBrain.connectionStrengthIH = JSON.parse(JSON.stringify(this.connectionStrengthIH));
         newBrain.connectionStrengthHO = JSON.parse(JSON.stringify(this.connectionStrengthHO));
+
         return newBrain;
     }
 
@@ -5399,6 +6723,7 @@ class NeuralNet {
             return val;
         };
 
+        // Mutate weights
         for (let i = 0; i < this.weightsIH.length; i++) {
             for (let j = 0; j < this.weightsIH[i].length; j++) {
                 this.weightsIH[i][j] = mutateValue(this.weightsIH[i][j]);
@@ -5411,9 +6736,15 @@ class NeuralNet {
             }
         }
 
-        for (let i = 0; i < this.biasH.length; i++) this.biasH[i] = mutateValue(this.biasH[i]);
-        for (let i = 0; i < this.biasO.length; i++) this.biasO[i] = mutateValue(this.biasO[i]);
+        // Mutate biases
+        for (let i = 0; i < this.biasH.length; i++) {
+            this.biasH[i] = mutateValue(this.biasH[i]);
+        }
+        for (let i = 0; i < this.biasO.length; i++) {
+            this.biasO[i] = mutateValue(this.biasO[i]);
+        }
 
+        // Lightly decay connection strengths on mutation (makes learning more meaningful)
         for (let i = 0; i < this.connectionStrengthIH.length; i++) {
             for (let j = 0; j < this.connectionStrengthIH[i].length; j++) {
                 this.connectionStrengthIH[i][j] *= 0.92;
@@ -5427,10 +6758,8 @@ class NeuralNet {
         }
     }
 }
+// ==================== MISSING CLASSES (Explosion, RedHazard, RedBeam, SpawnEffect) ====================
 
-// =====================================================
-// SUPPORTING CLASSES
-// =====================================================
 class Explosion {
     constructor(x, y) {
         this.x = x;
@@ -5441,7 +6770,8 @@ class Explosion {
         this.particles = [];
         for (let i = 0; i < 10; i++) {
             this.particles.push({
-                x: 0, y: 0,
+                x: 0,
+                y: 0,
                 vx: random(-2.8, 2.8),
                 vy: random(-2.8, 2.8),
                 life: random(10, 18)
@@ -5508,7 +6838,6 @@ class RedHazard {
         this.vy += (centerY - this.y) * pull / (distToCenter + 6);
         this.x += this.vx;
         this.y += this.vy;
-
         if (musicEnabled && musicData.highs > 0.4) {
             let jerk = (musicData.highs - 0.4) * 3.2;
             this.vx += random(-jerk, jerk);
@@ -5566,7 +6895,9 @@ class RedBeam {
                     let len = sqrt(dx*dx + dy*dy) || 1;
                     c.vx += (dx / len) * 1.7;
                     c.vy += (dy / len) * 1.7;
-                    if (c.energy > 15) c.currentThought = "Hit by beam!";
+                    if (c.energy > 15) {
+                        c.currentThought = "Hit by beam!";
+                    }
                 }
             }
             this.damageApplied = true;
@@ -5613,26 +6944,17 @@ class SpawnEffect {
         }
     }
 }
-
-// =====================================================
-// CREATURE CLASS (FULL - NO SUMMARIES)
-// =====================================================
+  
+// ==================== CREATURE CLASS ====================
 class Creature {
     constructor(x, y, parentModules = null, generation = 1, parentTraits = null) {
-        this.x = x;
-        this.y = y;
-        this.vx = random(-0.4, 0.4);
-        this.vy = random(-0.4, 0.4);
+        this.x = x; this.y = y;
+        this.vx = random(-0.4, 0.4); this.vy = random(-0.4, 0.4);
         this.energy = parentModules ? 39 : 50 + random(18);
         this.name = generateSciFiName();
-        this.isPredator = false;
-        this.honey = 0;
-        this.generation = generation;
-        this.children = [];
-        this.childrenCount = 0;
-        this.killCount = 0;
-        this.reproCooldown = 0;
-        this.currentThought = "Exploring...";
+        this.isPredator = false; this.honey = 0;
+        this.generation = generation; this.children = []; this.childrenCount = 0;
+        this.killCount = 0; this.reproCooldown = 0; this.currentThought = "Exploring...";
         this.damageFlash = 0;
         this.purpleFlash = 0;
         this.mustEatWhite = false;
@@ -5661,14 +6983,7 @@ class Creature {
         }
 
         let types = ['harvester', 'sensor', 'mover', 'resistant', 'explorer', 'communicator'];
-        let colors = {
-            'harvester': '#34d399',
-            'sensor': '#38bdf8',
-            'mover': '#a78bfa',
-            'resistant': '#f472b6',
-            'explorer': '#fbbf24',
-            'communicator': '#c084fc'
-        };
+        let colors = { 'harvester': '#34d399', 'sensor': '#38bdf8', 'mover': '#a78bfa', 'resistant': '#f472b6', 'explorer': '#fbbf24', 'communicator': '#c084fc' };
 
         if (parentModules) {
             this.modules = parentModules.map(m => ({ ...m }));
@@ -5687,9 +7002,7 @@ class Creature {
         this.updateSpecialization();
     }
 
-    getModuleCount(type) {
-        return this.modules.filter(m => m.type === type).length;
-    }
+    getModuleCount(type) { return this.modules.filter(m => m.type === type).length; }
 
     getTieredModuleCount(type) {
         return this.modules.filter(m => m.type === type).reduce((sum, m) => sum + (m.tier || 1), 0);
@@ -5734,7 +7047,7 @@ class Creature {
         const dangerRadius = 130;
         for (let h of redHazards) {
             let d = dist(this.x, this.y, h.x, h.y);
-            if (d < dangerRadius) nearbyCount++;
+            if (dangerRadius) nearbyCount++;
             if (d < nearestDist) {
                 nearestDist = d;
                 nearestAngle = atan2(h.y - this.y, h.x - this.y);
@@ -5903,11 +7216,13 @@ class Creature {
         let effectiveHazardDist = hazardInfo.dist * detectionQuality;
         let dodgedThisFrame = false;
 
+        // ==================== NEURAL BRAIN EXECUTION ====================
         if (frameCount % 2 === 0 && this.brain) {
             const inputs = this.getBrainInputs(hazardInfo, effectiveHazardDist, isDay);
             this.brainOutputs = this.brain.forward(inputs);
         }
 
+        // Get brain outputs (with safe defaults)
         let brain = this.brainOutputs || [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5];
         let brainFoodDrive     = brain[0] || 0.5;
         let brainVortexEscape  = brain[1] || 0.5;
@@ -5916,11 +7231,13 @@ class Creature {
         let brainExploration   = brain[4] || 0.5;
         let brainReproWill     = brain[5] || 0.5;
         let brainPredatorTend  = brain[6] || 0.5;
+        // ============================================================
 
         if (effectiveHazardDist > 0.14) {
             let avoidAngle = hazardInfo.angle + PI;
             let avoidStrength = effectiveHazardDist * 2.6;
 
+            // Brain influence on hazard avoidance
             avoidStrength *= (0.6 + brainHazardAvoid * 1.4);
 
             if (effectiveHazardDist > 0.62) {
@@ -5980,6 +7297,7 @@ class Creature {
             let predictive = sin(frameCount * 0.07) * 0.55;
             avoidAngle += predictive * 0.35;
 
+            // Brain hazard avoidance influence
             avoidStrength *= (0.7 + brainHazardAvoid * 1.3);
 
             this.vx += cos(avoidAngle) * avoidStrength * 0.038 * timeScale;
@@ -6021,6 +7339,7 @@ class Creature {
             let len = sqrt(dx*dx + dy*dy) || 1;
             let escape = (tieredMover * 0.025 + tieredExpl * 0.02) * timeScale;
 
+            // Brain vortex escape influence
             escape *= (0.6 + brainVortexEscape * 1.6);
 
             this.vx += (dx / len) * escape;
@@ -6037,6 +7356,7 @@ class Creature {
             if (dist(this.x, this.y, centerX, centerY) < 170) {
                 let escapeForce = (tieredMover * 0.023 + tieredExpl * 0.016) * timeScale;
 
+                // Brain vortex escape influence
                 escapeForce *= (0.65 + brainVortexEscape * 1.5);
 
                 let dx = this.x - centerX;
@@ -6124,6 +7444,7 @@ class Creature {
                 let hungerFactor = map(this.energy, 0, 58, 1.5, 0.88);
                 let pull = settings.zonePullStrength * hungerFactor + this.getModuleCount('harvester') * 0.022;
 
+                // Brain food drive influence
                 pull *= (0.7 + brainFoodDrive * 1.3);
 
                 this.vx += (dx / d) * pull * timeScale;
@@ -6166,6 +7487,7 @@ class Creature {
                     avgY /= count;
 
                     let alignStrength = 0.032 * Math.min(similarNeighbors / 3, 1.4) * timeScale;
+                    // Brain social alignment influence
                     alignStrength *= (0.6 + brainSocialAlign * 1.5);
 
                     this.vx += (avgVx - this.vx) * alignStrength;
@@ -6215,6 +7537,7 @@ class Creature {
                 let vForce = 0.68 * vortexStrength * vortexDir * (1 - socialResist);
                 vForce *= (1 - (this.traits.vortexResistance - 1) * 0.32);
 
+                // Brain vortex escape influence
                 vForce *= (0.65 + brainVortexEscape * 1.4);
 
                 this.vx += (tx / tlen) * vForce * timeScale;
@@ -6226,6 +7549,7 @@ class Creature {
             }
 
             if (cdist < 140) {
+                // Brain exploration influence
                 let exploreForce = (0.6 + brainExploration * 1.2);
                 this.vx += random(-0.78, 0.78) * 0.44 * exploreForce * timeScale;
                 this.vy += random(-0.78, 0.78) * 0.44 * exploreForce * timeScale;
@@ -6275,6 +7599,7 @@ class Creature {
                 if (groupSize > 12) pressureChance *= 1.4;
                 if (groupSize > 18) pressureChance *= 1.5;
 
+                // Brain predator tendency influence
                 if (brainPredatorTend > 0.65) pressureChance *= 1.6;
 
                 if (random() < pressureChance) {
@@ -6298,7 +7623,8 @@ class Creature {
             const isFilterMode = currentWallFilterMode === "custom_filter" && settings && settings.types && settings.types.length > 0;
             const targetTypes = isFilterMode ? settings.types : null;
 
-            if (!(isFilterMode && (targetTypes.includes('white') || targetTypes.includes('red')))) {
+            if (isFilterMode && (targetTypes.includes('white') || targetTypes.includes('red'))) {
+            } else {
                 let d = distToLineSegment(this.x, this.y, wallStartX, wallStartY, mouseX, mouseY);
                 if (d < 28) {
                     let shouldAffect = true;
@@ -6317,7 +7643,7 @@ class Creature {
 
                     if (shouldAffect) {
                         let mx = (wallStartX + mouseX) / 2;
-                        let my = (wallStartY + mouseX) / 2;
+                        let my = (wallStartY + mouseY) / 2;
                         let dx = this.x - mx;
                         let dy = this.y - my;
                         let len = sqrt(dx*dx + dy*dy) || 1;
@@ -6606,9 +7932,124 @@ class Creature {
         }
         pop();
     }
-}// =====================================================
-// RESET SIMULATION
-// =====================================================
+}
+// ==================== MUSIC MODE SPECIAL PARTICLES + VISUALIZER ====================
+
+if (currentMusicMode === 'prune' && purpleInfectParticles.length > 0) {
+    for (let i = purpleInfectParticles.length - 1; i >= 0; i--) {
+        let p = purpleInfectParticles[i];
+        p.update();
+        p.draw();
+
+        for (let c of creatures) {
+            if (dist(p.x, p.y, c.x, c.y) < p.size + 20 && !c.isPredator) {
+                c.purpleFlash = max(c.purpleFlash || 0, 160);
+                c.energy -= 9;
+                p.life = 0;
+
+                if (c.energy < 32 && random() < 0.38) {
+                    c.isPredator = true;
+                    c.currentThought = "Infected - Turned predator";
+                }
+                break;
+            }
+        }
+
+        if (p.isDead()) {
+            if (dist(p.x, p.y, width/2, height/2) < 35) {
+                let newPred = null;
+                if (geneVaultSlots[0]) {
+                    newPred = new Creature(width/2 + random(-35,35), height/2 + random(-35,35),
+                                           geneVaultSlots[0].modules, geneVaultSlots[0].generation || 3);
+                    newPred.isPredator = true;
+                } else {
+                    newPred = new Creature(width/2 + random(-30,30), height/2 + random(-30,30));
+                    newPred.isPredator = true;
+                }
+                creatures.push(newPred);
+                addFloatingText(newPred.x, newPred.y - 22, "PREDATOR SPAWNED", '#c026ff');
+            }
+            purpleInfectParticles.splice(i, 1);
+        }
+    }
+}
+
+if (currentMusicMode === 'evolve') {
+    if (frameCount % 28 === 0 && moduleParticles.length < 14) {
+        moduleParticles.push(new ModuleParticle());
+    }
+    for (let i = moduleParticles.length - 1; i >= 0; i--) {
+        let mp = moduleParticles[i];
+        mp.update();
+        mp.draw();
+        for (let c of creatures) {
+            if (!c.isPredator && dist(mp.x, mp.y, c.x, c.y) < 24 && c.modules.length < 13) {
+                const newMod = { type: mp.type, tier: 1, color: '#fbbf24' };
+                c.modules.push(newMod);
+                mp.collected = true;
+                addFloatingText(c.x, c.y - 26, `+${mp.type}`, '#fbbf24');
+                c.updateSpecialization();
+                break;
+            }
+        }
+        if (mp.isDead()) {
+            moduleParticles.splice(i, 1);
+        }
+    }
+}
+
+drawMusicModeTintAndBorder();
+updateEvolveEnvironmentalCycle();
+
+if (musicVisualizerActive && currentMusicMode) {
+    console.log("%c[DIRECT] Attempting to draw visualizer NOW", "color: lime; font-size: 14px");
+
+    push();
+    drawingContext.save();
+    resetMatrix();
+    colorMode(RGB, 255);
+    ellipseMode(CENTER);
+    noFill();
+
+    let r = musicVisualizerRadius || 280;
+
+    stroke(255, 255, 0);
+    strokeWeight(30);
+    ellipse(width/2, height/2, r * 2.4, r * 2.4);
+
+    stroke(255, 0, 255);
+    strokeWeight(18);
+    ellipse(width/2, height/2, r * 1.7, r * 1.7);
+
+    stroke(0, 255, 255);
+    strokeWeight(10);
+    ellipse(width/2, height/2, r * 1.1, r * 1.1);
+
+    fill(255);
+    noStroke();
+    textAlign(CENTER, CENTER);
+    textSize(48);
+    text("DIRECT DRAW TEST", width/2, height/2 - 30);
+    textSize(32);
+    text(currentMusicMode.toUpperCase(), width/2, height/2 + 30);
+
+    drawingContext.restore();
+    pop();
+}
+
+if (musicVisualizerActive) {
+    push();
+    noStroke();
+    fill(255, 0, 0, 90);
+    rect(0, 0, width, 60);
+    fill(255);
+    textSize(22);
+    textAlign(LEFT, CENTER);
+    text("MUSIC VISUALIZER IS RUNNING", 20, 32);
+    pop();
+}
+
+// ==================== RESET SIM ====================
 function resetSim() {
     creatures = [];
     vortexParticles = [];
@@ -6623,7 +8064,6 @@ function resetSim() {
     floatingTexts = [];
     energyWalls = [];
     evolutionHistory = [];
-
     graphData = {
         pop: [],
         modules: [],
@@ -6631,7 +8071,6 @@ function resetSim() {
         greenFood: [],
         blueFood: []
     };
-
     greenZone.food = 320;
     blueZone.food = 320;
     globalReproCooldown = 0;
@@ -6677,7 +8116,6 @@ function resetSim() {
     envPhaseProgress = 0;
     if (envLabelElement) envLabelElement.classList.add('hidden');
 
-    // Spawn initial creatures + particles
     for (let i = 0; i < 9; i++) {
         creatures.push(new Creature(random(width), random(height)));
     }
