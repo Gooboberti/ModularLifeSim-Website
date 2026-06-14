@@ -6506,49 +6506,37 @@ class ModuleParticle {
 }
       
 
-              // === v1.74: Wall Filter Helper ===
-              // =====================================================
-              // CLEAN FILTER SYSTEM - REBUILT FROM SCRATCH (v1.93)
-              // =====================================================
+// =====================================================
+// CLEAN WALL ARCHITECTURE v1.95
+// =====================================================
 
-              // =====================================================
-              // CLEAN WALL ARCHITECTURE v1.95
-              // Solid Barrier = affects everything
-              // Selective Filter = ONLY affects chosen type, transparent to everything else
-              // =====================================================
+function creatureMatchesWallFilter(creature, wall) {
+    const isFilterWall = wall.wallType === "filter" || wall.filterMode === "custom_filter";
+    if (!isFilterWall || !wall.filterSettings) {
+        return false;
+    }
 
-              function creatureMatchesWallFilter(creature, wall) {
-                  // Fallback support for old walls
-                  const isFilterWall = wall.wallType === "filter" || wall.filterMode === "custom_filter";
-                  if (!isFilterWall || !wall.filterSettings) {
-                      return false;
-                  }
+    const types = wall.filterSettings.types || [];
+    if (types.length === 0) return false;
 
-                  const types = wall.filterSettings.types || [];
-                  if (types.length === 0) return false;
+    if (types.includes('white') || types.includes('red')) {
+        return false;
+    }
 
-                  // White and Red particle filters NEVER affect creatures
-                  if (types.includes('white') || types.includes('red')) {
-                      return false;
-                  }
+    const moduleCount = creature.modules ? creature.modules.length : 0;
+    const isActualPredator = creature.isPredator === true;
+    const isHighModule = moduleCount >= 15;
+    const isLowModule = moduleCount <= 2;
 
-                  // Creature filters - Predator filter is now stricter
-                  const moduleCount = creature.modules ? creature.modules.length : 0;
-                  const isActualPredator = creature.isPredator === true;   // Only real predators
-                  const isHighModule = moduleCount >= 15;
-                  const isLowModule = moduleCount <= 2;
+    if (types.includes('predator') && isActualPredator) return true;
+    if (types.includes('high_module') && isHighModule) return true;
+    if (types.includes('low_module') && isLowModule) return true;
 
-                  if (types.includes('predator') && isActualPredator) return true;
-                  if (types.includes('high_module') && isHighModule) return true;
-                  if (types.includes('low_module') && isLowModule) return true;
+    return false;
+}
 
-                  return false;
-              }
-
-  // =====================================================
-// NEURAL NET CLASS - v0.1.1
-// Lightweight feedforward network for creature brains
-// 12 inputs → 12 hidden → 7 outputs
+// =====================================================
+// NEURAL NET CLASS
 // =====================================================
 class NeuralNet {
     constructor() {
@@ -6556,7 +6544,6 @@ class NeuralNet {
         this.hiddenSize = 12;
         this.outputSize = 7;
 
-        // Initialize weights with small random values
         this.weightsIH = this.randomMatrix(this.hiddenSize, this.inputSize);
         this.weightsHO = this.randomMatrix(this.outputSize, this.hiddenSize);
         this.biasH = this.randomArray(this.hiddenSize, 0.1);
@@ -6568,7 +6555,7 @@ class NeuralNet {
         for (let i = 0; i < rows; i++) {
             let row = [];
             for (let j = 0; j < cols; j++) {
-                row.push((Math.random() * 2 - 1) * 0.6); // Xavier-like init
+                row.push((Math.random() * 2 - 1) * 0.6);
             }
             m.push(row);
         }
@@ -6583,14 +6570,11 @@ class NeuralNet {
         return arr;
     }
 
-    // Sigmoid activation
     sigmoid(x) {
         return 1 / (1 + Math.exp(-x));
     }
 
-    // Forward pass
     forward(inputs) {
-        // Input → Hidden
         let hidden = [];
         for (let i = 0; i < this.hiddenSize; i++) {
             let sum = this.biasH[i];
@@ -6600,7 +6584,6 @@ class NeuralNet {
             hidden.push(this.sigmoid(sum));
         }
 
-        // Hidden → Output
         let outputs = [];
         for (let i = 0; i < this.outputSize; i++) {
             let sum = this.biasO[i];
@@ -6613,7 +6596,6 @@ class NeuralNet {
         return outputs;
     }
 
-    // Create a copy of this brain (for reproduction)
     copy() {
         let newBrain = new NeuralNet();
         newBrain.weightsIH = JSON.parse(JSON.stringify(this.weightsIH));
@@ -6623,7 +6605,6 @@ class NeuralNet {
         return newBrain;
     }
 
-    // Mutate weights (used during reproduction)
     mutate(mutationRate = 0.08, mutationStrength = 0.35) {
         const mutateValue = (val) => {
             if (Math.random() < mutationRate) {
@@ -6653,7 +6634,7 @@ class NeuralNet {
     }
 }
 
-  
+// ==================== CREATURE CLASS ====================
 class Creature {
     constructor(x, y, parentModules = null, generation = 1, parentTraits = null) {
         this.x = x; this.y = y;
@@ -6672,9 +6653,7 @@ class Creature {
         this.adaptationLevel = 0;
         this.role = 'Balanced';
 
-        // ==================== NEURAL BRAIN ====================
         this.brain = new NeuralNet();
-        // ====================================================
 
         if (parentTraits) {
             this.traits = {
@@ -6771,7 +6750,6 @@ class Creature {
         };
     }
 
-    // ==================== NEURAL BRAIN INPUTS ====================
     getBrainInputs(hazardInfo, effectiveHazardDist, isDay) {
         const inputs = [];
 
@@ -6798,7 +6776,6 @@ class Creature {
 
         return inputs;
     }
-    // ============================================================
 
     pruneExcessModules() {
         const maxModules = 11;
@@ -6905,12 +6882,10 @@ class Creature {
 
         let child = new Creature(this.x + random(-6, 6), this.y + random(-6, 6), newModules, this.generation + 1, this.traits);
 
-        // ==================== NEURAL BRAIN INHERITANCE ====================
         if (this.brain) {
             child.brain = this.brain.copy();
             child.brain.mutate(0.09, 0.38);
         }
-        // ============================================================
 
         return child;
     }
@@ -6978,12 +6953,10 @@ class Creature {
             this.adaptationLevel = min(11, (this.adaptationLevel || 0) + 0.007 * timeScale);
         }
 
-        // ==================== NEURAL BRAIN EXECUTION ====================
         if (frameCount % 2 === 0 && this.brain) {
             const inputs = this.getBrainInputs(hazardInfo, effectiveHazardDist, isDay);
             this.brainOutputs = this.brain.forward(inputs);
         }
-        // ============================================================
 
         const tieredSensor = this.getTieredModuleCount('sensor');
         const tieredMover = this.getTieredModuleCount('mover');
@@ -7605,9 +7578,9 @@ class Creature {
         pop();
     }
 }
+
 // ==================== MUSIC MODE SPECIAL PARTICLES + VISUALIZER ====================
 
-// PRUNE - Purple Infect Particles
 if (currentMusicMode === 'prune' && purpleInfectParticles.length > 0) {
     for (let i = purpleInfectParticles.length - 1; i >= 0; i--) {
         let p = purpleInfectParticles[i];
@@ -7646,7 +7619,7 @@ if (currentMusicMode === 'prune' && purpleInfectParticles.length > 0) {
         }
     }
 }
-// EVOLVE - Module Particles
+
 if (currentMusicMode === 'evolve') {
     if (frameCount % 28 === 0 && moduleParticles.length < 14) {
         moduleParticles.push(new ModuleParticle());
@@ -7671,11 +7644,9 @@ if (currentMusicMode === 'evolve') {
     }
 }
 
-// Visualizer + Tint + Diagnostic (END OF draw())
 drawMusicModeTintAndBorder();
 updateEvolveEnvironmentalCycle();
 
-// ==================== DIRECT INJECTION TEST - MUSIC VISUALIZER ====================
 if (musicVisualizerActive && currentMusicMode) {
     console.log("%c[DIRECT] Attempting to draw visualizer NOW", "color: lime; font-size: 14px");
 
@@ -7688,7 +7659,6 @@ if (musicVisualizerActive && currentMusicMode) {
 
     let r = musicVisualizerRadius || 280;
 
-    // Huge obvious rings
     stroke(255, 255, 0);
     strokeWeight(30);
     ellipse(width/2, height/2, r * 2.4, r * 2.4);
@@ -7701,7 +7671,6 @@ if (musicVisualizerActive && currentMusicMode) {
     strokeWeight(10);
     ellipse(width/2, height/2, r * 1.1, r * 1.1);
 
-    // Massive centered text
     fill(255);
     noStroke();
     textAlign(CENTER, CENTER);
@@ -7713,9 +7682,7 @@ if (musicVisualizerActive && currentMusicMode) {
     drawingContext.restore();
     pop();
 }
-// ==================== END DIRECT INJECTION ====================
 
-// === EMERGENCY DIAGNOSTIC (red bar at top) ===
 if (musicVisualizerActive) {
     push();
     noStroke();
@@ -7727,8 +7694,7 @@ if (musicVisualizerActive) {
     text("MUSIC VISUALIZER IS RUNNING", 20, 32);
     pop();
 }
-} // ← Correct closing bracket for draw()
-     
+
 // ==================== RESET SIM ====================
 function resetSim() {
     creatures = [];
@@ -7759,10 +7725,13 @@ function resetSim() {
     timeScale = 1;
     simTime = 0;
     zoomLevel = 1.0;
+
     const zoomEl = document.getElementById('zoom-level');
     if (zoomEl) zoomEl.innerText = '100%';
+
     const timeEl = document.getElementById('sim-time');
     if (timeEl) timeEl.innerText = '00:00';
+
     const pauseBtn = document.getElementById('pause-btn');
     const pauseText = document.getElementById('pause-text');
     if (pauseBtn && pauseText) {
@@ -7770,27 +7739,29 @@ function resetSim() {
         pauseBtn.classList.add('bg-white/10');
         pauseText.innerHTML = 'Pause';
     }
+
     document.querySelectorAll('[id^="speed-"]').forEach(el => el.classList.remove('active', 'bg-emerald-500', 'text-[#0a0a0f]'));
     const speed1 = document.getElementById('speed-1');
     if (speed1) speed1.classList.add('active', 'bg-emerald-500', 'text-[#0a0a0f]');
+
     deselectCreature();
     totalScore = 0;
     totalPredatorKills = 0;
+
     const scoreEl = document.getElementById('vegas-score');
     if (scoreEl) scoreEl.innerText = '0';
+
     const popEl = document.getElementById('stat-pop');
     const predEl = document.getElementById('stat-pred');
     const modEl = document.getElementById('stat-modules');
-    const greenFoodEl = document.getElementById('stat-green-food');
-    const blueFoodEl = document.getElementById('stat-blue-food');
     if (popEl) popEl.innerText = '9';
     if (predEl) predEl.innerText = '0';
     if (modEl) modEl.innerText = '1.0';
-    if (greenFoodEl) greenFoodEl.innerText = '320';
-    if (blueFoodEl) blueFoodEl.innerText = '320';
+
     environmentPhase = 0;
     envPhaseProgress = 0;
     if (envLabelElement) envLabelElement.classList.add('hidden');
+
     for (let i = 0; i < 9; i++) {
         creatures.push(new Creature(random(width), random(height)));
     }
@@ -7800,6 +7771,7 @@ function resetSim() {
     for (let i = 0; i < 6; i++) {
         redHazards.push(new RedHazard());
     }
+
     if (miniChartCtx) drawMiniChart();
     updateMainStats();
 }
