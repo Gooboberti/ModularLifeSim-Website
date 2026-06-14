@@ -6296,16 +6296,17 @@ class VortexParticle {
     }
 }
 
-// ==================== PRUNE MODE: Purple Infect Particles ====================
+// ==================== PRUNE MODE: Shiny Purple Infect Particle ====================
 class PurpleInfectParticle {
     constructor() {
         this.x = random(width);
         this.y = random(height * 0.22);
         this.vx = random(-2.4, 2.4);
         this.vy = random(0.9, 3.4);
-        this.size = random(8.5, 13.5);
-        this.life = 520;
-        this.attractStrength = 0.052;
+        this.size = random(9.5, 14.5);
+        this.life = 580;
+        this.attractStrength = 0.055;
+        this.pulse = random(TWO_PI);
     }
 
     update() {
@@ -6319,18 +6320,18 @@ class PurpleInfectParticle {
         this.x += this.vx;
         this.y += this.vy;
         this.life--;
-
-        this.vx *= 0.976;
-        this.vy *= 0.976;
+        this.vx *= 0.975;
+        this.vy *= 0.975;
+        this.pulse += 0.09;
 
         for (let c of creatures) {
             if (!c.isPredator) {
                 let d = dist(this.x, this.y, c.x, c.y);
-                if (d < 165 && d > 12) {
+                if (d < 175 && d > 12) {
                     let dx2 = c.x - this.x;
                     let dy2 = c.y - this.y;
-                    this.vx += dx2 * 0.0011;
-                    this.vy += dy2 * 0.0011;
+                    this.vx += dx2 * 0.00135;
+                    this.vy += dy2 * 0.00135;
                 }
             }
         }
@@ -6339,17 +6340,28 @@ class PurpleInfectParticle {
     draw() {
         push();
         noStroke();
-        fill(195, 65, 235, 235);
-        circle(this.x, this.y, this.size);
-        fill(225, 110, 255, 145);
-        circle(this.x, this.y, this.size * 1.9);
-        fill(255, 200, 255, 95);
-        circle(this.x - this.size * 0.3, this.y - this.size * 0.3, this.size * 0.55);
+        let pulseSize = this.size + sin(this.pulse) * 2.0;
+
+        // Outer soft glow
+        fill(175, 55, 235, 40);
+        circle(this.x, this.y, pulseSize * 2.8);
+
+        // Mid glow layer
+        fill(195, 75, 250, 95);
+        circle(this.x, this.y, pulseSize * 1.95);
+
+        // Bright main body
+        fill(215, 95, 255, 235);
+        circle(this.x, this.y, pulseSize);
+
+        // Inner shine highlight
+        fill(255, 210, 255, 165);
+        circle(this.x - pulseSize * 0.28, this.y - pulseSize * 0.28, pulseSize * 0.42);
         pop();
     }
 
     isDead() {
-        return this.life <= 0 || dist(this.x, this.y, width/2, height/2) < 30;
+        return this.life <= 0 || dist(this.x, this.y, width / 2, height / 2) < 28;
     }
 }
 
@@ -6473,41 +6485,52 @@ class ModuleParticle {
     }
 }
 
-// ==================== PARTICLE EATING LOGIC ====================
+// =====================================================
+// PARTICLE EATING LOGIC
+// =====================================================
 function handleParticleEating(creature) {
-    // Purple Infect Particle (Prune)
+    // Purple Infect Particle (Prune Mode)
     for (let i = purpleInfectParticles.length - 1; i >= 0; i--) {
         let p = purpleInfectParticles[i];
-        if (dist(creature.x, creature.y, p.x, p.y) < 18) {
-            creature.purpleInfectTime = 420;
-            creature.purpleInfectStrength = 1.0;
+        if (dist(creature.x, creature.y, p.x, p.y) < 20) {
+            creature.purpleFlash = max(creature.purpleFlash || 0, 520);
+            creature.purpleInfectStrength = (creature.purpleInfectStrength || 0) + 1.1;
             purpleInfectParticles.splice(i, 1);
-            addFloatingText(creature.x, creature.y - 20, "INFECTED", '#c026ff');
-            playTone(420, 'sawtooth', 0.25, 0.6);
+
+            addFloatingText(creature.x, creature.y - 22, "INFECTED", '#c026ff');
+            playTone(420, 'sawtooth', 0.28, 0.65);
+
+            // Higher chance to turn creature into predator when infected
+            if (!creature.isPredator && creature.energy < 48 && random() < 0.52) {
+                creature.isPredator = true;
+                creature.currentThought = "Infected - Turned predator";
+            }
             return;
         }
     }
 
-    // Yellow Glowing Particle (Evolve)
+    // Yellow Glowing Particle (Evolve Mode)
     for (let i = yellowGlowingParticles.length - 1; i >= 0; i--) {
         let p = yellowGlowingParticles[i];
-        if (dist(creature.x, creature.y, p.x, p.y) < 18) {
+        if (dist(creature.x, creature.y, p.x, p.y) < 20) {
             const types = ['Harvester', 'Sensor', 'Mover', 'Resistant', 'Explorer', 'Communicator'];
             let newType = random(types);
             creature.modules.push({ type: newType, tier: 1 });
             yellowGlowingParticles.splice(i, 1);
+
             addFloatingText(creature.x, creature.y - 25, "+1 MODULE", '#ffcc33');
             playTone(780, 'sine', 0.18, 0.5);
             return;
         }
     }
 
-    // Module Particle (Evolve)
+    // Module Particle (Evolve Mode)
     for (let i = moduleParticles.length - 1; i >= 0; i--) {
         let p = moduleParticles[i];
-        if (dist(creature.x, creature.y, p.x, p.y) < 16) {
+        if (dist(creature.x, creature.y, p.x, p.y) < 18) {
             creature.modules.push({ type: p.type, tier: 1 });
             p.collected = true;
+
             addFloatingText(creature.x, creature.y - 22, `+${p.type}`, '#ffdd66');
             playTone(920, 'sine', 0.15, 0.45);
             return;
@@ -6515,12 +6538,14 @@ function handleParticleEating(creature) {
     }
 }
 
-// ==================== VORTEX ARRIVAL LOGIC ====================
+// =====================================================
+// VORTEX ARRIVAL LOGIC
+// =====================================================
 function handleParticleVortexArrival() {
-    // Purple Infect Particle → Spawn 3 predators
+    // Purple Infect Particle reaches vortex → Spawn predators (Prune)
     for (let i = purpleInfectParticles.length - 1; i >= 0; i--) {
         let p = purpleInfectParticles[i];
-        if (p.isDead() && dist(p.x, p.y, width/2, height/2) < 35) {
+        if (p.isDead() && dist(p.x, p.y, width / 2, height / 2) < 35) {
             for (let k = 0; k < 3; k++) {
                 let predator = createPredatorFromGeneVaultOrRandom();
                 creatures.push(predator);
@@ -6529,10 +6554,10 @@ function handleParticleVortexArrival() {
         }
     }
 
-    // Yellow Glowing Particle → Popcorn into 3 attractive modules
+    // Yellow Glowing Particle reaches vortex → Popcorn into attractive modules (Evolve)
     for (let i = yellowGlowingParticles.length - 1; i >= 0; i--) {
         let p = yellowGlowingParticles[i];
-        if (p.isDead() && dist(p.x, p.y, width/2, height/2) < 35) {
+        if (p.isDead() && dist(p.x, p.y, width / 2, height / 2) < 35) {
             for (let k = 0; k < 3; k++) {
                 let mod = new ModuleParticle(true);
                 moduleParticles.push(mod);
@@ -6541,10 +6566,10 @@ function handleParticleVortexArrival() {
         }
     }
 
-    // Module Particle reaching vortex → Popcorn into 3 modules if floating
+    // Module Particle reaches vortex while floating → Popcorn into more modules (Evolve)
     for (let i = moduleParticles.length - 1; i >= 0; i--) {
         let p = moduleParticles[i];
-        if (p.isFloating && p.isDead() && dist(p.x, p.y, width/2, height/2) < 32) {
+        if (p.isFloating && p.isDead() && dist(p.x, p.y, width / 2, height / 2) < 32) {
             for (let k = 0; k < 3; k++) {
                 let mod = new ModuleParticle(true);
                 moduleParticles.push(mod);
@@ -6554,34 +6579,65 @@ function handleParticleVortexArrival() {
     }
 }
 
-// ==================== PHASE SPAWNING LOGIC ====================
+// =====================================================
+// MUSIC MODE PARTICLE SPAWNING
+// =====================================================
 function updateMusicModeParticles() {
     if (!currentMusicMode) return;
 
+    // ==================== PRUNE MODE ====================
     if (currentMusicMode === 'prune') {
-        if (random() < 0.032 && purpleInfectParticles.length < 7) {
+        // Shiny purple infect particles
+        if (random() < 0.042 && purpleInfectParticles.length < 10) {
             purpleInfectParticles.push(new PurpleInfectParticle());
         }
-        if (random() < 0.022 && redParticles.length < 14) {
-            // Add extra red hazard spawning here if desired
+
+        // Extra red hazards during Prune mode
+        if (random() < 0.022 * redHazardIntensity && redHazards.length < 24) {
+            redHazards.push(new RedHazard());
         }
     }
 
+    // ==================== EVOLVE MODE ====================
     if (currentMusicMode === 'evolve') {
-        if (random() < 0.026 && yellowGlowingParticles.length < 6) {
+        // Yellow glowing particles (mutation chance)
+        if (random() < 0.028 && yellowGlowingParticles.length < 7) {
             yellowGlowingParticles.push(new YellowGlowingParticle());
         }
-        if (random() < 0.02 && moduleParticles.length < 8) {
+
+        // Attractive floating module particles
+        if (random() < 0.022 && moduleParticles.length < 10) {
             moduleParticles.push(new ModuleParticle(true));
         }
     }
 
+    // ==================== REPLICATE MODE ====================
     if (currentMusicMode === 'replicate') {
-        if (random() < 0.04) {
-            // Spawn extra white or special white particles here
+        // Spawn extra food blooms / honey deposits
+        if (random() < 0.018) {
+            let x = random(width);
+            let y = random(height);
+            let targetIsGreen = random() > 0.5;
+            foodBlooms.push({
+                x: x,
+                y: y,
+                radius: random(14, 22),
+                life: random(280, 420),
+                targetIsGreen: targetIsGreen,
+                age: 0
+            });
         }
-        if (random() < 0.014) {
-            // Spawn honey/food deposits here
+
+        // Occasional gentle reproduction pressure
+        if (random() < 0.012 && creatures.length < 160) {
+            let randomCreature = random(creatures);
+            if (randomCreature && !randomCreature.isPredator && randomCreature.energy > 55) {
+                if (random() < 0.35) {
+                    let child = randomCreature.reproduce();
+                    creatures.push(child);
+                    spawnEffects.push(new SpawnEffect(child.x, child.y));
+                }
+            }
         }
     }
 }
