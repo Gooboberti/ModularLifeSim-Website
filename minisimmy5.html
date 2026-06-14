@@ -6568,67 +6568,53 @@ function handleParticleVortexArrival() {
 // =====================================================
 // MUSIC MODE PARTICLE SPAWNING
 // =====================================================
-function updateMusicModeParticles() {
-    if (!currentMusicMode) return;
+// ==================== PRUNE MODE: Purple Star Particle (Brighter) ====================
+class PurpleInfectParticle {
+    constructor() {
+        let angle = random(TWO_PI);
+        let distance = random(480, 620);
+        this.x = centerX + cos(angle) * distance;
+        this.y = centerY + sin(angle) * distance;
 
-    // ==================== PRUNE MODE ====================
-    if (currentMusicMode === 'prune') {
-        // Purple star-like particles (bright points of light)
-        if (random() < 0.048 && purpleInfectParticles.length < 11) {
-            purpleInfectParticles.push(new PurpleInfectParticle());
-        }
-
-        // Extra red hazards during Prune mode
-        if (random() < 0.022 * redHazardIntensity && redHazards.length < 24) {
-            redHazards.push(new RedHazard());
-        }
+        this.vx = random(-1.5, 1.5);
+        this.vy = random(-1.5, 1.5);
+        this.size = random(3.0, 4.3);
+        this.life = 720;
+        this.attractStrength = 0.046;
+        this.twinkle = random(TWO_PI);
     }
 
-    // ==================== EVOLVE MODE ====================
-if (currentMusicMode === 'evolve') {
-    // Spawn clusters of 1-3 tiny module particles frequently
-    if (random() < 0.085 && moduleParticles.length < 28) {
-        let clusterSize = floor(random(1, 3.99)); // 1 to 3
+    update() {
+        let dx = width / 2 - this.x;
+        let dy = height / 2 - this.y;
+        let distToCenter = sqrt(dx * dx + dy * dy) || 1;
 
-        for (let i = 0; i < clusterSize; i++) {
-            moduleParticles.push(new ModuleParticle(true));
-        }
+        this.vx += (dx / distToCenter) * this.attractStrength;
+        this.vy += (dy / distToCenter) * this.attractStrength;
+
+        this.x += this.vx;
+        this.y += this.vy;
+        this.life--;
+        this.vx *= 0.978;
+        this.vy *= 0.978;
+        this.twinkle += 0.11;
     }
 
-    // Occasional yellow star particles
-    if (random() < 0.018 && yellowGlowingParticles.length < 7) {
-        yellowGlowingParticles.push(new YellowGlowingParticle());
+    draw() {
+        let brightness = 230 + sin(this.twinkle) * 40;
+        noStroke();
+
+        // Soft purple glow
+        fill(170, 50, 230, 50);
+        circle(this.x, this.y, this.size * 3.4);
+
+        // Bright core (matching white particle visibility)
+        fill(235, 140, 255, brightness);
+        circle(this.x, this.y, this.size);
     }
-}
 
-    // ==================== REPLICATE MODE ====================
-    if (currentMusicMode === 'replicate') {
-        // Periodic waves of bright white particles (star-like)
-        if (frameCount % 18 === 0 && random() < 0.65) {
-            for (let i = 0; i < 3; i++) {
-                if (vortexParticles.length < 180) {
-                    vortexParticles.push(new VortexParticle(true));
-                }
-            }
-        }
-
-        // Periodic waves of honey / food deposits
-        if (frameCount % 45 === 0 && random() < 0.7) {
-            for (let i = 0; i < 2; i++) {
-                let x = random(width * 0.15, width * 0.85);
-                let y = random(height * 0.15, height * 0.85);
-                let targetIsGreen = random() > 0.5;
-
-                foodBlooms.push({
-                    x: x,
-                    y: y,
-                    radius: random(13, 20),
-                    life: random(320, 480),
-                    targetIsGreen: targetIsGreen,
-                    age: 0
-                });
-            }
-        }
+    isDead() {
+        return this.life <= 0 || dist(this.x, this.y, width / 2, height / 2) < 24;
     }
 }
 // =====================================================
