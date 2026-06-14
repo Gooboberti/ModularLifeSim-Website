@@ -2062,7 +2062,7 @@ function forceEnvironmentalPhase(phase) {
 }
 
 // =====================================================
-// LIVE NEURAL NET VISUALIZER (Cleaner Version)
+// LIVE NEURAL NET VISUALIZER
 // =====================================================
 function drawNeuralNet(creature) {
     const canvas = document.getElementById('neural-net-canvas');
@@ -2086,7 +2086,7 @@ function drawNeuralNet(creature) {
     const midX = 120;
     const rightX = 198;
 
-    // Elder factor
+    // Elder factor (experience / age)
     const elderFactor = Math.min(1,
         ((creature.generation || 1) * 0.07) +
         ((creature.killCount || 0) * 0.012) +
@@ -2103,19 +2103,25 @@ function drawNeuralNet(creature) {
     // Input → Hidden
     for (let i = 0; i < inputCount; i++) {
         const y1 = getY(i, inputCount);
+
         for (let j = 0; j < hiddenCount; j++) {
             const y2 = getY(j, hiddenCount);
 
             const strength = brain.connectionStrengthIH?.[j]?.[i] || 0;
             const weight = brain.weightsIH[j][i] || 0;
 
-            if (strength < 0.08 && Math.abs(weight) < 0.35) continue;
+            // Only draw meaningful connections
+            if (strength < 0.06 && Math.abs(weight) < 0.32) continue;
 
-            const alpha = 0.15 + (strength * 0.65) + (Math.abs(weight) * 0.18);
-            const thickness = 0.7 + (strength * 2.1) + (elderFactor * 0.5);
+            // Stronger learned connections become more visible and slightly greener
+            const alpha = 0.12 + (strength * 0.72) + (Math.abs(weight) * 0.16);
+            const thickness = 0.6 + (strength * 2.4) + (elderFactor * 0.6);
 
-            ctx.strokeStyle = `rgba(148, 163, 184, ${Math.min(0.88, alpha)})`;
-            ctx.lineWidth = Math.min(3.2, thickness);
+            // Color shifts toward green as connection strength increases
+            const gray = Math.floor(148 - (strength * 45));
+            ctx.strokeStyle = `rgba(${gray}, ${gray + 15}, 184, ${Math.min(0.92, alpha)})`;
+            ctx.lineWidth = Math.min(3.6, thickness);
+
             ctx.beginPath();
             ctx.moveTo(leftX, y1);
             ctx.lineTo(midX, y2);
@@ -2126,19 +2132,22 @@ function drawNeuralNet(creature) {
     // Hidden → Output
     for (let j = 0; j < hiddenCount; j++) {
         const y1 = getY(j, hiddenCount);
+
         for (let k = 0; k < outputCount; k++) {
             const y2 = getY(k, outputCount);
 
             const strength = brain.connectionStrengthHO?.[k]?.[j] || 0;
             const weight = brain.weightsHO[k][j] || 0;
 
-            if (strength < 0.08 && Math.abs(weight) < 0.35) continue;
+            if (strength < 0.06 && Math.abs(weight) < 0.32) continue;
 
-            const alpha = 0.15 + (strength * 0.65) + (Math.abs(weight) * 0.18);
-            const thickness = 0.7 + (strength * 2.1) + (elderFactor * 0.5);
+            const alpha = 0.12 + (strength * 0.72) + (Math.abs(weight) * 0.16);
+            const thickness = 0.6 + (strength * 2.4) + (elderFactor * 0.6);
 
-            ctx.strokeStyle = `rgba(148, 163, 184, ${Math.min(0.88, alpha)})`;
-            ctx.lineWidth = Math.min(3.2, thickness);
+            const gray = Math.floor(148 - (strength * 45));
+            ctx.strokeStyle = `rgba(${gray}, ${gray + 15}, 184, ${Math.min(0.92, alpha)})`;
+            ctx.lineWidth = Math.min(3.6, thickness);
+
             ctx.beginPath();
             ctx.moveTo(midX, y1);
             ctx.lineTo(rightX, y2);
@@ -2152,7 +2161,7 @@ function drawNeuralNet(creature) {
             const y = getY(i, count);
             const val = values[i] ?? 0.5;
 
-            // Node
+            // Node background
             ctx.fillStyle = '#0a0a0f';
             ctx.strokeStyle = '#64748b';
             ctx.lineWidth = 1.3;
@@ -2161,30 +2170,30 @@ function drawNeuralNet(creature) {
             ctx.fill();
             ctx.stroke();
 
-            // Activity glow
-            const intensity = Math.abs(val - 0.5) * 1.6 + 0.3;
+            // Activity glow (green)
+            const intensity = Math.abs(val - 0.5) * 1.65 + 0.35;
             ctx.fillStyle = `rgba(52, 211, 153, ${Math.min(0.95, intensity)})`;
             ctx.beginPath();
-            ctx.arc(x, y, 3.8, 0, Math.PI * 2);
+            ctx.arc(x, y, 3.9, 0, Math.PI * 2);
             ctx.fill();
 
-            // Elder glow
-            if (elderFactor > 0.4) {
-                ctx.strokeStyle = `rgba(52, 211, 153, ${elderFactor * 0.35})`;
-                ctx.lineWidth = 1.6;
+            // Elder glow (stronger on experienced creatures)
+            if (elderFactor > 0.35) {
+                ctx.strokeStyle = `rgba(52, 211, 153, ${elderFactor * 0.38})`;
+                ctx.lineWidth = 1.8;
                 ctx.beginPath();
-                ctx.arc(x, y, 8.5, 0, Math.PI * 2);
+                ctx.arc(x, y, 8.8, 0, Math.PI * 2);
                 ctx.stroke();
             }
 
-            // Label (I1, H3, O2 etc.) - kept subtle
+            // Layer label (I1, H3, O2...)
             ctx.fillStyle = '#94a3b8';
             ctx.font = '8px monospace';
             ctx.textAlign = x < 100 ? 'right' : 'left';
             const labelX = x + (x < 100 ? -10 : 10);
             ctx.fillText(`${prefix}${i + 1}`, labelX, y + 2.5);
 
-            // Value next to node - now sharp green to match the labels below
+            // Value next to node (sharp green)
             ctx.fillStyle = '#34d399';
             ctx.font = '7.5px monospace';
             ctx.textAlign = isOutput ? 'left' : 'right';
