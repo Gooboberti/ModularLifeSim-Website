@@ -2162,7 +2162,6 @@ function generateSciFiName() {
     const suffixes = ['-9','-12','ara','ith','on','yx','ar','en','os','ix','ael','or'];
     return prefixes[Math.floor(Math.random()*prefixes.length)] + suffixes[Math.floor(Math.random()*suffixes.length)];
 }
-
 function getAudioContext() {
     if (!audioCtx) {
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -2213,44 +2212,54 @@ function stopCursorHum() {
 }
 
 // ==================== IMPROVED SOUND FUNCTIONS ====================
-
 function playCursorDamageSound(creature) {
     if (!canPlaySound('cursor')) return;
     if (activeVoices > MAX_VOICES) return;
     activeVoices++;
-
     const ctx = getAudioContext();
     // (keep your existing playCursorDamageSound code exactly as it is)
     // ... your full layered cursor damage sound stays here ...
 }
 
-function playTone(freq, type = null, duration = 0.28, volume = 0.055, detune = 0, attack = 0.012, release = 0.22) {
+function playTone(freq, type = null, duration = null, volume = null, detune = null, attack = null, release = null) {
     if (!canPlaySound('core')) return;
     if (activeVoices > MAX_VOICES) return;
     activeVoices++;
 
     const ctx = getAudioContext();
+    const p = soundParams.core; // ← NEW: read defaults from soundParams
+
+    // Use soundParams.core values as defaults, but allow overrides from function arguments
+    const finalType     = type     ?? p.waveform;
+    const finalDuration = duration ?? p.duration;
+    const finalVolume   = volume   ?? p.volume;
+    const finalDetune   = detune   ?? p.detune;
+    const finalAttack   = attack   ?? p.attack;
+    const finalRelease  = release  ?? p.release;
+
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     const filter = ctx.createBiquadFilter();
 
-    osc.type = type || defaultWaveform;
+    osc.type = finalType || defaultWaveform;
     osc.frequency.value = freq * pitchShift;
+
     const randomDetune = (Math.random() - 0.5) * 18;
-    osc.detune.value = detune + randomDetune;
+    osc.detune.value = finalDetune + randomDetune;
 
     filter.type = 'lowpass';
     filter.frequency.value = 2100;
 
-    let finalVol = volume * effectsVolume * 1.12;
+    let finalVol = finalVolume * effectsVolume * 1.12;
+
     if (activeVoices > 16) {
         const excess = activeVoices - 16;
         finalVol *= Math.max(0.78, 1 - (excess * 0.018));
     }
 
     gain.gain.value = 0;
-    gain.gain.linearRampToValueAtTime(finalVol, ctx.currentTime + attack);
-    gain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + duration);
+    gain.gain.linearRampToValueAtTime(finalVol, ctx.currentTime + finalAttack);
+    gain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + finalDuration);
 
     osc.connect(filter);
     filter.connect(gain);
@@ -2260,7 +2269,7 @@ function playTone(freq, type = null, duration = 0.28, volume = 0.055, detune = 0
     setTimeout(() => {
         try { osc.stop(); } catch(e){}
         activeVoices = Math.max(0, activeVoices - 1);
-    }, (duration + 0.12) * 1000);
+    }, (finalDuration + 0.12) * 1000);
 }
 
 function playBirthSound() {
@@ -2289,13 +2298,10 @@ function playDeathSound() {
 }
 
 // ==================== MISSING SOUND FUNCTIONS (Add these) ====================
-
 function playExplosionSound() {
     if (!canPlaySound('explosion')) return;
     if (activeVoices > MAX_VOICES + 1) return;
-
     const ctx = getAudioContext();
-
     // Low boom
     const osc1 = ctx.createOscillator();
     const gain1 = ctx.createGain();
@@ -2311,7 +2317,6 @@ function playExplosionSound() {
     gain1.connect(masterGain);
     osc1.start();
     setTimeout(() => { try { osc1.stop(); } catch(e){} }, 720);
-
     // Noise crack + mid tone
     setTimeout(() => {
         const osc2 = ctx.createOscillator();
@@ -2319,10 +2324,8 @@ function playExplosionSound() {
         const noise = ctx.createBufferSource();
         const noiseFilter = ctx.createBiquadFilter();
         const noiseGain = ctx.createGain();
-
         osc2.type = 'square';
         osc2.frequency.value = 180;
-
         const buffer = ctx.createBuffer(1, ctx.sampleRate * 0.4, ctx.sampleRate);
         const data = buffer.getChannelData(0);
         for (let i = 0; i < data.length; i++) {
@@ -2334,14 +2337,12 @@ function playExplosionSound() {
         noiseFilter.Q.value = 1.8;
         noiseGain.gain.value = 0.08 * effectsVolume;
         noiseGain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.45);
-
         osc2.connect(noiseFilter);
         noise.connect(noiseFilter);
         noiseFilter.connect(noiseGain);
         noiseGain.connect(masterGain);
         osc2.start();
         noise.start();
-
         setTimeout(() => {
             try { osc2.stop(); noise.stop(); } catch(e){}
         }, 500);
@@ -2352,9 +2353,7 @@ function playWallBreakSound(sizeMult = 1) {
     if (!canPlaySound('wall')) return;
     if (activeVoices > MAX_VOICES + 2) return;
     activeVoices++;
-
     const ctx = getAudioContext();
-
     // Noise burst
     const noise = ctx.createBufferSource();
     const noiseFilter = ctx.createBiquadFilter();
@@ -2378,7 +2377,6 @@ function playWallBreakSound(sizeMult = 1) {
         try { noise.stop(); } catch(e){}
         activeVoices = Math.max(0, activeVoices - 1);
     }, 550);
-
     // High sine tail
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
@@ -2401,7 +2399,6 @@ function playWallBreakSound(sizeMult = 1) {
 function playShipShootSound() {
     if (!canPlaySound('ship')) return;
     if (activeVoices > MAX_VOICES + 2) return;
-
     const ctx = getAudioContext();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
@@ -2424,7 +2421,6 @@ function playShipShootSound() {
 function playBulletImpactSound() {
     if (!canPlaySound('bullet')) return;
     if (activeVoices > MAX_VOICES + 1) return;
-
     const ctx = getAudioContext();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
@@ -2448,7 +2444,6 @@ function playBulletImpactSound() {
 function playAbsorbSound() {
     if (!canPlaySound('absorb')) return;
     if (activeVoices > MAX_VOICES - 1) return;
-
     const ctx = getAudioContext();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
@@ -2468,8 +2463,6 @@ function playAbsorbSound() {
     }, 400);
 }
 
-
-  
 function playDepositSound() {
     if (!canPlaySound('deposit')) return;
     playTone(540, 'sine', 0.24, 0.028, 0, 0.012, 0.22);
@@ -2490,64 +2483,65 @@ function playAmbientPulse(isDay) {
 }
 
 // (Keep all your other sound functions like playExplosionSound, playWallBreakSound, etc. exactly as they are in your current file)
-              // === FLOATING TEXT ===
-              class FloatingText {
-                  constructor(x, y, text, color = '#34d399') {
-                      this.x = x;
-                      this.y = y;
-                      this.text = text;
-                      this.color = color;
-                      this.life = 52;
-                      this.vy = -1.35;
-                      this.alpha = 255;
-                  }
-                  update() {
-                      this.y += this.vy;
-                      this.life--;
-                      this.alpha = map(this.life, 0, 52, 0, 255);
-                  }
-                  show() {
-                      if (this.life <= 0) return;
-                      push();
-                      translate(this.x, this.y);
-                      fill(red(this.color), green(this.color), blue(this.color), this.alpha);
-                      textAlign(CENTER);
-                      textSize(12);
-                      textFont('Inter, system-ui');
-                      text(this.text, 0, 0);
-                      pop();
-                  }
-              }
 
-              function addFloatingText(x, y, text, color = '#34d399') {
-                  floatingTexts.push(new FloatingText(x, y, text, color));
-              }
+// === FLOATING TEXT ===
+class FloatingText {
+    constructor(x, y, text, color = '#34d399') {
+        this.x = x;
+        this.y = y;
+        this.text = text;
+        this.color = color;
+        this.life = 52;
+        this.vy = -1.35;
+        this.alpha = 255;
+    }
+    update() {
+        this.y += this.vy;
+        this.life--;
+        this.alpha = map(this.life, 0, 52, 0, 255);
+    }
+    show() {
+        if (this.life <= 0) return;
+        push();
+        translate(this.x, this.y);
+        fill(red(this.color), green(this.color), blue(this.color), this.alpha);
+        textAlign(CENTER);
+        textSize(12);
+        textFont('Inter, system-ui');
+        text(this.text, 0, 0);
+        pop();
+    }
+}
 
-              function setupSoundSliders() {}
-              function setupSliders() {
-                  setupSoundSliders();
-                  const mappings = [
-                      ['slider-drain', 'val-drain', 'energyDrain', 3],
-                      ['slider-particle', 'val-particle', 'particleFoodValue', 1],
-                      ['slider-repro', 'val-repro', 'reproductionChance', 4],
-                      ['slider-vortex', 'val-vortex', 'vortexMultiplier', 1],
-                      ['slider-phero', 'val-phero', 'pheromoneDeposit', 1],
-                      ['slider-zonepull', 'val-zonepull', 'zonePullStrength', 1]
-                  ];
-                  mappings.forEach(([sliderId, valId, key, decimals]) => {
-                      const slider = document.getElementById(sliderId);
-                      const val = document.getElementById(valId);
-                      if (slider && val) {
-                          slider.value = settings[key];
-                          val.innerText = settings[key].toFixed(decimals);
-                          slider.oninput = () => {
-                              settings[key] = parseFloat(slider.value);
-                              val.innerText = settings[key].toFixed(decimals);
-                          };
-                      }
-                  });
-              } 
+function addFloatingText(x, y, text, color = '#34d399') {
+    floatingTexts.push(new FloatingText(x, y, text, color));
+}
 
+function setupSoundSliders() {}
+
+function setupSliders() {
+    setupSoundSliders();
+    const mappings = [
+        ['slider-drain', 'val-drain', 'energyDrain', 3],
+        ['slider-particle', 'val-particle', 'particleFoodValue', 1],
+        ['slider-repro', 'val-repro', 'reproductionChance', 4],
+        ['slider-vortex', 'val-vortex', 'vortexMultiplier', 1],
+        ['slider-phero', 'val-phero', 'pheromoneDeposit', 1],
+        ['slider-zonepull', 'val-zonepull', 'zonePullStrength', 1]
+    ];
+    mappings.forEach(([sliderId, valId, key, decimals]) => {
+        const slider = document.getElementById(sliderId);
+        const val = document.getElementById(valId);
+        if (slider && val) {
+            slider.value = settings[key];
+            val.innerText = settings[key].toFixed(decimals);
+            slider.oninput = () => {
+                settings[key] = parseFloat(slider.value);
+                val.innerText = settings[key].toFixed(decimals);
+            };
+        }
+    });
+}
       // Enhanced Extract to Egg modal with live balance + top 10
       function showExtractEggModal() {
           const modal = document.getElementById('extract-egg-modal');
