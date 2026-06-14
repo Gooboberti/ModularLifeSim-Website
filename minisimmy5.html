@@ -4302,48 +4302,23 @@ if (musicVisualizerActive && currentMusicMode) {
     pop();
 }
 // ==================== END MUSIC VISUALIZER ====================
+// =====================================================
+// MAIN GAME UPDATE LOOP (Non-Paused)
+// =====================================================
 
-    if (paused) {
-        try {
-            drawWorld();
-            updateMainStats();
-            if (miniChartCtx) drawMiniChart();
-        } catch (e) {
-            console.warn("Paused draw error:", e);
-        }
-        return;
+if (paused) {
+    try {
+        drawWorld();
+        updateMainStats();
+        if (miniChartCtx) drawMiniChart();
+    } catch (e) {
+        console.warn("Paused draw error:", e);
     }
+    return;
+}
 
-                  if (paused) {
-                      drawWorld();
-                      updateMainStats();
-
-                          updateMainStats();
-
-          // Live trends graph update
-          if (frameCount % 25 === 0 && miniChartCtx) {
-              drawMiniChart();
-          }
-
-          fill(255, 255, 255, 190);
-          textAlign(LEFT);
-          textSize(12);
-          textFont('Inter, system-ui');
-          if (isDay) {
-              text('DAY', 16, 24);
-          } else {
-              text('NIGHT', 16, 24);
-          }
-
-                      if (miniChartCtx) drawMiniChart();
-                      return;
-                  }
-
-                  simTime += (1 / 60) * timeScale;
-
-
-// === Incubation Progress Tick ===
-if (!paused && incubatingEggs.length > 0) {
+// --- Incubation Progress (runs every frame) ---
+if (incubatingEggs.length > 0) {
     for (let i = incubatingEggs.length - 1; i >= 0; i--) {
         let inc = incubatingEggs[i];
         let progressGain = 0.016 * timeScale; // ~1% per second at 1x speed
@@ -4351,347 +4326,237 @@ if (!paused && incubatingEggs.length > 0) {
 
         if (inc.progress >= 100 && !inc.completed) {
             inc.completed = true;
-            addFloatingText(width/2, 80, "Incubation Complete!", '#a78bfa');
+            addFloatingText(width / 2, 80, "Incubation Complete!", '#a78bfa');
+            playIncubationCompleteSound?.(); // optional sound
         }
     }
 }
 
-                
-                  const timeEl = document.getElementById('sim-time');
-                  if (timeEl) timeEl.innerText = formatSimTime(simTime);
+// --- Time & UI Updates ---
+simTime += (1 / 60) * timeScale;
 
+const timeEl = document.getElementById('sim-time');
+if (timeEl) timeEl.innerText = formatSimTime(simTime);
 
-                  // FPS calculation
-                  frameCountForFPS++;
-                  const now = Date.now();
-                  if (now - lastFPSUpdate > 500) {
-                      currentFPS = Math.round((frameCountForFPS * 1000) / (now - lastFPSUpdate));
-                      const fpsEl = document.getElementById('fps-counter');
-                      if (fpsEl) {
-                          fpsEl.innerText = currentFPS;
-                          // Color code performance
-                          if (currentFPS >= 50) fpsEl.style.color = '#34d399';
-                          else if (currentFPS >= 30) fpsEl.style.color = '#fbbf24';
-                          else fpsEl.style.color = '#f87171';
-                      }
-                      frameCountForFPS = 0;
-                      lastFPSUpdate = now;
-                  }
+// FPS Counter
+frameCountForFPS++;
+const now = Date.now();
+if (now - lastFPSUpdate > 500) {
+    currentFPS = Math.round((frameCountForFPS * 1000) / (now - lastFPSUpdate));
+    const fpsEl = document.getElementById('fps-counter');
+    if (fpsEl) {
+        fpsEl.innerText = currentFPS;
+        fpsEl.style.color = currentFPS >= 50 ? '#34d399' 
+                          : currentFPS >= 30 ? '#fbbf24' 
+                          : '#f87171';
+    }
+    frameCountForFPS = 0;
+    lastFPSUpdate = now;
+}
 
-                  if (globalReproCooldown > 0) globalReproCooldown--;
+// --- Global Cooldowns & Environment ---
+if (globalReproCooldown > 0) globalReproCooldown--;
 
-                  envPhaseProgress += timeScale;
-                  if (envPhaseProgress >= envCycleLength) {
-                      envPhaseProgress = 0;
-                      environmentPhase = (environmentPhase + 1) % 3;
-                      updateEnvLabel(environmentPhase);
-                  }
+envPhaseProgress += timeScale;
+if (envPhaseProgress >= envCycleLength) {
+    envPhaseProgress = 0;
+    environmentPhase = (environmentPhase + 1) % 3;
+    updateEnvLabel(environmentPhase);
+}
 
-                  timeOfDay = (frameCount * timeScale % dayLength) / dayLength;
-                  let isDay = timeOfDay < 0.5;
+// Day/Night Cycle
+timeOfDay = (frameCount * timeScale % dayLength) / dayLength;
+let isDay = timeOfDay < 0.5;
 
-                  if (isDay !== lastIsDay) {
-                      if (isDay) greenZone.food = Math.min(greenZone.maxFood, greenZone.food + 150);
-                      else blueZone.food = Math.min(blueZone.maxFood, blueZone.food + 150);
-                      lastIsDay = isDay;
+if (isDay !== lastIsDay) {
+    if (isDay) {
+        greenZone.food = Math.min(greenZone.maxFood, greenZone.food + 150);
+    } else {
+        blueZone.food = Math.min(blueZone.maxFood, blueZone.food + 150);
+    }
+    lastIsDay = isDay;
+    if (Math.random() < 0.55 * soundDensity) playAmbientPulse(isDay);
+}
 
-                      if (Math.random() < 0.55 * soundDensity) playAmbientPulse(isDay);
-                  }
+// =====================================================
+// VORTEX & ENVIRONMENT SETUP
+// =====================================================
 
-                  let env = getEnvironmentModifiers();
-                  if (environmentPhase === 0) {
-                      fill(16, 48, 32, 22);
-                  } else if (environmentPhase === 1) {
-                      fill(18, 22, 28, 18);
-                  } else {
-                      fill(48, 28, 18, 26);
-                  }
-                  rect(0, 0, width, height);
+let env = getEnvironmentModifiers();
 
-                  let vortexPhase = (timeOfDay + 0.25) % 1;
-                  let vortexStrength = sin(vortexPhase * TWO_PI) * 0.5 + 0.5;
-                  vortexStrength *= settings.vortexMultiplier;
-
-                  // Environmental modifier on vortex
-                  let envMods = getEnvironmentModifiers();
-                  vortexStrength *= envMods.vortexMult || 1.0;
-
-
+let vortexPhase = (timeOfDay + 0.25) % 1;
+let vortexStrength = (sin(vortexPhase * TWO_PI) * 0.5 + 0.5) * settings.vortexMultiplier;
+vortexStrength *= env.vortexMult || 1.0;
 
 let vortexDir = cos(vortexPhase * TWO_PI);
-                
-                  stroke(255, 255, 255, 5);
-                  strokeWeight(1);
-                  noFill();
-                  for (let r = 42; r < 460; r += 38) {
-                      ellipse(centerX, centerY, r * 2, r * 2);
-                  }
 
-                  fill(16, 18, 26);
-                  stroke(50, 55, 70);
-                  strokeWeight(3.5);
-                  circle(centerX, centerY, 22);
-                  noStroke();
-                  fill(70, 75, 85, 42);
-                  circle(centerX - 4, centerY - 4, 8);
+// Background tint based on environment phase
+if (environmentPhase === 0) {
+    fill(16, 48, 32, 22);      // Fertile
+} else if (environmentPhase === 1) {
+    fill(18, 22, 28, 18);      // Normal
+} else {
+    fill(48, 28, 18, 26);      // Drought
+}
+rect(0, 0, width, height);
 
-                  push();
-                  translate(width / 2, height / 2);
-                  scale(zoomLevel);
-                  translate(-width / 2, -height / 2);
+// Subtle vortex rings
+stroke(255, 255, 255, 5);
+strokeWeight(1);
+noFill();
+for (let r = 42; r < 460; r += 38) {
+    ellipse(centerX, centerY, r * 2, r * 2);
+}
 
-                  const pulseG = sin(frameCount * 0.11) * 0.05 + 1;
-                  const pulseB = sin(frameCount * 0.1 + 1.1) * 0.05 + 1;
+// Center vortex core
+fill(16, 18, 26);
+stroke(50, 55, 70);
+strokeWeight(3.5);
+circle(centerX, centerY, 22);
+noStroke();
+fill(70, 75, 85, 42);
+circle(centerX - 4, centerY - 4, 8);
 
-                  // Environmental phase strongly affects zone size
-                  let envSizeMult = 1.0;
-                  if (environmentPhase === 0) envSizeMult = 1.82;     // Fertile - large, reaches middle but less overlap
-                  else if (environmentPhase === 2) envSizeMult = 0.32; // Drought - barely visible
+// =====================================================
+// ZOOM + DRAWING TRANSFORM
+// =====================================================
 
-                  let greenDisplayR = Math.max(greenZone.minR * (environmentPhase === 2 ? 0.6 : 1),
-                                               greenZone.baseR * (greenZone.food / greenZone.maxFood) * pulseG * envSizeMult);
-                  let blueDisplayR = Math.max(blueZone.minR * (environmentPhase === 2 ? 0.6 : 1),
-                                              blueZone.baseR * (blueZone.food / blueZone.maxFood) * pulseB * envSizeMult);
+push();
+translate(width / 2, height / 2);
+scale(zoomLevel);
+translate(-width / 2, -height / 2);
 
+const pulseG = sin(frameCount * 0.11) * 0.05 + 1;
+const pulseB = sin(frameCount * 0.1 + 1.1) * 0.05 + 1;
 
-                  fill(16, 185, 129, isDay ? 90 : 32);
-                  circle(greenZone.x, greenZone.y, greenDisplayR * 2);
-                  fill(16, 185, 129, isDay ? 50 : 18);
-                  circle(greenZone.x, greenZone.y, greenDisplayR * 2.2);
+// Environmental size multiplier
+let envSizeMult = (environmentPhase === 0) ? 1.82 : (environmentPhase === 2) ? 0.32 : 1.0;
 
-                  fill(56, 189, 248, isDay ? 32 : 90);
-                  circle(blueZone.x, blueZone.y, blueDisplayR * 2);
-                  fill(56, 189, 248, isDay ? 18 : 50);
-                  circle(blueZone.x, blueZone.y, blueDisplayR * 2.2);
+// Green Zone
+let greenDisplayR = Math.max(
+    greenZone.minR * (environmentPhase === 2 ? 0.6 : 1),
+    greenZone.baseR * (greenZone.food / greenZone.maxFood) * pulseG * envSizeMult
+);
+fill(16, 185, 129, isDay ? 90 : 32);
+circle(greenZone.x, greenZone.y, greenDisplayR * 2);
+fill(16, 185, 129, isDay ? 50 : 18);
+circle(greenZone.x, greenZone.y, greenDisplayR * 2.2);
 
-                  for (let i = redBeams.length - 1; i >= 0; i--) {
-                      let b = redBeams[i];
-                      b.update();
-                      b.show();
+// Blue Zone
+let blueDisplayR = Math.max(
+    blueZone.minR * (environmentPhase === 2 ? 0.6 : 1),
+    blueZone.baseR * (blueZone.food / blueZone.maxFood) * pulseB * envSizeMult
+);
+fill(56, 189, 248, isDay ? 32 : 90);
+circle(blueZone.x, blueZone.y, blueDisplayR * 2);
+fill(56, 189, 248, isDay ? 18 : 50);
+circle(blueZone.x, blueZone.y, blueDisplayR * 2.2);
 
-                      if (b.life <= 0) {
-                          redBeams.splice(i, 1);
-                      }
-                  }
+// =====================================================
+// RED BEAMS + RED HAZARDS
+// =====================================================
 
-                  if (redHazardsEnabled) {
-                      for (let i = redHazards.length - 1; i >= 0; i--) {
-                          let h = redHazards[i];
-                          h.update(vortexDir, vortexStrength);
+for (let i = redBeams.length - 1; i >= 0; i--) {
+    let b = redBeams[i];
+    b.update();
+    b.show();
+    if (b.life <= 0) redBeams.splice(i, 1);
+}
 
-                          if (dist(h.x, h.y, centerX, centerY) < 7) {
-                              explosions.push(new Explosion(h.x, h.y));
-                              playExplosionSound();
-                              redHazards.splice(i, 1);
-                              continue;
-                          }
+if (redHazardsEnabled) {
+    for (let i = redHazards.length - 1; i >= 0; i--) {
+        let h = redHazards[i];
+        h.update(vortexDir, vortexStrength);
 
-                          h.show();
+        if (dist(h.x, h.y, centerX, centerY) < 7) {
+            explosions.push(new Explosion(h.x, h.y));
+            playExplosionSound();
+            redHazards.splice(i, 1);
+            continue;
+        }
 
-                          for (let c of creatures) {
-                              let d = dist(h.x, h.y, c.x, c.y);
-                              if (d < h.size + 6) {
-                                  let sensorBonus = c.getModuleCount('sensor') * 0.38;
-                                  let baseDamage = 26 + random(4, 10) - sensorBonus;
+        h.show();
 
-                                  c.energy = max(0, c.energy - baseDamage);
-                                  c.damageFlash = 50;
-                                  c.purpleFlash = max(c.purpleFlash || 0, 48);
-                                  c.hazardDamageTaken = (c.hazardDamageTaken || 0) + baseDamage;
+        // Creature collision damage
+        for (let c of creatures) {
+            let d = dist(h.x, h.y, c.x, c.y);
+            if (d < h.size + 6) {
+                let sensorBonus = c.getModuleCount('sensor') * 0.38;
+                let baseDamage = 26 + random(4, 10) - sensorBonus;
 
-                                  let dx = c.x - h.x;
-                                  let dy = c.y - h.x;
-                                  let len = sqrt(dx*dx + dy*dy) || 1;
-                                  c.vx += (dx / len) * 2.2;
-                                  c.vy += (dy / len) * 2.2;
+                c.energy = max(0, c.energy - baseDamage);
+                c.damageFlash = 50;
+                c.purpleFlash = max(c.purpleFlash || 0, 48);
+                c.hazardDamageTaken = (c.hazardDamageTaken || 0) + baseDamage;
 
-                                  if (c.energy > 15) {
-                                      c.currentThought = "Hit!";
-                                  }
+                let dx = c.x - h.x;
+                let dy = c.y - h.y;
+                let len = sqrt(dx * dx + dy * dy) || 1;
+                c.vx += (dx / len) * 2.2;
+                c.vy += (dy / len) * 2.2;
 
-                                  for (let other of creatures) {
-                                      if (other === c) continue;
-                                      let od = dist(h.x, h.y, other.x, other.y);
-                                      if (od < 48) {
-                                          let oSensor = other.getModuleCount('sensor') * 0.32;
-                                          let oDamage = 12 + random(2, 5) - oSensor;
-                                          other.energy = max(0, other.energy - oDamage);
-                                          other.damageFlash = max(other.damageFlash || 0, 35);
-                                          other.hazardDamageTaken = (other.hazardDamageTaken || 0) + oDamage;
+                if (c.energy > 15) c.currentThought = "Hit!";
 
-                                          let odx = other.x - h.x;
-                                          let ody = other.y - h.x;
-                                          let olen = sqrt(odx*odx + ody*ody) || 1;
-                                          other.vx += (odx / olen) * 1;
-                                          other.vy += (ody / olen) * 1;
-                                      }
-                                  }
+                // AoE damage to nearby creatures
+                for (let other of creatures) {
+                    if (other === c) continue;
+                    let od = dist(h.x, h.y, other.x, other.y);
+                    if (od < 48) {
+                        let oSensor = other.getModuleCount('sensor') * 0.32;
+                        let oDamage = 12 + random(2, 5) - oSensor;
+                        other.energy = max(0, other.energy - oDamage);
+                        other.damageFlash = max(other.damageFlash || 0, 35);
+                        other.hazardDamageTaken = (other.hazardDamageTaken || 0) + oDamage;
 
-                                  explosions.push(new Explosion(h.x, h.y));
-                                  playExplosionSound();
+                        let odx = other.x - h.x;
+                        let ody = other.y - h.y;
+                        let olen = sqrt(odx * odx + ody * ody) || 1;
+                        other.vx += (odx / olen) * 1;
+                        other.vy += (ody / olen) * 1;
+                    }
+                }
 
-                                  redHazards.splice(i, 1);
-                                  break;
-                              }
-                          }
-                      }
+                explosions.push(new Explosion(h.x, h.y));
+                playExplosionSound();
+                redHazards.splice(i, 1);
+                break;
+            }
+        }
+    }
 
-                     const targetRedCount = 8;
-if (redHazards.length < targetRedCount) {
-    let spawnChance = (targetRedCount - redHazards.length) * 0.11;
-
-   
-
-    if (random() < spawnChance) {
-        redHazards.push(new RedHazard());
+    // Red hazard spawning
+    const targetRedCount = 8;
+    if (redHazards.length < targetRedCount) {
+        let spawnChance = (targetRedCount - redHazards.length) * 0.11;
+        if (random() < spawnChance) {
+            redHazards.push(new RedHazard());
+        }
     }
 }
-                  }
 
-                  for (let i = explosions.length - 1; i >= 0; i--) {
-                      let ex = explosions[i];
-                      ex.update();
-                      ex.show();
+// =====================================================
+// EXPLOSIONS + SPAWN EFFECTS + FLOATING TEXT
+// =====================================================
 
-                      if (ex.life <= 0) {
-                          explosions.splice(i, 1);
-                      }
-                  }
+for (let i = explosions.length - 1; i >= 0; i--) {
+    let ex = explosions[i];
+    ex.update();
+    ex.show();
+    if (ex.life <= 0) explosions.splice(i, 1);
+}
 
-                  for (let i = spawnEffects.length - 1; i >= 0; i--) {
-                      let se = spawnEffects[i];
-                      se.update();
-                      se.show();
+for (let i = spawnEffects.length - 1; i >= 0; i--) {
+    let se = spawnEffects[i];
+    se.update();
+    se.show();
+    if (se.life <= 0) spawnEffects.splice(i, 1);
+}
 
-                      if (se.life <= 0) {
-                          spawnEffects.splice(i, 1);
-                      }
-                  }
-
-                  // Draw floating texts (in world space)
-                  if (showDamageNumbers) {
-                      for (let ft of floatingTexts) {
-                          ft.show();
-                      }
-                  }
-
-                  // === Draw Energy Walls (with splitting behavior) ===
-                  for (let i = energyWalls.length - 1; i >= 0; i--) {
-                      let w = energyWalls[i];
-
-                      // Check immunity first
-                      let isImmune = w.immuneUntil && frameCount < w.immuneUntil;
-
-                      if (!isImmune) {
-                          // Very slow passive decay only when vulnerable
-                          w.life -= 0.35;
-
-                          // Red particle absorption + empowerment (only for offensive walls)
-                          if (w.offensive) {
-                              for (let j = redHazards.length - 1; j >= 0; j--) {
-                                  let r = redHazards[j];
-                                  if (distToLineSegment(r.x, r.y, w.x1, w.y1, w.x2, w.y2) < 22) {
-                                      redHazards.splice(j, 1);
-
-                                      if (!w.empowered) {
-                                          w.redHits = (w.redHits || 0) + 1;
-                                          w.shakeTimer = 12 + (w.redHits * 4);
-
-                                          if (w.redHits >= 5) {
-                                              w.empowered = true;
-                                          }
-                                      }
-
-                                      // Offensive walls become temporarily vortex-vulnerable when hit by red
-                                      w.vortexImmune = false;
-                                      w.vortexVulnerableUntil = frameCount + 600;
-
-                                      playAbsorbSound();
-
-                                      // Visual explosion feedback
-                                      explosions.push(new Explosion(r.x, r.y));
-                                      for (let k = 0; k < 2; k++) {
-                                          explosions.push(new Explosion(r.x + random(-12, 12), r.y + random(-12, 12)));
-                                      }
-                                  }
-                              }
-                          }
-                      }
-
-                      if (w.life <= 0) {
-                          let length = w.originalLength || dist(w.x1, w.y1, w.x2, w.y2);
-
-                          // Split cleanly down the middle if long enough and not immune
-                          if (length > 42 && !isImmune) {
-                              let mx = (w.x1 + w.x2) / 2;
-                              let my = (w.y1 + w.y2) / 2;
-
-                              let newLife = Math.max(140, length * 2.0);
-
-                              // Left piece - becomes immune for 1 second
-                              energyWalls.push({
-                                  x1: w.x1,
-                                  y1: w.y1,
-                                  x2: mx,
-                                  y2: my,
-                                  life: newLife,
-                                  maxLife: newLife,
-                                  hitFlash: 0,
-                                  vx: w.vx - 1.2,
-                                  vy: w.vy - 1.2,
-                                  originalLength: length * 0.5,
-                                  immuneUntil: frameCount + 60,
-                                  redHits: 0,
-                                  empowered: false,
-                                  shakeTimer: 0
-                              });
-
-                              // Right piece - becomes immune for 1 second
-                              energyWalls.push({
-                                  x1: mx,
-                                  y1: my,
-                                  x2: w.x2,
-                                  y2: w.y2,
-                                  life: newLife,
-                                  maxLife: newLife,
-                                  hitFlash: 0,
-                                  vx: w.vx + 1.2,
-                                  vy: w.vy + 1.2,
-                                  originalLength: length * 0.5,
-                                  immuneUntil: frameCount + 60,
-                                  redHits: 0,
-                                  empowered: false,
-                                  shakeTimer: 0
-                              });
-
-                              explosions.push(new Explosion(mx, my));
-                              playWallBreakSound(0.6);
-
-                              energyWalls.splice(i, 1);
-                              continue;
-
-                          } else {
-                              // Final break (too small or was immune)
-                              let explodeX = (w.x1 + w.x2) / 2;
-                              let explodeY = (w.y1 + w.y2) / 2;
-
-                              playWallBreakSound(0.4);
-                              playExplosionSound();
-                              explosions.push(new Explosion(explodeX, explodeY));
-
-                              for (let c of creatures) {
-                                  let d = dist(c.x, c.y, explodeX, explodeY);
-                                  if (d < 40) {
-                                      c.energy = max(0, c.energy - 20);
-                                      c.purpleFlash = max(c.purpleFlash || 0, 60);
-                                  }
-                              }
-
-                              energyWalls.splice(i, 1);
-                              continue;
-                          }
-                      }
-
+if (showDamageNumbers) {
+    for (let ft of floatingTexts) {
+        ft.show();
+    }
+}
                       // === v1.85: Solid + Filter walls deflect white/red particles when selected ===
                       const isSolid = !w.filterMode || w.filterMode === "repel_all";
                       const filterTypes = (w.filterSettings && w.filterSettings.types) || [];
