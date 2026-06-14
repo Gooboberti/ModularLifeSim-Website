@@ -1530,54 +1530,56 @@ Start of Chunk 2
 -->
     <!-- ========== CHUNK 2 START ========== -->
 <script>
-          
-              let creatures = [];
-              let eggs = [];
-              const MAX_INCUBATOR_SLOTS = 10;
-              let incubatingEggs = []; // { id, eggData, progress (0-100), completed }
-              let nextIncubationId = 1;
-              const MAX_EGGS = 10; // Max eggs player can hold
-              let predators = [];
-              let vortexParticles = [];
-              let pheromones = [];
-              let foodBlooms = [];
-              let staticFoodPatches = [];
-              let energyOrbs = [];
-              let redHazards = [];
-              let redBeams = [];
-              let purpleInfectParticles = [];
-              let moduleParticles = [];
-    
-              let explosions = [];
-              let spawnEffects = [];
-              let floatingTexts = [];
-              let vortexProjectiles = []; // Bullets deflected by Energy Walls that spiral in the vortex
-              let showDamageNumbers = false; // Hidden by default at startup
-              let evolutionHistory = [];
-              let hidePrestigeWarning = false;
-              let geneVaultSlots = new Array(10).fill(null);
-              // === Real Chart History (v1.5) ===
-              let historyPop = [];
-              let historyPred = [];
-              let historyHR = [];
-              let historyModules = [];
-              const MAX_HISTORY = 180; // ~3-6 minutes depending on recording rate
-              let greenZone, blueZone;
-              let timeOfDay = 0;
-              let dayLength = 1600;
-              let lastIsDay = true;
-              let globalReproCooldown = 0;
-              let centerX, centerY;
-              let selectedCreature = null;
-              let trackAlpha = true; // ← ADD THIS
-              // High Roller Points (main currency) - exposed on window for reliable access from modal/chart functions
-              let highRollerPoints = 0;
-              if (typeof window !== 'undefined') window.highRollerPoints = highRollerPoints;
-              let analyticsModalOpen = false;
-              // === VERSIONING (for future updates) ===
-      const GAME_VERSION = "v2.01 - Fixed crash: isFilterMode scope error during wall drawing";
+      // ==================== GAME STATE VARIABLES ====================
+let creatures = [];
+let eggs = [];
+const MAX_INCUBATOR_SLOTS = 10;
+let incubatingEggs = []; // { id, eggData, progress (0-100), completed }
+let nextIncubationId = 1;
+const MAX_EGGS = 10; // Max eggs player can hold
+let predators = [];
+let vortexParticles = [];
+let pheromones = [];
+let foodBlooms = [];
+let staticFoodPatches = [];
+let energyOrbs = [];
+let redHazards = [];
+let redBeams = [];
+let purpleInfectParticles = [];
+let moduleParticles = [];
 
-// ==================== AUDIO VARIABLES ====================
+let explosions = [];
+let spawnEffects = [];
+let floatingTexts = [];
+let vortexProjectiles = []; // Bullets deflected by Energy Walls that spiral in the vortex
+let showDamageNumbers = false; // Hidden by default at startup
+let evolutionHistory = [];
+let hidePrestigeWarning = false;
+let geneVaultSlots = new Array(10).fill(null);
+// === Real Chart History (v1.5) ===
+let historyPop = [];
+let historyPred = [];
+let historyHR = [];
+let historyModules = [];
+const MAX_HISTORY = 180; // ~3-6 minutes depending on recording rate
+let greenZone, blueZone;
+let timeOfDay = 0;
+let dayLength = 1600;
+let lastIsDay = true;
+let globalReproCooldown = 0;
+let centerX, centerY;
+let selectedCreature = null;
+let trackAlpha = true; // ← ADD THIS
+// High Roller Points (main currency) - exposed on window for reliable access from modal/chart functions
+let highRollerPoints = 0;
+if (typeof window !== 'undefined') window.highRollerPoints = highRollerPoints;
+let analyticsModalOpen = false;
+// === VERSIONING (for future updates) ===
+const GAME_VERSION = "v2.01 - Fixed crash: isFilterMode scope error during wall drawing";
+
+// ==================== AUDIO SYSTEM ====================
+
+// --- Audio Variables ---
 let masterVolume = 0.12;
 let effectsVolume = 0.65;
 let ambientVolume = 1.6;
@@ -1593,7 +1595,8 @@ const MAX_VOICES = 26;
 let cursorHumOsc = null;
 let cursorHumGain = null;
 let cursorHumFilter = null;
-// ==================== SOUND CONTROL SYSTEM ====================
+
+// --- Sound Control System ---
 let soundEnabled = {
     master: true,
     core: true,
@@ -1668,7 +1671,7 @@ function muteAllSounds() {
     });
     updateSoundSettings();
 }
-// ==================== TEMPORARY DEBUG LOGGING VERSION ====================
+
 function canPlaySound(category) {
     if (!soundEnabled.master) return false;
     if (soundEnabled.hasOwnProperty(category)) {
@@ -1677,25 +1680,330 @@ function canPlaySound(category) {
     return true;
 }
 
-// ==================== SCORE, UNLOCKS & HAZARDS ====================
-let totalScore = 0;
-let totalPredatorKills = 0;
-let lastScoreUpdate = 0;
-let unlockedSpeeds = {2: true, 4: true};
-let redHazardsUnlocked = false;
-let cursorHazardUnlocked = false;
-let freeMode = false;
+// --- Core Audio Engine ---
+function getAudioContext() {
+    if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        masterGain = audioCtx.createGain();
+        compressor = audioCtx.createDynamicsCompressor();
+        compressor.threshold.value = -18;
+        compressor.knee.value = 8;
+        compressor.ratio.value = 12;
+        compressor.attack.value = 0.003;
+        compressor.release.value = 0.25;
+        masterGain.gain.value = masterVolume;
+        masterGain.connect(compressor);
+        compressor.connect(audioCtx.destination);
+    }
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+}
 
-let redHazardsEnabled = true;
-let redHazardIntensity = 1;
-let cursorHazardActive = false;
+function startCursorHum() {
+    const ctx = getAudioContext();
+    if (cursorHumOsc) return;
+    cursorHumOsc = ctx.createOscillator();
+    cursorHumGain = ctx.createGain();
+    cursorHumFilter = ctx.createBiquadFilter();
+    cursorHumOsc.type = 'sine';
+    cursorHumOsc.frequency.value = 48;
+    cursorHumFilter.type = 'lowpass';
+    cursorHumFilter.frequency.value = 180;
+    cursorHumGain.gain.value = 0;
+    cursorHumOsc.connect(cursorHumFilter);
+    cursorHumFilter.connect(cursorHumGain);
+    cursorHumGain.connect(masterGain);
+    cursorHumOsc.start();
+    const targetVol = 0.015 * effectsVolume;
+    cursorHumGain.gain.linearRampToValueAtTime(targetVol, ctx.currentTime + 0.8);
+}
 
-let persistentHazard = { x: 0, y: 0, active: false };
-let placedHazards = [];
-let beamCharge = 0;
-let maxPlacedHazards = 3;
+function stopCursorHum() {
+    if (!cursorHumOsc || !cursorHumGain) return;
+    const ctx = getAudioContext();
+    cursorHumGain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.6);
+    setTimeout(() => {
+        try { if (cursorHumOsc) cursorHumOsc.stop(); } catch(e) {}
+        cursorHumOsc = null;
+        cursorHumGain = null;
+        cursorHumFilter = null;
+    }, 700);
+}
 
-// ==================== MUSIC MODAL + MODES ====================
+// --- Core Tone Engine ---
+function playTone(freq, type = null, duration = null, volume = null, detune = null, attack = null, release = null) {
+    if (!canPlaySound('core')) return;
+    if (activeVoices > MAX_VOICES) return;
+    activeVoices++;
+
+    const ctx = getAudioContext();
+    const p = soundParams.core;
+
+    const finalType     = type     ?? p.waveform;
+    const finalDuration = duration ?? p.duration;
+    const finalVolume   = volume   ?? p.volume;
+    const finalDetune   = detune   ?? p.detune;
+    const finalAttack   = attack   ?? p.attack;
+    const finalRelease  = release  ?? p.release;
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const filter = ctx.createBiquadFilter();
+
+    osc.type = finalType || defaultWaveform;
+    osc.frequency.value = freq * pitchShift;
+
+    const randomDetune = (Math.random() - 0.5) * 18;
+    osc.detune.value = finalDetune + randomDetune;
+
+    filter.type = 'lowpass';
+    filter.frequency.value = 2100;
+
+    let finalVol = finalVolume * effectsVolume * 1.12;
+
+    if (activeVoices > 16) {
+        const excess = activeVoices - 16;
+        finalVol *= Math.max(0.78, 1 - (excess * 0.018));
+    }
+
+    gain.gain.value = 0;
+    gain.gain.linearRampToValueAtTime(finalVol, ctx.currentTime + finalAttack);
+    gain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + finalDuration);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(masterGain);
+    osc.start();
+
+    setTimeout(() => {
+        try { osc.stop(); } catch(e){}
+        activeVoices = Math.max(0, activeVoices - 1);
+    }, (finalDuration + 0.12) * 1000);
+}
+// --- Simple Layered Sounds ---
+function playCursorDamageSound(creature) {
+    if (!canPlaySound('cursor')) return;
+    if (activeVoices > MAX_VOICES) return;
+    activeVoices++;
+    const ctx = getAudioContext();
+
+    // TODO: Full layered cursor damage sound goes here
+}
+
+function playBirthSound() {
+    if (!canPlaySound('birth')) return;
+    const p = soundParams.birth;
+    playTone(880, p.waveform, p.duration * 1.05, p.volume * 0.9, 0, p.attack, p.release);
+    setTimeout(() => playTone(1108, 'sine', p.duration * 0.85, p.volume * 0.75, 12, p.attack * 0.8, p.release * 0.85), 55);
+    setTimeout(() => playTone(1320, 'sine', p.duration * 0.7, p.volume * 0.65, -8, p.attack * 0.6, p.release * 0.75), 105);
+}
+
+function playEatSound(isGreenZone = true) {
+    if (!canPlaySound('eating')) return;
+    if (activeVoices > MAX_VOICES - 4) return;
+    if (creatures.length > 90 && Math.random() > 0.25) return;
+    if (Math.random() > soundDensity * 0.55) return;
+    const p = soundParams.eating;
+    const base = isGreenZone ? 620 : 780;
+    playTone(base, p.waveform, p.duration, p.volume, 0, p.attack, p.release);
+    setTimeout(() => playTone(base * 1.5, p.waveform, p.duration * 0.7, p.volume * 0.65, 5, p.attack * 0.7, p.release * 0.7), 22);
+}
+
+function playDeathSound() {
+    if (!canPlaySound('death')) return;
+    if (creatures.length > 110 && Math.random() > 0.4) return;
+    const p = soundParams.death;
+    playTone(220, p.waveform, p.duration, p.volume, 0, p.attack, p.release);
+    setTimeout(() => playTone(175, 'sine', p.duration * 0.8, p.volume * 0.75, -10, p.attack * 0.7, p.release * 0.85), 75);
+}
+
+function playDepositSound() {
+    if (!canPlaySound('deposit')) return;
+    const p = soundParams.deposit;
+    playTone(540, p.waveform, p.duration, p.volume, 0, p.attack, p.release);
+    setTimeout(() => playTone(680, 'sine', p.duration * 0.75, p.volume * 0.8, 8, p.attack * 0.7, p.release * 0.75), 38);
+}
+
+function playPredatorFeedSound() {
+    if (!canPlaySound('predator')) return;
+    const p = soundParams.predator;
+    playTone(165, p.waveform, p.duration, p.volume, 0, p.attack, p.release);
+    setTimeout(() => playTone(210, 'sine', p.duration * 0.75, p.volume * 0.8, 15, p.attack * 0.6, p.release * 0.7), 28);
+}
+
+function playAmbientPulse(isDay) {
+    if (!canPlaySound('ambient')) return;
+    const freq = isDay ? 48 : 42;
+    const vol = (isDay ? 0.007 : 0.011) * ambientVolume;
+    playTone(freq, 'sine', 1.9, vol, 0, 0.35, 1.5);
+}
+
+// --- Complex / Custom Sounds ---
+function playExplosionSound() {
+    if (!canPlaySound('explosion')) return;
+    if (activeVoices > MAX_VOICES + 1) return;
+    const ctx = getAudioContext();
+    // Low boom
+    const osc1 = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    const filter1 = ctx.createBiquadFilter();
+    osc1.type = 'sawtooth';
+    osc1.frequency.value = 85;
+    filter1.type = 'lowpass';
+    filter1.frequency.value = 420;
+    gain1.gain.value = 0.16 * effectsVolume;
+    gain1.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.65);
+    osc1.connect(filter1);
+    filter1.connect(gain1);
+    gain1.connect(masterGain);
+    osc1.start();
+    setTimeout(() => { try { osc1.stop(); } catch(e){} }, 720);
+    // Noise crack + mid tone
+    setTimeout(() => {
+        const osc2 = ctx.createOscillator();
+        const gain2 = ctx.createGain();
+        const noise = ctx.createBufferSource();
+        const noiseFilter = ctx.createBiquadFilter();
+        const noiseGain = ctx.createGain();
+        osc2.type = 'square';
+        osc2.frequency.value = 180;
+        const buffer = ctx.createBuffer(1, ctx.sampleRate * 0.4, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < data.length; i++) {
+            data[i] = Math.random() * 2 - 1;
+        }
+        noise.buffer = buffer;
+        noiseFilter.type = 'bandpass';
+        noiseFilter.frequency.value = 1200;
+        noiseFilter.Q.value = 1.8;
+        noiseGain.gain.value = 0.08 * effectsVolume;
+        noiseGain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.45);
+        osc2.connect(noiseFilter);
+        noise.connect(noiseFilter);
+        noiseFilter.connect(noiseGain);
+        noiseGain.connect(masterGain);
+        osc2.start();
+        noise.start();
+        setTimeout(() => {
+            try { osc2.stop(); noise.stop(); } catch(e){}
+        }, 500);
+    }, 32);
+}
+
+function playWallBreakSound(sizeMult = 1) {
+    if (!canPlaySound('wall')) return;
+    if (activeVoices > MAX_VOICES + 2) return;
+    activeVoices++;
+    const ctx = getAudioContext();
+    // Noise burst
+    const noise = ctx.createBufferSource();
+    const noiseFilter = ctx.createBiquadFilter();
+    const noiseGain = ctx.createGain();
+    const buffer = ctx.createBuffer(1, ctx.sampleRate * 0.55, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) {
+        data[i] = Math.random() * 2 - 1;
+    }
+    noise.buffer = buffer;
+    noiseFilter.type = 'bandpass';
+    noiseFilter.frequency.value = 2650 + sizeMult * 350;
+    noiseFilter.Q.value = 4.2;
+    noiseGain.gain.value = 0.26 * effectsVolume * Math.min(sizeMult, 1.7);
+    noiseGain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.48);
+    noise.connect(noiseFilter);
+    noiseFilter.connect(noiseGain);
+    noiseGain.connect(masterGain);
+    noise.start();
+    setTimeout(() => {
+        try { noise.stop(); } catch(e){}
+        activeVoices = Math.max(0, activeVoices - 1);
+    }, 550);
+    // High sine tail
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const filter = ctx.createBiquadFilter();
+    osc.type = 'sine';
+    osc.frequency.value = 1720 + sizeMult * 280;
+    filter.type = 'highpass';
+    filter.frequency.value = 1350;
+    gain.gain.value = 0.19 * effectsVolume;
+    gain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.28);
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(masterGain);
+    osc.start();
+    setTimeout(() => {
+        try { osc.stop(); } catch(e){}
+    }, 340);
+}
+
+function playShipShootSound() {
+    if (!canPlaySound('ship')) return;
+    if (activeVoices > MAX_VOICES + 2) return;
+    const ctx = getAudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const filter = ctx.createBiquadFilter();
+    osc.type = 'sawtooth';
+    osc.frequency.value = 920;
+    filter.type = 'lowpass';
+    filter.frequency.value = 2200;
+    gain.gain.value = 0.22 * effectsVolume;
+    gain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.16);
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(masterGain);
+    osc.start();
+    setTimeout(() => {
+        try { osc.stop(); } catch(e){}
+    }, 200);
+}
+
+function playBulletImpactSound() {
+    if (!canPlaySound('bullet')) return;
+    if (activeVoices > MAX_VOICES + 1) return;
+    const ctx = getAudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const filter = ctx.createBiquadFilter();
+    osc.type = 'square';
+    osc.frequency.value = 620;
+    filter.type = 'bandpass';
+    filter.frequency.value = 1100;
+    filter.Q.value = 2.5;
+    gain.gain.value = 0.18 * effectsVolume;
+    gain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.22);
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(masterGain);
+    osc.start();
+    setTimeout(() => {
+        try { osc.stop(); } catch(e){}
+    }, 280);
+}
+
+function playAbsorbSound() {
+    if (!canPlaySound('absorb')) return;
+    if (activeVoices > MAX_VOICES - 1) return;
+    const ctx = getAudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const filter = ctx.createBiquadFilter();
+    osc.type = 'sine';
+    osc.frequency.value = 420;
+    filter.type = 'lowpass';
+    filter.frequency.value = 900;
+    gain.gain.value = 0.16 * effectsVolume;
+    gain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.35);
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(masterGain);
+    osc.start();
+    setTimeout(() => {
+        try { osc.stop(); } catch(e){}
+    }, 400);
+}
+// ==================== MUSIC MODE SYSTEM ====================
 let musicEnabled = false;
 let currentMusicMode = null;
 let musicData = { bass: 0, mids: 0, highs: 0 };
@@ -2044,12 +2352,10 @@ function drawMusicVisualizer() {
     ellipse(cx, cy, 95 + mids * 40, 95 + mids * 40);
     pop();
 }
-
 // ==================== SLIDER INITIALIZATION ====================
 function initVisualizerSliders() {
-    // (your existing slider init code stays exactly the same)
+    // Visualizer sliders will be set up here (currently unused)
 }
-
 // Auto-initialize sliders when page loads
 window.addEventListener('load', () => {
     setTimeout(() => {
@@ -2162,338 +2468,8 @@ function generateSciFiName() {
     const suffixes = ['-9','-12','ara','ith','on','yx','ar','en','os','ix','ael','or'];
     return prefixes[Math.floor(Math.random()*prefixes.length)] + suffixes[Math.floor(Math.random()*suffixes.length)];
 }
-function getAudioContext() {
-    if (!audioCtx) {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        masterGain = audioCtx.createGain();
-        compressor = audioCtx.createDynamicsCompressor();
-        compressor.threshold.value = -18;
-        compressor.knee.value = 8;
-        compressor.ratio.value = 12;
-        compressor.attack.value = 0.003;
-        compressor.release.value = 0.25;
-        masterGain.gain.value = masterVolume;
-        masterGain.connect(compressor);
-        compressor.connect(audioCtx.destination);
-    }
-    if (audioCtx.state === 'suspended') audioCtx.resume();
-    return audioCtx;
-}
 
-function startCursorHum() {
-    const ctx = getAudioContext();
-    if (cursorHumOsc) return;
-    cursorHumOsc = ctx.createOscillator();
-    cursorHumGain = ctx.createGain();
-    cursorHumFilter = ctx.createBiquadFilter();
-    cursorHumOsc.type = 'sine';
-    cursorHumOsc.frequency.value = 48;
-    cursorHumFilter.type = 'lowpass';
-    cursorHumFilter.frequency.value = 180;
-    cursorHumGain.gain.value = 0;
-    cursorHumOsc.connect(cursorHumFilter);
-    cursorHumFilter.connect(cursorHumGain);
-    cursorHumGain.connect(masterGain);
-    cursorHumOsc.start();
-    const targetVol = 0.015 * effectsVolume;
-    cursorHumGain.gain.linearRampToValueAtTime(targetVol, ctx.currentTime + 0.8);
-}
-
-function stopCursorHum() {
-    if (!cursorHumOsc || !cursorHumGain) return;
-    const ctx = getAudioContext();
-    cursorHumGain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.6);
-    setTimeout(() => {
-        try { if (cursorHumOsc) cursorHumOsc.stop(); } catch(e) {}
-        cursorHumOsc = null;
-        cursorHumGain = null;
-        cursorHumFilter = null;
-    }, 700);
-}
-
-// ==================== IMPROVED SOUND FUNCTIONS ====================
-function playCursorDamageSound(creature) {
-    if (!canPlaySound('cursor')) return;
-    if (activeVoices > MAX_VOICES) return;
-    activeVoices++;
-    const ctx = getAudioContext();
-    // (keep your existing playCursorDamageSound code exactly as it is)
-    // ... your full layered cursor damage sound stays here ...
-}
-
-function playTone(freq, type = null, duration = null, volume = null, detune = null, attack = null, release = null) {
-    if (!canPlaySound('core')) return;
-    if (activeVoices > MAX_VOICES) return;
-    activeVoices++;
-
-    const ctx = getAudioContext();
-    const p = soundParams.core; // ← NEW: read defaults from soundParams
-
-    // Use soundParams.core values as defaults, but allow overrides from function arguments
-    const finalType     = type     ?? p.waveform;
-    const finalDuration = duration ?? p.duration;
-    const finalVolume   = volume   ?? p.volume;
-    const finalDetune   = detune   ?? p.detune;
-    const finalAttack   = attack   ?? p.attack;
-    const finalRelease  = release  ?? p.release;
-
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    const filter = ctx.createBiquadFilter();
-
-    osc.type = finalType || defaultWaveform;
-    osc.frequency.value = freq * pitchShift;
-
-    const randomDetune = (Math.random() - 0.5) * 18;
-    osc.detune.value = finalDetune + randomDetune;
-
-    filter.type = 'lowpass';
-    filter.frequency.value = 2100;
-
-    let finalVol = finalVolume * effectsVolume * 1.12;
-
-    if (activeVoices > 16) {
-        const excess = activeVoices - 16;
-        finalVol *= Math.max(0.78, 1 - (excess * 0.018));
-    }
-
-    gain.gain.value = 0;
-    gain.gain.linearRampToValueAtTime(finalVol, ctx.currentTime + finalAttack);
-    gain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + finalDuration);
-
-    osc.connect(filter);
-    filter.connect(gain);
-    gain.connect(masterGain);
-    osc.start();
-
-    setTimeout(() => {
-        try { osc.stop(); } catch(e){}
-        activeVoices = Math.max(0, activeVoices - 1);
-    }, (finalDuration + 0.12) * 1000);
-}
-
-function playBirthSound() {
-    if (!canPlaySound('birth')) return;
-    const p = soundParams.birth;
-
-    // Layered birth sound using soundParams
-    playTone(880, p.waveform, p.duration * 1.05, p.volume * 0.9, 0, p.attack, p.release);
-    setTimeout(() => playTone(1108, 'sine', p.duration * 0.85, p.volume * 0.75, 12, p.attack * 0.8, p.release * 0.85), 55);
-    setTimeout(() => playTone(1320, 'sine', p.duration * 0.7, p.volume * 0.65, -8, p.attack * 0.6, p.release * 0.75), 105);
-}
-
-function playEatSound(isGreenZone = true) {
-    if (!canPlaySound('eating')) return;
-    if (activeVoices > MAX_VOICES - 4) return;
-    if (creatures.length > 90 && Math.random() > 0.25) return;
-    if (Math.random() > soundDensity * 0.55) return;
-
-    const p = soundParams.eating;
-    const base = isGreenZone ? 620 : 780;
-
-    playTone(base, p.waveform, p.duration, p.volume, 0, p.attack, p.release);
-    setTimeout(() => playTone(base * 1.5, p.waveform, p.duration * 0.7, p.volume * 0.65, 5, p.attack * 0.7, p.release * 0.7), 22);
-}
-
-function playDeathSound() {
-    if (!canPlaySound('death')) return;
-    if (creatures.length > 110 && Math.random() > 0.4) return;
-
-    const p = soundParams.death;
-
-    playTone(220, p.waveform, p.duration, p.volume, 0, p.attack, p.release);
-    setTimeout(() => playTone(175, 'sine', p.duration * 0.8, p.volume * 0.75, -10, p.attack * 0.7, p.release * 0.85), 75);
-}
-
-// ==================== COMPLEX / CUSTOM SOUND FUNCTIONS ====================
-function playExplosionSound() {
-    if (!canPlaySound('explosion')) return;
-    if (activeVoices > MAX_VOICES + 1) return;
-    const ctx = getAudioContext();
-    // Low boom
-    const osc1 = ctx.createOscillator();
-    const gain1 = ctx.createGain();
-    const filter1 = ctx.createBiquadFilter();
-    osc1.type = 'sawtooth';
-    osc1.frequency.value = 85;
-    filter1.type = 'lowpass';
-    filter1.frequency.value = 420;
-    gain1.gain.value = 0.16 * effectsVolume;
-    gain1.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.65);
-    osc1.connect(filter1);
-    filter1.connect(gain1);
-    gain1.connect(masterGain);
-    osc1.start();
-    setTimeout(() => { try { osc1.stop(); } catch(e){} }, 720);
-    // Noise crack + mid tone
-    setTimeout(() => {
-        const osc2 = ctx.createOscillator();
-        const gain2 = ctx.createGain();
-        const noise = ctx.createBufferSource();
-        const noiseFilter = ctx.createBiquadFilter();
-        const noiseGain = ctx.createGain();
-        osc2.type = 'square';
-        osc2.frequency.value = 180;
-        const buffer = ctx.createBuffer(1, ctx.sampleRate * 0.4, ctx.sampleRate);
-        const data = buffer.getChannelData(0);
-        for (let i = 0; i < data.length; i++) {
-            data[i] = Math.random() * 2 - 1;
-        }
-        noise.buffer = buffer;
-        noiseFilter.type = 'bandpass';
-        noiseFilter.frequency.value = 1200;
-        noiseFilter.Q.value = 1.8;
-        noiseGain.gain.value = 0.08 * effectsVolume;
-        noiseGain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.45);
-        osc2.connect(noiseFilter);
-        noise.connect(noiseFilter);
-        noiseFilter.connect(noiseGain);
-        noiseGain.connect(masterGain);
-        osc2.start();
-        noise.start();
-        setTimeout(() => {
-            try { osc2.stop(); noise.stop(); } catch(e){}
-        }, 500);
-    }, 32);
-}
-
-function playWallBreakSound(sizeMult = 1) {
-    if (!canPlaySound('wall')) return;
-    if (activeVoices > MAX_VOICES + 2) return;
-    activeVoices++;
-    const ctx = getAudioContext();
-    // Noise burst
-    const noise = ctx.createBufferSource();
-    const noiseFilter = ctx.createBiquadFilter();
-    const noiseGain = ctx.createGain();
-    const buffer = ctx.createBuffer(1, ctx.sampleRate * 0.55, ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < data.length; i++) {
-        data[i] = Math.random() * 2 - 1;
-    }
-    noise.buffer = buffer;
-    noiseFilter.type = 'bandpass';
-    noiseFilter.frequency.value = 2650 + sizeMult * 350;
-    noiseFilter.Q.value = 4.2;
-    noiseGain.gain.value = 0.26 * effectsVolume * Math.min(sizeMult, 1.7);
-    noiseGain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.48);
-    noise.connect(noiseFilter);
-    noiseFilter.connect(noiseGain);
-    noiseGain.connect(masterGain);
-    noise.start();
-    setTimeout(() => {
-        try { noise.stop(); } catch(e){}
-        activeVoices = Math.max(0, activeVoices - 1);
-    }, 550);
-    // High sine tail
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    const filter = ctx.createBiquadFilter();
-    osc.type = 'sine';
-    osc.frequency.value = 1720 + sizeMult * 280;
-    filter.type = 'highpass';
-    filter.frequency.value = 1350;
-    gain.gain.value = 0.19 * effectsVolume;
-    gain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.28);
-    osc.connect(filter);
-    filter.connect(gain);
-    gain.connect(masterGain);
-    osc.start();
-    setTimeout(() => {
-        try { osc.stop(); } catch(e){}
-    }, 340);
-}
-
-function playShipShootSound() {
-    if (!canPlaySound('ship')) return;
-    if (activeVoices > MAX_VOICES + 2) return;
-    const ctx = getAudioContext();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    const filter = ctx.createBiquadFilter();
-    osc.type = 'sawtooth';
-    osc.frequency.value = 920;
-    filter.type = 'lowpass';
-    filter.frequency.value = 2200;
-    gain.gain.value = 0.22 * effectsVolume;
-    gain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.16);
-    osc.connect(filter);
-    filter.connect(gain);
-    gain.connect(masterGain);
-    osc.start();
-    setTimeout(() => {
-        try { osc.stop(); } catch(e){}
-    }, 200);
-}
-
-function playBulletImpactSound() {
-    if (!canPlaySound('bullet')) return;
-    if (activeVoices > MAX_VOICES + 1) return;
-    const ctx = getAudioContext();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    const filter = ctx.createBiquadFilter();
-    osc.type = 'square';
-    osc.frequency.value = 620;
-    filter.type = 'bandpass';
-    filter.frequency.value = 1100;
-    filter.Q.value = 2.5;
-    gain.gain.value = 0.18 * effectsVolume;
-    gain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.22);
-    osc.connect(filter);
-    filter.connect(gain);
-    gain.connect(masterGain);
-    osc.start();
-    setTimeout(() => {
-        try { osc.stop(); } catch(e){}
-    }, 280);
-}
-
-function playAbsorbSound() {
-    if (!canPlaySound('absorb')) return;
-    if (activeVoices > MAX_VOICES - 1) return;
-    const ctx = getAudioContext();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    const filter = ctx.createBiquadFilter();
-    osc.type = 'sine';
-    osc.frequency.value = 420;
-    filter.type = 'lowpass';
-    filter.frequency.value = 900;
-    gain.gain.value = 0.16 * effectsVolume;
-    gain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.35);
-    osc.connect(filter);
-    filter.connect(gain);
-    gain.connect(masterGain);
-    osc.start();
-    setTimeout(() => {
-        try { osc.stop(); } catch(e){}
-    }, 400);
-}
-
-function playDepositSound() {
-    if (!canPlaySound('deposit')) return;
-    const p = soundParams.deposit;
-    playTone(540, p.waveform, p.duration, p.volume, 0, p.attack, p.release);
-    setTimeout(() => playTone(680, 'sine', p.duration * 0.75, p.volume * 0.8, 8, p.attack * 0.7, p.release * 0.75), 38);
-}
-
-function playPredatorFeedSound() {
-    if (!canPlaySound('predator')) return;
-    const p = soundParams.predator;
-    playTone(165, p.waveform, p.duration, p.volume, 0, p.attack, p.release);
-    setTimeout(() => playTone(210, 'sine', p.duration * 0.75, p.volume * 0.8, 15, p.attack * 0.6, p.release * 0.7), 28);
-}
-
-function playAmbientPulse(isDay) {
-    if (!canPlaySound('ambient')) return;
-    const freq = isDay ? 48 : 42;
-    const vol = (isDay ? 0.007 : 0.011) * ambientVolume;
-    playTone(freq, 'sine', 1.9, vol, 0, 0.35, 1.5);
-}
-// (Keep all your other sound functions like playExplosionSound, playWallBreakSound, etc. exactly as they are in your current file)
-
-// === FLOATING TEXT ===
+// ==================== FLOATING TEXT ====================
 class FloatingText {
     constructor(x, y, text, color = '#34d399') {
         this.x = x;
@@ -2551,51 +2527,50 @@ function setupSliders() {
         }
     });
 }
-      // Enhanced Extract to Egg modal with live balance + top 10
-      function showExtractEggModal() {
-          const modal = document.getElementById('extract-egg-modal');
-          const listContainer = document.getElementById('extract-egg-list');
-          if (!modal || !listContainer) return;
 
-          listContainer.innerHTML = '';
+// ==================== MODALS (Extract Egg, Top Creatures, etc.) ====================
+function showExtractEggModal() {
+    const modal = document.getElementById('extract-egg-modal');
+    const listContainer = document.getElementById('extract-egg-list');
+    if (!modal || !listContainer) return;
 
-          // Live balance header
-          const balanceDiv = document.createElement('div');
-          balanceDiv.className = 'mb-4 px-1 flex justify-between items-center text-sm border-b border-white/10 pb-3';
-          balanceDiv.innerHTML = `
-              <span class="text-white/60">Your Balance</span>
-              <span class="font-mono text-2xl text-violet-400 font-semibold">${totalScore.toLocaleString()}</span>
-          `;
-          listContainer.appendChild(balanceDiv);
+    listContainer.innerHTML = '';
 
-          // Get current top 10
-          let sorted = [...creatures].sort((a, b) => {
-              let scoreA = (a.modules?.length || 0) * 3 + (a.killCount || 0) * 2 + (a.childrenCount || 0);
-              let scoreB = (b.modules?.length || 0) * 3 + (b.killCount || 0) * 2 + (b.childrenCount || 0);
-              return scoreB - scoreA;
-          }).slice(0, 10);
+    const balanceDiv = document.createElement('div');
+    balanceDiv.className = 'mb-4 px-1 flex justify-between items-center text-sm border-b border-white/10 pb-3';
+    balanceDiv.innerHTML = `
+        <span class="text-white/60">Your Balance</span>
+        <span class="font-mono text-2xl text-violet-400 font-semibold">${totalScore.toLocaleString()}</span>
+    `;
+    listContainer.appendChild(balanceDiv);
 
-          if (sorted.length === 0) {
-              listContainer.innerHTML += `<div class="text-center text-white/60 py-8">No creatures available yet.</div>`;
-          } else {
-              sorted.forEach(creature => {
-                  const div = document.createElement('div');
-                  div.className = 'flex items-center justify-between bg-white/5 hover:bg-white/10 rounded-2xl px-4 py-3 cursor-pointer transition-colors mb-1';
-                  div.innerHTML = `
-                      <div>
-                          <div class="font-semibold text-emerald-400">${creature.name}</div>
-                          <div class="text-xs text-white/60">Gen ${creature.generation} • ${creature.modules?.length || 0} modules • ${creature.killCount || 0} kills</div>
-                      </div>
-                      <button class="px-4 py-1.5 text-sm rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-medium">Extract</button>
-                  `;
-                  div.onclick = () => extractCreatureToEgg(creature);
-                  listContainer.appendChild(div);
-              });
-          }
+    let sorted = [...creatures].sort((a, b) => {
+        let scoreA = (a.modules?.length || 0) * 3 + (a.killCount || 0) * 2 + (a.childrenCount || 0);
+        let scoreB = (b.modules?.length || 0) * 3 + (b.killCount || 0) * 2 + (b.childrenCount || 0);
+        return scoreB - scoreA;
+    }).slice(0, 10);
 
-          modal.classList.remove('hidden');
-          modal.classList.add('flex');
-      }
+    if (sorted.length === 0) {
+        listContainer.innerHTML += `<div class="text-center text-white/60 py-8">No creatures available yet.</div>`;
+    } else {
+        sorted.forEach(creature => {
+            const div = document.createElement('div');
+            div.className = 'flex items-center justify-between bg-white/5 hover:bg-white/10 rounded-2xl px-4 py-3 cursor-pointer transition-colors mb-1';
+            div.innerHTML = `
+                <div>
+                    <div class="font-semibold text-emerald-400">${creature.name}</div>
+                    <div class="text-xs text-white/60">Gen ${creature.generation} • ${creature.modules?.length || 0} modules • ${creature.killCount || 0} kills</div>
+                </div>
+                <button class="px-4 py-1.5 text-sm rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-medium">Extract</button>
+            `;
+            div.onclick = () => extractCreatureToEgg(creature);
+            listContainer.appendChild(div);
+        });
+    }
+
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
 
 function showTopCreaturesModal() {
     console.log("Top 10 button clicked");
@@ -2606,12 +2581,10 @@ function showTopCreaturesModal() {
         return;
     }
 
-    // Move to body if needed (safety)
     if (modal.parentElement !== document.body) {
         document.body.appendChild(modal);
     }
 
-    // Force show
     modal.style.cssText = `
         display: flex !important;
         align-items: center !important;
@@ -2627,7 +2600,6 @@ function showTopCreaturesModal() {
 
     listContainer.innerHTML = '';
 
-    // Sort + show top 10
     let sorted = [...creatures].sort((a, b) => {
         let scoreA = (a.modules?.length || 0) * 2.5 + (a.killCount || 0) * 4 + (a.childrenCount || 0) * 3 + (a.energy || 0) * 0.6;
         let scoreB = (b.modules?.length || 0) * 2.5 + (b.killCount || 0) * 4 + (b.childrenCount || 0) * 3 + (b.energy || 0) * 0.6;
