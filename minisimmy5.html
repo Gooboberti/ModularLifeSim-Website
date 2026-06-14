@@ -6770,7 +6770,6 @@ class Creature {
             count: nearbyCount
         };
     }
-
     // ==================== NEURAL BRAIN INPUTS ====================
     getBrainInputs(hazardInfo, effectiveHazardDist, isDay) {
         // Collect 12 normalized inputs for the neural network
@@ -6785,10 +6784,10 @@ class Creature {
         // 3. Is it day time? (0 = night, 1 = day)
         inputs.push(isDay ? 1 : 0);
 
-        // 4. Effective hazard distance (already normalized 0-1 from earlier calc)
+        // 4. Effective hazard distance (already normalized 0-1)
         inputs.push(effectiveHazardDist);
 
-        // 5 & 6. Hazard angle as sin + cos (better for neural net than raw angle)
+        // 5 & 6. Hazard angle as sin + cos
         inputs.push(sin(hazardInfo.angle));
         inputs.push(cos(hazardInfo.angle));
 
@@ -6813,7 +6812,9 @@ class Creature {
 
         return inputs;
     }
-    // ============================================================    pruneExcessModules() {
+    // ============================================================
+
+    pruneExcessModules() {
         const maxModules = 11;
         if (this.modules.length <= maxModules) return;
 
@@ -6928,6 +6929,7 @@ class Creature {
 
         return child;
     }
+
     update(isDay, vortexDir, vortexStrength, timeScale = 1, envMods = null) {
         if (this.reproCooldown > 0) this.reproCooldown--;
         if (!this.isPredator && this.energy < 14) this.isPredator = true;
@@ -6952,7 +6954,6 @@ class Creature {
                 this.currentThought = "Dodging hazard!";
             }
 
-            // Avoid spaceship bullets when active
             if (spaceshipActive && bullets.length > 0) {
                 for (let b of bullets) {
                     let d = dist(this.x, this.y, b.x, b.y);
@@ -6993,7 +6994,6 @@ class Creature {
         }
 
         // ==================== NEURAL BRAIN EXECUTION ====================
-        // Runs every 2 frames for performance. Outputs are stored in this.brainOutputs
         if (frameCount % 2 === 0 && this.brain) {
             const inputs = this.getBrainInputs(hazardInfo, effectiveHazardDist, isDay);
             this.brainOutputs = this.brain.forward(inputs);
@@ -7010,7 +7010,6 @@ class Creature {
         if (tieredSensor >= 3 && effectiveHazardDist > 0.11) {
             let avoidAngle = hazardInfo.angle + PI;
             let avoidStrength = effectiveHazardDist * 3.2;
-
             let predictive = sin(frameCount * 0.07) * 0.55;
             avoidAngle += predictive * 0.35;
 
@@ -7099,6 +7098,7 @@ class Creature {
                 }
             }
         }
+
         if (this.isPredator) {
             let target = null;
             let lowest = Infinity;
@@ -7135,12 +7135,8 @@ class Creature {
                     this.isPredator = false;
                     this.currentThought = "Just fed";
                     playPredatorFeedSound();
-
                     totalPredatorKills++;
-
                     this.updateSpecialization();
-
-                    // Points for predator feed
                     addFloatingText(this.x, this.y - 10, '+25', '#f87171');
                 }
             }
@@ -7270,7 +7266,6 @@ class Creature {
                 playDepositSound();
             }
 
-            // Social Pressure / Outcast Logic - Stronger version
             let localGroup = this.getLocalGroup(58);
             if (localGroup.length >= 5) {
                 let mySpec = this.specialization;
@@ -7283,448 +7278,348 @@ class Creature {
                 let groupSize = localGroup.length;
                 let myRatio = myCount / groupSize;
 
-                // Base pressure scales with group size (large stacks consume themselves)
                 let pressureChance = (0.004 + (groupSize * 0.0008)) * timeScale;
 
-                // Outsiders get much higher pressure
                 if (myRatio < 0.22) {
                     pressureChance *= 2.8;
                     if (myRatio < 0.12) pressureChance *= 1.8;
                     if (myRatio < 0.08) pressureChance *= 1.6;
                 }
 
-                // Very large groups have baseline internal competition
-                if (groupSize > 12) {
-                    pressureChance *= 1.4;
-                }
-                if (groupSize > 18) {
-                    pressureChance *= 1.5;
-                }
+                if (groupSize > 12) pressureChance *= 1.4;
+                if (groupSize > 18) pressureChance *= 1.5;
 
                 if (random() < pressureChance) {
-    if (!this.isPredator && this.energy > 18) {
-        this.isPredator = true;
-        playTone(180, 'sawtooth', 0.35, 0.6, 0, 0.03, 0.25);   // Predator transformation sound
-        this.currentThought = (myRatio < 0.18) ? "Outcast..." : "Internal pressure";
+                    if (!this.isPredator && this.energy > 18) {
+                        this.isPredator = true;
+                        playTone(180, 'sawtooth', 0.35, 0.6, 0, 0.03, 0.25);
+                        this.currentThought = (myRatio < 0.18) ? "Outcast..." : "Internal pressure";
+                    }
+                }
+            }
+        }
+
+        this.x += this.vx;
+        this.y += this.vy;
+        this.vx *= 0.81;
+        this.vy *= 0.81;
+        this.x = constrain(this.x, 7, width - 7);
+
+        if (isDrawingWall && typeof wallStartX === 'number') {
+            const settings = window.currentFilterWallSettings;
+            const isFilterMode = currentWallFilterMode === "custom_filter" && settings && settings.types && settings.types.length > 0;
+            const targetTypes = isFilterMode ? settings.types : null;
+
+            if (isFilterMode && (targetTypes.includes('white') || targetTypes.includes('red'))) {
+            } else {
+                let d = distToLineSegment(this.x, this.y, wallStartX, wallStartY, mouseX, mouseY);
+                if (d < 28) {
+                    let shouldAffect = true;
+
+                    if (isFilterMode) {
+                        const moduleCount = this.modules ? this.modules.length : 0;
+                        const isActualPred = this.isPredator === true;
+                        const isHigh = moduleCount >= 15;
+                        const isLow = moduleCount <= 2;
+
+                        shouldAffect = false;
+                        if (targetTypes.includes('predator') && isActualPred) shouldAffect = true;
+                        if (targetTypes.includes('high_module') && isHigh) shouldAffect = true;
+                        if (targetTypes.includes('low_module') && isLow) shouldAffect = true;
+                    }
+
+                    if (shouldAffect) {
+                        let mx = (wallStartX + mouseX) / 2;
+                        let my = (wallStartY + mouseY) / 2;
+                        let dx = this.x - mx;
+                        let dy = this.y - my;
+                        let len = sqrt(dx*dx + dy*dy) || 1;
+                        let push = 5.2;
+                        this.vx += (dx / len) * push;
+                        this.vy += (dy / len) * push;
+                        this.vx += (dx / len) * 2.2;
+                        this.vy += (dy / len) * 2.2;
+                    }
+                }
+            }
+        }
+
+        if (isDrawingWall && typeof wallStartX === 'number') {
+            const sweepSettings = window.currentFilterWallSettings;
+            const isSweepFilter = currentWallFilterMode === "custom_filter" && sweepSettings && sweepSettings.types && sweepSettings.types.length > 0;
+
+            if (isSweepFilter) {
+                const targetTypes = sweepSettings.types;
+
+                if (targetTypes.includes('white')) {
+                    for (let p of vortexParticles) {
+                        let d = distToLineSegment(p.x, p.y, wallStartX, wallStartY, mouseX, mouseY);
+                        if (d < 32) {
+                            let mx = (wallStartX + mouseX) / 2;
+                            let my = (wallStartY + mouseY) / 2;
+                            let dx = p.x - mx;
+                            let dy = p.y - my;
+                            let len = sqrt(dx*dx + dy*dy) || 1;
+                            p.x += (dx / len) * 6.5;
+                            p.y += (dy / len) * 6.5;
+                            p.vx = (p.vx || 0) * 0.25;
+                            p.vy = (p.vy || 0) * 0.25;
+                        }
+                    }
+                }
+
+                if (targetTypes.includes('red')) {
+                    for (let r of redHazards) {
+                        let d = distToLineSegment(r.x, r.y, wallStartX, wallStartY, mouseX, mouseY);
+                        if (d < 32) {
+                            let mx = (wallStartX + mouseX) / 2;
+                            let my = (wallStartY + mouseY) / 2;
+                            let dx = r.x - mx;
+                            let dy = r.y - my;
+                            let len = sqrt(dx*dx + dy*dy) || 1;
+                            r.x += (dx / len) * 7.0;
+                            r.y += (dy / len) * 7.0;
+                            r.vx = (r.vx || 0) * 0.2;
+                            r.vy = (r.vy || 0) * 0.2;
+                        }
+                    }
+                }
+            }
+        }
+
+        this.y = constrain(this.y, 7, height - 7);
+
+        if (energyWalls.length > 0 && this.getTieredModuleCount('sensor') > 0) {
+            for (let w of energyWalls) {
+                let d = distToLineSegment(this.x, this.y, w.x1, w.y1, w.x2, w.y2);
+                if (d < 55) {
+                    let mx = (w.x1 + w.x2) / 2;
+                    let my = (w.y1 + w.y2) / 2;
+                    let dx = this.x - mx;
+                    let dy = this.y - my;
+                    let len = sqrt(dx*dx + dy*dy) || 1;
+                    let avoid = map(d, 0, 55, 1.8, 0.3);
+                    this.vx += (dx / len) * avoid * 0.035 * timeScale;
+                    this.vy += (dy / len) * avoid * 0.035 * timeScale;
+                    if (d < 25 && this.currentThought.length < 12) {
+                        this.currentThought = "Avoiding wall";
+                    }
+                }
+            }
+        }
+
+        if (energyWalls.length > 0) {
+            for (let w of energyWalls) {
+                let d = distToLineSegment(this.x, this.y, w.x1, w.y1, w.x2, w.y2);
+                if (d < 14) {
+                    const effectiveWallType = w.wallType || (w.filterMode === "custom_filter" ? "filter" : "solid");
+
+                    if (effectiveWallType === "solid") {
+                        let mx = (w.x1 + w.x2) / 2;
+                        let my = (w.y1 + w.y2) / 2;
+                        let dx = this.x - mx;
+                        let dy = this.y - my;
+                        let len = sqrt(dx*dx + dy*dy) || 1;
+                        let force = 4.2;
+                        this.vx += (dx / len) * force;
+                        this.vy += (dy / len) * force;
+
+                        if (w.offensive) {
+                            this.purpleFlash = 55;
+                            this.mustEatWhite = true;
+                            this.energy = Math.max(0, this.energy - 5.5 * timeScale);
+                            w.life -= 22;
+                        } else {
+                            w.life -= 9;
+                        }
+                        w.hitFlash = 12;
+                    } else if (effectiveWallType === "filter") {
+                        const matches = creatureMatchesWallFilter(this, w);
+                        if (matches) {
+                            let mx = (w.x1 + w.x2) / 2;
+                            let my = (w.y1 + w.y2) / 2;
+                            let dx = this.x - mx;
+                            let dy = this.y - my;
+                            let len = sqrt(dx*dx + dy*dy) || 1;
+                            let force = 5.8;
+                            this.vx += (dx / len) * force;
+                            this.vy += (dy / len) * force;
+
+                            if (w.offensive) {
+                                this.purpleFlash = 65;
+                                this.mustEatWhite = true;
+                                this.energy = Math.max(0, this.energy - 4.8 * timeScale);
+                                w.life -= 5;
+                            } else {
+                                w.life -= 2;
+                            }
+                            w.hitFlash = 12;
+
+                            if (w.empowered && !this.isPredator) {
+                                this.isPredator = true;
+                            }
+                        }
+                    }
+
+                    if (this.energy > 8) {
+                        this.currentThought = (effectiveWallType === "filter") ? "Filtered by wall" : "Hit energy wall";
+                    }
+                    break;
+                }
+            }
+        }
+
+        let inG = dist(this.x, this.y, greenZone.x, greenZone.y) < greenZone.baseR;
+        let inB = dist(this.x, this.y, blueZone.x, blueZone.y) < blueZone.baseR;
+        let gainMult = envMods ? envMods.energyGainMult : 1.0;
+
+        if (inG && isDay && greenZone.food > 0) {
+            let g = (0.26 + this.getModuleCount('harvester') * 0.09) * gainMult;
+            this.energy = min(100, this.energy + g * timeScale);
+            greenZone.food = max(0, greenZone.food - 0.3 * timeScale);
+            if (this.energy > 74) this.honey = min(26, this.honey + 0.32 * timeScale);
+            let pheroChance = this.getModuleCount('communicator') > 0 ? 0.12 : 0.08;
+            if (inG && this.getSimilarNeighborCount() >= 3) pheroChance *= 1.35;
+            if (random() < pheroChance * timeScale) {
+                pheromones.push({ x: this.x, y: this.y, life: 200, isGreen: true });
+            }
+            if (random() < 0.08) {
+                addFloatingText(this.x, this.y - 8, '+1', '#34d399');
+            }
+        }
+
+        if (inB && !isDay && blueZone.food > 0) {
+            let g = (0.26 + this.getModuleCount('sensor') * 0.08) * gainMult;
+            this.energy = min(100, this.energy + g * timeScale);
+            blueZone.food = max(0, blueZone.food - 0.3 * timeScale);
+            if (this.energy > 74) this.honey = min(26, this.honey + 0.32 * timeScale);
+            let pheroChance = this.getModuleCount('communicator') > 0 ? 0.12 : 0.08;
+            if (inB && this.getSimilarNeighborCount() >= 3) pheroChance *= 1.35;
+            if (random() < pheroChance * timeScale) {
+                pheromones.push({ x: this.x, y: this.y, life: 200, isGreen: false });
+            }
+            if (random() < 0.08) {
+                addFloatingText(this.x, this.y - 8, '+1', '#38bdf8');
+            }
+        }
+
+        if (frameCount % 170 === 0) {
+            this.checkForTierUpgrades();
+            this.pruneExcessModules();
+        }
     }
-}
-                          }
-                      }
 
-                      this.x += this.vx;
-                      this.y += this.vy;
-                      this.vx *= 0.81;
-                      this.vy *= 0.81;
-                      this.x = constrain(this.x, 7, width - 7);
-
-                      // v1.98: Live sweep now respects current filter selection
-                      if (isDrawingWall && typeof wallStartX === 'number') {
-                          const settings = window.currentFilterWallSettings;
-                          const isFilterMode = currentWallFilterMode === "custom_filter" && settings && settings.types && settings.types.length > 0;
-                          const targetTypes = isFilterMode ? settings.types : null;
-
-                          // For White/Red particle filters, do not push creatures during sweep
-                          if (isFilterMode && (targetTypes.includes('white') || targetTypes.includes('red'))) {
-                              // Skip creature deflection for particle-only filters
-                          } else {
-                              let d = distToLineSegment(this.x, this.y, wallStartX, wallStartY, mouseX, mouseY);
-                              if (d < 28) {
-                                  // Check if this creature should be affected by current filter
-                                  let shouldAffect = true;
-
-                                  if (isFilterMode) {
-                                      const moduleCount = this.modules ? this.modules.length : 0;
-                                      const isActualPred = this.isPredator === true;   // Strict predator check
-                                      const isHigh = moduleCount >= 15;
-                                      const isLow = moduleCount <= 2;
-
-                                      shouldAffect = false;
-                                      if (targetTypes.includes('predator') && isActualPred) shouldAffect = true;
-                                      if (targetTypes.includes('high_module') && isHigh) shouldAffect = true;
-                                      if (targetTypes.includes('low_module') && isLow) shouldAffect = true;
-                                  }
-
-                                  if (shouldAffect) {
-                                      let mx = (wallStartX + mouseX) / 2;
-                                      let my = (wallStartY + mouseY) / 2;
-                                      let dx = this.x - mx;
-                                      let dy = this.y - my;
-                                      let len = sqrt(dx*dx + dy*dy) || 1;
-                                      let push = 5.2;
-                                      this.vx += (dx / len) * push;
-                                      this.vy += (dy / len) * push;
-                                      this.vx += (dx / len) * 2.2;
-                                      this.vy += (dy / len) * 2.2;
-                                  }
-                              }
-                          }
-                      }
-
-                      // === v1.99: Live particle sweep for White/Red filters ===
-                      if (isDrawingWall && typeof wallStartX === 'number') {
-                          const sweepSettings = window.currentFilterWallSettings;
-                          const isSweepFilter = currentWallFilterMode === "custom_filter" && sweepSettings && sweepSettings.types && sweepSettings.types.length > 0;
-
-                          if (isSweepFilter) {
-                              const targetTypes = sweepSettings.types;
-
-                              if (targetTypes.includes('white')) {
-                                  // Strongly deflect white vortex particles during sweep
-                                  for (let p of vortexParticles) {
-                                      let d = distToLineSegment(p.x, p.y, wallStartX, wallStartY, mouseX, mouseY);
-                                      if (d < 32) {
-                                          let mx = (wallStartX + mouseX) / 2;
-                                          let my = (wallStartY + mouseY) / 2;
-                                          let dx = p.x - mx;
-                                          let dy = p.y - my;
-                                          let len = sqrt(dx*dx + dy*dy) || 1;
-
-                                          p.x += (dx / len) * 6.5;
-                                          p.y += (dy / len) * 6.5;
-                                          p.vx = (p.vx || 0) * 0.25;
-                                          p.vy = (p.vy || 0) * 0.25;
-                                      }
-                                  }
-                              }
-
-                              if (targetTypes.includes('red')) {
-                                  // Strongly deflect red hazards during sweep
-                                  for (let r of redHazards) {
-                                      let d = distToLineSegment(r.x, r.y, wallStartX, wallStartY, mouseX, mouseY);
-                                      if (d < 32) {
-                                          let mx = (wallStartX + mouseX) / 2;
-                                          let my = (wallStartY + mouseY) / 2;
-                                          let dx = r.x - mx;
-                                          let dy = r.y - my;
-                                          let len = sqrt(dx*dx + dy*dy) || 1;
-
-                                          r.x += (dx / len) * 7.0;
-                                          r.y += (dy / len) * 7.0;
-                                          r.vx = (r.vx || 0) * 0.2;
-                                          r.vy = (r.vy || 0) * 0.2;
-                                      }
-                                  }
-                              }
-                          }
-                      }
-
-                      this.y = constrain(this.y, 7, height - 7);
-
-                      // === Proactive Energy Wall Avoidance (like red hazards) ===
-                      if (energyWalls.length > 0 && this.getTieredModuleCount('sensor') > 0) {
-                          for (let w of energyWalls) {
-                              let d = distToLineSegment(this.x, this.y, w.x1, w.y1, w.x2, w.y2);
-                              if (d < 55) { // start avoiding from farther away
-                                  let mx = (w.x1 + w.x2) / 2;
-                                  let my = (w.y1 + w.y2) / 2;
-                                  let dx = this.x - mx;
-                                  let dy = this.y - my;
-                                  let len = sqrt(dx*dx + dy*dy) || 1;
-                                  let avoid = map(d, 0, 55, 1.8, 0.3);
-                                  this.vx += (dx / len) * avoid * 0.035 * timeScale;
-                                  this.vy += (dy / len) * avoid * 0.035 * timeScale;
-                                  if (d < 25 && this.currentThought.length < 12) {
-                                      this.currentThought = "Avoiding wall";
-                                  }
-                              }
-                          }
-                      }
-
-                      // === Energy Wall Collision v1.95 - Clean Architecture ===
-                      if (energyWalls.length > 0) {
-                          for (let w of energyWalls) {
-                              let d = distToLineSegment(this.x, this.y, w.x1, w.y1, w.x2, w.y2);
-                              if (d < 14) {
-
-                                  // Fallback for old walls created before v1.95
-                                  const effectiveWallType = w.wallType || (w.filterMode === "custom_filter" ? "filter" : "solid");
-
-                                  // === SOLID BARRIER ===
-                                  if (effectiveWallType === "solid") {
-                                      let mx = (w.x1 + w.x2) / 2;
-                                      let my = (w.y1 + w.y2) / 2;
-                                      let dx = this.x - mx;
-                                      let dy = this.y - my;
-                                      let len = sqrt(dx*dx + dy*dy) || 1;
-
-                                      let force = 4.2;
-                                      this.vx += (dx / len) * force;
-                                      this.vy += (dy / len) * force;
-
-                                      // Offensive effects on solid barriers
-                                      if (w.offensive) {
-                                          this.purpleFlash = 55;
-                                          this.mustEatWhite = true;
-                                          this.energy = Math.max(0, this.energy - 5.5 * timeScale);
-                                          w.life -= 22;
-                                      } else {
-                                          w.life -= 9;
-                                      }
-                                      w.hitFlash = 12;
-                                  }
-
-                                  // === SELECTIVE FILTER WALL ===
-                                  else if (effectiveWallType === "filter") {
-                                      const matches = creatureMatchesWallFilter(this, w);
-
-                                      if (matches) {
-                                          // Only matching creatures are affected
-                                          let mx = (w.x1 + w.x2) / 2;
-                                          let my = (w.y1 + w.y2) / 2;
-                                          let dx = this.x - mx;
-                                          let dy = this.y - my;
-                                          let len = sqrt(dx*dx + dy*dy) || 1;
-
-                                          let force = 5.8;
-                                          this.vx += (dx / len) * force;
-                                          this.vy += (dy / len) * force;
-
-                                          if (w.offensive) {
-                                              this.purpleFlash = 65;
-                                              this.mustEatWhite = true;
-                                              this.energy = Math.max(0, this.energy - 4.8 * timeScale);
-                                              w.life -= 5; // filters degrade slowly even when offensive
-                                          } else {
-                                              w.life -= 2;
-                                          }
-                                          w.hitFlash = 12;
-
-                                          if (w.empowered && !this.isPredator) {
-                                              this.isPredator = true;
-                                          }
-                                      }
-                                      // If !matches → do NOTHING. Creature passes through completely unaffected.
-                                  }
-
-                                  if (this.energy > 8) {
-                                      this.currentThought = (effectiveWallType === "filter") ? "Filtered by wall" : "Hit energy wall";
-                                  }
-                                  break;
-                              }
-                          }
-                      }
-
-                      let inG = dist(this.x, this.y, greenZone.x, greenZone.y) < greenZone.baseR;
-                      let inB = dist(this.x, this.y, blueZone.x, blueZone.y) < blueZone.baseR;
-
-                      let gainMult = envMods ? envMods.energyGainMult : 1.0;
-
-                      if (inG && isDay && greenZone.food > 0) {
-                          let g = (0.26 + this.getModuleCount('harvester') * 0.09) * gainMult;
-                          this.energy = min(100, this.energy + g * timeScale);
-                          greenZone.food = max(0, greenZone.food - 0.3 * timeScale);
-                          if (this.energy > 74) this.honey = min(26, this.honey + 0.32 * timeScale);
-                          let pheroChance = this.getModuleCount('communicator') > 0 ? 0.12 : 0.08;
-                          if (inG && this.getSimilarNeighborCount() >= 3) pheroChance *= 1.35;
-                          if (random() < pheroChance * timeScale) {
-                              pheromones.push({ x: this.x, y: this.y, life: 200, isGreen: true });
-                          }
-
-                          // Small points for eating from zone
-                          if (random() < 0.08) {
-                              addFloatingText(this.x, this.y - 8, '+1', '#34d399');
-                          }
-                      }
-
-                      if (inB && !isDay && blueZone.food > 0) {
-                          let g = (0.26 + this.getModuleCount('sensor') * 0.08) * gainMult;
-                          this.energy = min(100, this.energy + g * timeScale);
-                          blueZone.food = max(0, blueZone.food - 0.3 * timeScale);
-                          if (this.energy > 74) this.honey = min(26, this.honey + 0.32 * timeScale);
-                          let pheroChance = this.getModuleCount('communicator') > 0 ? 0.12 : 0.08;
-                          if (inB && this.getSimilarNeighborCount() >= 3) pheroChance *= 1.35;
-                          if (random() < pheroChance * timeScale) {
-                              pheromones.push({ x: this.x, y: this.y, life: 200, isGreen: false });
-                          }
-
-                          if (random() < 0.08) {
-                              addFloatingText(this.x, this.y - 8, '+1', '#38bdf8');
-                          }
-                      }
-
-                      if (frameCount % 170 === 0) {
-                          this.checkForTierUpgrades();
-                          this.pruneExcessModules();
-                      }
-                  }
-
-                  checkForTierUpgrades() {
-                      let typeTierCounts = {};
-                      for (let m of this.modules) {
-                          const key = m.type + '-' + (m.tier || 1);
-                          typeTierCounts[key] = (typeTierCounts[key] || 0) + 1;
-                      }
-
-for (let key in typeTierCounts) {
-    if (typeTierCounts[key] >= 3) {
-        const [type, tierStr] = key.split('-');
-        const currentTier = parseInt(tierStr);
-        const nextTier = Math.min(10, currentTier + 1);
-
+    checkForTierUpgrades() {
+        let typeTierCounts = {};
         for (let m of this.modules) {
-            if (m.type === type && (m.tier || 1) === currentTier) {
-                m.tier = nextTier;
-                this.updateSpecialization();
+            const key = m.type + '-' + (m.tier || 1);
+            typeTierCounts[key] = (typeTierCounts[key] || 0) + 1;
+        }
 
-                // Tier up sound
-                playTone(1320, 'sine', 0.25, 0.7, 0, 0.02, 0.2);
-                setTimeout(() => {
-                    playTone(1580, 'sine', 0.18, 0.5, 12, 0.015, 0.15);
-                }, 80);
+        for (let key in typeTierCounts) {
+            if (typeTierCounts[key] >= 3) {
+                const [type, tierStr] = key.split('-');
+                const currentTier = parseInt(tierStr);
+                const nextTier = Math.min(10, currentTier + 1);
 
-                break;
+                for (let m of this.modules) {
+                    if (m.type === type && (m.tier || 1) === currentTier) {
+                        m.tier = nextTier;
+                        this.updateSpecialization();
+
+                        playTone(1320, 'sine', 0.25, 0.7, 0, 0.02, 0.2);
+                        setTimeout(() => {
+                            playTone(1580, 'sine', 0.18, 0.5, 12, 0.015, 0.15);
+                        }, 80);
+
+                        break;
+                    }
+                }
             }
         }
     }
+
+    show() {
+        push();
+        translate(this.x, this.y);
+        let s = 7 + this.modules.length * 0.16;
+
+        if (selectedCreature === this) {
+            stroke(255, 255, 255, 170);
+            strokeWeight(2.2);
+            circle(0, 0, s + 6);
+            stroke(52, 211, 153, 110);
+            strokeWeight(1.3);
+            circle(0, 0, s + 10);
+        }
+
+        let coreColor = this.isPredator ? '#f87171' : '#facc15';
+        if (this.specialization === 'harvester') coreColor = '#34d399';
+        if (this.specialization === 'sensor') coreColor = '#38bdf8';
+        if (this.specialization === 'mover') coreColor = '#a78bfa';
+        if (this.specialization === 'resistant') coreColor = '#f472b6';
+        if (this.specialization === 'explorer') coreColor = '#fbbf24';
+        if (this.specialization === 'communicator') coreColor = '#c084fc';
+
+        fill(coreColor);
+        stroke(this.isPredator ? '#fecaca' : '#fef08c');
+        strokeWeight(1);
+        circle(0, 0, s);
+        noStroke();
+        fill(255, 255, 255, 42);
+        circle(-s * 0.08, -s * 0.08, s * 0.15);
+
+        if (this.honey > 2.5) {
+            fill('#f59e0b');
+            circle(2.5, -2.5, 2.3 + min(this.honey * 0.07, 5.5));
+        }
+
+        if (this.damageFlash > 0 || this.purpleFlash > 0) {
+            let alpha = this.purpleFlash > 0 ? 190 + sin(frameCount * 0.6) * 40 : 150 + sin(frameCount * 0.55) * 35;
+            fill(167, 139, 250, alpha);
+            circle(0, 0, s * 1.15);
+        }
+
+        if (this.role.includes('Master') || this.role.includes('Warden') || this.role.includes('Leader')) {
+            noFill();
+            stroke(255, 255, 255, 32);
+            strokeWeight(1.3);
+            circle(0, 0, s + 8 + sin(frameCount * 0.13) * 1.8);
+        }
+
+        for (let m of this.modules) {
+            fill(m.color);
+            stroke(255, 255, 255, 3);
+            strokeWeight(0.12);
+
+            const tier = m.tier || 1;
+            const size = 3.2 + (tier - 1) * 0.6;
+
+            circle(m.offsetX, m.offsetY, size);
+
+            if (tier === 5) {
+                stroke('#fde047');
+                strokeWeight(1.9);
+                noFill();
+                circle(m.offsetX, m.offsetY, size + 1.9);
+                fill(m.color);
+            } else if (tier > 5) {
+                stroke('#f472b6');
+                strokeWeight(2.2);
+                noFill();
+                circle(m.offsetX, m.offsetY, size + 2.2);
+                fill(m.color);
+            } else if (tier > 1) {
+                stroke('#fbbf24');
+                strokeWeight(tier === 2 ? 1 : tier === 3 ? 1.4 : 1.7);
+                noFill();
+                circle(m.offsetX, m.offsetY, size + 1.3);
+                fill(m.color);
+            }
+        }
+        pop();
+    }
 }
-                  }
-
-                  show() {
-                      push();
-                      translate(this.x, this.y);
-                      let s = 7 + this.modules.length * 0.16;
-
-                      if (selectedCreature === this) {
-                          stroke(255, 255, 255, 170);
-                          strokeWeight(2.2);
-                          circle(0, 0, s + 6);
-                          stroke(52, 211, 153, 110);
-                          strokeWeight(1.3);
-                          circle(0, 0, s + 10);
-                      }
-
-                      let coreColor = this.isPredator ? '#f87171' : '#facc15';
-                      if (this.specialization === 'harvester') coreColor = '#34d399';
-                      if (this.specialization === 'sensor') coreColor = '#38bdf8';
-                      if (this.specialization === 'mover') coreColor = '#a78bfa';
-                      if (this.specialization === 'resistant') coreColor = '#f472b6';
-                      if (this.specialization === 'explorer') coreColor = '#fbbf24';
-                      if (this.specialization === 'communicator') coreColor = '#c084fc';
-
-                      fill(coreColor);
-                      stroke(this.isPredator ? '#fecaca' : '#fef08c');
-                      strokeWeight(1);
-                      circle(0, 0, s);
-                      noStroke();
-                      fill(255, 255, 255, 42);
-                      circle(-s * 0.08, -s * 0.08, s * 0.15);
-
-                      if (this.honey > 2.5) {
-                          fill('#f59e0b');
-                          circle(2.5, -2.5, 2.3 + min(this.honey * 0.07, 5.5));
-                      }
-
-                      if (this.damageFlash > 0 || this.purpleFlash > 0) {
-                          let alpha = this.purpleFlash > 0 ? 190 + sin(frameCount * 0.6) * 40 : 150 + sin(frameCount * 0.55) * 35;
-                          fill(167, 139, 250, alpha);
-                          circle(0, 0, s * 1.15);
-                      }
-
-                      if (this.role.includes('Master') || this.role.includes('Warden') || this.role.includes('Leader')) {
-                          noFill();
-                          stroke(255, 255, 255, 32);
-                          strokeWeight(1.3);
-                          circle(0, 0, s + 8 + sin(frameCount * 0.13) * 1.8);
-                      }
-
-                      // Floating creature names removed
-
-                      for (let m of this.modules) {
-                          fill(m.color);
-                          stroke(255, 255, 255, 3);
-                          strokeWeight(0.12);
-
-                          const tier = m.tier || 1;
-                          const size = 3.2 + (tier - 1) * 0.6;
-
-                          circle(m.offsetX, m.offsetY, size);
-
-                          if (tier === 5) {
-    stroke('#fde047');
-    strokeWeight(1.9);
-    noFill();
-    circle(m.offsetX, m.offsetY, size + 1.9);
-    fill(m.color);
-} else if (tier > 5) {
-    // Tier VI+
-    stroke('#f472b6');           // Pink/magenta glow for high tiers
-    strokeWeight(2.2);
-    noFill();
-    circle(m.offsetX, m.offsetY, size + 2.2);
-    fill(m.color);
-} else if (tier > 1) {
-    stroke('#fbbf24');
-    strokeWeight(tier === 2 ? 1 : tier === 3 ? 1.4 : 1.7);
-    noFill();
-    circle(m.offsetX, m.offsetY, size + 1.3);
-    fill(m.color);
-}
-                      }
-                      pop();
-                  }
-              }
-
-      function showPrestigeWarningModal() {
-          const modal = document.createElement('div');
-          modal.className = 'fixed inset-0 bg-black/80 flex items-center justify-center z-[200]';
-          modal.innerHTML = `
-              <div class="bg-[#121218] border border-white/10 rounded-3xl max-w-sm w-full mx-4 p-6 text-center">
-                  <div class="text-xl font-semibold mb-3 text-orange-400">Furnace is Active</div>
-                  <p class="text-white/80 mb-5">Prestiging now will stop the furnace early.<br>You will lose <span class="text-red-400 font-semibold">15% of your burning dust</span>.</p>
-
-                  <div class="flex items-center justify-center gap-x-2 mb-6">
-                      <input type="checkbox" id="hide-warning-checkbox" class="accent-orange-500">
-                      <label for="hide-warning-checkbox" class="text-sm text-white/70 cursor-pointer">Don't show this warning again</label>
-                  </div>
-
-                  <div class="flex gap-3">
-                      <button onclick="playUIClick(); this.closest('.fixed').remove()"
-                              class="flex-1 px-4 py-2.5 bg-white/10 hover:bg-white/20 rounded-2xl text-sm">
-                          Cancel
-                      </button>
-                      <button onclick="handlePrestigeWarningConfirm(this)"
-                              class="flex-1 px-4 py-2.5 bg-red-500/90 hover:bg-red-500 rounded-2xl text-sm font-medium">
-                          Prestige Anyway
-                      </button>
-                  </div>
-              </div>
-          `;
-          document.body.appendChild(modal);
-      }
-
-      function handlePrestigeWarningConfirm(button) {
-          const checkbox = document.getElementById('hide-warning-checkbox');
-          if (checkbox && checkbox.checked) {
-              hidePrestigeWarning = true;
-          }
-          button.closest('.fixed').remove();
-          forcePrestige(); // proceed with prestige
-      }
-
-      function forcePrestige() {
-          // Properly shut down furnace with 15% loss
-          if (burningCrystals > 0) {
-              const loss = burningCrystals * 0.15;
-              aetheriumDust += Math.floor(burningCrystals - loss);
-              burningCrystals = 0;
-              furnaceEndTime = 0;
-              addFloatingText(width/2, 90, `Furnace stopped (-15% Dust)`, '#f87171');
-          }
-
-          // Convert points → dust (100,000 points = 1 mg)
-          const dustGained = totalScore / 100000;
-          aetheriumDust += dustGained;
-
-          addFloatingText(width/2, 70, `+${formatDust(dustGained)} from Prestige`, '#34d399');
-
-          resetSim();
-          totalScore = 0;
-          updateMainStats();
-          updateAetheriumUI();
-          updateFurnaceUI();
-
-        
-
 // ==================== MUSIC MODE SPECIAL PARTICLES + VISUALIZER ====================
 
 // PRUNE - Purple Infect Particles
