@@ -2221,17 +2221,16 @@ function playCursorDamageSound(creature) {
 function playTone(freq, type = null, duration = 0.28, volume = 0.055, detune = 0, attack = 0.012, release = 0.22) {
     if (!canPlaySound('core')) return;
 
-    // Log everything as before
+    // Auto-quiet the loud 420Hz sawtooth spam
+    if (freq === 420 && type === 'sawtooth' && volume > 0.5) {
+        volume = 0.035;           // greatly reduced volume
+        duration = 0.18;          // shorter
+    }
+
     console.log(
         `[Tone Log] freq: ${freq.toFixed(0)} | type: ${type || defaultWaveform} | ` +
         `dur: ${duration.toFixed(2)} | vol: ${volume.toFixed(3)} | detune: ${detune}`
     );
-
-    // Extra isolation: show call stack for the loud 420Hz sawtooth
-    if (freq === 420 && type === 'sawtooth' && volume > 0.5) {
-        console.warn('%c[Sound Isolation] Loud 420Hz sawtooth detected! Call stack below:', 'color: #f87171; font-weight: bold');
-        console.trace();
-    }
 
     if (activeVoices > MAX_VOICES) return;
     activeVoices++;
@@ -2243,7 +2242,6 @@ function playTone(freq, type = null, duration = 0.28, volume = 0.055, detune = 0
 
     osc.type = type || defaultWaveform;
     osc.frequency.value = freq * pitchShift;
-
     const randomDetune = (Math.random() - 0.5) * 18;
     osc.detune.value = detune + randomDetune;
 
