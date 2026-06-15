@@ -4111,7 +4111,6 @@ if (!paused && incubatingEggs.length > 0) {
         }
     }
 }
-
                   const timeEl = document.getElementById('sim-time');
                   if (timeEl) timeEl.innerText = formatSimTime(simTime);
 
@@ -5419,7 +5418,7 @@ if (!paused && incubatingEggs.length > 0) {
                       }
                   }
 
-                  // ==================== SPACESHIP + BULLETS ====================
+                  // ==================== SPACESHIP + BULLETS (IMPROVED COLLISION + HIGH KILL VALUE) ====================
                   if (spaceshipActive) {
                       // Draw improved spaceship
                       push();
@@ -5508,11 +5507,14 @@ if (!paused && incubatingEggs.length > 0) {
                           }
                           if (hitWall) continue;
 
-                          // Bullet collision with creatures - high damage + strong purple DoT
+                          // ==================== IMPROVED BULLET COLLISION ====================
+                          // Increased radius + secondary check for better hit registration
                           for (let j = creatures.length - 1; j >= 0; j--) {
                               let c = creatures[j];
+                              let hitDist = dist(b.x, b.y, c.x, c.y);
 
-                              if (dist(b.x, b.y, c.x, c.y) < 12) {
+                              // Primary check (improved radius) + fallback check using previous bullet position
+                              if (hitDist < 16 || (b.prevX && dist(b.prevX, b.prevY, c.x, c.y) < 18)) {
                                   // High damage - designed for 1-2 shot kills
                                   c.energy -= 82;
                                   c.damageFlash = 70;
@@ -5523,6 +5525,15 @@ if (!paused && incubatingEggs.length > 0) {
 
                                   // Impact sound
                                   playBulletImpactSound();
+
+                                  // Award high point value for spaceship bullet kill
+                                  if (c.energy <= 0) {
+                                      let killPoints = c.getPointValue(true); // true = killed by bullet
+                                      if (typeof totalScore !== 'undefined') {
+                                          totalScore += killPoints;
+                                      }
+                                      addFloatingText(c.x, c.y - 8, `+${killPoints}`, '#fbbf24');
+                                  }
 
                                   bullets.splice(i, 1);
                                   break;
@@ -5627,6 +5638,7 @@ if (typeof updateVegasScore === 'function') {
 updateMainStats();
 updatePrestigePreview();
 updatePrestigeButtonGlow();
+
     // ==================== AUTO-TRACK CURRENT ALPHA ====================
 if (trackAlpha && frameCount % 60 === 0) {   // Check every ~1 second
     const alpha = getCurrentAlpha();
@@ -6512,7 +6524,6 @@ class SpawnEffect {
         }
     }
 }
-
   // =====================================================
 // NEURAL NET CLASS (Upgraded with Connection Strength)
 // =====================================================
