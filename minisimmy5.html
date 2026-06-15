@@ -7015,7 +7015,7 @@ class Creature {
         return bonus;
     }
 
-    // === NEW: Module-based Movement Bonus ===
+    // === Module-based Movement Bonus ===
     getModuleMovementBonus() {
         const mover = this.getTieredModuleCount('mover');
         const explorer = this.getTieredModuleCount('explorer');
@@ -7023,31 +7023,24 @@ class Creature {
         const totalModules = this.modules.length;
 
         let bonus = 0;
-
-        // Base bonus from having more modules (small)
         bonus += totalModules * 0.012;
+        bonus += mover * 0.065;
+        bonus += explorer * 0.055;
+        bonus += sensor * 0.025;
 
-        // Strong bonuses from movement-oriented modules
-        bonus += mover * 0.065;           // Mover is best for raw movement
-        bonus += explorer * 0.055;        // Explorer excels at exploration
-        bonus += sensor * 0.025;          // Sensor gives slight dynamic feel
-
-        // Small tier bonus (modules with higher tiers move a bit better)
         const avgTier = this.modules.length > 0 
             ? this.modules.reduce((sum, m) => sum + (m.tier || 1), 0) / this.modules.length 
             : 1;
         bonus += (avgTier - 1) * 0.018;
 
-        return constrain(bonus, 0, 0.85); // Hard cap so it doesn't get crazy
+        return constrain(bonus, 0, 0.85);
     }
 
-    // === v3.0: Resistant Movement Penalty ===
     getResistantSpeedPenalty() {
         const resistantTiers = this.getTieredModuleCount('resistant');
         return Math.min(0.35, resistantTiers * 0.06);
     }
 
-    // === v3.1: Module-based Brain Bias ===
     getModuleBrainBias() {
         const bias = {
             foodDrive: 0, vortexEscape: 0, hazardAvoid: 0,
@@ -7079,19 +7072,6 @@ class Creature {
         const stability = Math.min(0.20, (gen - 2) * 0.03);
         const exploration = Math.max(-0.09, 0.08 - (gen - 2) * 0.013);
         return { stability, exploration };
-    }
-
-    getSimilarNeighborCount() {
-        let count = 0;
-        const myTypes = new Set(this.modules.map(m => m.type));
-        for (let o of creatures) {
-            if (o === this) continue;
-            const otherTypes = new Set(o.modules.map(m => m.type));
-            let shared = 0;
-            for (let t of myTypes) if (otherTypes.has(t)) shared++;
-            if (shared >= 1 && dist(this.x, this.y, o.x, o.y) < 50) count++;
-        }
-        return count;
     }
 
     getLocalGroup(radius) {
@@ -7311,12 +7291,21 @@ class Creature {
         }
 
         const ageProgress = this.age / this.maxAge;
-        if (ageProgress > 0.30) {
-            const slowdown = (ageProgress - 0.40) * 0.65;
-            this.speedMultiplier = 1 - slowdown;
-        } else {
-            this.speedMultiplier = 1;
+
+        // === YOUTH SPEED BOOST (faster + more desperate when young) ===
+        let youthBoost = 1.0;
+        if (ageProgress < 0.28) {
+            // Brand new creatures are fastest and most active
+            youthBoost = 1.0 + (0.28 - ageProgress) * 1.6; // up to ~1.45x speed
         }
+
+        // Old age slowdown
+        let finalSpeed = this.speedMultiplier || 1;
+        if (ageProgress > 0.38) {
+            const slowdown = (ageProgress - 0.38) * 0.78;
+            finalSpeed *= (1 - slowdown);
+        }
+        finalSpeed *= youthBoost;
 
         if (this.reproCooldown > 0) this.reproCooldown--;
         if (!this.isPredator && this.energy < 14) this.isPredator = true;
@@ -7384,11 +7373,38 @@ class Creature {
             this.currentThought = "Creating bloom";
         }
 
-        if ((tieredMover >= 3 || tieredExpl >= 3) && dist(this.x, this.y, centerX, centerY) < 150) {
+        // === STRONGER VORTEX INTERACTION ===
+        const cdist = dist(this.x, this.y, centerX, centerY);
+        const vortexPull = vortexStrength * 0.9;
+
+        if (cdist < 220) {
             let dx = this.x - centerX;
             let dy = this.y - centerY;
             let len = sqrt(dx*dx + dy*dy) || 1;
-            let escape = (tieredMover * 0.026 + tieredExpl * 0.021) * timeScale * (0.65 + brainVortexEscape * 1.6);
+
+            // Stronger outward push near center (they have to fight to stay)
+            let pushStrength = (1 - (cdist / 220)) * 1.35 * vortexPull;
+            pushStrength *= (0.7 + brainVortexEscape * 1.1);
+
+            // Mover/Explorer modules help resist being thrown around
+            const moveBonus = this.getModuleMovementBonus();
+            const resistance = this.traits.vortexResistance || 1.0;
+            pushStrength *= (1.0 - (moveBonus * 0.35) - (resistance - 1) * 0.25);
+
+            this.vx += (dx / len) * pushStrength * 0.028 * timeScale;
+            this.vy += (dy / len) * pushStrength * 0.028 * timeScale;
+
+            if (cdist < 90 && random() < 0.04) {
+                this.currentThought = "Fighting the current";
+            }
+        }
+
+        // Extra escape force for high mover/explorer near center
+        if ((tieredMover >= 3 || tieredExpl >= 3) && cdist < 160) {
+            let dx = this.x - centerX;
+            let dy = this.y - centerY;
+            let len = sqrt(dx*dx + dy*dy) || 1;
+            let escape = (tieredMover * 0.032 + tieredExpl * 0.028) * timeScale * (0.7 + brainVortexEscape * 1.5);
             this.vx += (dx / len) * escape;
             this.vy += (dy / len) * escape;
         }
@@ -7414,32 +7430,29 @@ class Creature {
                 this.vy += (dy / d) * pull * timeScale;
             }
 
-            // === Module Movement Bonus Applied ===
             const moveBonus = this.getModuleMovementBonus();
             const genBias = this.getGenerationMovementBias();
             const explorerBonus = this.getTieredModuleCount('explorer') * 0.05;
 
-            let cdist = dist(this.x, this.y, centerX, centerY);
-
-            // Micro Wriggle (now boosted by modules)
-            let wriggleForce = (0.42 + (sin(this.wrigglePhase) * 0.24)) * (1 + moveBonus * 0.6);
+            // Micro Wriggle (boosted)
+            let wriggleForce = (0.44 + (sin(this.wrigglePhase) * 0.26)) * (1 + moveBonus * 0.65);
             wriggleForce *= (0.9 + brainExploration * 0.6);
             this.vx += cos(this.wrigglePhase * 1.3) * wriggleForce * 0.019 * timeScale;
             this.vy += sin(this.wrigglePhase * 1.1) * wriggleForce * 0.019 * timeScale;
 
-            // Exploration (boosted by modules)
-            if (cdist < 170) {
-                let exploreForce = (0.9 + brainExploration * 1.45) + explorerBonus + genBias.exploration;
-                exploreForce *= (1 + moveBonus * 0.7);
-                exploreForce = constrain(exploreForce, 0.5, 2.8);
+            // Exploration (boosted by modules + youth)
+            if (cdist < 175) {
+                let exploreForce = (0.95 + brainExploration * 1.5) + explorerBonus + genBias.exploration;
+                exploreForce *= (1 + moveBonus * 0.75);
+                exploreForce = constrain(exploreForce, 0.55, 3.0);
 
-                this.vx += random(-1.1, 1.1) * 0.55 * exploreForce * timeScale;
-                this.vy += random(-1.1, 1.1) * 0.55 * exploreForce * timeScale;
+                this.vx += random(-1.15, 1.15) * 0.58 * exploreForce * timeScale;
+                this.vy += random(-1.15, 1.15) * 0.58 * exploreForce * timeScale;
             } else if (d > 70) {
-                let exploreForce = (0.95 + brainExploration * 1.3) + explorerBonus;
-                exploreForce *= (1 + moveBonus * 0.65);
-                this.vx += random(-0.52, 0.52) * 0.37 * exploreForce * timeScale;
-                this.vy += random(-0.52, 0.52) * 0.37 * exploreForce * timeScale;
+                let exploreForce = (1.0 + brainExploration * 1.35) + explorerBonus;
+                exploreForce *= (1 + moveBonus * 0.7);
+                this.vx += random(-0.55, 0.55) * 0.39 * exploreForce * timeScale;
+                this.vy += random(-0.55, 0.55) * 0.39 * exploreForce * timeScale;
             }
 
             // Social Conversion Pressure
@@ -7471,9 +7484,8 @@ class Creature {
         }
 
         // Resistant Penalty
-        const moveSpeed = this.speedMultiplier || 1;
         const resistantPenalty = this.getResistantSpeedPenalty();
-        const finalMoveSpeed = moveSpeed * (1 - resistantPenalty);
+        const finalMoveSpeed = finalSpeed * (1 - resistantPenalty);
         this.vx *= finalMoveSpeed;
         this.vy *= finalMoveSpeed;
 
