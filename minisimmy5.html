@@ -6910,6 +6910,12 @@ class Creature {
         this.vx = random(-0.4, 0.4); this.vy = random(-0.4, 0.4);
         this.energy = parentModules ? 39 : 50 + random(18);
         this.name = generateSciFiName();
+
+        // === AGE SYSTEM ===
+        this.age = 0;
+        this.maxAge = 18000 + Math.floor(random(-2000, 2000)); // ~5 minutes average
+        this.speedMultiplier = 1;
+
         this.isPredator = false; this.honey = 0;
         this.generation = generation; this.children = []; this.childrenCount = 0;
         this.killCount = 0; this.reproCooldown = 0; this.currentThought = "Exploring...";
@@ -6963,7 +6969,7 @@ class Creature {
     getModuleCount(type) { return this.modules.filter(m => m.type === type).length; }
 
     getTieredModuleCount(type) {
-        return this.modules.filter(m => m.type === type).reduce((sum, m) => sum + (m.tier || 1), 0);
+        return this.modules.filter(m => m.type === type).reduce((sum, m => sum + (m.tier || 1), 0);
     }
 
     getEfficiencyBonus() {
@@ -7021,47 +7027,39 @@ class Creature {
 
     getBrainInputs(hazardInfo, effectiveHazardDist, isDay) {
         const inputs = [];
-
         inputs.push(constrain(this.energy / 100, 0, 1));
         inputs.push(constrain(this.honey / 26, 0, 1));
         inputs.push(isDay ? 1 : 0);
         inputs.push(effectiveHazardDist);
         inputs.push(sin(hazardInfo.angle));
         inputs.push(cos(hazardInfo.angle));
-
         let nearby = 0;
         for (let o of creatures) {
             if (o !== this && dist(this.x, this.y, o.x, o.y) < 60) nearby++;
         }
         inputs.push(constrain(nearby / 12, 0, 1));
-
         inputs.push(constrain(this.getTieredModuleCount('harvester') / 6, 0, 1));
         inputs.push(constrain(this.getTieredModuleCount('sensor') / 6, 0, 1));
         inputs.push(constrain(this.getTieredModuleCount('mover') / 6, 0, 1));
         inputs.push(constrain((this.adaptationLevel || 0) / 11, 0, 1));
-
         let cdist = dist(this.x, this.y, centerX, centerY);
         inputs.push(constrain(cdist / 400, 0, 1));
-
         return inputs;
     }
 
     pruneExcessModules() {
         const maxModules = 11;
         if (this.modules.length <= maxModules) return;
-
         let byType = {};
         for (let m of this.modules) {
             if (!byType[m.type]) byType[m.type] = [];
             byType[m.type].push(m);
         }
-
         let newModules = [];
         for (let type in byType) {
             byType[type].sort((a, b) => (b.tier || 1) - (a.tier || 1));
             newModules.push(byType[type][0]);
         }
-
         const dominant = this.specialization;
         if (dominant && byType[dominant]) {
             let extras = byType[dominant].slice(1);
@@ -7069,7 +7067,6 @@ class Creature {
                 newModules.push(extras.shift());
             }
         }
-
         if (newModules.length < maxModules) {
             let remaining = [];
             for (let type in byType) {
@@ -7081,7 +7078,6 @@ class Creature {
                 newModules.push(remaining.shift());
             }
         }
-
         this.modules = newModules;
         this.updateSpecialization();
     }
@@ -7092,12 +7088,10 @@ class Creature {
             this.role = 'Balanced';
             return;
         }
-
         let counts = {};
         for (let m of this.modules) {
             counts[m.type] = (counts[m.type] || 0) + (m.tier || 1);
         }
-
         let maxType = null;
         let maxCount = 0;
         for (let type in counts) {
@@ -7106,9 +7100,7 @@ class Creature {
                 maxType = type;
             }
         }
-
         this.specialization = maxType || 'balanced';
-
         const tieredCount = this.getTieredModuleCount(this.specialization);
         if (tieredCount >= 4) {
             if (this.specialization === 'harvester') this.role = 'Master Harvester';
@@ -7127,19 +7119,16 @@ class Creature {
 
     reproduce() {
         let newModules = this.modules.map(m => ({...m}));
-
         let typeTierCounts = {};
         for (let m of newModules) {
             const key = m.type + '-' + (m.tier || 1);
             typeTierCounts[key] = (typeTierCounts[key] || 0) + 1;
         }
-
         for (let key in typeTierCounts) {
             if (typeTierCounts[key] >= 3) {
                 const [type, tierStr] = key.split('-');
                 const currentTier = parseInt(tierStr);
                 const nextTier = Math.min(10, currentTier + 1);
-
                 for (let m of newModules) {
                     if (m.type === type && (m.tier || 1) === currentTier) {
                         m.tier = nextTier;
@@ -7148,18 +7137,34 @@ class Creature {
                 }
             }
         }
-
         let child = new Creature(this.x + random(-6, 6), this.y + random(-6, 6), newModules, this.generation + 1, this.traits);
-
         if (this.brain) {
             child.brain = this.brain.copy();
             child.brain.mutate(0.09, 0.38);
         }
-
         return child;
     }
 
     update(isDay, vortexDir, vortexStrength, timeScale = 1, envMods = null) {
+        // ==================== AGE SYSTEM ====================
+        this.age++;
+
+        // Die of old age
+        if (this.age > this.maxAge) {
+            this.energy = 0;
+            this.currentThought = "Died of old age";
+            return;
+        }
+
+        // Subtle slowdown (starts after 55% age)
+        const ageProgress = this.age / this.maxAge;
+        if (ageProgress > 0.55) {
+            const slowdown = (ageProgress - 0.55) * 0.65;
+            this.speedMultiplier = 1 - slowdown;
+        } else {
+            this.speedMultiplier = 1;
+        }
+
         if (this.reproCooldown > 0) this.reproCooldown--;
         if (!this.isPredator && this.energy < 14) this.isPredator = true;
 
@@ -7182,27 +7187,23 @@ class Creature {
 
         // Get brain outputs (with safe defaults)
         let brain = this.brainOutputs || [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5];
-        let brainFoodDrive     = brain[0] || 0.5;
-        let brainVortexEscape  = brain[1] || 0.5;
-        let brainHazardAvoid   = brain[2] || 0.5;
-        let brainSocialAlign   = brain[3] || 0.5;
-        let brainExploration   = brain[4] || 0.5;
-        let brainReproWill     = brain[5] || 0.5;
-        let brainPredatorTend  = brain[6] || 0.5;
+        let brainFoodDrive = brain[0] || 0.5;
+        let brainVortexEscape = brain[1] || 0.5;
+        let brainHazardAvoid = brain[2] || 0.5;
+        let brainSocialAlign = brain[3] || 0.5;
+        let brainExploration = brain[4] || 0.5;
+        let brainReproWill = brain[5] || 0.5;
+        let brainPredatorTend = brain[6] || 0.5;
         // ============================================================
 
         if (effectiveHazardDist > 0.14) {
             let avoidAngle = hazardInfo.angle + PI;
             let avoidStrength = effectiveHazardDist * 2.6;
-
-            // Brain influence on hazard avoidance
             avoidStrength *= (0.6 + brainHazardAvoid * 1.4);
-
             if (effectiveHazardDist > 0.62) {
                 avoidStrength *= 1.7;
                 this.currentThought = "Dodging hazard!";
             }
-
             if (spaceshipActive && bullets.length > 0) {
                 for (let b of bullets) {
                     let d = dist(this.x, this.y, b.x, b.y);
@@ -7219,17 +7220,13 @@ class Creature {
                     }
                 }
             }
-
             let adaptationBoost = this.adaptationLevel * 0.016;
             avoidStrength += adaptationBoost;
-
             this.vx += cos(avoidAngle) * avoidStrength * 0.032 * timeScale;
             this.vy += sin(avoidAngle) * avoidStrength * 0.032 * timeScale;
-
             let traitBonus = (this.traits.hazardAvoidance - 1) * 0.55;
             this.vx += cos(avoidAngle) * traitBonus * 0.018 * timeScale;
             this.vy += sin(avoidAngle) * traitBonus * 0.018 * timeScale;
-
             dodgedThisFrame = true;
         }
 
@@ -7254,17 +7251,12 @@ class Creature {
             let avoidStrength = effectiveHazardDist * 3.2;
             let predictive = sin(frameCount * 0.07) * 0.55;
             avoidAngle += predictive * 0.35;
-
-            // Brain hazard avoidance influence
             avoidStrength *= (0.7 + brainHazardAvoid * 1.3);
-
             this.vx += cos(avoidAngle) * avoidStrength * 0.038 * timeScale;
             this.vy += sin(avoidAngle) * avoidStrength * 0.038 * timeScale;
-
             if (effectiveHazardDist > 0.52) {
                 this.currentThought = "Elegant dodge";
             }
-
             if (frameCount % 7 === 0 && effectiveHazardDist > 0.38) {
                 this.adaptationLevel = min(11, this.adaptationLevel + 0.013);
             }
@@ -7296,13 +7288,9 @@ class Creature {
             let dy = this.y - centerY;
             let len = sqrt(dx*dx + dy*dy) || 1;
             let escape = (tieredMover * 0.025 + tieredExpl * 0.02) * timeScale;
-
-            // Brain vortex escape influence
             escape *= (0.6 + brainVortexEscape * 1.6);
-
             this.vx += (dx / len) * escape;
             this.vy += (dy / len) * escape;
-
             if (random() < 0.07 * timeScale) {
                 this.vx += random(-1.1, 1.1) * 0.55 * timeScale;
                 this.vy += random(-1.1, 1.1) * 0.55 * timeScale;
@@ -7313,10 +7301,7 @@ class Creature {
         if (tieredMover >= 2 || tieredExpl >= 2) {
             if (dist(this.x, this.y, centerX, centerY) < 170) {
                 let escapeForce = (tieredMover * 0.023 + tieredExpl * 0.016) * timeScale;
-
-                // Brain vortex escape influence
                 escapeForce *= (0.65 + brainVortexEscape * 1.5);
-
                 let dx = this.x - centerX;
                 let dy = this.y - centerY;
                 let len = sqrt(dx*dx + dy*dy) || 1;
@@ -7401,10 +7386,7 @@ class Creature {
             if (d > 7) {
                 let hungerFactor = map(this.energy, 0, 58, 1.5, 0.88);
                 let pull = settings.zonePullStrength * hungerFactor + this.getModuleCount('harvester') * 0.022;
-
-                // Brain food drive influence
                 pull *= (0.7 + brainFoodDrive * 1.3);
-
                 this.vx += (dx / d) * pull * timeScale;
                 this.vy += (dy / d) * pull * timeScale;
                 this.currentThought = isDay ? "Going to Green" : "Going to Blue";
@@ -7413,7 +7395,6 @@ class Creature {
             let explorerBonus = (this.getModuleCount('explorer') * 0.16) + (this.traits.explorationBias - 1) * 0.22;
             let similarNeighbors = this.getSimilarNeighborCount();
             let inGroup = similarNeighbors >= 3;
-
             if (inGroup) {
                 this.currentThought = "With allies";
                 this.energy += 0.0035 * timeScale;
@@ -7422,13 +7403,11 @@ class Creature {
             if (similarNeighbors > 0) {
                 let avgVx = 0, avgVy = 0, avgX = 0, avgY = 0, count = 0;
                 const myTypes = new Set(this.modules.map(m => m.type));
-
                 for (let o of creatures) {
                     if (o === this) continue;
                     const otherTypes = new Set(o.modules.map(m => m.type));
                     let shared = 0;
                     for (let t of myTypes) if (otherTypes.has(t)) shared++;
-
                     if (shared >= 1 && dist(this.x, this.y, o.x, o.y) < 50) {
                         avgVx += o.vx;
                         avgVy += o.vy;
@@ -7437,20 +7416,15 @@ class Creature {
                         count++;
                     }
                 }
-
                 if (count > 0) {
                     avgVx /= count;
                     avgVy /= count;
                     avgX /= count;
                     avgY /= count;
-
                     let alignStrength = 0.032 * Math.min(similarNeighbors / 3, 1.4) * timeScale;
-                    // Brain social alignment influence
                     alignStrength *= (0.6 + brainSocialAlign * 1.5);
-
                     this.vx += (avgVx - this.vx) * alignStrength;
                     this.vy += (avgVy - this.vy) * alignStrength;
-
                     let cohesionStrength = 0.025 * Math.min(similarNeighbors / 3, 1.4) * timeScale;
                     let cdx = avgX - this.x;
                     let cdy = avgY - this.y;
@@ -7486,7 +7460,6 @@ class Creature {
                 if (o !== this && dist(this.x, this.y, o.x, o.y) < 42) neighbors++;
             }
             let socialResist = Math.min(0.48, neighbors * settings.socialResist);
-
             let cdist = dist(this.x, this.y, centerX, centerY);
             if (cdist > 14 && cdist < 400) {
                 let tx = -(this.y - centerY);
@@ -7494,20 +7467,15 @@ class Creature {
                 let tlen = sqrt(tx * tx + ty * ty) || 1;
                 let vForce = 0.68 * vortexStrength * vortexDir * (1 - socialResist);
                 vForce *= (1 - (this.traits.vortexResistance - 1) * 0.32);
-
-                // Brain vortex escape influence
                 vForce *= (0.65 + brainVortexEscape * 1.4);
-
                 this.vx += (tx / tlen) * vForce * timeScale;
                 this.vy += (ty / tlen) * vForce * timeScale;
-
                 let pull = 0.36 * vortexStrength * (1 - socialResist);
                 this.vx += (centerX - this.x) * pull / (cdist + 5) * timeScale;
                 this.vy += (centerY - this.y) * pull / (cdist + 5) * timeScale;
             }
 
             if (cdist < 140) {
-                // Brain exploration influence
                 let exploreForce = (0.6 + brainExploration * 1.2);
                 this.vx += random(-0.78, 0.78) * 0.44 * exploreForce * timeScale;
                 this.vy += random(-0.78, 0.78) * 0.44 * exploreForce * timeScale;
@@ -7541,25 +7509,18 @@ class Creature {
                 for (let o of localGroup) {
                     specCounts[o.specialization] = (specCounts[o.specialization] || 0) + 1;
                 }
-
                 let myCount = specCounts[mySpec] || 1;
                 let groupSize = localGroup.length;
                 let myRatio = myCount / groupSize;
-
                 let pressureChance = (0.004 + (groupSize * 0.0008)) * timeScale;
-
                 if (myRatio < 0.22) {
                     pressureChance *= 2.8;
                     if (myRatio < 0.12) pressureChance *= 1.8;
                     if (myRatio < 0.08) pressureChance *= 1.6;
                 }
-
                 if (groupSize > 12) pressureChance *= 1.4;
                 if (groupSize > 18) pressureChance *= 1.5;
-
-                // Brain predator tendency influence
                 if (brainPredatorTend > 0.65) pressureChance *= 1.6;
-
                 if (random() < pressureChance) {
                     if (!this.isPredator && this.energy > 18) {
                         this.isPredator = true;
@@ -7575,30 +7536,25 @@ class Creature {
         this.vx *= 0.81;
         this.vy *= 0.81;
         this.x = constrain(this.x, 7, width - 7);
-
         if (isDrawingWall && typeof wallStartX === 'number') {
             const settings = window.currentFilterWallSettings;
             const isFilterMode = currentWallFilterMode === "custom_filter" && settings && settings.types && settings.types.length > 0;
             const targetTypes = isFilterMode ? settings.types : null;
-
             if (isFilterMode && (targetTypes.includes('white') || targetTypes.includes('red'))) {
             } else {
                 let d = distToLineSegment(this.x, this.y, wallStartX, wallStartY, mouseX, mouseY);
                 if (d < 28) {
                     let shouldAffect = true;
-
                     if (isFilterMode) {
                         const moduleCount = this.modules ? this.modules.length : 0;
                         const isActualPred = this.isPredator === true;
                         const isHigh = moduleCount >= 15;
                         const isLow = moduleCount <= 2;
-
                         shouldAffect = false;
                         if (targetTypes.includes('predator') && isActualPred) shouldAffect = true;
                         if (targetTypes.includes('high_module') && isHigh) shouldAffect = true;
                         if (targetTypes.includes('low_module') && isLow) shouldAffect = true;
                     }
-
                     if (shouldAffect) {
                         let mx = (wallStartX + mouseX) / 2;
                         let my = (wallStartY + mouseY) / 2;
@@ -7618,16 +7574,14 @@ class Creature {
         if (isDrawingWall && typeof wallStartX === 'number') {
             const sweepSettings = window.currentFilterWallSettings;
             const isSweepFilter = currentWallFilterMode === "custom_filter" && sweepSettings && sweepSettings.types && sweepSettings.types.length > 0;
-
             if (isSweepFilter) {
                 const targetTypes = sweepSettings.types;
-
                 if (targetTypes.includes('white')) {
                     for (let p of vortexParticles) {
                         let d = distToLineSegment(p.x, p.y, wallStartX, wallStartY, mouseX, mouseY);
                         if (d < 32) {
                             let mx = (wallStartX + mouseX) / 2;
-                            let my = (wallStartY + mouseY) / 2;
+                            let my = (wallStartY + mouseX) / 2;
                             let dx = p.x - mx;
                             let dy = p.y - my;
                             let len = sqrt(dx*dx + dy*dy) || 1;
@@ -7638,13 +7592,12 @@ class Creature {
                         }
                     }
                 }
-
                 if (targetTypes.includes('red')) {
                     for (let r of redHazards) {
                         let d = distToLineSegment(r.x, r.y, wallStartX, wallStartY, mouseX, mouseY);
                         if (d < 32) {
                             let mx = (wallStartX + mouseX) / 2;
-                            let my = (wallStartY + mouseY) / 2;
+                            let my = (wallStartY + mouseX) / 2;
                             let dx = r.x - mx;
                             let dy = r.y - my;
                             let len = sqrt(dx*dx + dy*dy) || 1;
@@ -7684,7 +7637,6 @@ class Creature {
                 let d = distToLineSegment(this.x, this.y, w.x1, w.y1, w.x2, w.y2);
                 if (d < 14) {
                     const effectiveWallType = w.wallType || (w.filterMode === "custom_filter" ? "filter" : "solid");
-
                     if (effectiveWallType === "solid") {
                         let mx = (w.x1 + w.x2) / 2;
                         let my = (w.y1 + w.y2) / 2;
@@ -7694,7 +7646,6 @@ class Creature {
                         let force = 4.2;
                         this.vx += (dx / len) * force;
                         this.vy += (dy / len) * force;
-
                         if (w.offensive) {
                             this.purpleFlash = 55;
                             this.mustEatWhite = true;
@@ -7715,7 +7666,6 @@ class Creature {
                             let force = 5.8;
                             this.vx += (dx / len) * force;
                             this.vy += (dy / len) * force;
-
                             if (w.offensive) {
                                 this.purpleFlash = 65;
                                 this.mustEatWhite = true;
@@ -7725,13 +7675,11 @@ class Creature {
                                 w.life -= 2;
                             }
                             w.hitFlash = 12;
-
                             if (w.empowered && !this.isPredator) {
                                 this.isPredator = true;
                             }
                         }
                     }
-
                     if (this.energy > 8) {
                         this.currentThought = (effectiveWallType === "filter") ? "Filtered by wall" : "Hit energy wall";
                     }
@@ -7786,23 +7734,19 @@ class Creature {
             const key = m.type + '-' + (m.tier || 1);
             typeTierCounts[key] = (typeTierCounts[key] || 0) + 1;
         }
-
         for (let key in typeTierCounts) {
             if (typeTierCounts[key] >= 3) {
                 const [type, tierStr] = key.split('-');
                 const currentTier = parseInt(tierStr);
                 const nextTier = Math.min(10, currentTier + 1);
-
                 for (let m of this.modules) {
                     if (m.type === type && (m.tier || 1) === currentTier) {
                         m.tier = nextTier;
                         this.updateSpecialization();
-
                         playTone(1320, 'sine', 0.25, 0.7, 0, 0.02, 0.2);
                         setTimeout(() => {
                             playTone(1580, 'sine', 0.18, 0.5, 12, 0.015, 0.15);
                         }, 80);
-
                         break;
                     }
                 }
@@ -7814,7 +7758,6 @@ class Creature {
         push();
         translate(this.x, this.y);
         let s = 7 + this.modules.length * 0.16;
-
         if (selectedCreature === this) {
             stroke(255, 255, 255, 170);
             strokeWeight(2.2);
@@ -7862,12 +7805,9 @@ class Creature {
             fill(m.color);
             stroke(255, 255, 255, 3);
             strokeWeight(0.12);
-
             const tier = m.tier || 1;
             const size = 3.2 + (tier - 1) * 0.6;
-
             circle(m.offsetX, m.offsetY, size);
-
             if (tier === 5) {
                 stroke('#fde047');
                 strokeWeight(1.9);
