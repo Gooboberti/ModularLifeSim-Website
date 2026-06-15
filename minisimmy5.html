@@ -918,7 +918,19 @@
 <!-- Top 10 Creatures Modal -->
 <div id="top-creatures-modal" onclick="hideTopCreaturesModal()" class="hidden fixed inset-0 bg-black/80 z-[100]">
     <div onclick="event.stopImmediatePropagation()" class="modal bg-[#121218] border border-white/10 rounded-3xl max-w-lg w-full mx-4 p-6 max-h-[80vh] overflow-auto flex flex-col">
-        <!-- ... (top creatures content remains unchanged) ... -->
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-xl font-semibold flex items-center gap-x-2">
+                <i class="fa-solid fa-tachometer-alt text-emerald-400"></i>
+                <span>Top 10 Creatures</span>
+            </h3>
+            <button onclick="playUIClick(); hideTopCreaturesModal()" class="text-3xl leading-none text-white/60 hover:text-white">×</button>
+        </div>
+
+        <div id="top-creatures-list" class="space-y-2 flex-1 overflow-auto pr-1"></div>
+        
+        <div class="mt-4 text-center text-xs text-white/50">
+            Sell creatures for their full point value (scales with tier)
+        </div>
     </div>
 </div>
 
@@ -1769,6 +1781,44 @@ function forceEnvironmentalPhase(phase) {
     }
 }
 
+function sellCreature(creature) {
+    if (!creature) return;
+
+    const value = creature.getPointValue(); // Uses your tier-scaled point value
+
+    // Add points to High Roller Score
+    totalScore = (totalScore || 0) + value;
+
+    // Remove from world
+    const index = creatures.indexOf(creature);
+    if (index > -1) {
+        creatures.splice(index, 1);
+    }
+
+    // Deselect if currently selected
+    if (selectedCreature === creature) {
+        deselectCreature();
+    }
+
+    // Visual + audio feedback
+    addFloatingText(creature.x, creature.y - 25, `+${value} pts`, '#fbbf24');
+    playTone(680, 'sine', 0.2, 0.6);
+    setTimeout(() => playTone(920, 'sine', 0.15, 0.4), 90);
+
+    // Refresh UIs
+    updateMainStats();
+    if (typeof updateTopFurnaceUI === 'function') updateTopFurnaceUI();
+
+    // Refresh Top 10 if it's open
+    const topModal = document.getElementById('top-creatures-modal');
+    if (topModal && topModal.style.display !== 'none' && !topModal.classList.contains('hidden')) {
+        setTimeout(() => {
+            hideTopCreaturesModal();
+            showTopCreaturesModal();
+        }, 80);
+    }
+}
+
   
 function createPredatorFromGeneVaultOrRandom() {
     // Try to pull from Gene Vault first
@@ -2411,7 +2461,46 @@ function extractCreatureToEgg(creature) {
     }
     showExtractEggModal();
 }
-// ==================== TOP 10 CREATURES MODAL (with body previews + Extract) ====================
+// ==================== SELL CREATURE FUNCTION ====================
+function sellCreature(creature) {
+    if (!creature) return;
+
+    const value = creature.getPointValue();
+
+    // Add points to High Roller Score
+    totalScore = (totalScore || 0) + value;
+
+    // Remove from world
+    const index = creatures.indexOf(creature);
+    if (index > -1) {
+        creatures.splice(index, 1);
+    }
+
+    // Deselect if currently selected
+    if (selectedCreature === creature) {
+        deselectCreature();
+    }
+
+    // Visual + audio feedback
+    addFloatingText(creature.x, creature.y - 25, `+${value} pts`, '#fbbf24');
+    playTone(680, 'sine', 0.2, 0.6);
+    setTimeout(() => playTone(920, 'sine', 0.15, 0.4), 90);
+
+    // Refresh UIs
+    updateMainStats();
+    if (typeof updateTopFurnaceUI === 'function') updateTopFurnaceUI();
+
+    // Refresh Top 10 modal if it's currently open
+    const topModal = document.getElementById('top-creatures-modal');
+    if (topModal && (topModal.style.display === 'flex' || topModal.classList.contains('flex'))) {
+        setTimeout(() => {
+            hideTopCreaturesModal();
+            showTopCreaturesModal();
+        }, 80);
+    }
+}
+
+// ==================== TOP 10 CREATURES MODAL (with body previews + Extract + Sell) ====================
 function showTopCreaturesModal() {
     const modal = document.getElementById('top-creatures-modal');
     if (!modal) {
@@ -2435,6 +2524,7 @@ function showTopCreaturesModal() {
     const listContainer = document.getElementById('top-creatures-list');
     if (!listContainer) return;
     listContainer.innerHTML = '';
+
     let sorted = [...creatures].sort((a, b) => {
         let scoreA = (a.modules?.length || 0) * 2.5 + (a.killCount || 0) * 4 + (a.childrenCount || 0) * 3 + (a.energy || 0) * 0.6;
         let scoreB = (b.modules?.length || 0) * 2.5 + (b.killCount || 0) * 4 + (b.childrenCount || 0) * 3 + (b.energy || 0) * 0.6;
@@ -2444,6 +2534,7 @@ function showTopCreaturesModal() {
         scoreB += tierB * 1.2;
         return scoreB - scoreA;
     }).slice(0, 10);
+
     if (sorted.length === 0) {
         listContainer.innerHTML = `<div class="text-center text-white/60 py-8">No creatures available yet.</div>`;
     } else {
@@ -2452,6 +2543,7 @@ function showTopCreaturesModal() {
             div.className = 'flex items-center gap-3 bg-white/5 hover:bg-white/10 rounded-2xl px-3 py-2.5 transition-colors';
             const tierTotal = creature.modules.reduce((sum, m) => sum + (m.tier || 1), 0);
             const canvasId = `top10-preview-${creature.name.replace(/\s+/g, '')}-${Date.now()}`;
+
             div.innerHTML = `
                 <canvas id="${canvasId}" width="46" height="46"
                         class="rounded-xl border border-white/10 bg-[#111113] flex-shrink-0"></canvas>
@@ -2462,6 +2554,9 @@ function showTopCreaturesModal() {
                     </div>
                 </div>
                 <div class="flex items-center gap-2 flex-shrink-0">
+                    <button class="sell-btn px-3 py-1 text-xs rounded-xl bg-red-500/80 hover:bg-red-500 text-white font-medium">
+                        Sell
+                    </button>
                     <button class="extract-btn px-3 py-1 text-xs rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-medium">
                         Extract
                     </button>
@@ -2470,6 +2565,16 @@ function showTopCreaturesModal() {
                     </button>
                 </div>
             `;
+
+            // Sell button
+            const sellBtn = div.querySelector('.sell-btn');
+            sellBtn.onclick = (e) => {
+                e.stopImmediatePropagation();
+                if (confirm(`Sell ${creature.name} for ${creature.getPointValue()} points?`)) {
+                    sellCreature(creature);
+                }
+            };
+
             // Extract button
             const extractBtn = div.querySelector('.extract-btn');
             extractBtn.onclick = (e) => {
@@ -2480,6 +2585,7 @@ function showTopCreaturesModal() {
                     showTopCreaturesModal();
                 }, 100);
             };
+
             // Inspect button
             const inspectBtn = div.querySelector('.inspect-btn');
             inspectBtn.onclick = (e) => {
@@ -2489,7 +2595,9 @@ function showTopCreaturesModal() {
                 isInspectorLocked = true;
                 hideTopCreaturesModal();
             };
+
             listContainer.appendChild(div);
+
             // Draw creature body preview
             setTimeout(() => {
                 const canvas = document.getElementById(canvasId);
@@ -2500,6 +2608,7 @@ function showTopCreaturesModal() {
         });
     }
 }
+
 function hideTopCreaturesModal() {
     const modal = document.getElementById('top-creatures-modal');
     if (modal) {
