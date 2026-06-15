@@ -6687,7 +6687,6 @@ class Creature {
         this.role = 'Balanced';
         this.brain = new NeuralNet();
         this.wrigglePhase = random(TWO_PI);
-
         if (parentTraits) {
             this.traits = {
                 pheromoneSensitivity: constrain(parentTraits.pheromoneSensitivity + random(-0.07, 0.07), 0.62, 1.55),
@@ -6703,10 +6702,8 @@ class Creature {
                 hazardAvoidance: 1.0 + random(-0.13, 0.13)
             };
         }
-
         let types = ['harvester', 'sensor', 'mover', 'resistant', 'explorer', 'communicator'];
         let colors = { 'harvester': '#34d399', 'sensor': '#38bdf8', 'mover': '#a78bfa', 'resistant': '#f472b6', 'explorer': '#fbbf24', 'communicator': '#c084fc' };
-
         if (parentModules) {
             this.modules = parentModules.map(m => ({ ...m }));
             if (random() < 0.42 && this.modules.length < 7) {
@@ -6720,9 +6717,7 @@ class Creature {
                 this.modules.push({ type: t, color: colors[t], offsetX: cos(ang) * di, offsetY: sin(ang) * di, tier: 1 });
             }
         }
-
         this.updateSpecialization();
-
         const baseSeconds = 15;
         const secondsPerGen = 3;
         let lifespanSeconds = baseSeconds + (this.generation - 1) * secondsPerGen;
@@ -6730,40 +6725,44 @@ class Creature {
         lifespanSeconds += resistantBonus;
         this.maxAge = Math.floor(lifespanSeconds * 60);
         this.maxAge += Math.floor(random(-120, 120));
-
         // ==================== POINT VALUE SYSTEM ====================
         this.calculatePointValue();
     }
 
-    // Calculate base point value (called once in constructor)
+    // Calculate base point value (called in constructor and after tier/specialization changes)
     calculatePointValue() {
         let value = 12; // Base value
 
-        // Generation bonus
-        value += (this.generation - 1) * 4;
+        // Generation bonus (stronger scaling)
+        value += (this.generation - 1) * 5;
 
-        // Module count and tier bonus
+        // Module count bonus
         const totalModules = this.modules.length;
-        const totalTiers = this.getTieredModuleCount('harvester') +
-                           this.getTieredModuleCount('sensor') +
-                           this.getTieredModuleCount('mover') +
-                           this.getTieredModuleCount('resistant') +
-                           this.getTieredModuleCount('explorer') +
-                           this.getTieredModuleCount('communicator');
+        value += totalModules * 4;
 
-        value += totalModules * 3;
-        value += totalTiers * 2;
+        // Tiered module bonus (much stronger scaling per tier level)
+        let totalTierValue = 0;
+        for (let m of this.modules) {
+            const tier = m.tier || 1;
+            totalTierValue += tier * 3;           // base per tier
+            if (tier >= 2) totalTierValue += (tier - 1) * 4;  // extra for each level above 1
+            if (tier >= 4) totalTierValue += (tier - 3) * 6;  // big bonus for high tiers
+        }
+        value += totalTierValue;
 
         // Predator bonus
-        if (this.isPredator) value += 15;
+        if (this.isPredator) value += 18;
 
         // Specialization bonuses
-        if (this.specialization === 'resistant') value += 8;
-        if (this.specialization === 'harvester') value += 6;
-        if (this.specialization === 'mover') value += 5;
+        if (this.specialization === 'resistant') value += 10;
+        if (this.specialization === 'harvester') value += 8;
+        if (this.specialization === 'mover') value += 7;
+        if (this.specialization === 'explorer') value += 6;
+        if (this.specialization === 'sensor') value += 5;
+        if (this.specialization === 'communicator') value += 5;
 
         // Adaptation level bonus
-        value += (this.adaptationLevel || 0) * 1.5;
+        value += (this.adaptationLevel || 0) * 2.5;
 
         this.pointValue = Math.floor(value);
     }
@@ -6771,12 +6770,10 @@ class Creature {
     // Get current point value (with optional spaceship bullet kill bonus)
     getPointValue(killedByBullet = false) {
         let value = this.pointValue || 12;
-
         if (killedByBullet) {
             // Big bonus for spaceship bullet kills
-            value = Math.floor(value * 2.6) + 35;
+            value = Math.floor(value * 2.75) + 42;
         }
-
         return Math.max(8, value);
     }
 
@@ -7003,6 +7000,9 @@ class Creature {
         } else {
             this.role = this.specialization.charAt(0).toUpperCase() + this.specialization.slice(1);
         }
+
+        // Keep point value up to date when specialization or tiers change
+        this.calculatePointValue();
     }
 
     reproduce() {
@@ -7306,6 +7306,15 @@ class Creature {
             const size = 3.2 + (tier - 1) * 0.6;
             circle(m.offsetX, m.offsetY, size);
         }
+
+        // ==================== POINT VALUE DISPLAY NEXT TO CREATURE ====================
+        if (selectedCreature === this) {
+            fill(255, 255, 255, 220);
+            textSize(9);
+            textAlign(CENTER);
+            text(`+${this.getPointValue()}`, 0, -s - 10);
+        }
+
         pop();
     }
 }
