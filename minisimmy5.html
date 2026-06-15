@@ -2078,7 +2078,6 @@ let aetheriumCrystals = 0;
 let aetheriumDust = 0;
 let burningCrystals = 0;
 let furnaceEndTime = 0;
-
 function formatDust(mg) {
     if (mg >= 1000000000) return (mg / 1000000000).toFixed(2) + " t";
     else if (mg >= 1000000) return (mg / 1000000).toFixed(2) + " kg";
@@ -2087,7 +2086,6 @@ function formatDust(mg) {
     else if (mg > 0) return (mg * 1000).toFixed(1) + " µg";
     else return "0 mg";
 }
-
 function formatLargeNumber(n) {
     if (n >= 1e12) return n.toExponential(2);
     else if (n >= 1e9) return (n / 1e9).toFixed(2) + "B";
@@ -2095,18 +2093,15 @@ function formatLargeNumber(n) {
     else if (n >= 10000) return (n / 1000).toFixed(1) + "k";
     else return Math.floor(n).toLocaleString();
 }
-
 function formatMultiplier(n) {
     if (n >= 10000) return n.toExponential(2);
     else if (n >= 1000) return Math.floor(n).toLocaleString();
     else return n.toFixed(0);
 }
-
 let timeScale = 1;
 let paused = false;
 let simTime = 0;
 let zoomLevel = 1.0;
-
 // ==================== CLEAN FURNACE FUNCTIONS ====================
 function extractDustEarly() {
     if (burningCrystals <= 0) return;
@@ -2116,14 +2111,12 @@ function extractDustEarly() {
     updateFurnaceUI();
     updateAetheriumUI();
 }
-
 function getBurningMultiplier() {
     if (burningCrystals > 0 && furnaceEndTime > Date.now()) {
         return burningCrystals * 100;
     }
     return 1;
 }
-
 setInterval(() => {
     if (burningCrystals > 0 && furnaceEndTime <= Date.now()) {
         burningCrystals = 0;
@@ -2131,22 +2124,17 @@ setInterval(() => {
         updateFurnaceUI();
     }
 }, 1000);
-
-  // ==================== FURNACE + DUST/CRYSTAL CONVERSION (RESTORED) ====================
-
+  // ==================== FURNACE + DUST/CRYSTAL CONVERSION (DYNAMIC SLIDERS SUPPORT) ====================
 function updateFurnaceUI() {
     const dustEl = document.getElementById('furnace-inv-dust');
     const burningEl = document.getElementById('furnace-burning');
     const timeEl = document.getElementById('furnace-time');
-
     if (dustEl) dustEl.innerText = formatDust(aetheriumDust);
-
     if (burningEl) {
         burningEl.innerText = burningCrystals > 0
             ? `${formatDust(burningCrystals)} dust`
             : `0 mg dust`;
     }
-
     if (timeEl) {
         if (burningCrystals > 0 && furnaceEndTime > Date.now()) {
             const remaining = Math.max(0, Math.floor((furnaceEndTime - Date.now()) / 1000));
@@ -2157,12 +2145,10 @@ function updateFurnaceUI() {
             timeEl.innerText = "--:--";
         }
     }
-
     if (typeof updateTopFurnaceUI === 'function') {
         updateTopFurnaceUI();
     }
 }
-
 function addDustToFurnace(amountMg) {
     if (aetheriumDust < amountMg) {
         addFloatingText(width/2, 100, "Not enough dust!", '#f87171');
@@ -2170,40 +2156,54 @@ function addDustToFurnace(amountMg) {
     }
     aetheriumDust -= amountMg;
     burningCrystals += amountMg;
-    furnaceEndTime = Date.now() + (5 * 60 * 1000);   // 5 minutes
-
+    furnaceEndTime = Date.now() + (5 * 60 * 1000); // 5 minutes
     // Furnace start sound
     playTone(420, 'sawtooth', 0.6, 0.5, 0, 0.1, 0.5);
-
     updateFurnaceUI();
     updateAetheriumUI();
 }
 
-function convertCrystalsToDust() {
-    if (aetheriumCrystals <= 0) return;
-    aetheriumDust += aetheriumCrystals * 1000000;   // 1 Crystal = 1 kg = 1,000,000 mg
-    aetheriumCrystals = 0;
-
+// ==================== DYNAMIC CONVERSION FUNCTIONS (for sliders) ====================
+function convertCrystalsToDustAmount(amount) {
+    if (aetheriumCrystals <= 0 || amount <= 0) return;
+    const actual = Math.min(amount, aetheriumCrystals);
+    aetheriumDust += actual * 1000000; // 1 Crystal = 1 kg = 1,000,000 mg
+    aetheriumCrystals -= actual;
     playTone(620, 'sine', 0.18, 0.5);
-    addFloatingText(width/2, 90, `Crushed to Dust`, '#f59e0b');
+    addFloatingText(width/2, 90, `Crushed ${actual} Crystal${actual > 1 ? 's' : ''} to Dust`, '#f59e0b');
     updateAetheriumUI();
-    showInventory();
+    if (typeof showInventory === 'function') showInventory();
 }
 
+function convertDustToCrystalsAmount(amountKg) {
+    const maxKg = Math.floor(aetheriumDust / 1000000);
+    if (maxKg < 1 || amountKg < 1) {
+        addFloatingText(width/2, 100, "Need at least 1 kg of dust!", '#f87171');
+        return;
+    }
+    const actual = Math.min(amountKg, maxKg);
+    aetheriumCrystals += actual;
+    aetheriumDust -= actual * 1000000;
+    playTone(720, 'sine', 0.22, 0.5);
+    addFloatingText(width/2, 90, `+${actual} Crystal${actual > 1 ? 's' : ''}`, '#f472b6');
+    updateAetheriumUI();
+    if (typeof showInventory === 'function') showInventory();
+}
+
+// Legacy full-conversion functions (kept for compatibility)
+function convertCrystalsToDust() {
+    if (aetheriumCrystals <= 0) return;
+    convertCrystalsToDustAmount(aetheriumCrystals);
+}
 function convertDustToCrystals() {
-    const kg = Math.floor(aetheriumDust / 1000000); // 1,000,000 mg = 1 kg = 1 Crystal
+    const kg = Math.floor(aetheriumDust / 1000000);
     if (kg < 1) {
         addFloatingText(width/2, 100, "Need at least 1 kg of dust!", '#f87171');
         return;
     }
-    aetheriumCrystals += kg;
-    aetheriumDust -= kg * 1000000;
-
-    playTone(720, 'sine', 0.22, 0.5);
-    addFloatingText(width/2, 90, `+${kg} Crystal${kg > 1 ? 's' : ''}`, '#f472b6');
-    updateAetheriumUI();
-    showInventory();
+    convertDustToCrystalsAmount(kg);
 }
+
 function showFurnaceModal() {
     const modal = document.getElementById('furnace-modal');
     if (!modal) {
@@ -2217,7 +2217,6 @@ function showFurnaceModal() {
     modal.classList.remove('hidden');
     modal.classList.add('flex');
 }
-
 function hideFurnaceModal() {
     const modal = document.getElementById('furnace-modal');
     if (modal) {
@@ -2225,16 +2224,14 @@ function hideFurnaceModal() {
         modal.classList.add('hidden');
     }
 }
-  
+ 
 // ==================== END FURNACE + CONVERSION ====================
-
 // ==================== PERFORMANCE & ENVIRONMENT ====================
 let frameCountForFPS = 0;
 let lastFPSUpdate = 0;
 let currentFPS = 60;
 let miniChartCtx;
 let graphData = { pop: [], modules: [], predators: [], greenFood: [], blueFood: [], hr: [] };
-
 const CHART_COLORS = {
     pop: '#34d399',
     predators: '#f87171',
@@ -2243,7 +2240,6 @@ const CHART_COLORS = {
     greenFood: '#10b981',
     blueFood: '#38bdf8'
 };
-
 let miniChartVisible = {
     pop: true,
     predators: true,
@@ -2252,12 +2248,10 @@ let miniChartVisible = {
     greenFood: true,
     blueFood: true
 };
-
 let environmentPhase = 0;
 let envCycleLength = 2200;
 let envPhaseProgress = 0;
 let envLabelElement = null;
-
 let settings = {
     energyDrain: 0.28,
     particleFoodValue: 1.3,
@@ -2273,7 +2267,6 @@ function generateSciFiName() {
     const suffixes = ['-9','-12','ara','ith','on','yx','ar','en','os','ix','ael','or'];
     return prefixes[Math.floor(Math.random()*prefixes.length)] + suffixes[Math.floor(Math.random()*suffixes.length)];
 }
-
 // ==================== FLOATING TEXT ====================
 class FloatingText {
     constructor(x, y, text, color = '#34d399') {
@@ -2302,13 +2295,10 @@ class FloatingText {
         pop();
     }
 }
-
 function addFloatingText(x, y, text, color = '#34d399') {
     floatingTexts.push(new FloatingText(x, y, text, color));
 }
-
 function setupSoundSliders() {}
-
 function setupSliders() {
     setupSoundSliders();
     const mappings = [
@@ -2332,16 +2322,13 @@ function setupSliders() {
         }
     });
 }
-
 // ==================== MODALS (Extract Egg, Top Creatures, etc.) ====================
 // ==================== EXTRACT TO EGG MODAL ====================
 function showExtractEggModal() {
     const modal = document.getElementById('extract-egg-modal');
     const listContainer = document.getElementById('extract-egg-list');
     if (!modal || !listContainer) return;
-
     listContainer.innerHTML = '';
-
     const balanceDiv = document.createElement('div');
     balanceDiv.className = 'mb-4 px-1 flex justify-between items-center text-sm border-b border-white/10 pb-3';
     balanceDiv.innerHTML = `
@@ -2349,13 +2336,11 @@ function showExtractEggModal() {
         <span class="font-mono text-2xl text-violet-400 font-semibold">${totalScore.toLocaleString()}</span>
     `;
     listContainer.appendChild(balanceDiv);
-
     let sorted = [...creatures].sort((a, b) => {
         let scoreA = (a.modules?.length || 0) * 3 + (a.killCount || 0) * 2 + (a.childrenCount || 0);
         let scoreB = (b.modules?.length || 0) * 3 + (b.killCount || 0) * 2 + (b.childrenCount || 0);
         return scoreB - scoreA;
     }).slice(0, 10);
-
     if (sorted.length === 0) {
         listContainer.innerHTML += `<div class="text-center text-white/60 py-8">No creatures available yet.</div>`;
     } else {
@@ -2373,11 +2358,9 @@ function showExtractEggModal() {
             listContainer.appendChild(div);
         });
     }
-
     modal.classList.remove('hidden');
     modal.classList.add('flex');
 }
-
 function extractCreatureToEgg(creature) {
     if (eggs.length >= MAX_EGGS) {
         alert(`Your Egg Inventory is full (${MAX_EGGS} max).`);
@@ -2387,15 +2370,12 @@ function extractCreatureToEgg(creature) {
         alert("You need 250,000 High Roller Points.");
         return;
     }
-
     totalScore -= 250000;
     updateMainStats();
     updateEggCountBadge();
-
     addFloatingText(creature.x, creature.y - 30, "-250,000", '#fbbf24');
     playTone(620, 'sine', 0.18, 0.6);
     setTimeout(() => playTone(880, 'sine', 0.12, 0.4), 110);
-
     // === Save full brain data ===
     let brainData = null;
     if (creature.brain) {
@@ -2408,7 +2388,6 @@ function extractCreatureToEgg(creature) {
             connectionStrengthHO: JSON.parse(JSON.stringify(creature.brain.connectionStrengthHO || []))
         };
     }
-
     const eggData = {
         name: creature.name,
         generation: creature.generation,
@@ -2418,19 +2397,14 @@ function extractCreatureToEgg(creature) {
         traits: JSON.parse(JSON.stringify(creature.traits || {})),
         brain: brainData
     };
-
     eggs.push(eggData);
-
     const index = creatures.indexOf(creature);
     if (index > -1) creatures.splice(index, 1);
-
     if (selectedCreature === creature) {
         deselectCreature();
     }
-
     showExtractEggModal();
 }
-
 // ==================== TOP 10 CREATURES MODAL (with body previews + Extract) ====================
 function showTopCreaturesModal() {
     const modal = document.getElementById('top-creatures-modal');
@@ -2438,59 +2412,49 @@ function showTopCreaturesModal() {
         console.error("Modal not found");
         return;
     }
-
     if (modal.parentElement !== document.body) {
         document.body.appendChild(modal);
     }
-
-    modal.style.cssText = `
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        position: fixed !important;
-        inset: 0 !important;
-        background-color: rgba(0, 0, 0, 0.8) !important;
-        z-index: 99999 !important;
-    `;
+    // Robust display forcing
+    modal.style.display = 'flex';
+    modal.style.alignItems = 'center';
+    modal.style.justifyContent = 'center';
+    modal.style.position = 'fixed';
+    modal.style.inset = '0';
+    modal.style.backgroundColor = 'rgba(0, 0, 0, 0.85)';
+    modal.style.zIndex = '99999';
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
 
     const listContainer = document.getElementById('top-creatures-list');
     if (!listContainer) return;
-
     listContainer.innerHTML = '';
-
     let sorted = [...creatures].sort((a, b) => {
         let scoreA = (a.modules?.length || 0) * 2.5 + (a.killCount || 0) * 4 + (a.childrenCount || 0) * 3 + (a.energy || 0) * 0.6;
         let scoreB = (b.modules?.length || 0) * 2.5 + (b.killCount || 0) * 4 + (b.childrenCount || 0) * 3 + (b.energy || 0) * 0.6;
-
         let tierA = a.modules.reduce((sum, m) => sum + (m.tier || 1), 0);
         let tierB = b.modules.reduce((sum, m) => sum + (m.tier || 1), 0);
         scoreA += tierA * 1.2;
         scoreB += tierB * 1.2;
-
         return scoreB - scoreA;
     }).slice(0, 10);
-
     if (sorted.length === 0) {
         listContainer.innerHTML = `<div class="text-center text-white/60 py-8">No creatures available yet.</div>`;
     } else {
         sorted.forEach(creature => {
             const div = document.createElement('div');
             div.className = 'flex items-center gap-3 bg-white/5 hover:bg-white/10 rounded-2xl px-3 py-2.5 transition-colors';
-
             const tierTotal = creature.modules.reduce((sum, m) => sum + (m.tier || 1), 0);
             const canvasId = `top10-preview-${creature.name.replace(/\s+/g, '')}-${Date.now()}`;
-
             div.innerHTML = `
                 <canvas id="${canvasId}" width="46" height="46"
                         class="rounded-xl border border-white/10 bg-[#111113] flex-shrink-0"></canvas>
-
                 <div class="flex-1 min-w-0">
                     <div class="font-semibold text-emerald-400">${creature.name}</div>
                     <div class="text-xs text-white/60">
                         Gen ${creature.generation} • ${creature.modules.length} modules (T${tierTotal}) • ${creature.killCount || 0} kills
                     </div>
                 </div>
-
                 <div class="flex items-center gap-2 flex-shrink-0">
                     <button class="extract-btn px-3 py-1 text-xs rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-medium">
                         Extract
@@ -2500,7 +2464,6 @@ function showTopCreaturesModal() {
                     </button>
                 </div>
             `;
-
             // Extract button
             const extractBtn = div.querySelector('.extract-btn');
             extractBtn.onclick = (e) => {
@@ -2511,7 +2474,6 @@ function showTopCreaturesModal() {
                     showTopCreaturesModal();
                 }, 100);
             };
-
             // Inspect button
             const inspectBtn = div.querySelector('.inspect-btn');
             inspectBtn.onclick = (e) => {
@@ -2521,9 +2483,7 @@ function showTopCreaturesModal() {
                 isInspectorLocked = true;
                 hideTopCreaturesModal();
             };
-
             listContainer.appendChild(div);
-
             // Draw creature body preview
             setTimeout(() => {
                 const canvas = document.getElementById(canvasId);
@@ -2534,11 +2494,11 @@ function showTopCreaturesModal() {
         });
     }
 }
-
 function hideTopCreaturesModal() {
     const modal = document.getElementById('top-creatures-modal');
     if (modal) {
         modal.style.cssText = '';
+        modal.style.display = 'none';
         modal.classList.remove('flex');
         modal.classList.add('hidden');
     }
