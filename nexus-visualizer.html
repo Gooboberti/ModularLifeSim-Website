@@ -1,0 +1,1555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEXUS // VISUALIZER</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&amp;family=Space+Grotesk:wght@500;600&amp;display=swap');
+        
+        :root {
+            --accent: #67e8f9;
+        }
+        
+        body {
+            font-family: 'Inter', system_ui, sans-serif;
+        }
+        
+        .font-display {
+            font-family: 'Space Grotesk', 'Inter', system_ui, sans-serif;
+            font-weight: 600;
+            letter-spacing: -0.025em;
+        }
+
+        .sci-fi-bg {
+            background: 
+                radial-gradient(circle at 50% 20%, rgba(103, 232, 249, 0.03) 0%, transparent 50%),
+                linear-gradient(#0a0a0f, #0a0a0f);
+        }
+
+        .neon-text {
+            text-shadow: 
+                0 0 5px rgb(103 232 249 / 0.5),
+                0 0 20px rgb(103 232 249 / 0.3);
+        }
+
+        .section-header {
+            font-size: 13px;
+            letter-spacing: 1.5px;
+            font-weight: 500;
+            color: rgb(163 163 172);
+        }
+
+        .song-row {
+            transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .song-row:hover {
+            background-color: rgb(39 39 42 / 0.6);
+            transform: translateX(2px);
+        }
+        
+        .song-row.playing {
+            background-color: rgb(103 232 249 / 0.08);
+            border-left: 3px solid #67e8f9;
+        }
+
+        .viz-canvas {
+            image-rendering: crisp-edges;
+            background: #05050a;
+        }
+
+        .modal {
+            animation: modalEnter 0.2s cubic-bezier(0.32, 0.72, 0, 1);
+        }
+
+        @keyframes modalEnter {
+            from { opacity: 0; transform: scale(0.985); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        .neon-glow {
+            box-shadow: 0 0 15px rgb(103 232 249 / 0.4);
+        }
+
+        .hud-text {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            letter-spacing: 1px;
+        }
+
+        .viz-select {
+            background: rgb(24 24 27);
+            color: white;
+            border: 1px solid rgb(63 63 70);
+        }
+
+        .viz-select:focus {
+            border-color: #67e8f9;
+            box-shadow: 0 0 0 3px rgb(103 232 249 / 0.1);
+            outline: none;
+        }
+
+        .control-btn {
+            transition: all 0.1s ease;
+        }
+        
+        .control-btn:hover {
+            background-color: rgb(63 63 70);
+            transform: scale(1.05);
+        }
+
+        .mini-viz {
+            background: #05050a;
+        }
+
+        .empty-state {
+            background: linear-gradient(145deg, #111113 0%, #0a0a0f 100%);
+        }
+
+        .frequency-bar {
+            transition: height 0.05s linear;
+        }
+
+        .sci-fi-grid {
+            background-image: 
+                linear-gradient(rgba(103,232,249,0.035) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(103,232,249,0.035) 1px, transparent 1px);
+            background-size: 24px 24px;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body class="bg-zinc-950 text-zinc-200 sci-fi-bg min-h-screen">
+    <!-- Header -->
+    <header class="border-b border-zinc-800 bg-zinc-950/90 backdrop-blur-xl sticky top-0 z-40">
+        <div class="max-w-screen-2xl mx-auto px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-x-4">
+                <!-- Logo -->
+                <div class="flex items-center gap-x-3">
+                    <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-cyan-400 to-teal-400 flex items-center justify-center shadow-inner">
+                        <div class="w-6 h-6 bg-zinc-950 rounded-xl flex items-center justify-center">
+                            <i class="fa-solid fa-waveform-lines text-cyan-400 text-xl"></i>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="font-display text-2xl tracking-tighter font-semibold">NEXUS</div>
+                        <div class="text-[10px] text-cyan-400/70 -mt-1.5 tracking-[2px]">VISUALIZER</div>
+                    </div>
+                </div>
+                <div class="hidden md:block px-3 py-1 text-xs rounded-full border border-zinc-800 text-zinc-400">
+                    CLASSIC WINDOWS REIMAGINED
+                </div>
+            </div>
+
+            <div class="flex items-center gap-x-3">
+                <button onclick="showHelp()" 
+                        class="px-4 py-2 text-xs flex items-center gap-x-2 text-zinc-400 hover:text-zinc-200 transition-colors">
+                    <i class="fa-solid fa-question-circle"></i>
+                    <span class="hidden sm:inline">HOW IT WORKS</span>
+                </button>
+                
+                <button id="load-folder-btn"
+                        class="flex items-center gap-x-2.5 px-5 py-2 bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-950 transition-all border border-zinc-700 hover:border-zinc-600 rounded-2xl text-sm font-medium">
+                    <i class="fa-solid fa-folder-open"></i>
+                    <span>LOAD MUSIC FOLDER</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <div class="max-w-screen-2xl mx-auto px-8 pt-8 pb-24">
+        <!-- Hero / Status -->
+        <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-y-4 mb-8">
+            <div>
+                <div class="flex items-center gap-x-3">
+                    <h1 class="font-display text-5xl tracking-tighter">Music Library</h1>
+                    <div id="track-count" 
+                         class="px-4 py-1 text-xs font-mono bg-zinc-900 border border-zinc-800 rounded-3xl flex items-center h-fit">
+                        0 TRACKS
+                    </div>
+                </div>
+                <p class="text-zinc-400 mt-1.5 max-w-md">Select a folder of audio files. Click any track to play. Open the full-screen visualizer for the classic experience.</p>
+            </div>
+            
+            <div class="flex items-center gap-x-3">
+                <div class="relative w-72">
+                    <input type="text" id="search-input" placeholder="Search tracks..." 
+                           class="w-full bg-zinc-900 border border-zinc-800 focus:border-cyan-400/60 transition-colors pl-10 pr-4 py-2.5 text-sm rounded-3xl placeholder:text-zinc-500">
+                    <i class="fa-solid fa-search absolute left-4 top-3.5 text-zinc-500"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Song Library -->
+        <div class="bg-zinc-900/60 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl">
+            <!-- List Header -->
+            <div class="px-6 py-4 border-b border-zinc-800 flex items-center text-xs uppercase tracking-widest text-zinc-400">
+                <div class="w-8"></div>
+                <div class="flex-1 px-2">TRACK</div>
+                <div class="w-24 text-right pr-2 hidden md:block">DURATION</div>
+                <div class="w-10"></div>
+            </div>
+            
+            <!-- Songs Container -->
+            <div id="song-list" 
+                 class="min-h-[420px] max-h-[58vh] overflow-y-auto divide-y divide-zinc-800 text-sm">
+                <!-- Populated dynamically by JS -->
+            </div>
+            
+            <!-- Empty State -->
+            <div id="empty-state" class="hidden px-8 py-16 text-center">
+                <div class="mx-auto w-16 h-16 bg-zinc-800 rounded-3xl flex items-center justify-center mb-6">
+                    <i class="fa-solid fa-music text-4xl text-zinc-600"></i>
+                </div>
+                <h3 class="font-medium text-xl tracking-tight">No tracks loaded yet</h3>
+                <p class="text-zinc-400 mt-2 max-w-xs mx-auto">Click the button above to select your music folder. All common audio formats are supported.</p>
+                <button onclick="document.getElementById('load-folder-btn').click()"
+                        class="mt-6 px-6 py-2.5 text-sm border border-zinc-700 hover:bg-zinc-800 rounded-2xl inline-flex items-center gap-x-2">
+                    <i class="fa-solid fa-folder"></i>
+                    <span>Select Folder</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Now Playing Bar -->
+        <div id="now-playing-bar" 
+             class="mt-6 bg-zinc-900 border border-zinc-800 rounded-3xl p-5 flex flex-col lg:flex-row lg:items-center gap-5 shadow-xl">
+            
+            <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-x-3">
+                    <div id="np-artwork" 
+                         class="w-11 h-11 bg-zinc-800 border border-zinc-700 rounded-2xl flex-shrink-0 flex items-center justify-center overflow-hidden">
+                        <i class="fa-solid fa-music text-xl text-zinc-500"></i>
+                    </div>
+                    <div class="min-w-0 flex-1">
+                        <div id="np-title" class="font-semibold text-lg tracking-tight truncate">No track selected</div>
+                        <div id="np-subtitle" class="text-xs text-zinc-400 flex items-center gap-x-1.5">
+                            <span id="np-artist">Select a song to begin</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Progress -->
+            <div class="flex-1 lg:max-w-md">
+                <div class="flex items-center gap-x-3 text-xs font-mono text-zinc-400">
+                    <div id="np-current-time" class="w-12 text-right tabular-nums">0:00</div>
+                    <input type="range" id="progress-slider" 
+                           class="flex-1 accent-cyan-400 cursor-pointer" min="0" max="100" step="0.1" value="0">
+                    <div id="np-duration" class="w-12 tabular-nums">0:00</div>
+                </div>
+            </div>
+
+            <!-- Controls -->
+            <div class="flex items-center justify-center gap-x-2 lg:gap-x-1">
+                <button id="prev-btn"
+                        class="control-btn w-10 h-10 flex items-center justify-center text-xl text-zinc-300 hover:text-white rounded-2xl hover:bg-zinc-800">
+                    <i class="fa-solid fa-step-backward"></i>
+                </button>
+                
+                <button id="play-btn"
+                        class="control-btn w-14 h-14 flex items-center justify-center bg-white text-zinc-950 hover:bg-zinc-100 active:scale-95 transition-all shadow-inner rounded-3xl text-3xl">
+                    <i class="fa-solid fa-play ml-0.5" id="play-icon"></i>
+                </button>
+                
+                <button id="next-btn"
+                        class="control-btn w-10 h-10 flex items-center justify-center text-xl text-zinc-300 hover:text-white rounded-2xl hover:bg-zinc-800">
+                    <i class="fa-solid fa-step-forward"></i>
+                </button>
+
+                <div class="w-px h-7 bg-zinc-700 mx-3 hidden lg:block"></div>
+
+                <!-- Volume -->
+                <div class="hidden md:flex items-center gap-x-2 text-zinc-400">
+                    <i class="fa-solid fa-volume-down text-sm"></i>
+                    <input type="range" id="volume-slider" 
+                           class="w-24 accent-cyan-400 cursor-pointer" min="0" max="1" step="0.01" value="0.85">
+                </div>
+
+                <!-- Open Visualizer -->
+                <button id="open-viz-btn"
+                        class="ml-2 lg:ml-4 px-6 py-3 text-sm font-semibold tracking-wider flex items-center gap-x-2.5 border border-cyan-400/70 hover:bg-cyan-400/10 hover:border-cyan-400 text-cyan-400 transition-all rounded-3xl active:scale-[0.985]">
+                    <span class="font-display">VISUALIZE</span>
+                    <i class="fa-solid fa-expand"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Full Screen Visualizer Modal -->
+    <div id="viz-modal" class="hidden fixed inset-0 z-[100] bg-black flex flex-col">
+        <!-- Top HUD Bar -->
+        <div class="h-14 flex-shrink-0 border-b border-white/10 bg-black/70 backdrop-blur-2xl flex items-center px-6 z-10">
+            <div class="flex items-center gap-x-4 flex-1 min-w-0">
+                <div>
+                    <div id="modal-song-title" class="font-semibold text-xl tracking-tighter truncate max-w-[420px]"></div>
+                    <div id="modal-song-subtitle" class="text-xs text-white/50 -mt-0.5"></div>
+                </div>
+            </div>
+
+            <!-- Visualizer Selector -->
+            <div class="flex items-center gap-x-3">
+                <div class="flex items-center text-xs bg-zinc-900 border border-white/10 rounded-2xl overflow-hidden">
+                    <div class="px-4 text-white/50 py-2 text-xs tracking-widest">MODE</div>
+                    <select id="viz-select" 
+                            class="viz-select px-5 py-2 text-sm font-medium cursor-pointer focus:outline-none border-l border-white/10">
+                        <!-- Populated by JS -->
+                    </select>
+                </div>
+                
+                <button id="close-viz-btn"
+                        class="w-9 h-9 flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 rounded-2xl transition-colors">
+                    <i class="fa-solid fa-times text-xl"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Canvas Container -->
+        <div id="canvas-container" class="flex-1 relative overflow-hidden bg-[#05050a]">
+            <canvas id="viz-canvas" class="viz-canvas absolute inset-0 w-full h-full"></canvas>
+            
+            <!-- Subtle sci-fi overlay -->
+            <div class="absolute inset-0 sci-fi-grid opacity-40 pointer-events-none"></div>
+            <div class="absolute inset-0 bg-[radial-gradient(#67e8f920_0.5px,transparent_1px)] bg-[length:3px_3px] pointer-events-none"></div>
+            
+            <!-- Floating HUD elements -->
+            <div class="absolute top-6 right-6 text-right pointer-events-none">
+                <div class="text-[10px] font-mono text-white/30 tracking-[3px]">NEXUS // LIVE FEED</div>
+                <div id="viz-mode-label" 
+                     class="text-xs font-medium text-cyan-400/90 tracking-wider mt-0.5"></div>
+            </div>
+            
+            <div class="absolute bottom-6 left-6 text-xs font-mono text-white/30 pointer-events-none hidden lg:block">
+                PRESS <span class="px-1.5 py-px bg-white/10 rounded">ESC</span> TO EXIT &nbsp;•&nbsp; CLICK CANVAS TO PAUSE
+            </div>
+        </div>
+
+        <!-- Bottom Control Bar -->
+        <div class="h-[68px] flex-shrink-0 border-t border-white/10 bg-black/80 backdrop-blur-2xl flex items-center px-6 z-10">
+            <div class="flex items-center gap-x-5 w-full">
+                <!-- Playback Controls -->
+                <div class="flex items-center gap-x-1.5">
+                    <button id="modal-prev-btn" class="control-btn w-9 h-9 flex items-center justify-center text-white/80 hover:text-white rounded-xl hover:bg-white/5">
+                        <i class="fa-solid fa-step-backward"></i>
+                    </button>
+                    <button id="modal-play-btn"
+                            class="control-btn w-11 h-11 flex items-center justify-center bg-white/95 text-zinc-950 hover:bg-white rounded-2xl text-2xl shadow-inner active:scale-95">
+                        <i class="fa-solid fa-play ml-[3px]" id="modal-play-icon"></i>
+                    </button>
+                    <button id="modal-next-btn" class="control-btn w-9 h-9 flex items-center justify-center text-white/80 hover:text-white rounded-xl hover:bg-white/5">
+                        <i class="fa-solid fa-step-forward"></i>
+                    </button>
+                </div>
+
+                <!-- Time + Progress -->
+                <div class="flex items-center gap-x-3 flex-1 max-w-2xl">
+                    <div id="modal-current-time" class="font-mono text-xs text-white/60 w-11 text-right tabular-nums">0:00</div>
+                    
+                    <input type="range" id="modal-progress-slider" 
+                           class="flex-1 accent-cyan-400 cursor-pointer" min="0" max="100" step="0.05" value="0">
+                    
+                    <div id="modal-duration" class="font-mono text-xs text-white/60 w-11 tabular-nums">0:00</div>
+                </div>
+
+                <div class="flex-1"></div>
+
+                <!-- Intensity + Extras -->
+                <div class="hidden xl:flex items-center gap-x-4 text-xs">
+                    <div class="flex items-center gap-x-2 text-white/50">
+                        <span class="font-mono tracking-widest text-[10px]">INTENSITY</span>
+                        <input type="range" id="intensity-slider" 
+                               class="w-28 accent-cyan-400" min="0.4" max="2.2" step="0.05" value="1.15">
+                    </div>
+                </div>
+
+                <button onclick="randomizeVisualizer()" 
+                        class="text-xs px-4 py-2 border border-white/10 hover:bg-white/5 rounded-2xl flex items-center gap-x-2 text-white/60 hover:text-white/90 transition-colors">
+                    <i class="fa-solid fa-random text-xs"></i>
+                    <span class="hidden lg:inline text-xs tracking-wider">RANDOM</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden Audio Element -->
+    <audio id="audio-player" class="hidden"></audio>
+    
+    <!-- Hidden File Input for Folder -->
+    <input type="file" id="folder-input" webkitdirectory directory multiple class="hidden">
+
+    <script>
+        // Tailwind script
+        function initializeTailwind() {
+            document.documentElement.style.setProperty('--accent', '#67e8f9');
+        }
+
+        // ==================== STATE ====================
+        let audioContext = null;
+        let analyser = null;
+        let sourceNode = null;
+        let audio = null;
+        
+        let songs = []; // {id, file, name, url, duration, formattedName}
+        let currentSong = null;
+        let currentIndex = -1;
+        let isPlaying = false;
+        
+        let currentViz = 'bars';
+        let intensity = 1.15;
+        let particles = [];
+        let animationFrameId = null;
+        let vizModalOpen = false;
+        
+        let vizPresets = [
+            { id: 'bars', name: 'Classic Bars', desc: 'Vertical frequency spectrum — classic Windows Media Player style' },
+            { id: 'scope', name: 'Oscilloscope', desc: 'Realtime waveform scope with persistence' },
+            { id: 'radial', name: 'Radial Core', desc: 'Pulsing central orb with frequency spokes' },
+            { id: 'particles', name: 'Particle Swarm', desc: 'Beat-reactive energy motes floating in the void' },
+            { id: 'waterfall', name: 'Spectrogram Waterfall', desc: 'Scrolling frequency history — evolution over time' },
+            { id: 'tunnel', name: 'Hyperspace Tunnel', desc: 'Depth-reactive concentric energy rings' }
+        ];
+
+        // ==================== HELPERS ====================
+        function formatTime(seconds) {
+            if (!seconds || isNaN(seconds)) return '0:00';
+            const min = Math.floor(seconds / 60);
+            const sec = Math.floor(seconds % 60);
+            return `${min}:${sec.toString().padStart(2, '0')}`;
+        }
+
+        function formatSongName(filename) {
+            let name = filename.replace(/\.[^/.]+$/, "");
+            name = name.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
+            return name.replace(/\b\w/g, char => char.toUpperCase());
+        }
+
+        function getAverage(dataArray, start, end) {
+            let sum = 0;
+            const s = Math.max(0, start);
+            const e = Math.min(dataArray.length, end);
+            for (let i = s; i < e; i++) {
+                sum += dataArray[i];
+            }
+            return sum / (e - s || 1);
+        }
+
+        function initAudioContext() {
+            if (audioContext) return;
+            try {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 512;
+                analyser.smoothingTimeConstant = 0.78;
+                analyser.minDecibels = -85;
+                analyser.maxDecibels = -10;
+            } catch (e) {
+                console.error("Web Audio API not supported", e);
+                alert("Your browser does not support the Web Audio API required for visualizations.");
+            }
+        }
+
+        function connectAudioSource() {
+            if (!audioContext || !analyser || sourceNode) return;
+            try {
+                sourceNode = audioContext.createMediaElementSource(audio);
+                sourceNode.connect(analyser);
+                analyser.connect(audioContext.destination);
+            } catch (e) {
+                console.warn("Audio source connection issue:", e);
+            }
+        }
+
+        // ==================== SONG LOADING ====================
+        async function loadMusicFolder() {
+            const input = document.getElementById('folder-input');
+            input.onchange = async (e) => {
+                const files = Array.from(e.target.files).filter(file => {
+                    const ext = file.name.split('.').pop().toLowerCase();
+                    return ['mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac', 'webm'].includes(ext) || file.type.startsWith('audio/');
+                });
+
+                if (files.length === 0) {
+                    alert("No audio files found in the selected folder.");
+                    return;
+                }
+
+                // Clear previous
+                songs = [];
+                document.getElementById('song-list').innerHTML = '';
+                document.getElementById('empty-state').classList.add('hidden');
+
+                // Create song objects
+                const newSongs = files.map((file, index) => ({
+                    id: Date.now() + index,
+                    file: file,
+                    name: file.name,
+                    formattedName: formatSongName(file.name),
+                    url: URL.createObjectURL(file),
+                    duration: null
+                }));
+
+                songs = newSongs;
+                renderSongList();
+
+                // Asynchronously load durations
+                loadDurationsInBackground();
+
+                // Update count
+                updateTrackCount();
+                
+                // Auto play first track?
+                // if (songs.length > 0) playSong(songs[0]);
+            };
+            input.click();
+        }
+
+        async function loadDurationsInBackground() {
+            const promises = songs.map(async (song, idx) => {
+                if (song.duration !== null) return;
+                try {
+                    const dur = await getAudioDuration(song.file);
+                    song.duration = dur;
+                    // Update only that row if it exists
+                    updateSongRowDuration(song.id, dur);
+                } catch (e) {
+                    song.duration = 0;
+                }
+            });
+            await Promise.allSettled(promises);
+        }
+
+        function getAudioDuration(file) {
+            return new Promise((resolve) => {
+                const tempAudio = new Audio();
+                tempAudio.src = URL.createObjectURL(file);
+                tempAudio.onloadedmetadata = () => {
+                    const duration = tempAudio.duration;
+                    URL.revokeObjectURL(tempAudio.src);
+                    resolve(duration || 0);
+                };
+                tempAudio.onerror = () => resolve(0);
+            });
+        }
+
+        function updateSongRowDuration(songId, duration) {
+            const row = document.querySelector(`[data-song-id="${songId}"]`);
+            if (!row) return;
+            const durEl = row.querySelector('.duration-badge');
+            if (durEl) {
+                durEl.textContent = formatTime(duration);
+            }
+        }
+
+        function updateTrackCount() {
+            const countEl = document.getElementById('track-count');
+            countEl.textContent = `${songs.length} TRACK${songs.length === 1 ? '' : 'S'}`;
+        }
+
+        // ==================== SONG LIST RENDER ====================
+        function renderSongList(filteredSongs = null) {
+            const container = document.getElementById('song-list');
+            const emptyState = document.getElementById('empty-state');
+            
+            const toRender = filteredSongs || songs;
+            
+            if (toRender.length === 0) {
+                container.innerHTML = '';
+                emptyState.classList.remove('hidden');
+                return;
+            }
+            
+            emptyState.classList.add('hidden');
+            container.innerHTML = '';
+
+            toRender.forEach((song, index) => {
+                const isCurrent = currentSong && currentSong.id === song.id;
+                
+                const row = document.createElement('div');
+                row.className = `song-row group flex items-center px-5 py-[13px] cursor-pointer border-b border-zinc-800 last:border-b-0 ${isCurrent ? 'playing' : ''}`;
+                row.dataset.songId = song.id;
+                
+                row.innerHTML = `
+                    <div class="w-8 flex-shrink-0 flex justify-center">
+                        <div class="w-6 h-6 flex items-center justify-center text-cyan-400/70 group-hover:text-cyan-400 transition-colors">
+                            ${isCurrent && isPlaying ? 
+                                `<i class="fa-solid fa-volume-up fa-beat text-sm"></i>` : 
+                                `<i class="fa-solid fa-play text-xs ml-0.5 group-hover:scale-110 transition-transform"></i>`}
+                        </div>
+                    </div>
+                    
+                    <div class="flex-1 min-w-0 px-2">
+                        <div class="font-medium truncate tracking-tight pr-4">${song.formattedName}</div>
+                        <div class="text-[10px] text-zinc-500 font-mono truncate">${song.name}</div>
+                    </div>
+                    
+                    <div class="w-24 text-right pr-4 hidden md:block">
+                        <span class="duration-badge px-3 py-px text-xs font-mono bg-zinc-800 text-zinc-400 rounded-2xl">
+                            ${song.duration ? formatTime(song.duration) : '—:—'}
+                        </span>
+                    </div>
+                    
+                    <div class="w-9 flex justify-end">
+                        <button class="play-btn opacity-0 group-hover:opacity-100 px-3 py-1.5 text-cyan-400 hover:bg-cyan-400/10 rounded-2xl transition-all text-xs font-medium tracking-wider">
+                            PLAY
+                        </button>
+                    </div>
+                `;
+                
+                // Click handlers
+                row.addEventListener('click', (e) => {
+                    if (!e.target.closest('.play-btn')) {
+                        playSong(song);
+                    }
+                });
+                
+                const playBtn = row.querySelector('.play-btn');
+                playBtn.addEventListener('click', (e) => {
+                    e.stopImmediatePropagation();
+                    playSong(song);
+                });
+                
+                container.appendChild(row);
+            });
+        }
+
+        function filterSongs() {
+            const query = document.getElementById('search-input').value.toLowerCase().trim();
+            if (!query) {
+                renderSongList();
+                return;
+            }
+            const filtered = songs.filter(s => 
+                s.formattedName.toLowerCase().includes(query) || 
+                s.name.toLowerCase().includes(query)
+            );
+            renderSongList(filtered);
+        }
+
+        // ==================== PLAYBACK ====================
+        function playSong(song) {
+            if (!song || !song.url) return;
+            
+            initAudioContext();
+            
+            if (!audio) {
+                audio = document.getElementById('audio-player');
+                setupAudioListeners();
+            }
+            
+            // If same song and playing, just pause
+            if (currentSong && currentSong.id === song.id && !audio.paused) {
+                audio.pause();
+                return;
+            }
+            
+            currentSong = song;
+            currentIndex = songs.findIndex(s => s.id === song.id);
+            
+            audio.src = song.url;
+            audio.load();
+            
+            // Connect source on first play or after src change
+            setTimeout(() => {
+                if (audioContext && !sourceNode) {
+                    connectAudioSource();
+                }
+            }, 80);
+            
+            audio.play().then(() => {
+                isPlaying = true;
+                updateNowPlayingUI();
+                updateAllPlayButtons();
+                renderSongList(); // refresh to show playing state
+                
+                // Auto-open visualizer on first play? Optional delight
+                // if (!vizModalOpen && songs.length > 0) openVisualizerModal();
+            }).catch(err => {
+                console.error("Playback failed:", err);
+                alert("Playback failed. Try a different track or check browser permissions.");
+            });
+        }
+
+        function setupAudioListeners() {
+            if (!audio) return;
+            
+            audio.onplay = () => {
+                isPlaying = true;
+                updateAllPlayButtons();
+                if (vizModalOpen) startVizLoop();
+            };
+            
+            audio.onpause = () => {
+                isPlaying = false;
+                updateAllPlayButtons();
+            };
+            
+            audio.onended = () => {
+                isPlaying = false;
+                updateAllPlayButtons();
+                // Auto next
+                if (currentIndex >= 0 && currentIndex < songs.length - 1) {
+                    setTimeout(() => playSong(songs[currentIndex + 1]), 420);
+                } else {
+                    // loop or stop
+                    if (currentSong) {
+                        // restart current for now
+                        audio.currentTime = 0;
+                        audio.play();
+                    }
+                }
+            };
+            
+            audio.ontimeupdate = () => {
+                updateProgressUI();
+            };
+            
+            audio.onloadedmetadata = () => {
+                updateDurationUI();
+            };
+            
+            // Volume sync
+            const volSlider = document.getElementById('volume-slider');
+            if (volSlider) {
+                audio.volume = parseFloat(volSlider.value);
+                volSlider.oninput = () => {
+                    audio.volume = parseFloat(volSlider.value);
+                };
+            }
+        }
+
+        function togglePlay() {
+            if (!audio || !currentSong) {
+                if (songs.length > 0) playSong(songs[0]);
+                return;
+            }
+            
+            if (audio.paused) {
+                audio.play();
+            } else {
+                audio.pause();
+            }
+        }
+
+        function playNext() {
+            if (!songs.length) return;
+            let nextIdx = currentIndex + 1;
+            if (nextIdx >= songs.length) nextIdx = 0;
+            playSong(songs[nextIdx]);
+        }
+
+        function playPrev() {
+            if (!songs.length) return;
+            let prevIdx = currentIndex - 1;
+            if (prevIdx < 0) prevIdx = songs.length - 1;
+            playSong(songs[prevIdx]);
+        }
+
+        function updateNowPlayingUI() {
+            if (!currentSong) return;
+            
+            // Main bar
+            document.getElementById('np-title').textContent = currentSong.formattedName;
+            document.getElementById('np-artist').textContent = currentSong.name.split('.').slice(0, -1).join('.');
+            
+            // Modal
+            const modalTitle = document.getElementById('modal-song-title');
+            const modalSub = document.getElementById('modal-song-subtitle');
+            if (modalTitle) modalTitle.textContent = currentSong.formattedName;
+            if (modalSub) modalSub.textContent = currentSong.name;
+            
+            updateProgressUI();
+            updateDurationUI();
+        }
+
+        function updateProgressUI() {
+            if (!audio || !currentSong) return;
+            
+            const percent = audio.duration ? (audio.currentTime / audio.duration) * 100 : 0;
+            
+            // Main
+            const mainSlider = document.getElementById('progress-slider');
+            if (mainSlider) mainSlider.value = percent;
+            
+            const timeEl = document.getElementById('np-current-time');
+            if (timeEl) timeEl.textContent = formatTime(audio.currentTime);
+            
+            // Modal
+            const modalSlider = document.getElementById('modal-progress-slider');
+            if (modalSlider) modalSlider.value = percent;
+            
+            const modalTime = document.getElementById('modal-current-time');
+            if (modalTime) modalTime.textContent = formatTime(audio.currentTime);
+        }
+
+        function updateDurationUI() {
+            if (!audio || !currentSong) return;
+            
+            const dur = audio.duration || currentSong.duration || 0;
+            
+            // Main
+            const durEl = document.getElementById('np-duration');
+            if (durEl) durEl.textContent = formatTime(dur);
+            
+            // Modal
+            const modalDur = document.getElementById('modal-duration');
+            if (modalDur) modalDur.textContent = formatTime(dur);
+        }
+
+        function updateAllPlayButtons() {
+            const mainIcon = document.getElementById('play-icon');
+            const modalIcon = document.getElementById('modal-play-icon');
+            
+            const isPaused = !isPlaying || (audio && audio.paused);
+            
+            if (mainIcon) {
+                mainIcon.className = isPaused ? 
+                    'fa-solid fa-play ml-0.5' : 
+                    'fa-solid fa-pause';
+            }
+            if (modalIcon) {
+                modalIcon.className = isPaused ? 
+                    'fa-solid fa-play ml-[3px]' : 
+                    'fa-solid fa-pause';
+            }
+            
+            // Re-render list to update playing indicators
+            if (document.getElementById('song-list').children.length > 0) {
+                renderSongList();
+            }
+        }
+
+        function seekTo(percent) {
+            if (!audio || !audio.duration) return;
+            audio.currentTime = (percent / 100) * audio.duration;
+        }
+
+        // ==================== VISUALIZER ====================
+        function populateVizSelect() {
+            const select = document.getElementById('viz-select');
+            if (!select) return;
+            
+            select.innerHTML = '';
+            
+            vizPresets.forEach(preset => {
+                const opt = document.createElement('option');
+                opt.value = preset.id;
+                opt.textContent = preset.name;
+                if (preset.id === currentViz) opt.selected = true;
+                select.appendChild(opt);
+            });
+            
+            select.onchange = (e) => {
+                currentViz = e.target.value;
+                document.getElementById('viz-mode-label').textContent = vizPresets.find(p => p.id === currentViz)?.name.toUpperCase() || '';
+                
+                // Reset particles when switching
+                if (currentViz !== 'particles') {
+                    particles = [];
+                }
+            };
+        }
+
+        function openVisualizerModal() {
+            const modal = document.getElementById('viz-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            vizModalOpen = true;
+            
+            const canvas = document.getElementById('viz-canvas');
+            const container = document.getElementById('canvas-container');
+            
+            // Initial size
+            setTimeout(() => {
+                resizeVizCanvas();
+            }, 60);
+            
+            // Populate / sync select
+            populateVizSelect();
+            
+            // Update labels
+            document.getElementById('viz-mode-label').textContent = 
+                vizPresets.find(p => p.id === currentViz)?.name.toUpperCase() || currentViz.toUpperCase();
+            
+            if (currentSong) {
+                document.getElementById('modal-song-title').textContent = currentSong.formattedName;
+                document.getElementById('modal-song-subtitle').textContent = currentSong.name;
+            } else {
+                document.getElementById('modal-song-title').textContent = 'NO TRACK LOADED';
+                document.getElementById('modal-song-subtitle').textContent = 'Load music and press play';
+            }
+            
+            // Start animation loop
+            if (!animationFrameId) {
+                startVizLoop();
+            }
+            
+            // Keyboard
+            document.addEventListener('keydown', handleVizKeydown, { once: false });
+            
+            // Click canvas to toggle pause
+            canvas.onclick = () => {
+                if (audio && currentSong) togglePlay();
+            };
+            
+            // Sync modal controls
+            setupModalControls();
+        }
+
+        function closeVisualizerModal() {
+            const modal = document.getElementById('viz-modal');
+            modal.classList.remove('flex');
+            modal.classList.add('hidden');
+            vizModalOpen = false;
+            
+            // Stop animation to save resources
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = null;
+            }
+            
+            document.removeEventListener('keydown', handleVizKeydown);
+        }
+
+        function handleVizKeydown(e) {
+            if (e.key === 'Escape') {
+                closeVisualizerModal();
+            }
+            if (e.key === ' ' || e.key === 'k') {
+                e.preventDefault();
+                togglePlay();
+            }
+            if (e.key === 'ArrowRight') playNext();
+            if (e.key === 'ArrowLeft') playPrev();
+            if (e.key.toLowerCase() === 'r') randomizeVisualizer();
+            
+            // Number keys to switch viz quickly
+            const num = parseInt(e.key);
+            if (!isNaN(num) && num >= 1 && num <= vizPresets.length) {
+                currentViz = vizPresets[num - 1].id;
+                const select = document.getElementById('viz-select');
+                if (select) select.value = currentViz;
+                document.getElementById('viz-mode-label').textContent = vizPresets[num-1].name.toUpperCase();
+                if (currentViz !== 'particles') particles = [];
+            }
+        }
+
+        function setupModalControls() {
+            // These are set once or re-bound safely
+            const modalPlay = document.getElementById('modal-play-btn');
+            const modalPrev = document.getElementById('modal-prev-btn');
+            const modalNext = document.getElementById('modal-next-btn');
+            const modalProgress = document.getElementById('modal-progress-slider');
+            const intensitySlider = document.getElementById('intensity-slider');
+            
+            if (modalPlay) modalPlay.onclick = togglePlay;
+            if (modalPrev) modalPrev.onclick = playPrev;
+            if (modalNext) modalNext.onclick = playNext;
+            
+            if (modalProgress) {
+                modalProgress.oninput = (e) => seekTo(parseFloat(e.target.value));
+            }
+            
+            if (intensitySlider) {
+                intensitySlider.value = intensity;
+                intensitySlider.oninput = (e) => {
+                    intensity = parseFloat(e.target.value);
+                };
+            }
+            
+            // Sync main progress too if changed in modal
+            const mainProgress = document.getElementById('progress-slider');
+            if (mainProgress) {
+                mainProgress.oninput = (e) => seekTo(parseFloat(e.target.value));
+            }
+        }
+
+        function resizeVizCanvas() {
+            const canvas = document.getElementById('viz-canvas');
+            const container = document.getElementById('canvas-container');
+            if (!canvas || !container) return;
+            
+            const rect = container.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            
+            canvas.width = Math.floor(rect.width * dpr);
+            canvas.height = Math.floor(rect.height * dpr);
+            
+            canvas.style.width = rect.width + 'px';
+            canvas.style.height = rect.height + 'px';
+            
+            const ctx = canvas.getContext('2d', { alpha: true });
+            ctx.scale(dpr, dpr); // for crisp on high dpi, but we can skip scale for perf in viz
+        }
+
+        function startVizLoop() {
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            
+            const canvas = document.getElementById('viz-canvas');
+            if (!canvas) return;
+            
+            const ctx = canvas.getContext('2d', { alpha: true });
+            
+            function animate() {
+                if (!vizModalOpen) {
+                    animationFrameId = null;
+                    return;
+                }
+                
+                const w = canvas.width / (window.devicePixelRatio || 1);
+                const h = canvas.height / (window.devicePixelRatio || 1);
+                
+                // Base dark sci-fi background with slight fade for trails
+                ctx.fillStyle = 'rgba(5, 5, 10, 0.65)';
+                ctx.fillRect(0, 0, w, h);
+                
+                let dataArray = new Uint8Array(0);
+                let bufferLength = 0;
+                
+                if (analyser && isPlaying && audio && !audio.paused) {
+                    bufferLength = analyser.frequencyBinCount;
+                    dataArray = new Uint8Array(bufferLength);
+                    analyser.getByteFrequencyData(dataArray);
+                } else {
+                    // Idle state or paused - draw subtle idle pattern
+                    bufferLength = 128;
+                    dataArray = new Uint8Array(bufferLength);
+                    // gentle sine idle
+                    const t = Date.now() / 900;
+                    for (let i = 0; i < bufferLength; i++) {
+                        dataArray[i] = Math.floor(40 + Math.sin(t + i * 0.2) * 25);
+                    }
+                }
+                
+                // Dispatch to current visualizer
+                try {
+                    switch (currentViz) {
+                        case 'bars':
+                            drawClassicBars(ctx, dataArray, w, h);
+                            break;
+                        case 'scope':
+                            drawOscilloscope(ctx, dataArray, w, h);
+                            break;
+                        case 'radial':
+                            drawRadialCore(ctx, dataArray, w, h);
+                            break;
+                        case 'particles':
+                            drawParticleSwarm(ctx, dataArray, w, h);
+                            break;
+                        case 'waterfall':
+                            drawWaterfall(ctx, dataArray, w, h);
+                            break;
+                        case 'tunnel':
+                            drawHyperspaceTunnel(ctx, dataArray, w, h);
+                            break;
+                        default:
+                            drawClassicBars(ctx, dataArray, w, h);
+                    }
+                } catch (err) {
+                    console.warn("Viz draw error:", err);
+                }
+                
+                // Subtle corner HUD accents
+                ctx.strokeStyle = 'rgba(103,232,249,0.15)';
+                ctx.lineWidth = 1;
+                // top-left bracket
+                ctx.beginPath();
+                ctx.moveTo(18, 18); ctx.lineTo(18, 38); ctx.moveTo(18, 18); ctx.lineTo(38, 18);
+                ctx.stroke();
+                // bottom-right
+                ctx.beginPath();
+                ctx.moveTo(w-18, h-18); ctx.lineTo(w-18, h-38); ctx.moveTo(w-18, h-18); ctx.lineTo(w-38, h-18);
+                ctx.stroke();
+                
+                animationFrameId = requestAnimationFrame(animate);
+            }
+            
+            animate();
+        }
+
+        function randomizeVisualizer() {
+            const idx = Math.floor(Math.random() * vizPresets.length);
+            currentViz = vizPresets[idx].id;
+            
+            const select = document.getElementById('viz-select');
+            if (select) select.value = currentViz;
+            
+            document.getElementById('viz-mode-label').textContent = vizPresets[idx].name.toUpperCase();
+            
+            if (currentViz !== 'particles') particles = [];
+        }
+
+        // ==================== VISUALIZER DRAW FUNCTIONS ====================
+        
+        function drawClassicBars(ctx, data, w, h) {
+            const bufferLength = data.length;
+            const barWidth = Math.max(3, (w / bufferLength) * 2.8);
+            let x = 0;
+            
+            ctx.shadowBlur = 14;
+            
+            for (let i = 0; i < bufferLength; i += 1) {
+                const val = data[i] * intensity;
+                const barHeight = (val / 255) * h * 0.92;
+                
+                // Classic cyan to violet gradient
+                const hue = 185 + (i / bufferLength) * 55;
+                ctx.shadowColor = `hsl(${hue}, 100%, 68%)`;
+                ctx.fillStyle = `hsl(${hue}, 95%, 62%)`;
+                
+                ctx.fillRect(x, h - barHeight, barWidth - 1.5, barHeight);
+                
+                // Top highlight line
+                ctx.fillStyle = 'rgba(255,255,255,0.35)';
+                ctx.fillRect(x, h - barHeight, barWidth - 1.5, 2);
+                
+                x += barWidth;
+                if (x > w) break;
+            }
+            ctx.shadowBlur = 0;
+        }
+
+        function drawOscilloscope(ctx, data, w, h) {
+            // Fade for classic persistence trail
+            ctx.fillStyle = 'rgba(3, 5, 18, 0.45)';
+            ctx.fillRect(0, 0, w, h);
+            
+            ctx.strokeStyle = '#67e8f9';
+            ctx.lineWidth = 2.2;
+            ctx.shadowBlur = 16;
+            ctx.shadowColor = '#67e8f9';
+            
+            ctx.beginPath();
+            
+            const sliceWidth = w / data.length;
+            let x = 0;
+            
+            for (let i = 0; i < data.length; i++) {
+                const v = (data[i] - 128) / 128.0;
+                const y = (v * (h * 0.48) * intensity) + (h / 2);
+                
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+                x += sliceWidth;
+            }
+            
+            ctx.stroke();
+            
+            // Subtle mirror / reflection
+            ctx.strokeStyle = 'rgba(103,232,249,0.35)';
+            ctx.lineWidth = 1;
+            ctx.shadowBlur = 4;
+            ctx.beginPath();
+            x = 0;
+            for (let i = 0; i < data.length; i++) {
+                const v = (data[i] - 128) / 128.0;
+                const y = (v * (h * 0.22) * intensity) + (h * 0.78);
+                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                x += sliceWidth;
+            }
+            ctx.stroke();
+            
+            ctx.shadowBlur = 0;
+        }
+
+        function drawRadialCore(ctx, data, w, h) {
+            const cx = w / 2;
+            const cy = h / 2;
+            const maxR = Math.min(w, h) * 0.43;
+            
+            const bass = getAverage(data, 0, 18) / 255 * intensity;
+            const mid = getAverage(data, 40, 90) / 255 * intensity;
+            
+            // Background subtle pulse
+            ctx.fillStyle = `rgba(15, 23, 42, ${0.15 + bass * 0.2})`;
+            ctx.fillRect(0, 0, w, h);
+            
+            // Central pulsing orb
+            const coreRadius = 18 + bass * 55;
+            const grad = ctx.createRadialGradient(cx, cy, coreRadius * 0.15, cx, cy, coreRadius * 1.15);
+            grad.addColorStop(0, '#ffffff');
+            grad.addColorStop(0.4, '#67e8f9');
+            grad.addColorStop(0.85, 'rgba(103,232,249,0.15)');
+            grad.addColorStop(1, 'rgba(15,23,42,0)');
+            
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.arc(cx, cy, coreRadius, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Frequency spokes / radial bars
+            const numSpokes = 96;
+            ctx.strokeStyle = '#67e8f9';
+            ctx.lineWidth = 1.6;
+            ctx.shadowBlur = 11;
+            ctx.shadowColor = '#67e8f9';
+            
+            for (let i = 0; i < numSpokes; i++) {
+                const idx = Math.floor((i / numSpokes) * data.length);
+                const amp = (data[idx] / 255) * intensity * 0.95;
+                const angle = (i / numSpokes) * Math.PI * 2;
+                
+                const inner = maxR * 0.28;
+                const outer = inner + (amp * maxR * 0.72);
+                
+                const x1 = cx + Math.cos(angle) * inner;
+                const y1 = cy + Math.sin(angle) * inner;
+                const x2 = cx + Math.cos(angle) * outer;
+                const y2 = cy + Math.sin(angle) * outer;
+                
+                ctx.beginPath();
+                ctx.moveTo(x1, y1);
+                ctx.lineTo(x2, y2);
+                ctx.stroke();
+            }
+            ctx.shadowBlur = 0;
+            
+            // Orbiting energy rings
+            ctx.strokeStyle = 'rgba(103,232,249,0.5)';
+            ctx.lineWidth = 1.5;
+            for (let r = 0.45; r < 0.92; r += 0.18) {
+                const ringR = maxR * r + Math.sin(Date.now() / 380 + r * 6) * (4 + mid * 6);
+                ctx.beginPath();
+                ctx.arc(cx, cy, ringR, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+        }
+
+        function drawParticleSwarm(ctx, data, w, h) {
+            const bass = getAverage(data, 2, 16) / 255;
+            const energy = getAverage(data, 20, 80) / 255 * intensity;
+            
+            // Emit new particles on strong bass
+            if (bass > 0.55 && Math.random() < 0.85) {
+                const emitCount = Math.floor(3 + bass * 7);
+                for (let k = 0; k < emitCount; k++) {
+                    particles.push({
+                        x: w * 0.5 + (Math.random() - 0.5) * 160,
+                        y: h * 0.62 + (Math.random() - 0.5) * 80,
+                        vx: (Math.random() - 0.5) * (5 + bass * 6),
+                        vy: (Math.random() - 0.5) * 3.5 - (1.5 + bass * 2),
+                        size: Math.random() * 3.2 + 1.4,
+                        alpha: 0.85 + Math.random() * 0.15,
+                        hue: 175 + Math.random() * 55,
+                        life: 65 + Math.random() * 45
+                    });
+                }
+            }
+            
+            // Update & draw particles
+            ctx.shadowBlur = 9;
+            
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += 0.035; // gentle gravity
+                p.vx *= 0.985;
+                p.alpha = Math.max(0.05, p.alpha * 0.982);
+                p.life--;
+                
+                if (p.life <= 0 || p.y > h + 30 || p.x < -20 || p.x > w + 20) {
+                    particles.splice(i, 1);
+                    continue;
+                }
+                
+                ctx.fillStyle = `hsla(${p.hue}, 100%, 72%, ${p.alpha})`;
+                ctx.shadowColor = `hsla(${p.hue}, 100%, 65%, 0.6)`;
+                
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            ctx.shadowBlur = 0;
+            
+            // Keep particle count reasonable
+            if (particles.length > 420) {
+                particles.splice(0, particles.length - 380);
+            }
+            
+            // Ambient floating particles when low energy
+            if (particles.length < 35 && Math.random() < 0.6) {
+                particles.push({
+                    x: Math.random() * w,
+                    y: Math.random() * h * 0.9,
+                    vx: (Math.random() - 0.5) * 0.8,
+                    vy: (Math.random() - 0.5) * 0.6,
+                    size: Math.random() * 1.8 + 0.6,
+                    alpha: 0.25,
+                    hue: 190,
+                    life: 140
+                });
+            }
+        }
+
+        function drawWaterfall(ctx, data, w, h) {
+            const scrollSpeed = 1.8;
+            
+            // Scroll previous content upward
+            ctx.drawImage(ctx.canvas, 
+                0, scrollSpeed, w, h - scrollSpeed, 
+                0, 0, w, h - scrollSpeed
+            );
+            
+            // Draw new frequency row at the bottom
+            const barW = w / data.length;
+            const yBase = h - scrollSpeed - 1;
+            
+            for (let i = 0; i < data.length; i++) {
+                const val = data[i] * intensity;
+                const x = i * barW;
+                const brightness = 45 + (val / 255) * 52;
+                const hue = 195 + (i / data.length) * 38;
+                
+                ctx.fillStyle = `hsl(${hue}, 92%, ${brightness}%)`;
+                ctx.fillRect(x, yBase, barW + 0.8, scrollSpeed * 1.6);
+            }
+            
+            // Subtle grid lines on the waterfall
+            ctx.strokeStyle = 'rgba(255,255,255,0.035)';
+            ctx.lineWidth = 0.6;
+            for (let gx = 0; gx < w; gx += 38) {
+                ctx.beginPath();
+                ctx.moveTo(gx, 0);
+                ctx.lineTo(gx, h);
+                ctx.stroke();
+            }
+        }
+
+        function drawHyperspaceTunnel(ctx, data, w, h) {
+            const cx = w / 2;
+            const cy = h / 2;
+            const maxR = Math.min(w, h) * 0.48;
+            
+            const bass = getAverage(data, 0, 14) / 255 * intensity;
+            const treble = getAverage(data, 110, data.length) / 255;
+            
+            ctx.strokeStyle = '#67e8f9';
+            ctx.shadowBlur = 7;
+            ctx.shadowColor = '#67e8f9';
+            
+            const numRings = 11;
+            const time = Date.now() / 420;
+            
+            for (let i = 0; i < numRings; i++) {
+                const progress = i / numRings;
+                let r = 12 + progress * maxR * 1.05 + Math.sin(time + i) * (3 + bass * 8);
+                
+                const alpha = 0.75 - (progress * 0.55);
+                ctx.strokeStyle = `hsla(190, 100%, 72%, ${alpha})`;
+                ctx.lineWidth = 1.8 + (1 - progress) * 2.5;
+                
+                ctx.beginPath();
+                ctx.arc(cx, cy, r, 0, Math.PI * 2);
+                ctx.stroke();
+                
+                // Add some radial "spokes" or motion lines
+                if (i % 2 === 0) {
+                    const spokeAngle = (time * 0.6 + i) % (Math.PI * 2);
+                    ctx.beginPath();
+                    ctx.moveTo(cx, cy);
+                    ctx.lineTo(
+                        cx + Math.cos(spokeAngle) * (r + 4),
+                        cy + Math.sin(spokeAngle) * (r + 4)
+                    );
+                    ctx.stroke();
+                }
+            }
+            
+            ctx.shadowBlur = 0;
+            
+            // Central bright core
+            const coreSize = 9 + bass * 28;
+            const coreGrad = ctx.createRadialGradient(cx, cy, 2, cx, cy, coreSize);
+            coreGrad.addColorStop(0, 'white');
+            coreGrad.addColorStop(0.6, '#67e8f9');
+            coreGrad.addColorStop(1, 'rgba(103,232,249,0)');
+            
+            ctx.fillStyle = coreGrad;
+            ctx.beginPath();
+            ctx.arc(cx, cy, coreSize, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // ==================== INITIALIZATION & EVENT LISTENERS ====================
+        function initializeUI() {
+            // Folder load
+            document.getElementById('load-folder-btn').addEventListener('click', loadMusicFolder);
+            document.getElementById('folder-input').addEventListener('change', () => {}); // handled in load func
+            
+            // Search
+            const searchInput = document.getElementById('search-input');
+            searchInput.addEventListener('input', filterSongs);
+            
+            // Main player buttons
+            document.getElementById('play-btn').addEventListener('click', togglePlay);
+            document.getElementById('prev-btn').addEventListener('click', playPrev);
+            document.getElementById('next-btn').addEventListener('click', playNext);
+            
+            // Progress main
+            const mainProgress = document.getElementById('progress-slider');
+            mainProgress.addEventListener('input', (e) => seekTo(parseFloat(e.target.value)));
+            
+            // Volume
+            const vol = document.getElementById('volume-slider');
+            vol.addEventListener('input', () => {
+                if (audio) audio.volume = parseFloat(vol.value);
+            });
+            
+            // Open visualizer
+            document.getElementById('open-viz-btn').addEventListener('click', () => {
+                if (!currentSong && songs.length > 0) {
+                    playSong(songs[0]);
+                }
+                openVisualizerModal();
+            });
+            
+            // Close modal
+            document.getElementById('close-viz-btn').addEventListener('click', closeVisualizerModal);
+            
+            // Modal progress
+            const modalProg = document.getElementById('modal-progress-slider');
+            if (modalProg) {
+                modalProg.addEventListener('input', (e) => seekTo(parseFloat(e.target.value)));
+            }
+            
+            // Intensity
+            const intSlider = document.getElementById('intensity-slider');
+            if (intSlider) {
+                intSlider.addEventListener('input', (e) => {
+                    intensity = parseFloat(e.target.value);
+                });
+            }
+            
+            // Drag and drop support on song list area
+            const songListArea = document.getElementById('song-list');
+            songListArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                songListArea.style.borderColor = '#67e8f9';
+            });
+            songListArea.addEventListener('dragleave', () => {
+                songListArea.style.borderColor = '';
+            });
+            songListArea.addEventListener('drop', async (e) => {
+                e.preventDefault();
+                songListArea.style.borderColor = '';
+                
+                const droppedFiles = Array.from(e.dataTransfer.files).filter(f => 
+                    f.type.startsWith('audio/') || /\.(mp3|wav|ogg|flac|m4a)$/i.test(f.name)
+                );
+                
+                if (droppedFiles.length === 0) return;
+                
+                const newSongs = droppedFiles.map((file, idx) => ({
+                    id: Date.now() + idx,
+                    file,
+                    name: file.name,
+                    formattedName: formatSongName(file.name),
+                    url: URL.createObjectURL(file),
+                    duration: null
+                }));
+                
+                songs = [...songs, ...newSongs];
+                renderSongList();
+                updateTrackCount();
+                loadDurationsInBackground();
+            });
+            
+            // Keyboard global shortcuts
+            document.addEventListener('keydown', (e) => {
+                if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+                
+                if (e.key === ' ' || e.key.toLowerCase() === 'k') {
+                    e.preventDefault();
+                    togglePlay();
+                }
+                if (e.key.toLowerCase() === 'n') playNext();
+                if (e.key.toLowerCase() === 'p') playPrev();
+                if (e.key.toLowerCase() === 'v' && currentSong) {
+                    if (vizModalOpen) closeVisualizerModal();
+                    else openVisualizerModal();
+                }
+            });
+            
+            // Resize canvas when modal is open
+            window.addEventListener('resize', () => {
+                if (vizModalOpen) {
+                    setTimeout(resizeVizCanvas, 120);
+                }
+            });
+            
+            // Initial empty state
+            document.getElementById('empty-state').classList.remove('hidden');
+            
+            // Seed a couple demo instructions if wanted, but keep clean
+            console.log('%c[NEXUS] Visualizer initialized. Ready for music folder.', 'color:#64748b');
+        }
+
+        function showHelp() {
+            const helpHTML = `
+                <div class="fixed inset-0 bg-black/90 z-[200] flex items-center justify-center p-6" onclick="this.remove()">
+                    <div onclick="event.stopImmediatePropagation()" class="max-w-lg bg-zinc-900 border border-zinc-700 rounded-3xl p-8 text-sm">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <div class="font-display text-2xl tracking-tighter">NEXUS VISUALIZER</div>
+                                <div class="text-xs text-cyan-400 tracking-[1.5px] mt-0.5">HOW TO USE</div>
+                            </div>
+                            <button onclick="event.target.closest('.fixed').remove()" class="text-2xl leading-none text-white/40 hover:text-white">&times;</button>
+                        </div>
+                        
+                        <div class="mt-8 space-y-6 text-zinc-300">
+                            <div>
+                                <div class="font-medium text-white mb-1 flex items-center gap-x-2"><i class="fa-solid fa-folder w-4"></i> LOAD MUSIC</div>
+                                <div class="text-xs pl-6">Click LOAD MUSIC FOLDER and select any folder containing MP3, WAV, OGG, FLAC etc. The app works entirely in your browser.</div>
+                            </div>
+                            
+                            <div>
+                                <div class="font-medium text-white mb-1 flex items-center gap-x-2"><i class="fa-solid fa-play w-4"></i> PLAYBACK</div>
+                                <div class="text-xs pl-6">Click any track in the list. Use spacebar, the player bar, or the visualizer controls. Next/Prev supported.</div>
+                            </div>
+                            
+                            <div>
+                                <div class="font-medium text-white mb-1 flex items-center gap-x-2"><i class="fa-solid fa-expand w-4"></i> VISUALIZER MODAL</div>
+                                <div class="text-xs pl-6">Click VISUALIZE to enter full-screen mode. Use the MODE dropdown or number keys (1-6) to switch classic visualizers. ESC to exit. Click canvas to pause.</div>
+                            </div>
+                            
+                            <div class="pt-3 border-t border-white/10 text-[10px] text-white/50">
+                                All visualizations run locally using the Web Audio API. No data leaves your device. 
+                                Expand by editing the vizPresets array and adding new draw functions in the source.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', helpHTML);
+        }
+
+        function initializeEverything() {
+            initializeTailwind();
+            initializeUI();
+            
+            // Set initial intensity
+            const intSlider = document.getElementById('intensity-slider');
+            if (intSlider) intSlider.value = intensity;
+            
+            // Demo tip in console
+            console.log('%c[NEXUS Visualizer] Drop this HTML in your repo. Create a "music" folder next to it. Serve via local server for best folder selection experience.', 'color: #475569');
+            
+            // Optional: pre-select a visualizer
+            currentViz = 'bars';
+            
+            // Easter egg / future note
+            // console.log('%c[Future] Minigames can be added inside the visualizer loop using canvas click coordinates or separate overlay canvas.', 'color:#334155');
+        }
+
+        // Boot
+        window.onload = initializeEverything;
+    </script>
+</body>
+</html>
