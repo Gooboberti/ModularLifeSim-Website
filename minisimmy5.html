@@ -6955,6 +6955,7 @@ class Creature {
         this.adaptationLevel = 0;
         this.role = 'Balanced';
         this.brain = new NeuralNet();
+        this.wrigglePhase = random(TWO_PI); // For organic wriggling
 
         if (parentTraits) {
             this.traits = {
@@ -7051,9 +7052,8 @@ class Creature {
     getGenerationMovementBias() {
         const gen = this.generation;
         if (gen <= 2) return { stability: 0, exploration: 0.08 };
-
-        const stability = Math.min(0.22, (gen - 2) * 0.032);
-        const exploration = Math.max(-0.10, 0.08 - (gen - 2) * 0.014);
+        const stability = Math.min(0.20, (gen - 2) * 0.03);
+        const exploration = Math.max(-0.09, 0.08 - (gen - 2) * 0.013);
         return { stability, exploration };
     }
 
@@ -7141,12 +7141,12 @@ class Creature {
         const targetSpeed = target.speedMultiplier || 1;
         const targetSensor = target.getTieredModuleCount('sensor');
 
-        let successChance = 0.018;
-        if (mySpeed < targetSpeed) successChance *= 0.6;
-        successChance *= (1 - (targetSensor * 0.08));
+        let successChance = 0.022;
+        if (mySpeed < targetSpeed) successChance *= 0.65;
+        successChance *= (1 - (targetSensor * 0.07));
 
         const hasHighValue = target.modules.some(m => m.type === 'harvester' || m.type === 'resistant');
-        if (hasHighValue) successChance *= 1.25;
+        if (hasHighValue) successChance *= 1.3;
 
         if (random() < successChance) {
             let targetModules = [...target.modules].sort((a, b) => (b.tier || 1) - (a.tier || 1));
@@ -7159,8 +7159,8 @@ class Creature {
                 if (index > -1) target.modules.splice(index, 1);
             }
 
-            this.energy = min(100, this.energy + 6);
-            if (random() < 0.6) this.honey = min(26, this.honey + 1.5);
+            this.energy = min(100, this.energy + 7);
+            if (random() < 0.6) this.honey = min(26, this.honey + 1.8);
 
             this.currentThought = "Nibbled module";
             target.currentThought = "Lost module...";
@@ -7257,7 +7257,6 @@ class Creature {
 
         let child = new Creature(this.x + random(-6, 6), this.y + random(-6, 6), newModules, this.generation + 1, this.traits);
 
-        // === v3.1: Brain Inheritance + Module Bias ===
         if (this.brain) {
             child.brain = this.brain.copy();
             child.brain.mutate(0.085, 0.36);
@@ -7278,6 +7277,7 @@ class Creature {
 
     update(isDay, vortexDir, vortexStrength, timeScale = 1, envMods = null) {
         this.age += timeScale;
+        this.wrigglePhase += 0.12 * timeScale; // Advance wriggle phase
 
         if (this.age > this.maxAge) {
             this.energy = 0;
@@ -7324,23 +7324,23 @@ class Creature {
         let brainReproWill = brain[5] || 0.5;
         let brainPredatorTend = brain[6] || 0.5;
 
-        // Hazard avoidance
-        if (effectiveHazardDist > 0.14) {
+        // === Hazard Avoidance (stronger) ===
+        if (effectiveHazardDist > 0.12) {
             let avoidAngle = hazardInfo.angle + PI;
-            let avoidStrength = effectiveHazardDist * 2.6 * (0.6 + brainHazardAvoid * 1.4);
-            if (effectiveHazardDist > 0.62) {
-                avoidStrength *= 1.7;
+            let avoidStrength = effectiveHazardDist * 2.9 * (0.65 + brainHazardAvoid * 1.5);
+            if (effectiveHazardDist > 0.58) {
+                avoidStrength *= 1.9;
                 this.currentThought = "Dodging hazard!";
             }
-            let adaptationBoost = this.adaptationLevel * 0.016;
-            this.vx += cos(avoidAngle) * (avoidStrength + adaptationBoost) * 0.032 * timeScale;
-            this.vy += sin(avoidAngle) * (avoidStrength + adaptationBoost) * 0.032 * timeScale;
+            let adaptationBoost = this.adaptationLevel * 0.018;
+            this.vx += cos(avoidAngle) * (avoidStrength + adaptationBoost) * 0.035 * timeScale;
+            this.vy += sin(avoidAngle) * (avoidStrength + adaptationBoost) * 0.035 * timeScale;
             dodgedThisFrame = true;
         }
 
-        if (dodgedThisFrame && effectiveHazardDist > 0.24) {
+        if (dodgedThisFrame && effectiveHazardDist > 0.22) {
             this.hazardsAvoided = (this.hazardsAvoided || 0) + 1;
-            this.adaptationLevel = min(11, (this.adaptationLevel || 0) + 0.04);
+            this.adaptationLevel = min(12, (this.adaptationLevel || 0) + 0.045);
         }
 
         const tieredSensor = this.getTieredModuleCount('sensor');
@@ -7349,11 +7349,11 @@ class Creature {
         const tieredComm = this.getTieredModuleCount('communicator');
         const tieredExpl = this.getTieredModuleCount('explorer');
 
-        if (tieredSensor >= 3 && effectiveHazardDist > 0.11) {
+        if (tieredSensor >= 3 && effectiveHazardDist > 0.10) {
             let avoidAngle = hazardInfo.angle + PI;
-            let avoidStrength = effectiveHazardDist * 3.2 * (0.7 + brainHazardAvoid * 1.3);
-            this.vx += cos(avoidAngle) * avoidStrength * 0.038 * timeScale;
-            this.vy += sin(avoidAngle) * avoidStrength * 0.038 * timeScale;
+            let avoidStrength = effectiveHazardDist * 3.4 * (0.7 + brainHazardAvoid * 1.4);
+            this.vx += cos(avoidAngle) * avoidStrength * 0.04 * timeScale;
+            this.vy += sin(avoidAngle) * avoidStrength * 0.04 * timeScale;
         }
 
         if (tieredHarv >= 3 && this.honey > 4.5 && random() < 0.0035 * timeScale) {
@@ -7366,14 +7366,14 @@ class Creature {
             let dx = this.x - centerX;
             let dy = this.y - centerY;
             let len = sqrt(dx*dx + dy*dy) || 1;
-            let escape = (tieredMover * 0.025 + tieredExpl * 0.02) * timeScale * (0.6 + brainVortexEscape * 1.6);
+            let escape = (tieredMover * 0.026 + tieredExpl * 0.021) * timeScale * (0.65 + brainVortexEscape * 1.6);
             this.vx += (dx / len) * escape;
             this.vy += (dy / len) * escape;
         }
 
-        // === v3.0: Module Nibbling ===
-        let localCreatures = this.getLocalGroup(48);
-        if (localCreatures.length > 0 && random() < 0.012 * timeScale && !this.isPredator) {
+        // === Module Nibbling ===
+        let localCreatures = this.getLocalGroup(46);
+        if (localCreatures.length > 0 && random() < 0.014 * timeScale && !this.isPredator) {
             let target = random(localCreatures);
             if (target && target.modules.length > 0) this.tryNibbleModule(target);
         }
@@ -7384,45 +7384,41 @@ class Creature {
             let dy = tgt.y - this.y;
             let d = dist(this.x, this.y, tgt.x, tgt.y);
 
-            if (d > 7) {
-                let hungerFactor = map(this.energy, 0, 58, 1.5, 0.88);
-                let pull = settings.zonePullStrength * hungerFactor + this.getModuleCount('harvester') * 0.022;
-                pull *= (0.7 + brainFoodDrive * 1.3);
+            if (d > 6) {
+                let hungerFactor = map(this.energy, 0, 58, 1.55, 0.9);
+                let pull = settings.zonePullStrength * hungerFactor + this.getModuleCount('harvester') * 0.024;
+                pull *= (0.72 + brainFoodDrive * 1.35);
                 this.vx += (dx / d) * pull * timeScale;
                 this.vy += (dy / d) * pull * timeScale;
             }
 
-            // === v3.1 + Movement Overhaul: More organic exploration ===
+            // === Micro Wriggle System (Microorganism feel) ===
             const genBias = this.getGenerationMovementBias();
-            const explorerBonus = this.getTieredModuleCount('explorer') * 0.045;
+            const explorerBonus = this.getTieredModuleCount('explorer') * 0.05;
 
             let cdist = dist(this.x, this.y, centerX, centerY);
 
-            // Stronger, more frequent exploration
-            if (cdist < 160) {
-                let exploreForce = (0.75 + brainExploration * 1.35) + explorerBonus + genBias.exploration;
-                exploreForce = constrain(exploreForce, 0.4, 2.4);
+            // Constant small wriggling movement (like microorganisms)
+            let wriggleForce = 0.38 + (sin(this.wrigglePhase) * 0.22);
+            wriggleForce *= (0.9 + brainExploration * 0.6);
+            this.vx += cos(this.wrigglePhase * 1.3) * wriggleForce * 0.018 * timeScale;
+            this.vy += sin(this.wrigglePhase * 1.1) * wriggleForce * 0.018 * timeScale;
 
-                this.vx += random(-0.95, 0.95) * 0.48 * exploreForce * timeScale;
-                this.vy += random(-0.95, 0.95) * 0.48 * exploreForce * timeScale;
+            // Stronger exploration when near vortex or far from food
+            if (cdist < 170) {
+                let exploreForce = (0.85 + brainExploration * 1.4) + explorerBonus + genBias.exploration;
+                exploreForce = constrain(exploreForce, 0.45, 2.6);
 
-                if (random() < 0.05) {
-                    if (genBias.stability > 0.12) this.currentThought = "Holding steady";
-                    else if (explorerBonus > 0.14) this.currentThought = "Pushing outward";
-                    else this.currentThought = "Exploring";
-                }
-            } else if (d > 75) {
-                let exploreForce = (0.85 + brainExploration * 1.2) + explorerBonus;
-                this.vx += random(-0.45, 0.45) * 0.32 * exploreForce * timeScale;
-                this.vy += random(-0.45, 0.45) * 0.32 * exploreForce * timeScale;
-
-                if (random() < 0.04 && this.generation >= 4) {
-                    this.currentThought = "Seeking new ground";
-                }
+                this.vx += random(-1.05, 1.05) * 0.52 * exploreForce * timeScale;
+                this.vy += random(-1.05, 1.05) * 0.52 * exploreForce * timeScale;
+            } else if (d > 70) {
+                let exploreForce = (0.9 + brainExploration * 1.25) + explorerBonus;
+                this.vx += random(-0.5, 0.5) * 0.35 * exploreForce * timeScale;
+                this.vy += random(-0.5, 0.5) * 0.35 * exploreForce * timeScale;
             }
 
-            // === Social Conversion Pressure (slightly toned down) ===
-            let localGroup = this.getLocalGroup(58);
+            // Social Conversion Pressure
+            let localGroup = this.getLocalGroup(56);
             if (localGroup.length >= 5) {
                 let rarity = this.getLocalSpecializationRarity();
                 let mySpec = this.specialization;
@@ -7432,17 +7428,15 @@ class Creature {
                 let groupSize = localGroup.length;
                 let myRatio = myCount / groupSize;
 
-                let pressureChance = (0.0035 + (groupSize * 0.0007)) * timeScale;
-
-                if (rarity > 0.65) pressureChance *= (1.7 + (rarity - 0.65) * 2.3);
-                else if (rarity > 0.45) pressureChance *= 1.3;
-
-                if (myRatio < 0.22) pressureChance *= 2.6;
-                if (groupSize > 12) pressureChance *= 1.35;
-                if (brainPredatorTend > 0.65) pressureChance *= 1.55;
+                let pressureChance = (0.0038 + (groupSize * 0.00075)) * timeScale;
+                if (rarity > 0.65) pressureChance *= (1.75 + (rarity - 0.65) * 2.4);
+                else if (rarity > 0.45) pressureChance *= 1.32;
+                if (myRatio < 0.22) pressureChance *= 2.7;
+                if (groupSize > 12) pressureChance *= 1.38;
+                if (brainPredatorTend > 0.65) pressureChance *= 1.6;
 
                 if (random() < pressureChance) {
-                    if (!this.isPredator && this.energy > 18) {
+                    if (!this.isPredator && this.energy > 17) {
                         this.isPredator = true;
                         playTone(180, 'sawtooth', 0.35, 0.6, 0, 0.03, 0.25);
                         this.currentThought = (rarity > 0.6) ? "Felt out of place..." : "Internal pressure";
@@ -7451,7 +7445,7 @@ class Creature {
             }
         }
 
-        // === v3.0: Resistant Movement Penalty ===
+        // === Resistant Movement Penalty ===
         const moveSpeed = this.speedMultiplier || 1;
         const resistantPenalty = this.getResistantSpeedPenalty();
         const finalMoveSpeed = moveSpeed * (1 - resistantPenalty);
@@ -7461,29 +7455,29 @@ class Creature {
         this.x += this.vx;
         this.y += this.vy;
 
-        // === Reduced damping for more organic movement ===
-        this.vx *= 0.88;
-        this.vy *= 0.88;
+        // Gentle damping (keeps wriggling feel)
+        this.vx *= 0.89;
+        this.vy *= 0.89;
 
         this.x = constrain(this.x, 7, width - 7);
         this.y = constrain(this.y, 7, height - 7);
 
-        // Energy gain from zones
+        // Energy zones
         let inG = dist(this.x, this.y, greenZone.x, greenZone.y) < greenZone.baseR;
         let inB = dist(this.x, this.y, blueZone.x, blueZone.y) < blueZone.baseR;
         let gainMult = envMods ? envMods.energyGainMult : 1.0;
 
         if (inG && isDay && greenZone.food > 0) {
-            let g = (0.26 + this.getModuleCount('harvester') * 0.09) * gainMult;
+            let g = (0.27 + this.getModuleCount('harvester') * 0.09) * gainMult;
             this.energy = min(100, this.energy + g * timeScale);
             greenZone.food = max(0, greenZone.food - 0.3 * timeScale);
-            if (this.energy > 74) this.honey = min(26, this.honey + 0.32 * timeScale);
+            if (this.energy > 74) this.honey = min(26, this.honey + 0.33 * timeScale);
         }
         if (inB && !isDay && blueZone.food > 0) {
-            let g = (0.26 + this.getModuleCount('sensor') * 0.08) * gainMult;
+            let g = (0.27 + this.getModuleCount('sensor') * 0.08) * gainMult;
             this.energy = min(100, this.energy + g * timeScale);
             blueZone.food = max(0, blueZone.food - 0.3 * timeScale);
-            if (this.energy > 74) this.honey = min(26, this.honey + 0.32 * timeScale);
+            if (this.energy > 74) this.honey = min(26, this.honey + 0.33 * timeScale);
         }
 
         if (frameCount % 170 === 0) {
