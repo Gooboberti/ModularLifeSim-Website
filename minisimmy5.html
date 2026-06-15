@@ -6958,6 +6958,7 @@ class Creature {
         this.role = 'Balanced';
         this.brain = new NeuralNet();
         this.wrigglePhase = random(TWO_PI);
+
         if (parentTraits) {
             this.traits = {
                 pheromoneSensitivity: constrain(parentTraits.pheromoneSensitivity + random(-0.07, 0.07), 0.62, 1.55),
@@ -6973,8 +6974,10 @@ class Creature {
                 hazardAvoidance: 1.0 + random(-0.13, 0.13)
             };
         }
+
         let types = ['harvester', 'sensor', 'mover', 'resistant', 'explorer', 'communicator'];
         let colors = { 'harvester': '#34d399', 'sensor': '#38bdf8', 'mover': '#a78bfa', 'resistant': '#f472b6', 'explorer': '#fbbf24', 'communicator': '#c084fc' };
+
         if (parentModules) {
             this.modules = parentModules.map(m => ({ ...m }));
             if (random() < 0.42 && this.modules.length < 7) {
@@ -6988,7 +6991,9 @@ class Creature {
                 this.modules.push({ type: t, color: colors[t], offsetX: cos(ang) * di, offsetY: sin(ang) * di, tier: 1 });
             }
         }
+
         this.updateSpecialization();
+
         const baseSeconds = 15;
         const secondsPerGen = 3;
         let lifespanSeconds = baseSeconds + (this.generation - 1) * secondsPerGen;
@@ -6996,6 +7001,54 @@ class Creature {
         lifespanSeconds += resistantBonus;
         this.maxAge = Math.floor(lifespanSeconds * 60);
         this.maxAge += Math.floor(random(-120, 120));
+
+        // ==================== POINT VALUE SYSTEM ====================
+        this.calculatePointValue();
+    }
+
+    // Calculate base point value (called once in constructor)
+    calculatePointValue() {
+        let value = 12; // Base value
+
+        // Generation bonus
+        value += (this.generation - 1) * 4;
+
+        // Module count and tier bonus
+        const totalModules = this.modules.length;
+        const totalTiers = this.getTieredModuleCount('harvester') +
+                           this.getTieredModuleCount('sensor') +
+                           this.getTieredModuleCount('mover') +
+                           this.getTieredModuleCount('resistant') +
+                           this.getTieredModuleCount('explorer') +
+                           this.getTieredModuleCount('communicator');
+
+        value += totalModules * 3;
+        value += totalTiers * 2;
+
+        // Predator bonus
+        if (this.isPredator) value += 15;
+
+        // Specialization bonuses
+        if (this.specialization === 'resistant') value += 8;
+        if (this.specialization === 'harvester') value += 6;
+        if (this.specialization === 'mover') value += 5;
+
+        // Adaptation level bonus
+        value += (this.adaptationLevel || 0) * 1.5;
+
+        this.pointValue = Math.floor(value);
+    }
+
+    // Get current point value (with optional spaceship bullet kill bonus)
+    getPointValue(killedByBullet = false) {
+        let value = this.pointValue || 12;
+
+        if (killedByBullet) {
+            // Big bonus for spaceship bullet kills
+            value = Math.floor(value * 2.6) + 35;
+        }
+
+        return Math.max(8, value);
     }
 
     // ==================== NEW: Lifespan Gain Method ====================
@@ -7006,9 +7059,11 @@ class Creature {
     }
 
     getModuleCount(type) { return this.modules.filter(m => m.type === type).length; }
+
     getTieredModuleCount(type) {
         return this.modules.filter(m => m.type === type).reduce((sum, m) => sum + (m.tier || 1), 0);
     }
+
     getEfficiencyBonus() {
         let bonus = 0;
         const harv = this.getTieredModuleCount('harvester');
@@ -7017,6 +7072,7 @@ class Creature {
         bonus += res * 0.0025;
         return bonus;
     }
+
     getModuleMovementBonus() {
         const mover = this.getTieredModuleCount('mover');
         const explorer = this.getTieredModuleCount('explorer');
@@ -7033,10 +7089,12 @@ class Creature {
         bonus += (avgTier - 1) * 0.015;
         return constrain(bonus, 0, 0.72);
     }
+
     getResistantSpeedPenalty() {
         const resistantTiers = this.getTieredModuleCount('resistant');
         return Math.min(0.35, resistantTiers * 0.06);
     }
+
     getModuleBrainBias() {
         const bias = {
             foodDrive: 0, vortexEscape: 0, hazardAvoid: 0,
@@ -7058,6 +7116,7 @@ class Creature {
         bias.socialAlign += comm * 0.08;
         return bias;
     }
+
     getGenerationMovementBias() {
         const gen = this.generation;
         if (gen <= 2) return { stability: 0, exploration: 0.07 };
@@ -7065,6 +7124,7 @@ class Creature {
         const exploration = Math.max(-0.08, 0.07 - (gen - 2) * 0.012);
         return { stability, exploration };
     }
+
     getLocalGroup(radius) {
         let group = [];
         for (let o of creatures) {
@@ -7072,6 +7132,7 @@ class Creature {
         }
         return group;
     }
+
     getLocalSpecializationRarity() {
         let localGroup = this.getLocalGroup(65);
         if (localGroup.length < 4) return 0;
@@ -7083,6 +7144,7 @@ class Creature {
         let rarity = 1 - (mySpecCount / localGroup.length);
         return constrain(rarity, 0, 1);
     }
+
     getNearestHazardInfo() {
         let nearestDist = Infinity;
         let nearestAngle = 0;
@@ -7098,6 +7160,7 @@ class Creature {
         let normDist = (nearestDist < Infinity) ? constrain(1 - (nearestDist / dangerRadius), 0, 1) : 0;
         return { dist: normDist, angle: nearestAngle, count: nearbyCount };
     }
+
     getBrainInputs(hazardInfo, effectiveHazardDist, isDay) {
         const inputs = [];
         inputs.push(constrain(this.energy / 100, 0, 1));
@@ -7119,6 +7182,7 @@ class Creature {
         inputs.push(constrain(cdist / 400, 0, 1));
         return inputs;
     }
+
     tryNibbleModule(target) {
         if (!target || target === this || target.isPredator || this.isPredator) return false;
         if (target.modules.length === 0) return false;
@@ -7149,6 +7213,7 @@ class Creature {
         }
         return false;
     }
+
     pruneExcessModules() {
         const maxModules = 11;
         if (this.modules.length <= maxModules) return;
@@ -7179,6 +7244,7 @@ class Creature {
         this.modules = newModules;
         this.updateSpecialization();
     }
+
     updateSpecialization() {
         if (this.modules.length === 0) {
             this.specialization = 'balanced';
@@ -7209,6 +7275,7 @@ class Creature {
             this.role = this.specialization.charAt(0).toUpperCase() + this.specialization.slice(1);
         }
     }
+
     reproduce() {
         let newModules = this.modules.map(m => ({...m}));
         let typeTierCounts = {};
@@ -7245,6 +7312,7 @@ class Creature {
         }
         return child;
     }
+
     update(isDay, vortexDir, vortexStrength, timeScale = 1, envMods = null) {
         this.age += timeScale;
         this.wrigglePhase += 0.11 * timeScale;
@@ -7442,6 +7510,7 @@ class Creature {
             this.pruneExcessModules();
         }
     }
+
     checkForTierUpgrades() {
         let typeTierCounts = {};
         for (let m of this.modules) {
@@ -7465,6 +7534,7 @@ class Creature {
             }
         }
     }
+
     getAgedColor(originalColor, ageProgress) {
         if (ageProgress < 0.5) return originalColor;
         const greyStrength = (ageProgress - 0.5) * 0.85;
@@ -7474,6 +7544,7 @@ class Creature {
         const grey = 145;
         return `rgb(${Math.floor(r + (grey - r) * greyStrength)}, ${Math.floor(g + (grey - g) * greyStrength)}, ${Math.floor(b + (grey - b) * greyStrength)})`;
     }
+
     show() {
         push();
         translate(this.x, this.y);
