@@ -6939,12 +6939,10 @@ class Creature {
         this.vx = random(-0.4, 0.4); this.vy = random(-0.4, 0.4);
         this.energy = parentModules ? 39 : 50 + random(18);
         this.name = generateSciFiName();
-
         // === AGE SYSTEM ===
         this.age = 0;
         this.maxAge = 1500 + Math.floor(random(-300, 300)); // ~45 seconds average
         this.speedMultiplier = 1;
-
         this.isPredator = false; this.honey = 0;
         this.generation = generation; this.children = []; this.childrenCount = 0;
         this.killCount = 0; this.reproCooldown = 0; this.currentThought = "Exploring...";
@@ -6956,9 +6954,7 @@ class Creature {
         this.hazardDamageTaken = 0;
         this.adaptationLevel = 0;
         this.role = 'Balanced';
-
         this.brain = new NeuralNet();
-
         if (parentTraits) {
             this.traits = {
                 pheromoneSensitivity: constrain(parentTraits.pheromoneSensitivity + random(-0.07, 0.07), 0.62, 1.55),
@@ -6974,10 +6970,8 @@ class Creature {
                 hazardAvoidance: 1.0 + random(-0.13, 0.13)
             };
         }
-
         let types = ['harvester', 'sensor', 'mover', 'resistant', 'explorer', 'communicator'];
         let colors = { 'harvester': '#34d399', 'sensor': '#38bdf8', 'mover': '#a78bfa', 'resistant': '#f472b6', 'explorer': '#fbbf24', 'communicator': '#c084fc' };
-
         if (parentModules) {
             this.modules = parentModules.map(m => ({ ...m }));
             if (random() < 0.42 && this.modules.length < 7) {
@@ -6991,16 +6985,13 @@ class Creature {
                 this.modules.push({ type: t, color: colors[t], offsetX: cos(ang) * di, offsetY: sin(ang) * di, tier: 1 });
             }
         }
-
         this.updateSpecialization();
     }
 
     getModuleCount(type) { return this.modules.filter(m => m.type === type).length; }
-
     getTieredModuleCount(type) {
         return this.modules.filter(m => m.type === type).reduce((sum, m) => sum + (m.tier || 1), 0);
     }
-
     getEfficiencyBonus() {
         let bonus = 0;
         const harv = this.getTieredModuleCount('harvester');
@@ -7009,7 +7000,6 @@ class Creature {
         bonus += res * 0.0025;
         return bonus;
     }
-
     getSimilarNeighborCount() {
         let count = 0;
         const myTypes = new Set(this.modules.map(m => m.type));
@@ -7022,7 +7012,6 @@ class Creature {
         }
         return count;
     }
-
     getLocalGroup(radius) {
         let group = [];
         for (let o of creatures) {
@@ -7032,7 +7021,6 @@ class Creature {
         }
         return group;
     }
-
     getNearestHazardInfo() {
         let nearestDist = Infinity;
         let nearestAngle = 0;
@@ -7053,7 +7041,6 @@ class Creature {
             count: nearbyCount
         };
     }
-
     getBrainInputs(hazardInfo, effectiveHazardDist, isDay) {
         const inputs = [];
         inputs.push(constrain(this.energy / 100, 0, 1));
@@ -7176,15 +7163,27 @@ class Creature {
 
     update(isDay, vortexDir, vortexStrength, timeScale = 1, envMods = null) {
         this.age += timeScale;
+
+        // === IMMEDIATE DEATH + REMOVAL ===
         if (this.age > this.maxAge) {
             this.energy = 0;
             this.currentThought = "Died of old age";
+
+            const index = creatures.indexOf(this);
+            if (index > -1) {
+                creatures.splice(index, 1);
+            }
+            if (selectedCreature === this) {
+                deselectCreature();
+            }
             return;
         }
 
         const ageProgress = this.age / this.maxAge;
-       if (ageProgress > 0.40) {     // Start greying earlier
-            const slowdown = (ageProgress - 0.55) * 0.65;
+
+        // === AGE SLOWDOWN (fixed) ===
+        if (ageProgress > 0.40) {
+            const slowdown = (ageProgress - 0.40) * 0.65;
             this.speedMultiplier = 1 - slowdown;
         } else {
             this.speedMultiplier = 1;
@@ -7256,7 +7255,6 @@ class Creature {
             this.hazardsAvoided = (this.hazardsAvoided || 0) + 1;
             this.adaptationLevel = min(11, (this.adaptationLevel || 0) + 0.04);
         }
-
         if (effectiveHazardDist > 0.07 && effectiveHazardDist < 0.52) {
             this.adaptationLevel = min(11, (this.adaptationLevel || 0) + 0.007 * timeScale);
         }
@@ -7496,7 +7494,6 @@ class Creature {
                 this.vx += (centerX - this.x) * pull / (cdist + 5) * timeScale;
                 this.vy += (centerY - this.y) * pull / (cdist + 5) * timeScale;
             }
-
             if (cdist < 140) {
                 let exploreForce = (0.6 + brainExploration * 1.2);
                 this.vx += random(-0.78, 0.78) * 0.44 * exploreForce * timeScale;
@@ -7557,19 +7554,16 @@ class Creature {
         const moveSpeed = this.speedMultiplier || 1;
         this.vx *= moveSpeed;
         this.vy *= moveSpeed;
-
         this.x += this.vx;
         this.y += this.vy;
         this.vx *= 0.81;
         this.vy *= 0.81;
-
         this.x = constrain(this.x, 7, width - 7);
 
         if (isDrawingWall && typeof wallStartX === 'number') {
             const settings = window.currentFilterWallSettings;
             const isFilterMode = currentWallFilterMode === "custom_filter" && settings && settings.types && settings.types.length > 0;
             const targetTypes = isFilterMode ? settings.types : null;
-
             if (!(isFilterMode && (targetTypes.includes('white') || targetTypes.includes('red')))) {
                 let d = distToLineSegment(this.x, this.y, wallStartX, wallStartY, mouseX, mouseY);
                 if (d < 28) {
@@ -7785,10 +7779,8 @@ class Creature {
 
     getAgedColor(originalColor, ageProgress) {
         if (ageProgress < 0.5) return originalColor;
-
         const greyStrength = (ageProgress - 0.5) * 0.85;
         let r, g, b;
-
         if (originalColor.startsWith('#')) {
             r = parseInt(originalColor.slice(1, 3), 16);
             g = parseInt(originalColor.slice(3, 5), 16);
@@ -7796,12 +7788,10 @@ class Creature {
         } else {
             return originalColor;
         }
-
         const grey = 145;
         const newR = Math.floor(r + (grey - r) * greyStrength);
         const newG = Math.floor(g + (grey - g) * greyStrength);
         const newB = Math.floor(b + (grey - b) * greyStrength);
-
         return `rgb(${newR}, ${newG}, ${newB})`;
     }
 
@@ -7817,7 +7807,6 @@ class Creature {
             strokeWeight(1.3);
             circle(0, 0, s + 10);
         }
-
         let coreColor = this.isPredator ? '#f87171' : '#facc15';
         if (this.specialization === 'harvester') coreColor = '#34d399';
         if (this.specialization === 'sensor') coreColor = '#38bdf8';
@@ -7828,7 +7817,6 @@ class Creature {
 
         const ageProgress = this.age / this.maxAge;
         const agedCoreColor = this.getAgedColor(coreColor, ageProgress);
-
         fill(agedCoreColor);
         stroke(this.isPredator ? '#fecaca' : '#fef08c');
         strokeWeight(1);
@@ -7841,13 +7829,11 @@ class Creature {
             fill('#f59e0b');
             circle(2.5, -2.5, 2.3 + min(this.honey * 0.07, 5.5));
         }
-
         if (this.damageFlash > 0 || this.purpleFlash > 0) {
             let alpha = this.purpleFlash > 0 ? 190 + sin(frameCount * 0.6) * 40 : 150 + sin(frameCount * 0.55) * 35;
             fill(167, 139, 250, alpha);
             circle(0, 0, s * 1.15);
         }
-
         if (this.role.includes('Master') || this.role.includes('Warden') || this.role.includes('Leader')) {
             noFill();
             stroke(255, 255, 255, 32);
@@ -7863,7 +7849,6 @@ class Creature {
             const tier = m.tier || 1;
             const size = 3.2 + (tier - 1) * 0.6;
             circle(m.offsetX, m.offsetY, size);
-
             if (tier === 5) {
                 stroke('#fde047');
                 strokeWeight(1.9);
