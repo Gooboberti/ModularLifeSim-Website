@@ -4402,6 +4402,7 @@ if (!paused && incubatingEggs.length > 0) {
         }
     }
 }
+
                   const timeEl = document.getElementById('sim-time');
                   if (timeEl) timeEl.innerText = formatSimTime(simTime);
 
@@ -4441,7 +4442,6 @@ if (!paused && incubatingEggs.length > 0) {
 
                       if (Math.random() < 0.55 * soundDensity) playAmbientPulse(isDay);
                   }
-
 
                   // ==================== REPLICATE MUSIC MODE: FORCE FERTILE SEASON ONLY ====================
                   if (typeof replicateMusicMode !== 'undefined' && replicateMusicMode === true) {
@@ -4836,6 +4836,7 @@ if (!paused && incubatingEggs.length > 0) {
                               }
                           }
                       }
+
                       // Vortex influence on walls (v1.72: immune by default, temporarily vulnerable after damage)
                       const isVulnerable = w.vortexVulnerableUntil && frameCount <= w.vortexVulnerableUntil;
                       const shouldApplyVortex = !w.vortexImmune || isVulnerable;
@@ -5035,63 +5036,71 @@ if (!paused && incubatingEggs.length > 0) {
                       p.show();
 
                       if (dist(p.x, p.y, centerX, centerY) < 4) {
-    if (p.isSpecial) {
-        // === SPECIAL: Spawn clone from Gene Vault ===
-        spawnVaultEchoCreature(p.x, p.y);
-    } else if (p.isPurple) {
-        let predator = new Creature(p.x, p.y);
-        predator.isPredator = true;
-        creatures.push(predator);
-    } else {
-        spawnCreatureFromVortexCenter(p.x, p.y, vortexDir, vortexStrength);
-    }
-    vortexParticles.splice(i, 1);
-    continue;
-}
+                          if (p.isSpecial) {
+                              // === SPECIAL: Spawn clone from Gene Vault ===
+                              spawnVaultEchoCreature(p.x, p.y);
+                          } else if (p.isPurple) {
+                              let predator = new Creature(p.x, p.y);
+                              predator.isPredator = true;
+                              creatures.push(predator);
+                          } else {
+                              spawnCreatureFromVortexCenter(p.x, p.y, vortexDir, vortexStrength);
+                          }
+                          vortexParticles.splice(i, 1);
+                          continue;
+                      }
 
                       for (let c of creatures) {
                           let harvesterBonus = c.getTieredModuleCount('harvester') * 4.5;
-                          let pickupRange = 14 + harvesterBonus; // increased across the board
-if (dist(p.x, p.y, c.x, c.y) < pickupRange) {
-    c.energy = min(100, c.energy + settings.particleFoodValue * timeScale);
-    if (Math.random() < 0.11 * soundDensity) playEatSound(isDay);
+                          let pickupRange = 14 + harvesterBonus;
 
-    // Floating points for eating particles
-    addFloatingText(c.x, c.y - 12, `+${Math.floor(settings.particleFoodValue)}`, '#a3e635');
+                          if (dist(p.x, p.y, c.x, c.y) < pickupRange) {
+                              c.energy = min(100, c.energy + settings.particleFoodValue * timeScale);
+                              if (Math.random() < 0.11 * soundDensity) playEatSound(isDay);
 
-    // =====================================================
-    // NEW: Special Vault Echo Particle logic
-    // =====================================================
-    if (p.isSpecial) {
-        // Turn creature into a clone of a random Gene Vault creature
-        let filledSlots = geneVaultSlots.filter(slot => slot !== null);
-        if (filledSlots.length > 0) {
-            let vaultData = random(filledSlots);
-            if (vaultData.modules) c.modules = [...vaultData.modules];
-            if (vaultData.generation) c.generation = vaultData.generation;
-            c.currentThought = "Echo Infected";
-            c.energy = max(c.energy, 70);
-        }
+                              // Floating points for eating particles
+                              addFloatingText(c.x, c.y - 12, `+${Math.floor(settings.particleFoodValue)}`, '#a3e635');
 
-        // Apply strong purple DoT infection
-        c.mustEatWhite = true;
-        c.purpleFlash = 420;      // Long duration
-        c.damageFlash = 420;
-        c.currentThought = "Infected - Must Feed";
+                              // =====================================================
+                              // NEW: Special Vault Echo Particle logic
+                              // =====================================================
+                              if (p.isSpecial) {
+                                  // Turn creature into a clone of a random Gene Vault creature
+                                  let filledSlots = geneVaultSlots.filter(slot => slot !== null);
+                                  if (filledSlots.length > 0) {
+                                      let vaultData = random(filledSlots);
+                                      if (vaultData.modules) c.modules = [...vaultData.modules];
+                                      if (vaultData.generation) c.generation = vaultData.generation;
+                                      c.currentThought = "Echo Infected";
+                                      c.energy = max(c.energy, 70);
+                                  }
 
-        addFloatingText(c.x, c.y - 30, "VAULT ECHO", '#c026d3');
-        playTone(420, 'sawtooth', 0.3, 0.7);
-    }
+                                  // Apply strong purple DoT infection
+                                  c.mustEatWhite = true;
+                                  c.purpleFlash = 420;
+                                  c.damageFlash = 420;
+                                  c.currentThought = "Infected - Must Feed";
 
-    // Existing cleanse mechanic (keep this)
-    if (c.mustEatWhite) {
-        c.ateWhiteParticle = true;
-        c.purpleFlash = Math.max(0, c.purpleFlash - 40);
-        c.currentThought = "Cleansed";
-    }
+                                  addFloatingText(c.x, c.y - 30, "VAULT ECHO", '#c026d3');
+                                  playTone(420, 'sawtooth', 0.3, 0.7);
+                              }
 
-    p.life = 0;
-}
+                              // Existing cleanse mechanic (keep this)
+                              if (c.mustEatWhite) {
+                                  c.ateWhiteParticle = true;
+                                  c.purpleFlash = Math.max(0, c.purpleFlash - 40);
+                                  c.currentThought = "Cleansed";
+                              }
+
+                              // ==================== NEW: +0.25s Lifespan from White Particles ====================
+                              if (!p.isSpecial && !p.isPurple) {
+                                  // Normal white vortex particle consumed → grant small lifespan bonus
+                                  c.maxAge = (c.maxAge || 0) + 0.25;
+                                  addFloatingText(c.x, c.y - 22, "+0.25s", '#a3e635');
+                              }
+
+                              p.life = 0;
+                          }
                       }
                   }
 
@@ -5221,7 +5230,7 @@ if (dist(p.x, p.y, c.x, c.y) < pickupRange) {
                       let target = b.targetIsGreen ? greenZone : blueZone;
                       let tdx = target.x - b.x;
                       let tdy = target.y - b.y;
-                      let tdist = sqrt(tdx*tdx + tdy*tdy) || 1;
+                      let tdist = sqrt(tdx * tdx + tdy * tdy) || 1;
 
                       let moveSpeed = 0.5;
                       b.x += (tdx / tdist) * moveSpeed * timeScale;
@@ -5321,7 +5330,7 @@ if (dist(p.x, p.y, c.x, c.y) < pickupRange) {
                       let target = o.targetIsGreen ? greenZone : blueZone;
                       let dx2 = target.x - o.x;
                       let dy2 = target.y - o.y;
-                      let distToTarget = sqrt(dx2*dx2 + dy2*dy2) || 1;
+                      let distToTarget = sqrt(dx2 * dx2 + dy2 * dy2) || 1;
 
                       o.x += (dx2 / distToTarget) * 1.75 * timeScale;
                       o.y += (dy2 / distToTarget) * 1.75 * timeScale;
@@ -5492,7 +5501,7 @@ if (dist(p.x, p.y, c.x, c.y) < pickupRange) {
                               if (d > 2) {
                                   let dx = c.x - mx;
                                   let dy = c.y - my;
-                                  let len = sqrt(dx*dx + dy*dy) || 1;
+                                  let len = sqrt(dx * dx + dy * dy) || 1;
                                   c.vx += (dx / len) * 2.6 * timeScale;
                                   c.vy += (dy / len) * 2.6 * timeScale;
                               }
@@ -5504,7 +5513,7 @@ if (dist(p.x, p.y, c.x, c.y) < pickupRange) {
                               let repelStrength = map(d, 7, 88, 1.65, 0.28);
                               let dx = c.x - mx;
                               let dy = c.y - my;
-                              let len = sqrt(dx*dx + dy*dy) || 1;
+                              let len = sqrt(dx * dx + dy * dy) || 1;
 
                               c.vx += (dx / len) * repelStrength * 0.85 * timeScale;
                               c.vy += (dy / len) * repelStrength * 0.85 * timeScale;
@@ -5575,7 +5584,7 @@ if (dist(p.x, p.y, c.x, c.y) < pickupRange) {
                                   if (d > 3) {
                                       let dx = c.x - persistentHazard.x;
                                       let dy = c.y - persistentHazard.y;
-                                      let len = sqrt(dx*dx + dy*dy) || 1;
+                                      let len = sqrt(dx * dx + dy * dy) || 1;
                                       c.vx += (dx / len) * 1.8 * timeScale;
                                       c.vy += (dy / len) * 1.8 * timeScale;
                                   }
@@ -5669,7 +5678,7 @@ if (dist(p.x, p.y, c.x, c.y) < pickupRange) {
                                       // Gentle repel from beam
                                       let dx = c.x - cx;
                                       let dy = c.y - cy;
-                                      let len = sqrt(dx*dx + dy*dy) || 1;
+                                      let len = sqrt(dx * dx + dy * dy) || 1;
                                       c.vx += (dx / len) * 1.2 * timeScale;
                                       c.vy += (dy / len) * 1.2 * timeScale;
                                   }
@@ -5909,7 +5918,6 @@ if (typeof updateVegasScore === 'function') {
 updateMainStats();
 updatePrestigePreview();
 updatePrestigeButtonGlow();
-
     // ==================== AUTO-TRACK CURRENT ALPHA ====================
 if (trackAlpha && frameCount % 60 === 0) {   // Check every ~1 second
     const alpha = getCurrentAlpha();
