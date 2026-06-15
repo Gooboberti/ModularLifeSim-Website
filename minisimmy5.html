@@ -6955,7 +6955,7 @@ class Creature {
         this.adaptationLevel = 0;
         this.role = 'Balanced';
         this.brain = new NeuralNet();
-        this.wrigglePhase = random(TWO_PI); // For organic wriggling
+        this.wrigglePhase = random(TWO_PI);
 
         if (parentTraits) {
             this.traits = {
@@ -6992,7 +6992,6 @@ class Creature {
 
         this.updateSpecialization();
 
-        // === GENERATION + RESISTANT MODULE LIFESPAN SYSTEM ===
         const baseSeconds = 15;
         const secondsPerGen = 3;
         let lifespanSeconds = baseSeconds + (this.generation - 1) * secondsPerGen;
@@ -7014,6 +7013,32 @@ class Creature {
         bonus += harv * 0.0035;
         bonus += res * 0.0025;
         return bonus;
+    }
+
+    // === NEW: Module-based Movement Bonus ===
+    getModuleMovementBonus() {
+        const mover = this.getTieredModuleCount('mover');
+        const explorer = this.getTieredModuleCount('explorer');
+        const sensor = this.getTieredModuleCount('sensor');
+        const totalModules = this.modules.length;
+
+        let bonus = 0;
+
+        // Base bonus from having more modules (small)
+        bonus += totalModules * 0.012;
+
+        // Strong bonuses from movement-oriented modules
+        bonus += mover * 0.065;           // Mover is best for raw movement
+        bonus += explorer * 0.055;        // Explorer excels at exploration
+        bonus += sensor * 0.025;          // Sensor gives slight dynamic feel
+
+        // Small tier bonus (modules with higher tiers move a bit better)
+        const avgTier = this.modules.length > 0 
+            ? this.modules.reduce((sum, m) => sum + (m.tier || 1), 0) / this.modules.length 
+            : 1;
+        bonus += (avgTier - 1) * 0.018;
+
+        return constrain(bonus, 0, 0.85); // Hard cap so it doesn't get crazy
     }
 
     // === v3.0: Resistant Movement Penalty ===
@@ -7048,7 +7073,6 @@ class Creature {
         return bias;
     }
 
-    // === v3.1: Generation-based Movement Tendency ===
     getGenerationMovementBias() {
         const gen = this.generation;
         if (gen <= 2) return { stability: 0, exploration: 0.08 };
@@ -7078,7 +7102,6 @@ class Creature {
         return group;
     }
 
-    // === v3.0: Social Conversion Pressure ===
     getLocalSpecializationRarity() {
         let localGroup = this.getLocalGroup(65);
         if (localGroup.length < 4) return 0;
@@ -7132,7 +7155,6 @@ class Creature {
         return inputs;
     }
 
-    // === v3.0: Basic Module Nibbling ===
     tryNibbleModule(target) {
         if (!target || target === this || target.isPredator || this.isPredator) return false;
         if (target.modules.length === 0) return false;
@@ -7277,7 +7299,7 @@ class Creature {
 
     update(isDay, vortexDir, vortexStrength, timeScale = 1, envMods = null) {
         this.age += timeScale;
-        this.wrigglePhase += 0.12 * timeScale; // Advance wriggle phase
+        this.wrigglePhase += 0.12 * timeScale;
 
         if (this.age > this.maxAge) {
             this.energy = 0;
@@ -7324,7 +7346,7 @@ class Creature {
         let brainReproWill = brain[5] || 0.5;
         let brainPredatorTend = brain[6] || 0.5;
 
-        // === Hazard Avoidance (stronger) ===
+        // Hazard Avoidance
         if (effectiveHazardDist > 0.12) {
             let avoidAngle = hazardInfo.angle + PI;
             let avoidStrength = effectiveHazardDist * 2.9 * (0.65 + brainHazardAvoid * 1.5);
@@ -7371,7 +7393,7 @@ class Creature {
             this.vy += (dy / len) * escape;
         }
 
-        // === Module Nibbling ===
+        // Module Nibbling
         let localCreatures = this.getLocalGroup(46);
         if (localCreatures.length > 0 && random() < 0.014 * timeScale && !this.isPredator) {
             let target = random(localCreatures);
@@ -7392,29 +7414,32 @@ class Creature {
                 this.vy += (dy / d) * pull * timeScale;
             }
 
-            // === Micro Wriggle System (Microorganism feel) ===
+            // === Module Movement Bonus Applied ===
+            const moveBonus = this.getModuleMovementBonus();
             const genBias = this.getGenerationMovementBias();
             const explorerBonus = this.getTieredModuleCount('explorer') * 0.05;
 
             let cdist = dist(this.x, this.y, centerX, centerY);
 
-            // Constant small wriggling movement (like microorganisms)
-            let wriggleForce = 0.38 + (sin(this.wrigglePhase) * 0.22);
+            // Micro Wriggle (now boosted by modules)
+            let wriggleForce = (0.42 + (sin(this.wrigglePhase) * 0.24)) * (1 + moveBonus * 0.6);
             wriggleForce *= (0.9 + brainExploration * 0.6);
-            this.vx += cos(this.wrigglePhase * 1.3) * wriggleForce * 0.018 * timeScale;
-            this.vy += sin(this.wrigglePhase * 1.1) * wriggleForce * 0.018 * timeScale;
+            this.vx += cos(this.wrigglePhase * 1.3) * wriggleForce * 0.019 * timeScale;
+            this.vy += sin(this.wrigglePhase * 1.1) * wriggleForce * 0.019 * timeScale;
 
-            // Stronger exploration when near vortex or far from food
+            // Exploration (boosted by modules)
             if (cdist < 170) {
-                let exploreForce = (0.85 + brainExploration * 1.4) + explorerBonus + genBias.exploration;
-                exploreForce = constrain(exploreForce, 0.45, 2.6);
+                let exploreForce = (0.9 + brainExploration * 1.45) + explorerBonus + genBias.exploration;
+                exploreForce *= (1 + moveBonus * 0.7);
+                exploreForce = constrain(exploreForce, 0.5, 2.8);
 
-                this.vx += random(-1.05, 1.05) * 0.52 * exploreForce * timeScale;
-                this.vy += random(-1.05, 1.05) * 0.52 * exploreForce * timeScale;
+                this.vx += random(-1.1, 1.1) * 0.55 * exploreForce * timeScale;
+                this.vy += random(-1.1, 1.1) * 0.55 * exploreForce * timeScale;
             } else if (d > 70) {
-                let exploreForce = (0.9 + brainExploration * 1.25) + explorerBonus;
-                this.vx += random(-0.5, 0.5) * 0.35 * exploreForce * timeScale;
-                this.vy += random(-0.5, 0.5) * 0.35 * exploreForce * timeScale;
+                let exploreForce = (0.95 + brainExploration * 1.3) + explorerBonus;
+                exploreForce *= (1 + moveBonus * 0.65);
+                this.vx += random(-0.52, 0.52) * 0.37 * exploreForce * timeScale;
+                this.vy += random(-0.52, 0.52) * 0.37 * exploreForce * timeScale;
             }
 
             // Social Conversion Pressure
@@ -7445,7 +7470,7 @@ class Creature {
             }
         }
 
-        // === Resistant Movement Penalty ===
+        // Resistant Penalty
         const moveSpeed = this.speedMultiplier || 1;
         const resistantPenalty = this.getResistantSpeedPenalty();
         const finalMoveSpeed = moveSpeed * (1 - resistantPenalty);
@@ -7455,7 +7480,6 @@ class Creature {
         this.x += this.vx;
         this.y += this.vy;
 
-        // Gentle damping (keeps wriggling feel)
         this.vx *= 0.89;
         this.vy *= 0.89;
 
