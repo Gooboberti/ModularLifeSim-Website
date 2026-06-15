@@ -6202,13 +6202,74 @@ function formatSimTime(seconds) {
                       addFloatingText(mouseX || width/2, mouseY || 100, "Filter: Allow Predators", '#c026ff');
                   }
               }
+// ==================== VORTEX PARTICLES ====================
+class VortexParticle {
+    constructor(fromEdge = false) {
+        if (fromEdge) {
+            let angle = random(TWO_PI);
+            let d = random(450, 570);
+            this.x = centerX + cos(angle) * d;
+            this.y = centerY + sin(angle) * d;
+        } else {
+            this.x = random(width);
+            this.y = random(height);
+        }
+        this.life = 9999;
+        this.size = random(1.6, 2.8);
+        this.isSpecial = Math.random() < 0.03;
+        if (this.isSpecial) {
+            this.size = random(3.2, 4.5);
+            this.pulse = random(TWO_PI);
+        }
+    }
+    update(vortexDir, vortexStrength) {
+        let dx = this.x - centerX;
+        let dy = this.y - centerY;
+        let distToCenter = sqrt(dx * dx + dy * dy) || 1;
+        if (distToCenter < 3.5) { this.life = 0; return; }
+        let tangentX = -dy, tangentY = dx;
+        let len = sqrt(tangentX * tangentX + tangentY * tangentY) || 1;
+        this.x += (tangentX / len) * 1.25 * vortexStrength * vortexDir;
+        this.y += (tangentY / len) * 1.25 * vortexStrength * vortexDir;
+        let pull = 0.82 * vortexStrength;
+        this.x += (centerX - this.x) * pull / (distToCenter + 0.8);
+        this.y += (centerY - this.y) * pull / (distToCenter + 0.8);
+        if (musicEnabled && musicData.bass > 0.35) {
+            let jerk = (musicData.bass - 0.35) * 2.8;
+            this.x += random(-jerk, jerk);
+            this.y += random(-jerk, jerk);
+        }
+        if (this.isSpecial) {
+            this.pulse = (this.pulse || 0) + 0.08;
+        }
+    }
+    show() {
+        if (this.isSpecial) {
+            let pulseSize = this.size + sin(this.pulse) * 1.2;
+            fill(255, 255, 255, 40);
+            noStroke();
+            circle(this.x, this.y, pulseSize * 2.8);
+            fill(255, 255, 255, 90);
+            circle(this.x, this.y, pulseSize * 1.8);
+            fill(255, 255, 255, 255);
+            circle(this.x, this.y, pulseSize);
+            fill(200, 220, 255, 180);
+            circle(this.x, this.y, pulseSize * 0.5);
+        } else {
+            fill(255, 255, 255, 185);
+            noStroke();
+            circle(this.x, this.y, this.size);
+        }
+    }
+}
+
 // ==================== PRUNE MODE: Purple Infect Particle ====================
 class PurpleInfectParticle {
     constructor() {
         let angle = random(TWO_PI);
         let distance = random(480, 620);
         this.x = centerX + cos(angle) * distance;
-        this.y = centerX + sin(angle) * distance;
+        this.y = centerY + sin(angle) * distance;
         this.vx = random(-1.3, 1.3);
         this.vy = random(-1.3, 1.3);
         this.size = random(3.2, 4.5);
@@ -6223,7 +6284,6 @@ class PurpleInfectParticle {
         this.vx *= 0.982;
         this.vy *= 0.982;
 
-        // Music reactivity
         if (musicEnabled && musicData.bass > 0.3) {
             let jerk = (musicData.bass - 0.3) * 2.2;
             this.vx += random(-jerk, jerk);
@@ -6251,7 +6311,7 @@ class YellowGlowingParticle {
         let angle = random(TWO_PI);
         let distance = random(480, 620);
         this.x = centerX + cos(angle) * distance;
-        this.y = centerX + sin(angle) * distance;
+        this.y = centerY + sin(angle) * distance;
         this.vx = random(-1.2, 1.2);
         this.vy = random(-1.2, 1.2);
         this.size = random(3.3, 4.6);
@@ -6338,6 +6398,313 @@ class ModuleParticle {
     }
     isDead() {
         return this.life <= 0 || this.collected;
+    }
+}
+
+// =====================================================
+// PARTICLE EATING LOGIC
+// =====================================================
+function handleParticleEating(creature) {
+    // Purple Infect Particle (Prune Mode)
+    for (let i = purpleInfectParticles.length - 1; i >= 0; i--) {
+        let p = purpleInfectParticles[i];
+        if (dist(creature.x, creature.y, p.x, p.y) < 20) {
+            creature.purpleFlash = max(creature.purpleFlash || 0, 520);
+            creature.purpleInfectStrength = (creature.purpleInfectStrength || 0) + 1.1;
+            purpleInfectParticles.splice(i, 1);
+            addFloatingText(creature.x, creature.y - 22, "INFECTED", '#c026ff');
+            playTone(420, 'sawtooth', 0.28, 0.65);
+            if (!creature.isPredator && creature.energy < 48 && random() < 0.52) {
+                creature.isPredator = true;
+                creature.currentThought = "Infected - Turned predator";
+            }
+            return;
+        }
+    }
+    // Yellow Glowing Particle (Evolve Mode)
+    for (let i = yellowGlowingParticles.length - 1; i >= 0; i--) {
+        let p = yellowGlowingParticles[i];
+        if (dist(creature.x, creature.y, p.x, p.y) < 20) {
+            const types = ['Harvester', 'Sensor', 'Mover', 'Resistant', 'Explorer', 'Communicator'];
+            let newType = random(types);
+            creature.modules.push({ type: newType, tier: 1 });
+            yellowGlowingParticles.splice(i, 1);
+            addFloatingText(creature.x, creature.y - 25, "+1 MODULE", '#ffcc33');
+            playTone(780, 'sine', 0.18, 0.5);
+            return;
+        }
+    }
+    // Module Particle (Evolve Mode)
+    for (let i = moduleParticles.length - 1; i >= 0; i--) {
+        let p = moduleParticles[i];
+        if (dist(creature.x, creature.y, p.x, p.y) < 18) {
+            creature.modules.push({ type: p.type, tier: 1 });
+            p.collected = true;
+            addFloatingText(creature.x, creature.y - 22, `+${p.type}`, '#ffdd66');
+            playTone(920, 'sine', 0.15, 0.45);
+            return;
+        }
+    }
+}
+
+// =====================================================
+// VORTEX ARRIVAL LOGIC
+// =====================================================
+function handleParticleVortexArrival() {
+    // Purple Infect Particle → Spawn predators (Prune)
+    for (let i = purpleInfectParticles.length - 1; i >= 0; i--) {
+        let p = purpleInfectParticles[i];
+        if (p.isDead() && dist(p.x, p.y, width / 2, height / 2) < 35) {
+            for (let k = 0; k < 3; k++) {
+                let predator = createPredatorFromGeneVaultOrRandom();
+                creatures.push(predator);
+            }
+            purpleInfectParticles.splice(i, 1);
+        }
+    }
+    // Yellow Glowing Particle → Popcorn into modules (Evolve)
+    for (let i = yellowGlowingParticles.length - 1; i >= 0; i--) {
+        let p = yellowGlowingParticles[i];
+        if (p.isDead() && dist(p.x, p.y, width / 2, height / 2) < 35) {
+            for (let k = 0; k < 3; k++) {
+                let mod = new ModuleParticle(true);
+                moduleParticles.push(mod);
+            }
+            yellowGlowingParticles.splice(i, 1);
+        }
+    }
+    // Module Particle reaches vortex → Popcorn into more modules
+    for (let i = moduleParticles.length - 1; i >= 0; i--) {
+        let p = moduleParticles[i];
+        if (p.isFloating && p.isDead() && dist(p.x, p.y, width / 2, height / 2) < 32) {
+            for (let k = 0; k < 3; k++) {
+                let mod = new ModuleParticle(true);
+                moduleParticles.push(mod);
+            }
+            moduleParticles.splice(i, 1);
+        }
+    }
+}
+
+// =====================================================
+// MUSIC MODE PARTICLE SPAWNING
+// =====================================================
+function updateMusicModeParticles_v2() {
+    console.log("%c[SPAWN] updateMusicModeParticles() called | Mode:", "color: #00ff9d", currentMusicMode);
+    if (!currentMusicMode) return;
+
+    console.log("%c[DEBUG] Reached mode check | currentMusicMode =", "color: orange", currentMusicMode);
+
+    // ==================== PRUNE MODE ====================
+    if (currentMusicMode === 'prune') {
+        if (random() < 0.24 && purpleInfectParticles.length < 28) {
+            purpleInfectParticles.push(new PurpleInfectParticle());
+            console.log("%c[SPAWNED] Purple particle added. Total now:", "color: #c084fc", purpleInfectParticles.length);
+        }
+        if (random() < 0.035 * (redHazardIntensity || 1) && redHazards.length < 26) {
+            redHazards.push(new RedHazard());
+        }
+    }
+
+    // ==================== EVOLVE MODE ====================
+    if (currentMusicMode === 'evolve') {
+        if (random() < 0.34 && moduleParticles.length < 55) {
+            let clusterSize = floor(random(1, 3.6));
+            for (let i = 0; i < clusterSize; i++) {
+                moduleParticles.push(new ModuleParticle(true));
+            }
+        }
+        if (random() < 0.14 && yellowGlowingParticles.length < 20) {
+            yellowGlowingParticles.push(new YellowGlowingParticle());
+        }
+    }
+
+    // ==================== REPLICATE MODE ====================
+    if (currentMusicMode === 'replicate') {
+        if (frameCount % 9 === 0 && random() < 0.85) {
+            for (let i = 0; i < 5; i++) {
+                if (vortexParticles.length < 240) {
+                    vortexParticles.push(new VortexParticle(true));
+                }
+            }
+        }
+    }
+}
+
+// ==================== MISSING CLASSES ====================
+class Explosion {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.life = 20;
+        this.maxLife = 20;
+        this.radius = 6;
+        this.particles = [];
+        for (let i = 0; i < 10; i++) {
+            this.particles.push({
+                x: 0, y: 0,
+                vx: random(-2.8, 2.8),
+                vy: random(-2.8, 2.8),
+                life: random(10, 18)
+            });
+        }
+    }
+    update() {
+        this.life--;
+        this.radius += 2.4;
+        for (let p of this.particles) {
+            p.x += p.vx; p.y += p.vy;
+            p.vx *= 0.9; p.vy *= 0.9;
+            p.life--;
+        }
+    }
+    show() {
+        let alpha = map(this.life, 0, this.maxLife, 0, 200);
+        noStroke();
+        fill(251, 146, 60, alpha * 0.5);
+        circle(this.x, this.y, this.radius * 1.5);
+        fill(239, 68, 68, alpha);
+        circle(this.x, this.y, this.radius);
+        fill(255, 240, 200, alpha * 1.1);
+        circle(this.x, this.y, this.radius * 0.4);
+        for (let p of this.particles) {
+            if (p.life > 0) {
+                let pAlpha = map(p.life, 0, 16, 0, 180);
+                fill(251, 146, 60, pAlpha);
+                circle(this.x + p.x, this.y + p.y, 3);
+            }
+        }
+    }
+}
+
+class RedHazard {
+    constructor() {
+        let angle = random(TWO_PI);
+        let d = random(400, 560);
+        this.x = centerX + cos(angle) * d;
+        this.y = centerY + sin(angle) * d;
+        this.vx = random(-0.6, 0.6);
+        this.vy = random(-0.6, 0.6);
+        this.size = random(5, 8);
+        this.pulse = random(TWO_PI);
+    }
+    update(vortexDir, vortexStrength) {
+        let dx = this.x - centerX;
+        let dy = this.y - centerY;
+        let distToCenter = sqrt(dx * dx + dy * dy) || 1;
+        if (distToCenter < 7) { this.explode(); return; }
+        let tangentX = -dy, tangentY = dx;
+        let len = sqrt(tangentX * tangentX + tangentY * tangentY) || 1;
+        let rotForce = 1.4 * vortexStrength * vortexDir;
+        this.vx += (tangentX / len) * rotForce;
+        this.vy += (tangentY / len) * rotForce;
+        let pull = 0.95 * vortexStrength;
+        this.vx += (centerX - this.x) * pull / (distToCenter + 6);
+        this.vy += (centerY - this.y) * pull / (distToCenter + 6);
+        this.x += this.vx;
+        this.y += this.vy;
+        if (musicEnabled && musicData.highs > 0.4) {
+            let jerk = (musicData.highs - 0.4) * 3.2;
+            this.vx += random(-jerk, jerk);
+            this.vy += random(-jerk, jerk);
+        }
+        this.vx *= 0.86;
+        this.vy *= 0.86;
+        this.pulse += 0.08;
+    }
+    explode() {
+        for (let i = 0; i < 4; i++) {
+            let angle = random(TWO_PI);
+            redBeams.push(new RedBeam(this.x, this.y, angle));
+        }
+    }
+    show() {
+        let alpha = 190 + sin(this.pulse) * 45;
+        fill(239, 68, 68, alpha);
+        noStroke();
+        circle(this.x, this.y, this.size);
+        fill(239, 68, 68, 55);
+        circle(this.x, this.y, this.size * 2);
+        fill(255, 225, 225, 230);
+        circle(this.x, this.y, this.size * 0.4);
+    }
+}
+
+class RedBeam {
+    constructor(x, y, angle) {
+        this.x = x;
+        this.y = y;
+        this.angle = angle;
+        this.vx = cos(angle) * 4.5;
+        this.vy = sin(angle) * 4.5;
+        this.life = 44;
+        this.width = 6.5;
+        this.damageApplied = false;
+    }
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.life--;
+        if (!this.damageApplied) {
+            for (let c of creatures) {
+                let d = dist(this.x, this.y, c.x, c.y);
+                if (d < 36) {
+                    let sensorBonus = c.getModuleCount('sensor') * 0.32;
+                    let damage = 20 + random(3, 8) - sensorBonus;
+                    c.energy = max(0, c.energy - damage);
+                    c.damageFlash = 42;
+                    c.purpleFlash = max(c.purpleFlash || 0, 38);
+                    c.hazardDamageTaken = (c.hazardDamageTaken || 0) + damage;
+                    let dx = c.x - this.x;
+                    let dy = c.y - this.x;
+                    let len = sqrt(dx*dx + dy*dy) || 1;
+                    c.vx += (dx / len) * 1.7;
+                    c.vy += (dy / len) * 1.7;
+                    if (c.energy > 15) c.currentThought = "Hit by beam!";
+                }
+            }
+            this.damageApplied = true;
+        }
+    }
+    show() {
+        if (this.life <= 0) return;
+        let alpha = map(this.life, 0, 44, 0, 190);
+        stroke(239, 68, 68, alpha);
+        strokeWeight(this.width);
+        line(this.x - this.vx * 2.5, this.y - this.vy * 2.5, this.x, this.y);
+        stroke(239, 68, 68, alpha * 0.3);
+        strokeWeight(this.width * 1.7);
+        line(this.x - this.vx * 7, this.y - this.vy * 7, this.x - this.vx * 1.5, this.y - this.vy * 1.5);
+    }
+}
+
+class SpawnEffect {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.life = 36;
+        this.maxLife = 36;
+        this.rings = [];
+        for (let i = 0; i < 3; i++) {
+            this.rings.push({ radius: 7 + i * 5, alpha: 210 });
+        }
+    }
+    update() {
+        this.life--;
+        for (let r of this.rings) {
+            r.radius += 1.7;
+            r.alpha = map(this.life, 0, this.maxLife, 0, 210);
+        }
+    }
+    show() {
+        for (let r of this.rings) {
+            if (r.alpha > 5) {
+                stroke(52, 211, 153, r.alpha);
+                strokeWeight(1.8);
+                noFill();
+                circle(this.x, this.y, r.radius);
+            }
+        }
     }
 }
 
