@@ -8646,10 +8646,38 @@ function purchaseGeneVaultSlot(slotNumber) {
         }
 
         alert(`Gene Vault Slot ${slotNumber} unlocked!`);
-        hideGeneVault();
+
+        // Direct DOM update so the slot visually unlocks immediately
+        const cards = document.querySelectorAll('#gene-vault-modal .grid > div');
+        const targetCard = cards[slotNumber - 1];
+
+        if (targetCard) {
+            targetCard.outerHTML = `
+                <div onclick="useGeneVaultSlot(${slotNumber})"
+                     class="group cursor-pointer rounded-2xl border border-emerald-500/40 bg-[#0a0a0f] p-4 transition-all hover:border-emerald-400">
+                    <div class="mb-2 flex items-center justify-between">
+                        <div class="text-sm font-semibold text-emerald-400">Slot ${slotNumber}</div>
+                        <div class="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] text-emerald-400">UNLOCKED</div>
+                    </div>
+                    <div class="mb-2 flex justify-center">
+                        <canvas id="vault-slot-${slotNumber}-canvas" width="92" height="92"
+                                class="rounded-xl border border-white/10 bg-[#111113]"></canvas>
+                    </div>
+                    <div id="vault-slot-${slotNumber}-info" class="text-center">
+                        <div class="text-xs text-white/60">Empty</div>
+                        <div class="text-[10px] text-white/40">Click to place egg</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Backup refresh
         setTimeout(() => {
-            showGeneVault();
-        }, 80);
+            if (typeof renderAllGeneVaultSlots === 'function') {
+                renderAllGeneVaultSlots();
+            }
+        }, 120);
+
     } else {
         alert(`You need ${cost.toLocaleString()} Aetherium Crystals to unlock Slot ${slotNumber}.`);
     }
@@ -8693,7 +8721,8 @@ function updateVaultSlotDisplay(slotNumber) {
 
     if (!canvas || !info) return;
 
-    if (egg) {
+    if (egg && egg.unlocked !== true && egg.name) {
+        // Has an actual egg stored
         if (typeof drawCreaturePreview === 'function') {
             drawCreaturePreview(egg, canvas);
         }
@@ -8702,7 +8731,7 @@ function updateVaultSlotDisplay(slotNumber) {
         info.innerHTML = `
             <div class="font-semibold text-emerald-400 text-sm">${egg.name}</div>
             <div class="text-[10px] text-white/60">Gen ${egg.generation} • ${totalModules} modules • ${egg.killCount || 0} kills</div>
-            
+           
             <div class="flex gap-2 mt-2">
                 <button onclick="event.stopImmediatePropagation(); swapGeneVaultEgg(${slotNumber})"
                         class="flex-1 px-2 py-1 text-[10px] rounded-lg bg-violet-600 hover:bg-violet-500 text-white font-medium">
@@ -8715,8 +8744,10 @@ function updateVaultSlotDisplay(slotNumber) {
             </div>
         `;
     } else {
+        // Empty or newly unlocked slot
         const ctx = canvas.getContext('2d');
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+
         info.innerHTML = `
             <div class="text-xs text-white/60">Empty</div>
             <div class="text-[10px] text-white/40">Click to place egg</div>
@@ -8747,7 +8778,6 @@ function showEggInventoryForVault(targetSlot) {
         eggs.forEach((egg, index) => {
             const card = document.createElement('div');
             card.className = 'bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-4 cursor-pointer transition-colors mb-2';
-
             const canvasId = `vault-choose-preview-${index}`;
 
             card.innerHTML = `
@@ -8825,7 +8855,6 @@ function showEggInventoryForVaultSwap(targetSlot) {
         eggs.forEach((egg, index) => {
             const card = document.createElement('div');
             card.className = 'bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-4 cursor-pointer mb-2';
-
             const canvasId = `vault-swap-preview-${index}`;
 
             card.innerHTML = `
@@ -8844,18 +8873,14 @@ function showEggInventoryForVaultSwap(targetSlot) {
 
             card.querySelector('button').onclick = (e) => {
                 e.stopImmediatePropagation();
-
                 const currentEgg = geneVaultSlots[targetSlot - 1];
                 if (currentEgg) {
                     eggs.push(currentEgg);
                 }
-
                 geneVaultSlots[targetSlot - 1] = JSON.parse(JSON.stringify(egg));
                 eggs.splice(index, 1);
-
                 updateEggCountBadge();
                 hideEggInventory();
-
                 setTimeout(() => {
                     showGeneVault();
                     updateVaultSlotDisplay(targetSlot);
@@ -8932,17 +8957,14 @@ function showEggDetails(index) {
         <div class="fixed inset-0 bg-black/80 flex items-center justify-center z-[110]" onclick="this.remove()">
             <div onclick="event.stopImmediatePropagation()"
                  class="modal bg-[#121218] border border-white/10 rounded-3xl max-w-md w-full mx-4 p-5">
-
                 <div class="flex gap-4 mb-4">
                     <div class="flex-shrink-0">
                         <canvas id="egg-preview-canvas" width="92" height="92"
                                 class="rounded-xl border border-white/10 bg-[#111113]"></canvas>
                     </div>
-
                     <div class="flex-1 min-w-0">
                         <div class="font-semibold text-xl text-emerald-400">${egg.name}</div>
                         <div class="text-xs text-white/50 mt-0.5">Stored Neural Pattern • Dormant</div>
-
                         <div class="flex gap-x-4 mt-3 text-sm">
                             <div><span class="text-white/50 text-xs">Gen</span><br><span class="font-mono">${egg.generation}</span></div>
                             <div><span class="text-white/50 text-xs">Kills</span><br><span class="font-mono text-red-400">${egg.killCount || 0}</span></div>
