@@ -8888,7 +8888,6 @@ function prestige() {
       }
 
 // ==================== SAVE MANAGER (Inventory + Vault + Incubator Only) ====================
-
 function showSaveManager() {
     const modal = document.getElementById('save-manager-modal');
     if (!modal) {
@@ -8915,39 +8914,31 @@ function hideSaveManager() {
 function quickSave() {
     const nameInput = document.getElementById('new-save-name');
     let saveName = nameInput ? nameInput.value.trim() : '';
-
     if (!saveName) {
         saveName = `Quick Save - ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
     }
-
     // Only save inventories, currencies, vault, and incubator — NOT creatures or map state
     const saveData = {
         name: saveName,
         timestamp: Date.now(),
         version: "2.2-inventory-only",
-
         // Currencies & Score
         totalScore: totalScore,
         aetheriumCrystals: aetheriumCrystals,
         aetheriumDust: aetheriumDust,
         highRollerPoints: highRollerPoints,
-
         // Gene Vault
         geneVaultSlots: JSON.parse(JSON.stringify(geneVaultSlots)),
-
         // Egg Inventory
         eggs: JSON.parse(JSON.stringify(eggs)),
-
         // Incubation Chamber
         incubatingEggs: JSON.parse(JSON.stringify(incubatingEggs)),
         nextIncubationId: nextIncubationId
     };
-
     let saves = JSON.parse(localStorage.getItem('minisimmy_saves') || '[]');
     saves.unshift(saveData);
     if (saves.length > 20) saves = saves.slice(0, 20);
     localStorage.setItem('minisimmy_saves', JSON.stringify(saves));
-
     addFloatingText(width / 2, 80, `Saved: ${saveName}`, '#34d399');
     if (nameInput) nameInput.value = '';
     updateManualSavesList();
@@ -8956,22 +8947,16 @@ function quickSave() {
 function updateManualSavesList() {
     const container = document.getElementById('manual-saves-list');
     if (!container) return;
-
     container.innerHTML = '';
-
     let saves = JSON.parse(localStorage.getItem('minisimmy_saves') || '[]');
-
     if (saves.length === 0) {
         container.innerHTML = `<div class="text-center text-white/50 text-sm py-4">No manual saves yet.</div>`;
         return;
     }
-
     saves.forEach((save, index) => {
         const div = document.createElement('div');
         div.className = 'flex justify-between items-center bg-white/5 hover:bg-white/10 rounded-2xl px-4 py-2 text-sm';
-
         const date = new Date(save.timestamp).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-
         div.innerHTML = `
             <div class="flex-1 min-w-0 pr-3">
                 <div class="font-medium text-emerald-400 truncate">${save.name}</div>
@@ -8982,17 +8967,21 @@ function updateManualSavesList() {
                 <button class="px-3 py-1 text-xs rounded-xl bg-red-500/80 hover:bg-red-500 text-white">Delete</button>
             </div>
         `;
-
-        div.querySelector('button').onclick = () => loadSave(index);
-        div.querySelectorAll('button')[1].onclick = () => {
-            if (confirm(`Delete save "${save.name}"?`)) {
-                let currentSaves = JSON.parse(localStorage.getItem('minisimmy_saves') || '[]');
-                currentSaves.splice(index, 1);
-                localStorage.setItem('minisimmy_saves', JSON.stringify(currentSaves));
-                updateManualSavesList();
-            }
-        };
-
+        // Robust button handling
+        const buttons = div.querySelectorAll('button');
+        if (buttons.length >= 1) {
+            buttons[0].onclick = () => loadSave(index);
+        }
+        if (buttons.length >= 2) {
+            buttons[1].onclick = () => {
+                if (confirm(`Delete save "${save.name}"?`)) {
+                    let currentSaves = JSON.parse(localStorage.getItem('minisimmy_saves') || '[]');
+                    currentSaves.splice(index, 1);
+                    localStorage.setItem('minisimmy_saves', JSON.stringify(currentSaves));
+                    updateManualSavesList();
+                }
+            };
+        }
         container.appendChild(div);
     });
 }
@@ -9007,43 +8996,35 @@ function loadSave(index) {
     let saves = JSON.parse(localStorage.getItem('minisimmy_saves') || '[]');
     const save = saves[index];
     if (!save) return;
-
     if (!confirm(`Load "${save.name}"?\nThis will replace your current inventories, vault, and incubator.\nCreatures on the map will NOT be affected.`)) return;
-
     // === Only restore inventories, currencies, vault, and incubator ===
     totalScore = save.totalScore || 0;
     aetheriumCrystals = save.aetheriumCrystals || 0;
     aetheriumDust = save.aetheriumDust || 0;
     highRollerPoints = save.highRollerPoints || 0;
-
     if (save.geneVaultSlots) geneVaultSlots = save.geneVaultSlots;
     if (save.eggs) eggs = save.eggs;
     if (save.incubatingEggs) incubatingEggs = save.incubatingEggs;
     if (save.nextIncubationId) nextIncubationId = save.nextIncubationId;
-
     addFloatingText(width / 2, 80, `Loaded: ${save.name}`, '#34d399');
     hideSaveManager();
-
     // Refresh all relevant UI
     updateMainStats();
     updateAetheriumUI();
     updateEggCountBadge();
-    updatePrestigePreview?.();
-    updateTopFurnaceUI?.();
-
+    if (typeof updatePrestigePreview === 'function') updatePrestigePreview();
+    if (typeof updateTopFurnaceUI === 'function') updateTopFurnaceUI();
     // Refresh Gene Vault if it's open
     const vaultModal = document.getElementById('gene-vault-modal');
     if (vaultModal && vaultModal.style.display !== 'none') {
         setTimeout(() => {
-            updateGeneVaultIncubatingList();
-            renderAllGeneVaultSlots?.();
+            if (typeof updateGeneVaultIncubatingList === 'function') updateGeneVaultIncubatingList();
+            if (typeof renderAllGeneVaultSlots === 'function') renderAllGeneVaultSlots();
         }, 80);
     }
 }
-
 // ==================== END SAVE MANAGER ====================
-
-      
+     
 function confirmExtractToEgg() {
     if (!selectedCreature) {
         alert("No creature selected in the inspector.");
@@ -9051,8 +9032,6 @@ function confirmExtractToEgg() {
     }
     extractCreatureToEgg(selectedCreature);
 }
-
-      
       
     
     </script>
