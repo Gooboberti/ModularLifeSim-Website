@@ -6935,7 +6935,6 @@ class NeuralNet {
     }
 }
 
-  
 // ==================== CREATURE CLASS ====================
 class Creature {
     constructor(x, y, parentModules = null, generation = 1, parentTraits = null) {
@@ -6957,7 +6956,6 @@ class Creature {
         this.adaptationLevel = 0;
         this.role = 'Balanced';
         this.brain = new NeuralNet();
-
         if (parentTraits) {
             this.traits = {
                 pheromoneSensitivity: constrain(parentTraits.pheromoneSensitivity + random(-0.07, 0.07), 0.62, 1.55),
@@ -6973,10 +6971,8 @@ class Creature {
                 hazardAvoidance: 1.0 + random(-0.13, 0.13)
             };
         }
-
         let types = ['harvester', 'sensor', 'mover', 'resistant', 'explorer', 'communicator'];
         let colors = { 'harvester': '#34d399', 'sensor': '#38bdf8', 'mover': '#a78bfa', 'resistant': '#f472b6', 'explorer': '#fbbf24', 'communicator': '#c084fc' };
-
         if (parentModules) {
             this.modules = parentModules.map(m => ({ ...m }));
             if (random() < 0.42 && this.modules.length < 7) {
@@ -6990,25 +6986,19 @@ class Creature {
                 this.modules.push({ type: t, color: colors[t], offsetX: cos(ang) * di, offsetY: sin(ang) * di, tier: 1 });
             }
         }
-
         this.updateSpecialization();
-
         // === GENERATION + RESISTANT MODULE LIFESPAN SYSTEM ===
         const baseSeconds = 15;
         const secondsPerGen = 3;
-
         // Base lifespan from generation
         let lifespanSeconds = baseSeconds + (this.generation - 1) * secondsPerGen;
-
         // Resistant module bonus: +0.25 seconds per tier level
         const resistantBonus = this.getTieredModuleCount('resistant') * 0.25;
         lifespanSeconds += resistantBonus;
-
         // Convert to frames + light randomness
         this.maxAge = Math.floor(lifespanSeconds * 60);
         this.maxAge += Math.floor(random(-120, 120)); // ±2 seconds
     }
-
     getModuleCount(type) { return this.modules.filter(m => m.type === type).length; }
     getTieredModuleCount(type) {
         return this.modules.filter(m => m.type === type).reduce((sum, m) => sum + (m.tier || 1), 0);
@@ -7021,6 +7011,14 @@ class Creature {
         bonus += res * 0.0025;
         return bonus;
     }
+
+    // === v3.0: Resistant Movement Penalty ===
+    getResistantSpeedPenalty() {
+        const resistantTiers = this.getTieredModuleCount('resistant');
+        // 6% speed penalty per tier level, capped at 35%
+        return Math.min(0.35, resistantTiers * 0.06);
+    }
+
     getSimilarNeighborCount() {
         let count = 0;
         const myTypes = new Set(this.modules.map(m => m.type));
@@ -7083,7 +7081,6 @@ class Creature {
         inputs.push(constrain(cdist / 400, 0, 1));
         return inputs;
     }
-
     pruneExcessModules() {
         const maxModules = 11;
         if (this.modules.length <= maxModules) return;
@@ -7118,7 +7115,6 @@ class Creature {
         this.modules = newModules;
         this.updateSpecialization();
     }
-
     updateSpecialization() {
         if (this.modules.length === 0) {
             this.specialization = 'balanced';
@@ -7153,7 +7149,6 @@ class Creature {
             this.role = this.specialization.charAt(0).toUpperCase() + this.specialization.slice(1);
         }
     }
-
     reproduce() {
         let newModules = this.modules.map(m => ({...m}));
         let typeTierCounts = {};
@@ -7181,7 +7176,6 @@ class Creature {
         }
         return child;
     }
-
     update(isDay, vortexDir, vortexStrength, timeScale = 1, envMods = null) {
         this.age += timeScale;
 
@@ -7568,9 +7562,13 @@ class Creature {
             }
         }
 
+        // === v3.0: Apply Resistant movement penalty ===
         const moveSpeed = this.speedMultiplier || 1;
-        this.vx *= moveSpeed;
-        this.vy *= moveSpeed;
+        const resistantPenalty = this.getResistantSpeedPenalty();
+        const finalMoveSpeed = moveSpeed * (1 - resistantPenalty);
+        this.vx *= finalMoveSpeed;
+        this.vy *= finalMoveSpeed;
+
         this.x += this.vx;
         this.y += this.vy;
         this.vx *= 0.81;
@@ -7889,7 +7887,6 @@ class Creature {
         pop();
     }
 }
-
 updateMusicModeParticles_v2();
 // ==================== MUSIC MODE SPECIAL PARTICLES + VISUALIZER ====================
 if (currentMusicMode === 'prune' && purpleInfectParticles.length > 0) {
