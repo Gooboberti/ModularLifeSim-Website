@@ -6990,14 +6990,11 @@ class Creature {
         // === GENERATION + RESISTANT MODULE LIFESPAN SYSTEM ===
         const baseSeconds = 15;
         const secondsPerGen = 3;
-        // Base lifespan from generation
         let lifespanSeconds = baseSeconds + (this.generation - 1) * secondsPerGen;
-        // Resistant module bonus: +0.25 seconds per tier level
         const resistantBonus = this.getTieredModuleCount('resistant') * 0.25;
         lifespanSeconds += resistantBonus;
-        // Convert to frames + light randomness
         this.maxAge = Math.floor(lifespanSeconds * 60);
-        this.maxAge += Math.floor(random(-120, 120)); // ±2 seconds
+        this.maxAge += Math.floor(random(-120, 120));
     }
     getModuleCount(type) { return this.modules.filter(m => m.type === type).length; }
     getTieredModuleCount(type) {
@@ -7015,7 +7012,6 @@ class Creature {
     // === v3.0: Resistant Movement Penalty ===
     getResistantSpeedPenalty() {
         const resistantTiers = this.getTieredModuleCount('resistant');
-        // 6% speed penalty per tier level, capped at 35%
         return Math.min(0.35, resistantTiers * 0.06);
     }
 
@@ -7081,6 +7077,59 @@ class Creature {
         inputs.push(constrain(cdist / 400, 0, 1));
         return inputs;
     }
+
+    // === v3.0: Basic Module Nibbling ===
+    tryNibbleModule(target) {
+        if (!target || target === this || target.isPredator || this.isPredator) return false;
+        if (target.modules.length === 0) return false;
+
+        const mySpeed = this.speedMultiplier || 1;
+        const targetSpeed = target.speedMultiplier || 1;
+        const targetSensor = target.getTieredModuleCount('sensor');
+
+        // Base success chance
+        let successChance = 0.018;
+
+        // Faster creatures are harder to nibble
+        if (mySpeed < targetSpeed) successChance *= 0.6;
+
+        // High sensor on target makes nibbling harder
+        successChance *= (1 - (targetSensor * 0.08));
+
+        // Slightly prefer nibbling high-value modules (Harvester / Resistant)
+        const hasHighValue = target.modules.some(m => m.type === 'harvester' || m.type === 'resistant');
+        if (hasHighValue) successChance *= 1.25;
+
+        if (random() < successChance) {
+            // Choose a module to nibble (bias toward higher tier)
+            let targetModules = [...target.modules];
+            targetModules.sort((a, b) => (b.tier || 1) - (a.tier || 1));
+            let chosen = targetModules[0];
+
+            // Downgrade or remove the module
+            if (chosen.tier && chosen.tier > 1) {
+                chosen.tier--;
+            } else {
+                // Remove the module
+                const index = target.modules.indexOf(chosen);
+                if (index > -1) target.modules.splice(index, 1);
+            }
+
+            // Small reward for the nibbler
+            this.energy = min(100, this.energy + 6);
+            if (random() < 0.6) this.honey = min(26, this.honey + 1.5);
+
+            this.currentThought = "Nibbled module";
+            target.currentThought = "Lost module...";
+
+            target.updateSpecialization();
+            this.updateSpecialization();
+
+            return true;
+        }
+        return false;
+    }
+
     pruneExcessModules() {
         const maxModules = 11;
         if (this.modules.length <= maxModules) return;
@@ -7484,6 +7533,16 @@ class Creature {
                     let fireflyForce = 0;
                     this.vx += (dx2 / d2) * fireflyForce;
                     this.vy += (dy2 / d2) * fireflyForce;
+                }
+            }
+
+            // === v3.0: Basic Module Nibbling Attempt ===
+            let localCreatures = this.getLocalGroup(48);
+            if (localCreatures.length > 0 && random() < 0.012 * timeScale) {
+                // Pick a random nearby target
+                let target = random(localCreatures);
+                if (target && target.modules.length > 0) {
+                    this.tryNibbleModule(target);
                 }
             }
 
