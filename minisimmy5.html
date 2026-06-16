@@ -2857,9 +2857,27 @@ initializeIncubatorSlots();
 function showIncubator() {
     const modal = document.getElementById('incubator-modal');
     if (!modal) return;
+
     modal.classList.remove('hidden');
     modal.classList.add('flex');
+
     renderIncubatorSlots();
+
+    // Add "View Egg Inventory" button at the bottom
+    let footer = document.getElementById('incubator-footer-btn');
+    if (!footer) {
+        footer = document.createElement('div');
+        footer.id = 'incubator-footer-btn';
+        footer.className = 'mt-5 flex justify-center';
+        footer.innerHTML = `
+            <button onclick="hideIncubator(); showEggInventory();"
+                    class="flex items-center gap-x-2 px-6 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium transition-colors">
+                <i class="fa-solid fa-egg"></i>
+                <span>View Egg Inventory</span>
+            </button>
+        `;
+        modal.querySelector('.p-5')?.appendChild(footer) || modal.appendChild(footer);
+    }
 }
 
 function hideIncubator() {
@@ -2877,15 +2895,17 @@ function renderIncubatorSlots() {
 
     incubatorSlots.forEach((slot, index) => {
         const hasInc = slot.currentIncubation !== null;
-        const progress = hasInc ? slot.currentIncubation.progress : 0;
-        const card = document.createElement('div');
+        const progress = hasInc ? Math.floor(slot.currentIncubation.progress) : 0;
 
-        card.className = `rounded-2xl border p-4 transition-all ${hasInc ? 'border-amber-500/60 bg-[#0f0a05]' : 'border-amber-500/20 bg-[#0a0a0f]'}`;
+        const card = document.createElement('div');
+        card.className = `rounded-2xl border p-3 transition-all ${hasInc 
+            ? 'border-amber-500/50 bg-[#0f0a05]' 
+            : 'border-amber-500/20 bg-[#0a0a0f]'}`;
 
         let html = `
-            <div class="flex justify-between items-center mb-2">
+            <div class="flex justify-between items-center mb-1.5">
                 <div class="text-sm font-semibold text-amber-400">Slot ${slot.id}</div>
-                <div class="font-mono text-xs text-amber-400">${slot.multiplier.toFixed(2)}×</div>
+                <div class="font-mono text-xs px-2 py-0.5 rounded bg-black/40 text-amber-400">${slot.multiplier.toFixed(2)}×</div>
             </div>
         `;
 
@@ -2894,24 +2914,31 @@ function renderIncubatorSlots() {
             const canvasId = `incubator-slot-preview-${slot.id}`;
 
             html += `
-                <div class="flex gap-3 mb-3">
-                    <canvas id="${canvasId}" width="52" height="52"
+                <div class="flex gap-3 mb-2">
+                    <canvas id="${canvasId}" width="48" height="48"
                             class="rounded-xl border border-white/10 bg-[#111113] flex-shrink-0"></canvas>
+                    
                     <div class="flex-1 min-w-0">
-                        <div class="text-xs text-white/70">Incubating: <span class="text-emerald-400">${egg.name}</span></div>
-                        <div class="w-full bg-white/10 h-2 rounded-full mt-2 overflow-hidden">
-                            <div class="bg-amber-500 h-2 transition-all" style="width:${progress}%"></div>
+                        <div class="text-xs text-white/80 mb-0.5">
+                            Incubating: <span class="text-emerald-400 font-medium">${egg.name}</span>
                         </div>
-                        <div class="text-[10px] text-right text-white/50 mt-0.5">${progress.toFixed(0)}%</div>
+                        
+                        <div class="w-full bg-white/10 h-2 rounded-full overflow-hidden mt-1">
+                            <div class="bg-amber-500 h-2 transition-all" style="width: ${progress}%"></div>
+                        </div>
+                        <div class="text-[10px] text-right text-white/50 mt-0.5">${progress}%</div>
                     </div>
                 </div>
+
                 <button onclick="cancelIncubationInSlot(${index}); event.stopImmediatePropagation();"
-                        class="w-full py-1 text-xs rounded-xl bg-red-500/80 hover:bg-red-500 text-white">Cancel</button>
+                        class="w-full py-1 text-xs rounded-xl bg-red-500/90 hover:bg-red-500 text-white font-medium">
+                    Cancel
+                </button>
             `;
         } else {
             html += `
-                <div class="h-14 flex items-center justify-center border border-white/10 rounded-xl bg-black/30 mb-2">
-                    <div class="text-center"><div class="text-xs text-white/50">Empty</div></div>
+                <div class="h-12 flex items-center justify-center border border-white/10 rounded-xl bg-black/30 mb-2">
+                    <div class="text-xs text-white/50">Empty Slot</div>
                 </div>
                 <button onclick="startIncubationInSlot(${index}); event.stopImmediatePropagation();"
                         class="w-full py-1.5 text-xs rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-medium">
@@ -2923,7 +2950,7 @@ function renderIncubatorSlots() {
         card.innerHTML = html;
         grid.appendChild(card);
 
-        // Draw creature preview if something is incubating
+        // Draw creature preview
         if (hasInc) {
             setTimeout(() => {
                 const canvas = document.getElementById(`incubator-slot-preview-${slot.id}`);
