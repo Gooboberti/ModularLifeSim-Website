@@ -2852,25 +2852,29 @@ initializeIncubatorSlots();
 function showIncubator() {
     const modal = document.getElementById('incubator-modal');
     if (!modal) return;
+
     modal.classList.remove('hidden');
     modal.classList.add('flex');
     renderIncubatorSlots();
 
-    // Add "View Egg Inventory" button at the bottom
-    let footer = document.getElementById('incubator-footer-btn');
-    if (!footer) {
-        footer = document.createElement('div');
-        footer.id = 'incubator-footer-btn';
-        footer.className = 'mt-5 flex justify-center';
-        footer.innerHTML = `
-            <button onclick="hideIncubator(); showEggInventory();"
-                    class="flex items-center gap-x-2 px-6 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium transition-colors">
-                <i class="fa-solid fa-egg"></i>
-                <span>View Egg Inventory</span>
-            </button>
-        `;
-        modal.querySelector('.p-5')?.appendChild(footer) || modal.appendChild(footer);
-    }
+    // Remove any existing footer button first (prevents duplicates)
+    const oldFooter = document.getElementById('incubator-footer-btn');
+    if (oldFooter) oldFooter.remove();
+
+    // Create fresh footer button
+    const footer = document.createElement('div');
+    footer.id = 'incubator-footer-btn';
+    footer.className = 'mt-5 flex justify-center';
+    footer.innerHTML = `
+        <button onclick="hideIncubator(); setTimeout(() => { showEggInventory(); }, 80);"
+                class="flex items-center gap-x-2 px-6 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium transition-colors">
+            <i class="fa-solid fa-egg"></i>
+            <span>View Egg Inventory</span>
+        </button>
+    `;
+
+    const contentArea = modal.querySelector('.p-5') || modal;
+    contentArea.appendChild(footer);
 }
 
 function hideIncubator() {
@@ -9613,7 +9617,6 @@ function updateAetheriumUI() {
       }
 
 // ==================== SAVE MANAGER (Inventory + Vault + Incubator Only) ====================
-
 function showSaveManager() {
     const modal = document.getElementById('save-manager-modal');
     if (!modal) {
@@ -9640,16 +9643,14 @@ function hideSaveManager() {
 function quickSave() {
     const nameInput = document.getElementById('new-save-name');
     let saveName = nameInput ? nameInput.value.trim() : '';
-
     if (!saveName) {
         saveName = `Quick Save - ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
     }
 
-    // Only save inventories, currencies, vault, and incubator — NOT creatures or map state
     const saveData = {
         name: saveName,
         timestamp: Date.now(),
-        version: "2.2-inventory-only",
+        version: "2.3-incubator-slots",
 
         // Currencies & Score
         totalScore: totalScore,
@@ -9663,9 +9664,12 @@ function quickSave() {
         // Egg Inventory
         eggs: JSON.parse(JSON.stringify(eggs)),
 
-        // Incubation Chamber
-        incubatingEggs: JSON.parse(JSON.stringify(incubatingEggs)),
-        nextIncubationId: nextIncubationId
+        // Incubation Chamber (old system)
+        incubatingEggs: JSON.parse(JSON.stringify(incubatingEggs || [])),
+        nextIncubationId: nextIncubationId || 1,
+
+        // Incubator Slot Bonuses (the 10 slots with multipliers)
+        incubatorSlots: JSON.parse(JSON.stringify(incubatorSlots || []))
     };
 
     let saves = JSON.parse(localStorage.getItem('minisimmy_saves') || '[]');
@@ -9681,7 +9685,6 @@ function quickSave() {
 function updateManualSavesList() {
     const container = document.getElementById('manual-saves-list');
     if (!container) return;
-
     container.innerHTML = '';
 
     let saves = JSON.parse(localStorage.getItem('minisimmy_saves') || '[]');
@@ -9733,18 +9736,30 @@ function loadSave(index) {
     const save = saves[index];
     if (!save) return;
 
-    if (!confirm(`Load "${save.name}"?\nThis will replace your current inventories, vault, and incubator.\nCreatures on the map will NOT be affected.`)) return;
+    if (!confirm(`Load "${save.name}"?\nThis will replace your inventories, vault, incubator slots, and currencies.\nCreatures on the map will NOT be affected.`)) return;
 
-    // === Only restore inventories, currencies, vault, and incubator ===
+    // === Restore currencies ===
     totalScore = save.totalScore || 0;
     aetheriumCrystals = save.aetheriumCrystals || 0;
     aetheriumDust = save.aetheriumDust || 0;
     highRollerPoints = save.highRollerPoints || 0;
 
+    // === Restore Gene Vault ===
     if (save.geneVaultSlots) geneVaultSlots = save.geneVaultSlots;
+
+    // === Restore Egg Inventory ===
     if (save.eggs) eggs = save.eggs;
+
+    // === Restore Old Incubation System ===
     if (save.incubatingEggs) incubatingEggs = save.incubatingEggs;
     if (save.nextIncubationId) nextIncubationId = save.nextIncubationId;
+
+    // === Restore Incubator Slot Bonuses ===
+    if (save.incubatorSlots && save.incubatorSlots.length === MAX_INCUBATOR_SLOTS) {
+        incubatorSlots = save.incubatorSlots;
+    } else {
+        initializeIncubatorSlots();
+    }
 
     addFloatingText(width / 2, 80, `Loaded: ${save.name}`, '#34d399');
     hideSaveManager();
@@ -9755,18 +9770,24 @@ function loadSave(index) {
     updateEggCountBadge();
     updatePrestigePreview?.();
     updateTopFurnaceUI?.();
-    
+
+    // Refresh Incubator modal if it's currently open
+    const incModal = document.getElementById('incubator-modal');
+    if (incModal && incModal.classList.contains('flex')) {
+        setTimeout(() => {
+            renderIncubatorSlots();
+        }, 60);
+    }
 
     // Refresh Gene Vault if it's open
     const vaultModal = document.getElementById('gene-vault-modal');
-    if (vaultModal && vaultModal.style.display !== 'none') {
+    if (vaultModal && vaultModal.classList.contains('flex')) {
         setTimeout(() => {
-            updateGeneVaultIncubatingList();
+            updateGeneVaultIncubatingList?.();
             renderAllGeneVaultSlots?.();
         }, 80);
     }
 }
-
 // ==================== END SAVE MANAGER ====================
 
       
