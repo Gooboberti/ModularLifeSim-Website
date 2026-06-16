@@ -8413,7 +8413,6 @@ function createBulletExplosion(x, y) {
 }
 
 
-
 // ==================== EGG INVENTORY SYSTEM ====================
 function updateEggCountBadge() {
     const badge = document.getElementById('egg-count-badge');
@@ -8439,78 +8438,16 @@ function showEggInventory() {
     header.innerHTML = `
         <div class="flex justify-between items-center">
             <div>
-                <div class="text-xl font-semibold text-amber-400">Incubator</div>
-                <div class="text-xs text-white/50">Slots used: ${incubatingEggs.length}/${MAX_INCUBATOR_SLOTS}</div>
+                <div class="text-xl font-semibold text-amber-400">Egg Inventory</div>
+                <div class="text-xs text-white/50">Available eggs: ${eggs.length}</div>
             </div>
-            <div class="text-xs text-white/60">Available eggs: ${eggs.length}</div>
         </div>
     `;
     list.appendChild(header);
 
-    // === INCUBATING SECTION ===
-    if (incubatingEggs.length > 0) {
-        const sectionTitle = document.createElement('div');
-        sectionTitle.className = 'col-span-2 text-sm font-semibold text-violet-400 px-1 mt-1 mb-2';
-        sectionTitle.innerText = 'Currently Incubating';
-        list.appendChild(sectionTitle);
-
-        incubatingEggs.forEach((inc) => {
-            const isComplete = inc.progress >= 100;
-            const card = document.createElement('div');
-            card.className = `bg-white/5 border ${isComplete ? 'border-emerald-500/40' : 'border-violet-500/30'} rounded-2xl p-4 mb-2`;
-
-            const canvasId = `incubating-preview-${inc.id}`;
-
-            card.innerHTML = `
-                <div class="flex gap-3">
-                    <div class="flex-shrink-0">
-                        <canvas id="${canvasId}" width="68" height="68"
-                                class="rounded-xl border border-white/10 bg-[#111113]"></canvas>
-                    </div>
-                    <div class="flex-1 min-w-0">
-                        <div class="flex justify-between items-start">
-                            <div>
-                                <div class="font-semibold text-emerald-400">${inc.eggData.name}</div>
-                                <div class="text-xs text-white/60">Gen ${inc.eggData.generation} • ${inc.eggData.modules.length} modules</div>
-                            </div>
-                            <div class="text-right text-xs font-mono ${isComplete ? 'text-emerald-400' : 'text-violet-400'}">
-                                ${inc.progress.toFixed(0)}%
-                            </div>
-                        </div>
-
-                        <div class="w-full bg-white/10 rounded-full h-2 mt-2 mb-3 overflow-hidden">
-                            <div class="${isComplete ? 'bg-emerald-500' : 'bg-violet-500'} h-2 transition-all" style="width: ${inc.progress}%"></div>
-                        </div>
-
-                        <div class="flex gap-2">
-                            <button class="flex-1 py-1.5 text-xs rounded-xl ${isComplete ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-red-500/80 hover:bg-red-500'} text-white font-medium">
-                                ${isComplete ? 'Release Copy' : 'Remove Early'}
-                            </button>
-                            <button class="px-4 py-1.5 text-xs rounded-xl bg-white/10 hover:bg-white/20">Details</button>
-                        </div>
-                    </div>
-                </div>
-            `;
-
-            const buttons = card.querySelectorAll('button');
-            buttons[0].onclick = () => releaseIncubatedEgg(inc.id, !isComplete);
-            buttons[1].onclick = () => showIncubatingEggDetails(inc.id);
-
-            list.appendChild(card);
-
-            // Draw preview
-            setTimeout(() => {
-                const canvas = document.getElementById(canvasId);
-                if (canvas && typeof drawCreaturePreview === 'function') {
-                    drawCreaturePreview(inc.eggData, canvas);
-                }
-            }, 10);
-        });
-    }
-
     // === AVAILABLE EGGS ===
     const availTitle = document.createElement('div');
-    availTitle.className = 'col-span-2 mt-4 mb-2 px-1 text-sm font-semibold text-amber-400';
+    availTitle.className = 'col-span-2 mt-2 mb-2 px-1 text-sm font-semibold text-amber-400';
     availTitle.innerText = 'Available Eggs';
     list.appendChild(availTitle);
 
@@ -8536,8 +8473,7 @@ function showEggInventory() {
                     </div>
                 </div>
                 <div class="flex items-center gap-2">
-                    <button class="px-4 py-1.5 text-xs rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-medium">Start Incubation</button>
-                    <button class="px-3 py-1.5 text-xs rounded-xl bg-red-500/80 hover:bg-red-500 text-white font-medium">Delete</button>
+                    <button class="px-4 py-1.5 text-xs rounded-xl bg-red-500/80 hover:bg-red-500 text-white font-medium">Delete</button>
                 </div>
             `;
 
@@ -8547,13 +8483,7 @@ function showEggInventory() {
                 }
             };
 
-            const startBtn = card.querySelector('button');
-            startBtn.onclick = (e) => {
-                e.stopImmediatePropagation();
-                startIncubationOnEgg(index);
-            };
-
-            const deleteBtn = card.querySelectorAll('button')[1];
+            const deleteBtn = card.querySelector('button');
             deleteBtn.onclick = (e) => {
                 e.stopImmediatePropagation();
                 if (confirm(`Delete "${egg.name}" permanently?`)) {
@@ -8565,7 +8495,6 @@ function showEggInventory() {
 
             list.appendChild(card);
 
-            // Draw preview
             setTimeout(() => {
                 const canvas = document.getElementById(canvasId);
                 if (canvas && typeof drawCreaturePreview === 'function') {
@@ -8588,229 +8517,7 @@ function hideEggInventory() {
     }
 }
 
-function startIncubationOnEgg(eggIndex) {
-    if (incubatingEggs.length >= MAX_INCUBATOR_SLOTS) {
-        alert("Incubator is full (max 10 slots).");
-        return;
-    }
-
-    const egg = eggs[eggIndex];
-    if (!egg) return;
-
-    const incubationEntry = {
-        id: nextIncubationId++,
-        eggData: JSON.parse(JSON.stringify(egg)),
-        progress: 0,
-        completed: false
-    };
-
-    incubatingEggs.push(incubationEntry);
-    eggs.splice(eggIndex, 1);
-    updateEggCountBadge();
-    showEggInventory();
-}
-
-function playIncubationCompleteSound() {
-    playTone(880, 'sine', 0.18, 0.5);
-    setTimeout(() => playTone(1100, 'sine', 0.22, 0.45), 90);
-    setTimeout(() => playTone(1320, 'sine', 0.28, 0.4), 200);
-}
-
-function releaseIncubatedEgg(incubationId, isEarly = false) {
-    const index = incubatingEggs.findIndex(e => e.id === incubationId);
-    if (index === -1) return;
-
-    const inc = incubatingEggs[index];
-    const eggData = inc.eggData;
-
-    if (isEarly) {
-        eggs.push(JSON.parse(JSON.stringify(eggData)));
-        incubatingEggs.splice(index, 1);
-        updateEggCountBadge();
-
-        addFloatingText(width/2, 90, "Incubation canceled - Egg returned", '#f87171');
-
-        const vaultModal = document.getElementById('gene-vault-modal');
-        if (vaultModal && vaultModal.style.display !== 'none') {
-            setTimeout(() => {
-                updateGeneVaultIncubatingList();
-            }, 60);
-        }
-        return;
-    }
-
-    if (inc.progress >= 100) {
-        showReleaseChoiceModal(incubationId);
-        return;
-    }
-
-    actuallyReleaseIncubatedEgg(incubationId, false);
-}
-
-function showEarlyReleaseWarning(incubationId) {
-    const modal = document.createElement('div');
-    modal.className = 'fixed inset-0 bg-black/80 flex items-center justify-center z-[130]';
-    modal.innerHTML = `
-        <div class="bg-[#121218] border border-red-500/40 rounded-3xl max-w-sm w-full mx-4 p-6">
-            <div class="text-xl font-semibold text-red-400 mb-3">Release Early?</div>
-            <p class="text-white/80 mb-5">You will lose all incubation progress on this egg.<br>The creature will be released in a weaker state.</p>
-            
-            <div class="flex gap-3">
-                <button id="cancel-early" onclick="playUIClick()" class="flex-1 px-4 py-2.5 bg-white/10 hover:bg-white/20 rounded-2xl text-sm">Cancel</button>
-                <button id="confirm-early" class="flex-1 px-4 py-2.5 bg-red-500/90 hover:bg-red-500 rounded-2xl text-sm font-medium">Release Anyway</button>
-            </div>
-        </div>
-    `;
-    document.body.appendChild(modal);
-
-    modal.querySelector('#cancel-early').onclick = () => modal.remove();
-    modal.querySelector('#confirm-early').onclick = () => {
-        modal.remove();
-        actuallyReleaseIncubatedEgg(incubationId, true);
-    };
-}
-
-function showReleaseChoiceModal(incubationId) {
-    const modal = document.createElement('div');
-    modal.className = 'fixed inset-0 bg-black/80 flex items-center justify-center z-[130]';
-    modal.innerHTML = `
-        <div class="bg-[#121218] border border-emerald-500/40 rounded-3xl max-w-sm w-full mx-4 p-6">
-            <div class="text-xl font-semibold text-emerald-400 mb-2">Incubation Complete</div>
-            <p class="text-white/80 mb-5">This egg has been fully studied. You can release the creature and keep a stable copy.</p>
-            
-            <div class="space-y-2">
-                <button id="release-inventory" class="w-full px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 rounded-2xl text-sm font-medium">
-                    Release + Keep Copy in Inventory
-                </button>
-                <button id="release-vault" class="w-full px-4 py-2.5 bg-violet-600 hover:bg-violet-500 rounded-2xl text-sm font-medium">
-                    Release + Send Copy to Gene Vault
-                </button>
-                <button id="cancel-release" onclick="playUIClick()" class="w-full px-4 py-2.5 bg-white/10 hover:bg-white/20 rounded-2xl text-sm mt-2">
-                    Cancel
-                </button>
-            </div>
-        </div>
-    `;
-    document.body.appendChild(modal);
-
-    modal.querySelector('#cancel-release').onclick = () => modal.remove();
-
-    modal.querySelector('#release-inventory').onclick = () => {
-        modal.remove();
-        actuallyReleaseIncubatedEgg(incubationId, false, 'inventory');
-    };
-
-    modal.querySelector('#release-vault').onclick = () => {
-        modal.remove();
-        actuallyReleaseIncubatedEgg(incubationId, false, 'vault');
-    };
-}
-
-function actuallyReleaseIncubatedEgg(incubationId, isEarly = false, destination = 'inventory') {
-    const index = incubatingEggs.findIndex(e => e.id === incubationId);
-    if (index === -1) return;
-
-    const inc = incubatingEggs[index];
-    const eggData = inc.eggData;
-
-    const newCreature = new Creature(
-        random(width * 0.3, width * 0.7),
-        random(height * 0.3, height * 0.7),
-        eggData.modules,
-        eggData.generation || 1
-    );
-
-    if (eggData.traits) newCreature.traits = JSON.parse(JSON.stringify(eggData.traits));
-    newCreature.name = eggData.name;
-    newCreature.killCount = eggData.killCount || 0;
-    newCreature.childrenCount = eggData.childrenCount || 0;
-    newCreature.currentThought = isEarly ? "Released early from Incubator" : "Released from Incubator";
-
-    if (eggData.brain && newCreature.brain) {
-        const b = eggData.brain;
-        newCreature.brain.weightsIH = JSON.parse(JSON.stringify(b.weightsIH));
-        newCreature.brain.weightsHO = JSON.parse(JSON.stringify(b.weightsHO));
-        newCreature.brain.biasH = [...b.biasH];
-        newCreature.brain.biasO = [...b.biasO];
-        newCreature.brain.connectionStrengthIH = JSON.parse(JSON.stringify(b.connectionStrengthIH || []));
-        newCreature.brain.connectionStrengthHO = JSON.parse(JSON.stringify(b.connectionStrengthHO || []));
-    }
-
-    creatures.push(newCreature);
-    spawnEffects.push(new SpawnEffect(newCreature.x, newCreature.y));
-
-    if (!isEarly && inc.progress >= 100) {
-        if (destination === 'vault') {
-            const emptySlot = geneVaultSlots.findIndex(slot => slot === null);
-            if (emptySlot !== -1) {
-                geneVaultSlots[emptySlot] = JSON.parse(JSON.stringify(eggData));
-                addFloatingText(newCreature.x, newCreature.y - 25, "Sent to Gene Vault", '#a78bfa');
-            } else {
-                eggs.push(JSON.parse(JSON.stringify(eggData)));
-                addFloatingText(newCreature.x, newCreature.y - 25, "Vault Full - Kept in Inventory", '#fbbf24');
-            }
-        } else {
-            eggs.push(JSON.parse(JSON.stringify(eggData)));
-            addFloatingText(newCreature.x, newCreature.y - 25, "Stable Copy Kept", '#a78bfa');
-        }
-    } else {
-        addFloatingText(newCreature.x, newCreature.y - 25, "Released (Progress Lost)", '#f87171');
-    }
-
-    incubatingEggs.splice(index, 1);
-    updateEggCountBadge();
-    showEggInventory();
-}
-
-function showIncubatingEggDetails(incubationId) {
-    const inc = incubatingEggs.find(e => e.id === incubationId);
-    if (!inc) return;
-
-    const egg = inc.eggData;
-
-    let modulesHTML = '';
-    if (egg.modules && egg.modules.length > 0) {
-        modulesHTML = egg.modules.map(m => {
-            const tier = m.tier || 1;
-            return `<div class="text-xs" style="color: ${m.color}">${m.type} ${tier > 1 ? `T${tier}` : ''}</div>`;
-        }).join('');
-    }
-
-    const html = `
-        <div class="fixed inset-0 bg-black/80 flex items-center justify-center z-[120]" onclick="this.remove()">
-            <div onclick="event.stopImmediatePropagation()" class="modal bg-[#121218] border border-white/10 rounded-3xl max-w-md w-full mx-4 p-5">
-                <div class="flex justify-between items-start mb-4">
-                    <div>
-                        <div class="font-semibold text-xl text-emerald-400">${egg.name}</div>
-                        <div class="text-xs text-white/50">Incubating • ${inc.progress.toFixed(0)}% complete</div>
-                    </div>
-                    <button onclick="this.closest('.fixed').remove()" class="text-3xl leading-none text-white/60 hover:text-white">&times;</button>
-                </div>
-
-                <div class="mb-4">
-                    <div class="text-xs text-white/60 mb-1">Modules</div>
-                    <div class="bg-white/5 rounded-2xl p-3 text-sm max-h-32 overflow-auto border border-white/10">
-                        ${modulesHTML || '<span class="text-white/50">No modules</span>'}
-                    </div>
-                </div>
-
-                <div class="flex gap-3">
-                    <button onclick="releaseIncubatedEgg(${incubationId}, ${inc.progress < 100}); this.closest('.fixed').remove()"
-                            class="flex-1 px-4 py-2 rounded-2xl text-sm font-medium ${inc.progress >= 100 ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-red-500/90 hover:bg-red-500'} text-white">
-                        ${inc.progress >= 100 ? 'Release Copy' : 'Release Early (Lose Progress)'}
-                    </button>
-                    <button onclick="this.closest('.fixed').remove()" class="flex-1 px-4 py-2 rounded-2xl bg-white/10 hover:bg-white/20 text-sm">
-                        Close
-                    </button>
-                </div>
-            </div>
-        </div>
-    `;
-
-    document.body.insertAdjacentHTML('beforeend', html);
-}
-
-// ==================== GENE VAULT FUNCTIONS ====================
+// ==================== GENE VAULT FUNCTIONS (Cleaned - No Old Incubation) ====================
 
 function showGeneVault() {
     const modal = document.getElementById('gene-vault-modal');
@@ -8825,7 +8532,6 @@ function showGeneVault() {
     modal.style.cssText = '';
 
     setTimeout(() => {
-        updateGeneVaultIncubatingList();
         renderAllGeneVaultSlots();
     }, 80);
 }
@@ -8839,169 +8545,15 @@ function hideGeneVault() {
     }
 }
 
+// Stubbed out old incubation functions so they don't interfere with Gene Vault
 function showStartIncubationMenu() {
-    if (eggs.length === 0) {
-        alert("You have no eggs available to incubate.");
-        return;
-    }
-    if (incubatingEggs.length >= MAX_INCUBATOR_SLOTS) {
-        alert("Incubator is full (max 10).");
-        return;
-    }
-
-    const modal = document.createElement('div');
-    modal.className = 'fixed inset-0 bg-black/80 flex items-center justify-center';
-    modal.style.zIndex = '999999';
-
-    modal.innerHTML = `
-        <div class="bg-[#121218] border border-white/10 rounded-3xl max-w-md w-full mx-4 p-5">
-            <div class="flex justify-between items-center mb-4">
-                <div class="text-lg font-semibold text-amber-400">Start Incubating Egg</div>
-                <button class="text-2xl text-white/60 hover:text-white">&times;</button>
-            </div>
-            <div class="space-y-2 max-h-[400px] overflow-auto" id="incubate-egg-list"></div>
-        </div>
-    `;
-
-    const closeBtn = modal.querySelector('button');
-    closeBtn.onclick = () => modal.remove();
-
-    const listContainer = modal.querySelector('#incubate-egg-list');
-
-    eggs.forEach((egg, index) => {
-        const div = document.createElement('div');
-        div.className = 'flex justify-between items-center bg-white/5 hover:bg-white/10 rounded-2xl p-3';
-
-        const canvasId = `start-inc-preview-${index}`;
-
-        div.innerHTML = `
-            <div class="flex items-center gap-3 flex-1 min-w-0 pr-3">
-                <canvas id="${canvasId}" width="48" height="48"
-                        class="rounded-xl border border-white/10 bg-[#111113] flex-shrink-0"></canvas>
-                <div class="min-w-0">
-                    <div class="font-semibold text-emerald-400">${egg.name}</div>
-                    <div class="text-xs text-white/60">Gen ${egg.generation} • ${egg.modules.length} modules</div>
-                </div>
-            </div>
-            <div class="flex items-center gap-2 flex-shrink-0">
-                <button class="px-4 py-1 text-xs rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-medium">Incubate</button>
-                <button class="px-3 py-1 text-xs rounded-xl bg-red-500/80 hover:bg-red-500 text-white font-medium">Delete</button>
-            </div>
-        `;
-
-        div.querySelector('button').onclick = (e) => {
-            e.stopImmediatePropagation();
-            startIncubationOnEgg(index);
-            modal.remove();
-            setTimeout(() => {
-                const container = document.getElementById('gene-vault-incubating-list');
-                if (container) updateGeneVaultIncubatingList();
-            }, 50);
-        };
-
-        const deleteBtn = div.querySelectorAll('button')[1];
-        deleteBtn.onclick = (e) => {
-            e.stopImmediatePropagation();
-            if (confirm(`Delete "${egg.name}" permanently?`)) {
-                eggs.splice(index, 1);
-                updateEggCountBadge();
-                modal.remove();
-                setTimeout(() => showStartIncubationMenu(), 60);
-            }
-        };
-
-        listContainer.appendChild(div);
-
-        setTimeout(() => {
-            const canvas = document.getElementById(canvasId);
-            if (canvas && typeof drawCreaturePreview === 'function') {
-                drawCreaturePreview(egg, canvas);
-            }
-        }, 10);
-    });
-
-    document.body.appendChild(modal);
+    // Old incubation UI has been moved to the new dedicated Incubator modal
+    // This function is intentionally left empty to prevent old UI from appearing
 }
 
 function updateGeneVaultIncubatingList() {
-    const container = document.getElementById('gene-vault-incubating-list');
-    if (!container) return;
-
-    container.innerHTML = '';
-
-    if (incubatingEggs.length === 0) {
-        const empty = document.createElement('div');
-        empty.className = 'text-center text-white/50 text-sm py-4';
-        empty.innerText = 'No eggs currently incubating.';
-        container.appendChild(empty);
-        return;
-    }
-
-    incubatingEggs.forEach((inc) => {
-        const isComplete = inc.progress >= 100;
-        const egg = inc.eggData;
-
-        const div = document.createElement('div');
-        div.className = `bg-white/5 border ${isComplete ? 'border-emerald-500/40' : 'border-violet-500/30'} rounded-2xl p-3`;
-
-        const canvasId = `inc-preview-${inc.id}`;
-
-        div.innerHTML = `
-            <div class="flex gap-3">
-                <div class="flex-shrink-0">
-                    <canvas id="${canvasId}" width="68" height="68"
-                            class="rounded-xl border border-white/10 bg-[#111113]"></canvas>
-                </div>
-                <div class="flex-1 min-w-0">
-                    <div class="flex justify-between items-start">
-                        <div>
-                            <div class="font-semibold text-emerald-400">${egg.name}</div>
-                            <div class="text-[10px] text-white/60">
-                                Gen ${egg.generation} • ${egg.modules ? egg.modules.length : 0} modules
-                            </div>
-                        </div>
-                        <div class="text-xs font-mono ${isComplete ? 'text-emerald-400' : 'text-violet-400'}">
-                            ${inc.progress.toFixed(0)}%
-                        </div>
-                    </div>
-
-                    <div class="mt-2 flex gap-2">
-                        <button class="flex-1 py-1 text-xs rounded-xl ${isComplete ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-red-500/80 hover:bg-red-500'} text-white font-medium">
-                            ${isComplete ? 'Release Copy' : 'Cancel Early'}
-                        </button>
-                        <button class="px-3 py-1 text-xs rounded-xl bg-white/10 hover:bg-white/20 text-white/80">Delete</button>
-                    </div>
-                </div>
-            </div>
-        `;
-
-        setTimeout(() => {
-            const canvas = document.getElementById(canvasId);
-            if (canvas && typeof drawCreaturePreview === 'function') {
-                drawCreaturePreview(egg, canvas);
-            }
-        }, 10);
-
-        const buttons = div.querySelectorAll('button');
-
-        buttons[0].onclick = () => {
-            releaseIncubatedEgg(inc.id, !isComplete);
-            setTimeout(() => {
-                hideGeneVault();
-                showGeneVault();
-            }, 80);
-        };
-
-        buttons[1].onclick = () => {
-            if (confirm(`Delete this incubating egg? Progress will be lost.`)) {
-                incubatingEggs = incubatingEggs.filter(e => e.id !== inc.id);
-                updateEggCountBadge();
-                updateGeneVaultIncubatingList();
-            }
-        };
-
-        container.appendChild(div);
-    });
+    // Old incubation list rendering disabled.
+    // All incubation now happens in the new dedicated Incubator modal.
 }
 
 function purchaseGeneVaultSlot(slotNumber) {
@@ -9034,7 +8586,6 @@ function purchaseGeneVaultSlot(slotNumber) {
 
         alert(`Gene Vault Slot ${slotNumber} unlocked!`);
 
-        // Direct DOM update so the slot visually unlocks immediately
         const cards = document.querySelectorAll('#gene-vault-modal .grid > div');
         const targetCard = cards[slotNumber - 1];
 
@@ -9058,7 +8609,6 @@ function purchaseGeneVaultSlot(slotNumber) {
             `;
         }
 
-        // Backup refresh
         setTimeout(() => {
             if (typeof renderAllGeneVaultSlots === 'function') {
                 renderAllGeneVaultSlots();
@@ -9109,7 +8659,6 @@ function updateVaultSlotDisplay(slotNumber) {
     if (!canvas || !info) return;
 
     if (egg && egg.unlocked !== true && egg.name) {
-        // Has an actual egg stored
         if (typeof drawCreaturePreview === 'function') {
             drawCreaturePreview(egg, canvas);
         }
@@ -9131,7 +8680,6 @@ function updateVaultSlotDisplay(slotNumber) {
             </div>
         `;
     } else {
-        // Empty or newly unlocked slot
         const ctx = canvas.getContext('2d');
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -9401,369 +8949,6 @@ function deleteEgg(index) {
         updateEggCountBadge();
     }
 }
-         // ==================== CLEAN INVENTORY + PRESTIGE + AETHERIUM ====================
-
-// ==================== INVENTORY MODAL (Fixed) ====================
-function showInventory() {
-    const modal = document.getElementById('inventory-modal');
-    if (!modal) {
-        console.warn("Inventory modal not found");
-        return;
-    }
-
-    // Move modal to body if it's nested (prevents z-index/click issues)
-    if (modal.parentElement !== document.body) {
-        document.body.appendChild(modal);
-    }
-
-    // Update values
-    const crystalEl = document.getElementById('inv-crystals');
-    const dustEl = document.getElementById('inv-dust');
-
-    if (crystalEl) crystalEl.innerText = aetheriumCrystals || 0;
-    if (dustEl) dustEl.innerText = formatDust(aetheriumDust);
-
-    // Show modal
-    modal.classList.remove('hidden');
-    modal.classList.add('flex');
-}
-
-function hideInventory() {
-    const modal = document.getElementById('inventory-modal');
-    if (modal) {
-        modal.classList.remove('flex');
-        modal.classList.add('hidden');
-    }
-}
-
-function prestige() {
-    // Prestige warning modal is temporarily disabled (function not implemented yet)
-    // if (burningCrystals > 0 && !hidePrestigeWarning) {
-    //     showPrestigeWarningModal();
-    //     return;
-    // }
-
-    // Apply 15% dust loss if furnace was burning
-    if (burningCrystals > 0) {
-        const loss = burningCrystals * 0.15;
-        aetheriumDust += Math.floor(burningCrystals - loss);
-        burningCrystals = 0;
-        furnaceEndTime = 0;
-        addFloatingText(width/2, 90, `Furnace stopped (-15% Dust)`, '#f87171');
-    }
-
-    if (totalScore < 1000) {
-        addFloatingText(width/2, height/2 - 40, "Need at least 1,000 points to prestige", '#f87171');
-        return;
-    }
-
-    // === NEW CONVERSION: 100,000 points = 1 mg ===
-    const dustGained = totalScore / 100000;
-    aetheriumDust += dustGained;
-
-    playTone(660, 'sine', 0.18, 0.6);
-    setTimeout(() => playTone(880, 'sine', 0.22, 0.55), 90);
-    setTimeout(() => playTone(1100, 'sine', 0.28, 0.5), 200);
-
-    // Visual feedback on Dust button
-    const dustBtn = document.getElementById('top-dust-btn');
-    if (dustBtn) {
-        dustBtn.style.transition = 'all 0.1s ease';
-        dustBtn.style.transform = 'scale(1.2)';
-        dustBtn.style.boxShadow = '0 0 20px #fb923c, 0 0 35px #f59e0b';
-        setTimeout(() => {
-            if (dustBtn) {
-                dustBtn.style.transform = 'scale(1)';
-                dustBtn.style.boxShadow = '';
-            }
-        }, 450);
-    }
-
-    resetSim();
-    totalScore = 0;
-    updateMainStats();
-    updateAetheriumUI();
-    updateFurnaceUI();
-}
-
-
-
-    function updateAetheriumUI() {
-    const crystalEl = document.getElementById('aetherium-crystals');
-    const dustEl = document.getElementById('aetherium-dust');
-
-    if (crystalEl) crystalEl.innerText = formatLargeNumber(aetheriumCrystals);
-    if (dustEl) dustEl.innerText = formatDust(aetheriumDust);
-
-    const topDust = document.getElementById('top-dust');
-    const topCrystals = document.getElementById('top-crystals');
-
-    if (topDust) topDust.innerText = formatDust(aetheriumDust);
-    if (topCrystals) topCrystals.innerText = formatLargeNumber(aetheriumCrystals);
-}
-
-
-      // ==================== FURNACE TOP BAR + EXPONENTIAL POINTS ====================
-
-      function updateTopFurnaceUI() {
-          const timerEl = document.getElementById('top-furnace-timer');
-          const bonusEl = document.getElementById('top-furnace-bonus');
-          const pointsWrapper = document.getElementById('top-points-wrapper');
-
-          const isBurning = burningCrystals > 0 && furnaceEndTime > Date.now();
-          const mult = getBurningMultiplier();
-
-          // Timer on the outside of Furnace button
-          if (timerEl) {
-              if (isBurning) {
-                  const remaining = Math.max(0, Math.floor((furnaceEndTime - Date.now()) / 1000));
-                  const min = Math.floor(remaining / 60);
-                  const sec = remaining % 60;
-                  timerEl.innerText = `${min}:${sec.toString().padStart(2, '0')}`;
-                  timerEl.classList.remove('hidden');
-                  timerEl.classList.add('flex');
-              } else {
-                  timerEl.classList.add('hidden');
-                  timerEl.classList.remove('flex');
-              }
-          }
-
-          // Current bonus between Furnace and Points
-          if (bonusEl) {
-    if (isBurning && mult > 1) {
-        const displayMult = formatMultiplier(mult);
-        bonusEl.innerText = `x${displayMult}`;
-        bonusEl.classList.remove('hidden');
-        bonusEl.classList.add('flex');
-    } else {
-        bonusEl.classList.add('hidden');
-        bonusEl.classList.remove('flex');
-    }
-}
-
-          // Glowing pulsing effect on Points when furnace is active
-          if (pointsWrapper) {
-              if (isBurning) {
-                  pointsWrapper.style.boxShadow = '0 0 18px #f59e0b, 0 0 32px #fb923c';
-                  pointsWrapper.style.animation = 'pulse-orange 1.6s infinite ease-in-out';
-              } else {
-                  pointsWrapper.style.boxShadow = '';
-                  pointsWrapper.style.animation = '';
-              }
-          }
-      }
-
-       function updatePrestigePreview() {
-          const el = document.getElementById('prestige-dust-preview');
-          if (!el) return;
-
-          const dustAmount = totalScore / 100000; // 100k points = 1 mg
-          el.innerText = formatDust(dustAmount);
-      }
-
-      function updatePrestigeButtonGlow() {
-          const btn = document.getElementById('prestige-btn');
-          if (!btn) return;
-
-          const isBurning = burningCrystals > 0 && furnaceEndTime > Date.now();
-
-          if (!isBurning) {
-              btn.style.boxShadow = '0 0 12px #c026ff, 0 0 24px #a21caf';
-              btn.style.animation = 'prestige-glow 1.8s infinite ease-in-out';
-          } else {
-              btn.style.boxShadow = '';
-              btn.style.animation = '';
-          }
-      }
-
-
-
-      function formatScore(n) {
-          if (n >= 100000000) {
-              return n.toExponential(2);
-          }
-          return Math.floor(n).toLocaleString();
-      }
-
-      // Add the pulsing animation
-      if (!document.getElementById('pulse-orange-style')) {
-          const style = document.createElement('style');
-          style.id = 'pulse-orange-style';
-          style.innerHTML = `
-              @keyframes pulse-orange {
-                  0%, 100% { box-shadow: 0 0 18px #f59e0b, 0 0 32px #fb923c; }
-                  50% { box-shadow: 0 0 28px #fb923c, 0 0 48px #f59e0b; }
-              }
-          `;
-          document.head.appendChild(style);
-      }
-
-// ==================== SAVE MANAGER (Inventory + Vault + Incubator Only) ====================
-
-function showSaveManager() {
-    const modal = document.getElementById('save-manager-modal');
-    if (!modal) {
-        console.warn("Save manager modal not found");
-        return;
-    }
-    if (modal.parentElement !== document.body) {
-        document.body.appendChild(modal);
-    }
-    modal.classList.remove('hidden');
-    modal.classList.add('flex');
-    updateManualSavesList();
-    updateAutoSavesList();
-}
-
-function hideSaveManager() {
-    const modal = document.getElementById('save-manager-modal');
-    if (modal) {
-        modal.classList.remove('flex');
-        modal.classList.add('hidden');
-    }
-}
-
-function quickSave() {
-    const nameInput = document.getElementById('new-save-name');
-    let saveName = nameInput ? nameInput.value.trim() : '';
-
-    if (!saveName) {
-        saveName = `Quick Save - ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-    }
-
-    // Only save inventories, currencies, vault, and incubator — NOT creatures or map state
-    const saveData = {
-        name: saveName,
-        timestamp: Date.now(),
-        version: "2.2-inventory-only",
-
-        // Currencies & Score
-        totalScore: totalScore,
-        aetheriumCrystals: aetheriumCrystals,
-        aetheriumDust: aetheriumDust,
-        highRollerPoints: highRollerPoints,
-
-        // Gene Vault
-        geneVaultSlots: JSON.parse(JSON.stringify(geneVaultSlots)),
-
-        // Egg Inventory
-        eggs: JSON.parse(JSON.stringify(eggs)),
-
-        // Incubation Chamber
-        incubatingEggs: JSON.parse(JSON.stringify(incubatingEggs)),
-        nextIncubationId: nextIncubationId
-    };
-
-    let saves = JSON.parse(localStorage.getItem('minisimmy_saves') || '[]');
-    saves.unshift(saveData);
-    if (saves.length > 20) saves = saves.slice(0, 20);
-    localStorage.setItem('minisimmy_saves', JSON.stringify(saves));
-
-    addFloatingText(width / 2, 80, `Saved: ${saveName}`, '#34d399');
-    if (nameInput) nameInput.value = '';
-    updateManualSavesList();
-}
-
-function updateManualSavesList() {
-    const container = document.getElementById('manual-saves-list');
-    if (!container) return;
-
-    container.innerHTML = '';
-
-    let saves = JSON.parse(localStorage.getItem('minisimmy_saves') || '[]');
-
-    if (saves.length === 0) {
-        container.innerHTML = `<div class="text-center text-white/50 text-sm py-4">No manual saves yet.</div>`;
-        return;
-    }
-
-    saves.forEach((save, index) => {
-        const div = document.createElement('div');
-        div.className = 'flex justify-between items-center bg-white/5 hover:bg-white/10 rounded-2xl px-4 py-2 text-sm';
-
-        const date = new Date(save.timestamp).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-
-        div.innerHTML = `
-            <div class="flex-1 min-w-0 pr-3">
-                <div class="font-medium text-emerald-400 truncate">${save.name}</div>
-                <div class="text-xs text-white/50">${date}</div>
-            </div>
-            <div class="flex gap-2 flex-shrink-0">
-                <button class="px-3 py-1 text-xs rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white">Load</button>
-                <button class="px-3 py-1 text-xs rounded-xl bg-red-500/80 hover:bg-red-500 text-white">Delete</button>
-            </div>
-        `;
-
-        div.querySelector('button').onclick = () => loadSave(index);
-        div.querySelectorAll('button')[1].onclick = () => {
-            if (confirm(`Delete save "${save.name}"?`)) {
-                let currentSaves = JSON.parse(localStorage.getItem('minisimmy_saves') || '[]');
-                currentSaves.splice(index, 1);
-                localStorage.setItem('minisimmy_saves', JSON.stringify(currentSaves));
-                updateManualSavesList();
-            }
-        };
-
-        container.appendChild(div);
-    });
-}
-
-function updateAutoSavesList() {
-    const container = document.getElementById('autosave-list');
-    if (!container) return;
-    container.innerHTML = `<div class="text-center text-white/50 text-sm py-3">Auto-save coming soon</div>`;
-}
-
-function loadSave(index) {
-    let saves = JSON.parse(localStorage.getItem('minisimmy_saves') || '[]');
-    const save = saves[index];
-    if (!save) return;
-
-    if (!confirm(`Load "${save.name}"?\nThis will replace your current inventories, vault, and incubator.\nCreatures on the map will NOT be affected.`)) return;
-
-    // === Only restore inventories, currencies, vault, and incubator ===
-    totalScore = save.totalScore || 0;
-    aetheriumCrystals = save.aetheriumCrystals || 0;
-    aetheriumDust = save.aetheriumDust || 0;
-    highRollerPoints = save.highRollerPoints || 0;
-
-    if (save.geneVaultSlots) geneVaultSlots = save.geneVaultSlots;
-    if (save.eggs) eggs = save.eggs;
-    if (save.incubatingEggs) incubatingEggs = save.incubatingEggs;
-    if (save.nextIncubationId) nextIncubationId = save.nextIncubationId;
-
-    addFloatingText(width / 2, 80, `Loaded: ${save.name}`, '#34d399');
-    hideSaveManager();
-
-    // Refresh all relevant UI
-    updateMainStats();
-    updateAetheriumUI();
-    updateEggCountBadge();
-    updatePrestigePreview?.();
-    updateTopFurnaceUI?.();
-
-    // Refresh Gene Vault if it's open
-    const vaultModal = document.getElementById('gene-vault-modal');
-    if (vaultModal && vaultModal.style.display !== 'none') {
-        setTimeout(() => {
-            updateGeneVaultIncubatingList();
-            renderAllGeneVaultSlots?.();
-        }, 80);
-    }
-}
-
-// ==================== END SAVE MANAGER ====================
-
-      
-function confirmExtractToEgg() {
-    if (!selectedCreature) {
-        alert("No creature selected in the inspector.");
-        return;
-    }
-    extractCreatureToEgg(selectedCreature);
-}
-
-      
       
     
     </script>
