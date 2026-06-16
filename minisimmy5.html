@@ -2739,6 +2739,11 @@ function getCreatureTier(creature) {
     return Math.max(...creature.modules.map(m => m.tier || 1));
 }
 
+function showEggInventoryOnTop() {
+    // Opens egg inventory on top of the incubator without closing it
+    showEggInventory();
+}
+  
 // ==================== EXT ====================
 function showExtractEggModal() {
     const modal = document.getElementById('extract-egg-modal');
@@ -2833,6 +2838,33 @@ function extractCreatureToEgg(creature) {
     showExtractEggModal();
 }
 
+function releaseEggFromIncubatorSlot(slotIndex) {
+    const slot = incubatorSlots[slotIndex];
+    if (!slot || !slot.currentIncubation) return;
+
+    const eggData = slot.currentIncubation.eggData;
+
+    // Create creature from egg and add to swarm
+    if (typeof createCreatureFromEgg === 'function') {
+        const creature = createCreatureFromEgg(eggData);
+        creatures.push(creature);
+
+        // Small bonus for releasing from incubator
+        creature.energy = Math.min(100, (creature.energy || 60) + 20);
+    } else {
+        // Fallback if the function doesn't exist
+        console.warn("createCreatureFromEgg not found — egg released as basic creature");
+    }
+
+    addFloatingText(width / 2, 75, "Egg released to swarm", '#34d399');
+    playTone(480, 'sine', 0.25, 0.5);
+
+    // Clear the slot
+    slot.currentIncubation = null;
+    renderIncubatorSlots();
+    updateMainStats();
+}  
+  
 // ==================== INCUBATOR SYSTEM ====================
 function initializeIncubatorSlots() {
     if (!incubatorSlots || incubatorSlots.length === 0) {
@@ -2857,16 +2889,15 @@ function showIncubator() {
     modal.classList.add('flex');
     renderIncubatorSlots();
 
-    // Remove any existing footer button first (prevents duplicates)
+    // Remove old footer if it exists
     const oldFooter = document.getElementById('incubator-footer-btn');
     if (oldFooter) oldFooter.remove();
 
-    // Create fresh footer button
     const footer = document.createElement('div');
     footer.id = 'incubator-footer-btn';
     footer.className = 'mt-5 flex justify-center';
     footer.innerHTML = `
-        <button onclick="hideIncubator(); setTimeout(() => { showEggInventory(); }, 80);"
+        <button onclick="showEggInventoryOnTop();"
                 class="flex items-center gap-x-2 px-6 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium transition-colors">
             <i class="fa-solid fa-egg"></i>
             <span>View Egg Inventory</span>
@@ -2931,10 +2962,17 @@ function renderIncubatorSlots() {
 
             if (isReady) {
                 html += `
-                    <button onclick="claimIncubatedSlot(${index}); event.stopImmediatePropagation();"
-                            class="w-full py-1.5 text-xs rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold animate-pulse">
-                        Claim Reward
-                    </button>
+                    <div class="space-y-2 mt-1">
+                        <button onclick="claimIncubatedSlot(${index}); event.stopImmediatePropagation();"
+                                class="w-full py-1.5 text-xs rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold">
+                            Claim Reward
+                        </button>
+                        
+                        <button onclick="releaseEggFromIncubatorSlot(${index}); event.stopImmediatePropagation();"
+                                class="w-full py-1.5 text-xs rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-medium">
+                            Release to Swarm
+                        </button>
+                    </div>
                 `;
             } else {
                 html += `
