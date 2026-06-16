@@ -3208,8 +3208,8 @@ function showTopCreaturesModal() {
 
             setTimeout(() => {
                 const canvas = document.getElementById(canvasId);
-                if (canvas && typeof drawCreaturePreview === 'function') {
-                    drawCreaturePreview(creature, canvas);
+                if (canvas && typeof diew === 'function') {
+                    diew(creature, canvas);
                 }
             }, 10);
         });
@@ -4426,44 +4426,63 @@ function drawCreaturePreview(creature, canvas) {
     const cy = canvas.height / 2;
     const scale = 2.8;
 
+    const isPredator = creature.isPredator === true;
+
+    // === Predator Glow ===
+    if (isPredator) {
+        ctx.fillStyle = 'rgba(239, 68, 68, 0.35)';
+        ctx.beginPath();
+        ctx.arc(cx, cy, 42, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
     // Background circle
     ctx.fillStyle = 'rgba(255,255,255,0.03)';
     ctx.beginPath();
     ctx.arc(cx, cy, 38, 0, Math.PI * 2);
     ctx.fill();
 
-    // Core color based on specialization / predator state
-    let coreColor = creature.isPredator ? '#f87171' : '#facc15';
-    if (creature.specialization === 'harvester') coreColor = '#34d399';
-    if (creature.specialization === 'sensor') coreColor = '#38bdf8';
-    if (creature.specialization === 'mover') coreColor = '#a78bfa';
-    if (creature.specialization === 'resistant') coreColor = '#f472b6';
-    if (creature.specialization === 'explorer') coreColor = '#fbbf24';
-    if (creature.specialization === 'communicator') coreColor = '#c084fc';
+    // === Core Color ===
+    let coreColor;
+    if (isPredator) {
+        coreColor = '#ef4444'; // Strong red for predators
+    } else {
+        coreColor = '#facc15';
+        if (creature.specialization === 'harvester') coreColor = '#34d399';
+        if (creature.specialization === 'sensor') coreColor = '#38bdf8';
+        if (creature.specialization === 'mover') coreColor = '#a78bfa';
+        if (creature.specialization === 'resistant') coreColor = '#f472b6';
+        if (creature.specialization === 'explorer') coreColor = '#fbbf24';
+        if (creature.specialization === 'communicator') coreColor = '#c084fc';
+    }
 
     ctx.fillStyle = coreColor;
-    ctx.strokeStyle = creature.isPredator ? '#fecaca' : '#fef08c';
-    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = isPredator ? '#fecaca' : '#fef08c';
+    ctx.lineWidth = isPredator ? 2 : 1.5;
+
     ctx.beginPath();
     ctx.arc(cx, cy, 11, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
 
-    // Draw modules with proper offsets and tiers
+    // === Draw Modules ===
     for (let m of creature.modules) {
         const x = cx + (m.offsetX || 0) * scale;
         const y = cy + (m.offsetY || 0) * scale;
         const tier = m.tier || 1;
         const size = 5.5 + (tier - 1) * 1.1;
 
-        ctx.fillStyle = m.color;
+        // Force red modules if predator
+        ctx.fillStyle = isPredator ? '#b91c1c' : (m.color || '#facc15');
         ctx.strokeStyle = 'rgba(255,255,255,0.15)';
         ctx.lineWidth = 0.8;
+
         ctx.beginPath();
         ctx.arc(x, y, size, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
 
+        // Tier rings
         if (tier > 1) {
             ctx.strokeStyle = tier === 5 ? '#fde047' : '#fbbf24';
             ctx.lineWidth = tier === 2 ? 1.2 : tier === 3 ? 1.6 : 2.0;
@@ -4472,6 +4491,7 @@ function drawCreaturePreview(creature, canvas) {
             ctx.stroke();
         }
     }
+}
 }
 // ==================== Inspector Update (Clean + Neural Net) ====================
 function updateInspector() {
@@ -9620,9 +9640,17 @@ function loadSave(index) {
       
 function confirmExtractToEgg() {
     if (!selectedCreature) {
-        alert("No creature selected in the inspector.");
+        alert("No creature selected.");
         return;
     }
+
+    // Block predators from being extracted
+    if (selectedCreature.isPredator) {
+        addFloatingText(selectedCreature.x, selectedCreature.y - 30, "Predators cannot be extracted", '#f87171');
+        playTone(220, 'sawtooth', 0.25, 0.6);
+        return;
+    }
+
     extractCreatureToEgg(selectedCreature);
 }
 
