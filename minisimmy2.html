@@ -7,25 +7,24 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
   <style>
-    body {
-      font-family: 'Inter', system-ui, sans-serif;
+    body { font-family: 'Inter', system-ui, sans-serif; background: #0a0a0f; color: #e0e0ea; }
+    .menu-btn { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
+    .menu-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1); }
+    #bg-canvas {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: 0;
+      opacity: 0.9;
     }
-    .menu-btn {
-      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-    .menu-btn:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-    }
-    .game-title {
-      font-family: 'Space Grotesk', 'Inter', system-ui, sans-serif;
-      letter-spacing: -0.04em;
-    }
+    .content { position: relative; z-index: 10; }
   </style>
 </head>
-<body class="bg-[#0a0a0f] text-[#e0e0ea]">
-  <div class="min-h-screen flex flex-col">
-   
+<body>
+
+  <canvas id="bg-canvas"></canvas>
+
+  <div class="min-h-screen flex flex-col content">
     <!-- Top Nav -->
     <div class="flex justify-between items-center px-8 py-6">
       <div class="flex items-center gap-x-3">
@@ -37,13 +36,11 @@
       <div class="text-xs text-white/40">v0.96</div>
     </div>
 
-    <!-- Hero / Background Area -->
+    <!-- Center Content -->
     <div class="flex-1 flex items-center justify-center px-6">
       <div class="w-full max-w-lg text-center">
-       
-        <!-- Hero Graphic Placeholder -->
         <div class="mb-10 flex justify-center">
-          <div class="w-80 h-80 rounded-3xl border border-white/10 bg-[#121218] flex items-center justify-center">
+          <div class="w-80 h-80 rounded-3xl border border-white/10 bg-[#121218]/90 flex items-center justify-center">
             <div class="text-center">
               <i class="fa-solid fa-atom text-[120px] text-emerald-400/90 mb-4"></i>
               <div class="text-3xl font-semibold tracking-tighter">MiniSimmy2</div>
@@ -52,43 +49,270 @@
           </div>
         </div>
 
-        <!-- Menu Buttons -->
         <div class="space-y-4 max-w-xs mx-auto">
-         
-          <!-- START -->
           <a href="minisimmy8.html"
              class="menu-btn flex items-center justify-center gap-x-3 w-full rounded-2xl bg-emerald-600 hover:bg-emerald-500 px-8 py-4 text-xl font-semibold text-white shadow-lg">
             <i class="fa-solid fa-play"></i>
             <span>START</span>
           </a>
 
-          <!-- LOAD -->
           <a href="minisimmy4.html#load"
              class="menu-btn flex items-center justify-center gap-x-3 w-full rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 px-8 py-4 text-xl font-medium text-white">
             <i class="fa-solid fa-folder-open"></i>
             <span>LOAD</span>
           </a>
 
-          <!-- GAME GUIDE (Updated) -->
           <a href="minisimmy2-guide.html"
              class="menu-btn flex items-center justify-center gap-x-3 w-full rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 px-8 py-4 text-xl font-medium text-white">
             <i class="fa-solid fa-book"></i>
             <span>GAME GUIDE</span>
           </a>
-
         </div>
       </div>
     </div>
 
     <!-- Bottom Bar -->
     <div class="flex justify-between items-center px-8 py-6 text-xs text-white/40">
-      <div>
-        An experiment in modular artificial life &amp; emergence
-      </div>
-      <a href="minisimmy2-roadmap.html" class="hover:text-white transition-colors">
-        Roadmap →
-      </a>
+      <div>An experiment in modular artificial life &amp; emergence</div>
+      <a href="minisimmy2-roadmap.html" class="hover:text-white transition-colors">Roadmap →</a>
     </div>
   </div>
+
+<script>
+// ==================== FIXED BACKGROUND ANIMATION ====================
+const canvas = document.getElementById('bg-canvas');
+const ctx = canvas.getContext('2d');
+
+let W = window.innerWidth;
+let H = window.innerHeight;
+let centerX = W / 2;
+let centerY = H / 2;
+
+let creatures = [];
+let whiteParticles = [];
+let redParticles = [];
+
+function resize() {
+  W = window.innerWidth;
+  H = window.innerHeight;
+  canvas.width = W;
+  canvas.height = H;
+  centerX = W / 2;
+  centerY = H / 2;
+}
+window.addEventListener('resize', resize);
+resize();
+
+// Load vault creatures
+function loadVaultCreatures() {
+  try {
+    const saves = JSON.parse(localStorage.getItem('minisimmy_saves') || '[]');
+    if (!saves.length) return [];
+    const latest = saves[0];
+    if (!latest.geneVaultSlots) return [];
+    return latest.geneVaultSlots.filter(s => s && s.name);
+  } catch(e) { return []; }
+}
+
+const vaultData = loadVaultCreatures();
+
+class Creature {
+  constructor(x, y, egg) {
+    this.x = x;
+    this.y = y;
+    this.vx = (Math.random() - 0.5) * 1.4;
+    this.vy = (Math.random() - 0.5) * 1.4;
+    this.size = 14 + (egg.modules?.length || 3) * 0.9;
+    this.color = getColorFromEgg(egg);
+  }
+  update() {
+    // Vortex pull
+    const dx = centerX - this.x;
+    const dy = centerY - this.y;
+    const d = Math.hypot(dx, dy) || 1;
+    this.vx += (dx / d) * 0.025;
+    this.vy += (dy / d) * 0.025;
+
+    this.x += this.vx;
+    this.y += this.vy;
+    this.vx *= 0.96;
+    this.vy *= 0.96;
+
+    // Bounce off edges softly
+    if (this.x < 40) this.vx = Math.abs(this.vx) * 0.8 + 0.3;
+    if (this.x > W - 40) this.vx = -Math.abs(this.vx) * 0.8 - 0.3;
+    if (this.y < 40) this.vy = Math.abs(this.vy) * 0.8 + 0.3;
+    if (this.y > H - 40) this.vy = -Math.abs(this.vy) * 0.8 - 0.3;
+  }
+  draw() {
+    ctx.save();
+    ctx.shadowColor = this.color;
+    ctx.shadowBlur = 25;
+    ctx.fillStyle = this.color;
+    ctx.globalAlpha = 0.92;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#ffffff';
+    ctx.globalAlpha = 0.45;
+    ctx.beginPath();
+    ctx.arc(this.x - 3, this.y - 3, this.size * 0.38, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+function getColorFromEgg(egg) {
+  if (!egg.modules || egg.modules.length === 0) return '#34d399';
+  const type = egg.modules[0].type;
+  const map = {
+    harvester: '#34d399',
+    sensor: '#38bdf8',
+    mover: '#a78bfa',
+    resistant: '#f472b6',
+    explorer: '#fbbf24',
+    communicator: '#c084fc'
+  };
+  return map[type] || '#34d399';
+}
+
+// Create vault creatures if any
+if (vaultData.length > 0) {
+  vaultData.slice(0, 6).forEach(egg => {
+    creatures.push(new Creature(
+      centerX + (Math.random() - 0.5) * 500,
+      centerY + (Math.random() - 0.5) * 320,
+      egg
+    ));
+  });
+}
+
+class WhiteParticle {
+  constructor() {
+    this.reset();
+  }
+  reset() {
+    this.x = Math.random() * W;
+    this.y = Math.random() * H;
+    this.vx = (Math.random() - 0.5) * 0.7;
+    this.vy = (Math.random() - 0.5) * 0.7;
+    this.size = Math.random() * 3.5 + 2.2;
+    this.life = Math.random() * 280 + 180;
+  }
+  update() {
+    const dx = centerX - this.x;
+    const dy = centerY - this.y;
+    const d = Math.hypot(dx, dy) || 1;
+    this.vx += (dx / d) * 0.018;
+    this.vy += (dy / d) * 0.018;
+
+    this.x += this.vx;
+    this.y += this.vy;
+    this.vx *= 0.985;
+    this.vy *= 0.985;
+    this.life--;
+
+    if (this.life < 0 || Math.random() < 0.005) this.reset();
+  }
+  draw() {
+    ctx.fillStyle = `rgba(220, 225, 235, ${this.life / 320})`;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// Spawn lots of white particles
+for (let i = 0; i < 130; i++) {
+  whiteParticles.push(new WhiteParticle());
+}
+
+class RedParticle {
+  constructor() {
+    this.reset();
+  }
+  reset() {
+    this.x = Math.random() < 0.5 ? -30 : W + 30;
+    this.y = Math.random() * H;
+    const angle = Math.atan2(centerY - this.y, centerX - this.x) + (Math.random() - 0.5) * 1.2;
+    this.vx = Math.cos(angle) * (Math.random() * 1.5 + 2.2);
+    this.vy = Math.sin(angle) * (Math.random() * 1.5 + 2.2);
+    this.life = Math.random() * 90 + 70;
+    this.size = Math.random() * 4 + 6;
+  }
+  update() {
+    this.x += this.vx;
+    this.y += this.vy;
+    this.life--;
+    if (this.life < 0) this.reset();
+  }
+  draw() {
+    const a = this.life / 100;
+    ctx.fillStyle = `rgba(239, 68, 68, ${a})`;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawVortex() {
+  // Stronger vortex rings
+  ctx.strokeStyle = 'rgba(52, 211, 153, 0.22)';
+  ctx.lineWidth = 3;
+  for (let r = 60; r < 580; r += 58) {
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // Center glow
+  const g = ctx.createRadialGradient(centerX, centerY, 15, centerX, centerY, 160);
+  g.addColorStop(0, 'rgba(52, 211, 153, 0.15)');
+  g.addColorStop(1, 'transparent');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, 160, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function animate() {
+  ctx.fillStyle = 'rgba(8, 8, 12, 0.82)';
+  ctx.fillRect(0, 0, W, H);
+
+  drawVortex();
+
+  // White particles
+  for (let p of whiteParticles) {
+    p.update();
+    p.draw();
+  }
+
+  // Occasionally add more white particles
+  if (Math.random() < 0.45 && whiteParticles.length < 160) {
+    whiteParticles.push(new WhiteParticle());
+  }
+
+  // Red particles
+  if (Math.random() < 0.028 && redParticles.length < 5) {
+    redParticles.push(new RedParticle());
+  }
+  for (let i = redParticles.length - 1; i >= 0; i--) {
+    redParticles[i].update();
+    redParticles[i].draw();
+    if (redParticles[i].life < 0) redParticles.splice(i, 1);
+  }
+
+  // Vault creatures
+  for (let c of creatures) {
+    c.update();
+    c.draw();
+  }
+
+  requestAnimationFrame(animate);
+}
+
+animate();
+</script>
 </body>
 </html>
