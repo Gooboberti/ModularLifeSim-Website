@@ -1452,18 +1452,6 @@ let yellowGlowingParticles = [];
 let explosions = [];
 let spawnEffects = [];
 let floatingTexts = [];
-  // ==================== FLOATING TEXT ====================
-function addFloatingText(x, y, text, color = '#ffffff') {
-    floatingTexts.push({
-        x: x,
-        y: y,
-        text: text,
-        color: color,
-        life: 75,
-        vy: -1.8,
-        alpha: 255
-    });
-}
 let vortexProjectiles = []; // Bullets deflected by Energy Walls that spiral in the vortex
 let showDamageNumbers = false; // Hidden by default at startup
 let evolutionHistory = [];
@@ -2691,6 +2679,214 @@ function generateSciFiName() {
     return prefixes[Math.floor(Math.random()*prefixes.length)] + suffixes[Math.floor(Math.random()*suffixes.length)];
 }
 
+// ==================== FLOATING TEXT ====================
+class FloatingText {
+    constructor(x, y, text, color = '#34d399') {
+        this.x = x;
+        this.y = y;
+        this.text = text;
+        this.color = color;
+        this.life = 52;
+        this.vy = -1.35;
+        this.alpha = 255;
+    }
+    update() {
+        this.y += this.vy;
+        this.life--;
+        this.alpha = map(this.life, 0, 52, 0, 255);
+    }
+    show() {
+        if (this.life <= 0) return;
+        push();
+        translate(this.x, this.y);
+        fill(red(this.color), green(this.color), blue(this.color), this.alpha);
+        textAlign(CENTER);
+        textSize(12);
+        textFont('Inter, system-ui');
+        text(this.text, 0, 0);
+        pop();
+    }
+}
+
+function addFloatingText(x, y, text, color = '#34d399') {
+    floatingTexts.push(new FloatingText(x, y, text, color));
+}
+
+function setupSoundSliders() {}
+
+function setupSliders() {
+    setupSoundSliders();
+    const mappings = [
+        ['slider-drain', 'val-drain', 'energyDrain', 3],
+        ['slider-particle', 'val-particle', 'particleFoodValue', 1],
+        ['slider-repro', 'val-repro', 'reproductionChance', 4],
+        ['slider-vortex', 'val-vortex', 'vortexMultiplier', 1],
+        ['slider-phero', 'val-phero', 'pheromoneDeposit', 1],
+        ['slider-zonepull', 'val-zonepull', 'zonePullStrength', 1]
+    ];
+    mappings.forEach(([sliderId, valId, key, decimals]) => {
+        const slider = document.getElementById(sliderId);
+        const val = document.getElementById(valId);
+        if (slider && val) {
+            slider.value = settings[key];
+            val.innerText = settings[key].toFixed(decimals);
+            slider.oninput = () => {
+                settings[key] = parseFloat(slider.value);
+                val.innerText = settings[key].toFixed(decimals);
+            };
+        }
+    });
+}
+
+function showEggInventoryFromIncubator() {
+    const eggModal = document.getElementById('egg-inventory-modal');
+    if (!eggModal) {
+        console.error("Egg inventory modal not found!");
+        return;
+    }
+
+    // Make sure it appears above the incubator
+    eggModal.style.zIndex = '140';
+
+    // Open the egg inventory modal
+    showEggInventory();
+}
+  
+// ==================== MODALS (Extract Egg, Top Creatures, etc.) ====================
+// ==================== HELPER: Get Creature Tier (Highest Module Tier) ====================
+function getCreatureTier(creature) {
+    if (!creature || !creature.modules || creature.modules.length === 0) return 1;
+    return Math.max(...creature.modules.map(m => m.tier || 1));
+}
+
+function showEggInventoryOnTop() {
+    // Opens egg inventory on top of the incubator without closing it
+    showEggInventory();
+}
+  
+// ==================== EXT ====================
+function showExtractEggModal() {
+    const modal = document.getElementById('extract-egg-modal');
+    const listContainer = document.getElementById('extract-egg-list');
+    if (!modal || !listContainer) return;
+    listContainer.innerHTML = '';
+    const balanceDiv = document.createElement('div');
+    balanceDiv.className = 'mb-4 px-1 flex justify-between items-center text-sm border-b border-white/10 pb-3';
+    balanceDiv.innerHTML = `
+        <span class="text-white/60">Your Balance</span>
+        <span class="font-mono text-2xl text-violet-400 font-semibold">${totalScore.toLocaleString()}</span>
+    `;
+    listContainer.appendChild(balanceDiv);
+    let sorted = [...creatures].sort((a, b) => {
+        const tierA = getCreatureTier(a);
+        const tierB = getCreatureTier(b);
+        let scoreA = (a.modules?.length || 0) * 3 + (a.killCount || 0) * 2 + (a.childrenCount || 0) + (tierA * 6);
+        let scoreB = (b.modules?.length || 0) * 3 + (b.killCount || 0) * 2 + (b.childrenCount || 0) + (tierB * 6);
+        return scoreB - scoreA;
+    }).slice(0, 10);
+    if (sorted.length === 0) {
+        listContainer.innerHTML += `<div class="text-center text-white/60 py-8">No creatures available yet.</div>`;
+    } else {
+        sorted.forEach(creature => {
+            const div = document.createElement('div');
+            div.className = 'flex items-center justify-between bg-white/5 hover:bg-white/10 rounded-2xl px-4 py-3 cursor-pointer transition-colors mb-1';
+            const creatureTier = getCreatureTier(creature);
+            div.innerHTML = `
+                <div>
+                    <div class="font-semibold text-emerald-400">${creature.name}</div>
+                    <div class="text-xs text-white/60">Gen ${creature.generation} • ${creature.modules?.length || 0} modules (Tier ${creatureTier}) • ${creature.killCount || 0} kills</div>
+                </div>
+                <button class="px-4 py-1.5 text-sm rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-medium">Extract</button>
+            `;
+            div.onclick = () => extractCreatureToEgg(creature);
+            listContainer.appendChild(div);
+        });
+    }
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+function hideExtractEggModal() {
+    const modal = document.getElementById('extract-egg-modal');
+    if (modal) {
+        modal.classList.remove('flex');
+        modal.classList.add('hidden');
+    }
+}
+
+function extractCreatureToEgg(creature) {
+    if (eggs.length >= MAX_EGGS) {
+        alert(`Your Egg Inventory is full (${MAX_EGGS} max).`);
+        return;
+    }
+    if (totalScore < 250000) {
+        alert("You need 250,000 High Roller Points.");
+        return;
+    }
+    totalScore -= 250000;
+    updateMainStats();
+    updateEggCountBadge();
+    addFloatingText(creature.x, creature.y - 30, "-250,000", '#fbbf24');
+    playTone(620, 'sine', 0.18, 0.6);
+    setTimeout(() => playTone(880, 'sine', 0.12, 0.4), 110);
+    let brainData = null;
+    if (creature.brain) {
+        brainData = {
+            weightsIH: JSON.parse(JSON.stringify(creature.brain.weightsIH)),
+            weightsHO: JSON.parse(JSON.stringify(creature.brain.weightsHO)),
+            biasH: [...creature.brain.biasH],
+            biasO: [...creature.brain.biasO],
+            connectionStrengthIH: JSON.parse(JSON.stringify(creature.brain.connectionStrengthIH || [])),
+            connectionStrengthHO: JSON.parse(JSON.stringify(creature.brain.connectionStrengthHO || []))
+        };
+    }
+    const eggData = {
+        name: creature.name,
+        generation: creature.generation,
+        modules: JSON.parse(JSON.stringify(creature.modules)),
+        killCount: creature.killCount || 0,
+        childrenCount: creature.childrenCount || 0,
+        traits: JSON.parse(JSON.stringify(creature.traits || {})),
+        brain: brainData
+    };
+    eggs.push(eggData);
+    const index = creatures.indexOf(creature);
+    if (index > -1) creatures.splice(index, 1);
+    if (selectedCreature === creature) {
+        deselectCreature();
+    }
+    showExtractEggModal();
+}
+
+function releaseEggFromIncubatorSlot(slotIndex) {
+    const slot = incubatorSlots[slotIndex];
+    if (!slot || !slot.currentIncubation) return;
+
+    // Apply slot multiplier bonus even when releasing to swarm
+    const gain = calculateIncubatorMultiplierGain(slot.currentIncubation.eggData);
+    slot.multiplier = Math.min(3.0, slot.multiplier + gain);
+    slot.totalIncubations++;
+
+    const eggData = slot.currentIncubation.eggData;
+
+    // Create creature from egg and add to swarm
+    if (typeof createCreatureFromEgg === 'function') {
+        const creature = createCreatureFromEgg(eggData);
+        creatures.push(creature);
+        creature.energy = Math.min(100, (creature.energy || 60) + 20);
+    } else {
+        console.warn("createCreatureFromEgg function not found");
+    }
+
+    addFloatingText(width / 2, 70, `+${gain.toFixed(3)}× Slot Bonus`, '#34d399');
+    addFloatingText(width / 2, 90, "Egg released to swarm", '#a5b4fc');
+
+    // Clear the slot
+    slot.currentIncubation = null;
+    renderIncubatorSlots();
+    updateMainStats();
+}
+  
 // ==================== INCUBATOR SYSTEM ====================
 function initializeIncubatorSlots() {
     if (!incubatorSlots || incubatorSlots.length === 0) {
@@ -2700,10 +2896,7 @@ function initializeIncubatorSlots() {
                 id: i,
                 multiplier: 1.0,
                 totalIncubations: 0,
-                currentIncubation: null,
-                currentEgg: null,              // Stores the egg being worked on (for automation looping)
-                automationUntil: 0,            // Timestamp when automation expires
-                isAutoIncubating: false
+                currentIncubation: null
             });
         }
     }
@@ -2713,6 +2906,7 @@ initializeIncubatorSlots();
 function showIncubator() {
     const modal = document.getElementById('incubator-modal');
     if (!modal) return;
+
     modal.classList.remove('hidden');
     modal.classList.add('flex');
     renderIncubatorSlots();
@@ -2731,6 +2925,7 @@ function showIncubator() {
             <span>View Egg Inventory</span>
         </button>
     `;
+
     const contentArea = modal.querySelector('.p-5') || modal;
     contentArea.appendChild(footer);
 }
@@ -2743,39 +2938,6 @@ function hideIncubator() {
     }
 }
 
-// ==================== BUY AUTOMATION ====================
-function buyIncubatorAutomation(slotIndex) {
-    const slot = incubatorSlots[slotIndex];
-    if (!slot) return;
-
-    const cost = 1; // 1 Crystal = 5 minutes
-
-    if (aetheriumCrystals < cost) {
-        addFloatingText(width/2, 90, "Not enough Crystals", '#f87171');
-        return;
-    }
-
-    aetheriumCrystals -= cost;
-    updateAetheriumUI();
-
-    const fiveMinutes = 5 * 60 * 1000;
-    const now = Date.now();
-
-    if (slot.automationUntil > now) {
-        slot.automationUntil += fiveMinutes;
-    } else {
-        slot.automationUntil = now + fiveMinutes;
-    }
-
-    slot.isAutoIncubating = true;
-
-    addFloatingText(width/2, 90, `Automation purchased for Slot ${slot.id}`, '#fbbf24');
-    playTone(720, 'sine', 0.2, 0.5);
-
-    renderIncubatorSlots();
-}
-
-// ==================== RENDER INCUBATOR SLOTS (with Automation Button) ====================
 function renderIncubatorSlots() {
     const grid = document.getElementById('incubator-slots-grid');
     if (!grid) return;
@@ -2790,11 +2952,6 @@ function renderIncubatorSlots() {
         card.className = `rounded-2xl border p-3 transition-all ${hasInc
             ? 'border-amber-500/50 bg-[#0f0a05]'
             : 'border-amber-500/20 bg-[#0a0a0f]'}`;
-
-        // Automation status
-        const now = Date.now();
-        const autoActive = slot.automationUntil && slot.automationUntil > now;
-        const minutesLeft = autoActive ? Math.ceil((slot.automationUntil - now) / 60000) : 0;
 
         let html = `
             <div class="flex justify-between items-center mb-1.5">
@@ -2811,12 +2968,12 @@ function renderIncubatorSlots() {
                 <div class="flex gap-3 mb-2">
                     <canvas id="${canvasId}" width="48" height="48"
                             class="rounded-xl border border-white/10 bg-[#111113] flex-shrink-0"></canvas>
-                   
+                    
                     <div class="flex-1 min-w-0">
                         <div class="text-xs text-white/80 mb-0.5">
                             Incubating: <span class="text-emerald-400 font-medium">${egg.name}</span>
                         </div>
-                       
+                        
                         <div class="w-full bg-white/10 h-2 rounded-full overflow-hidden mt-1">
                             <div class="${isReady ? 'bg-emerald-500' : 'bg-amber-500'} h-2 transition-all" style="width: ${progress}%"></div>
                         </div>
@@ -2832,7 +2989,7 @@ function renderIncubatorSlots() {
                                 class="w-full py-1.5 text-xs rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold">
                             Claim Reward
                         </button>
-                       
+                        
                         <button onclick="releaseEggFromIncubatorSlot(${index}); event.stopImmediatePropagation();"
                                 class="w-full py-1.5 text-xs rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-medium">
                             Release to Swarm
@@ -2859,21 +3016,6 @@ function renderIncubatorSlots() {
             `;
         }
 
-        // === AUTOMATION BUTTON ===
-        html += `
-            <div class="mt-3">
-                <button onclick="buyIncubatorAutomation(${index}); event.stopImmediatePropagation();"
-                        class="w-full py-1.5 px-3 text-xs rounded-xl font-medium transition-all
-                               ${autoActive 
-                                   ? 'bg-emerald-600/90 hover:bg-emerald-500 text-white' 
-                                   : 'bg-orange-500/90 hover:bg-orange-500 text-white'}">
-                    ${autoActive 
-                        ? `🤖 Auto Active (${minutesLeft}m left)` 
-                        : 'Buy Automation (1 Crystal = 5 min)'}
-                </button>
-            </div>
-        `;
-
         card.innerHTML = html;
         grid.appendChild(card);
 
@@ -2887,51 +3029,6 @@ function renderIncubatorSlots() {
         }
     });
 }
-
-// ==================== INCUBATOR AUTOMATION ====================
-function updateIncubatorAutomation() {
-    const now = Date.now();
-
-    incubatorSlots.forEach((slot, index) => {
-        // Expire automation if time is up
-        if (slot.automationUntil && now > slot.automationUntil) {
-            slot.automationUntil = 0;
-            slot.isAutoIncubating = false;
-            return;
-        }
-
-        if (!slot.isAutoIncubating || !slot.automationUntil) return;
-
-        // Auto-start next cycle if no incubation is running
-        if (!slot.currentIncubation && slot.currentEgg) {
-            startAutomatedIncubation(index);
-        }
-    });
-}
-
-function startAutomatedIncubation(slotIndex) {
-    const slot = incubatorSlots[slotIndex];
-    if (!slot || !slot.currentEgg) return;
-
-    const eggData = JSON.parse(JSON.stringify(slot.currentEgg));
-
-    slot.currentIncubation = {
-        eggData: eggData,
-        progress: 0,
-        startTime: Date.now(),
-        readyToClaim: false,
-        completed: false
-    };
-}
-
-// Call this in your main game loop (add it near other updates)
-function updateIncubatorAutomationLoop() {
-    if (!paused) {
-        updateIncubatorAutomation();
-    }
-}
-
-// ==================== EXISTING FUNCTIONS (Updated where needed) ====================
 
 function startIncubationInSlot(slotIndex) {
     if (eggs.length === 0) {
@@ -2954,6 +3051,7 @@ function showEggSelectionForSlot(slotIndex) {
             <div id="egg-list" class="max-h-[420px] overflow-auto space-y-2"></div>
         </div>
     `;
+
     const close = modal.querySelector('button');
     close.onclick = () => { modal.remove(); showIncubator(); };
 
@@ -2963,21 +3061,24 @@ function showEggSelectionForSlot(slotIndex) {
         const row = document.createElement('div');
         row.className = 'flex items-center gap-3 bg-white/5 hover:bg-white/10 p-3 rounded-2xl cursor-pointer';
         const canvasId = `egg-choose-preview-${slotIndex}-${i}`;
+
         row.innerHTML = `
             <canvas id="${canvasId}" width="46" height="46"
                     class="rounded-xl border border-white/10 bg-[#111113] flex-shrink-0"></canvas>
             <div class="flex-1 min-w-0">
                 <div class="text-emerald-400 font-medium">${egg.name}</div>
-                <div class="text-xs text-white/60">Gen ${egg.generation} • ${egg.modules?.length || 0} mods</div>
+                <div class="text-xs text-white/60">Gen ${egg.generation} • ${egg.modules?.length || 0} mods • Score ${getEggScore(egg)}</div>
             </div>
             <button class="px-4 py-1 text-xs bg-amber-600 hover:bg-amber-500 rounded-xl text-white">Incubate</button>
         `;
+
         row.querySelector('button').onclick = (e) => {
             e.stopImmediatePropagation();
             assignEggToSlot(slotIndex, i);
             modal.remove();
             showIncubator();
         };
+
         list.appendChild(row);
 
         setTimeout(() => {
@@ -2996,17 +3097,12 @@ function assignEggToSlot(slotIndex, eggIndex) {
     const egg = eggs[eggIndex];
     if (!slot || !egg) return;
 
-    const eggCopy = JSON.parse(JSON.stringify(egg));
-
     slot.currentIncubation = {
-        eggData: eggCopy,
+        eggData: JSON.parse(JSON.stringify(egg)),
         progress: 0,
         completed: false,
         readyToClaim: false
     };
-
-    // Store the egg so automation can loop it
-    slot.currentEgg = eggCopy;
 
     eggs.splice(eggIndex, 1);
     updateEggCountBadge();
@@ -3028,8 +3124,10 @@ function updateIncubatorSlotsProgress(timeScale = 1) {
     incubatorSlots.forEach(slot => {
         if (slot.currentIncubation) {
             const inc = slot.currentIncubation;
+
             const eggScore = getEggScore(inc.eggData) || 500;
             const difficulty = 1 + (eggScore / 2400);
+
             const baseGain = 0.27;
             const gain = baseGain * timeScale / difficulty;
 
@@ -3043,10 +3141,246 @@ function updateIncubatorSlotsProgress(timeScale = 1) {
     });
 }
 
-// Add this call in your main game loop (near other updates)
-function updateAllIncubatorSystems(timeScale = 1) {
-    updateIncubatorSlotsProgress(timeScale);
-    updateIncubatorAutomationLoop();
+let currentSlotForCompletion = null;
+
+function claimIncubatedSlot(slotIndex) {
+    const slot = incubatorSlots[slotIndex];
+    if (!slot || !slot.currentIncubation || !slot.currentIncubation.readyToClaim) return;
+
+    const gain = calculateIncubatorMultiplierGain(slot.currentIncubation.eggData);
+    slot.multiplier = Math.min(3.0, slot.multiplier + gain);
+    slot.totalIncubations++;
+
+    currentSlotForCompletion = slotIndex;
+    showIncubationCompleteModal(slotIndex);
+}
+
+function showIncubationCompleteModal(slotIndex) {
+    const modal = document.getElementById('incubation-complete-modal');
+    const content = document.getElementById('incubation-complete-content');
+    if (!modal || !content) return;
+
+    currentSlotForCompletion = slotIndex;
+    const slot = incubatorSlots[slotIndex];
+    const inc = slot.currentIncubation;
+    const egg = inc.eggData;
+
+    const baseScore = getEggScore(egg);
+    const gain = calculateIncubatorMultiplierGain(egg);
+    const oldMult = slot.multiplier - gain;
+    const newMult = slot.multiplier;
+
+    const modList = egg.modules && egg.modules.length > 0
+        ? egg.modules.map(m => `${m.type} T${m.tier || 1}`).join(', ')
+        : 'None';
+
+    content.innerHTML = `
+        <div class="bg-white/5 rounded-2xl p-4">
+            <div class="text-emerald-400 font-semibold text-lg">${egg.name}</div>
+            <div class="text-xs text-white/60">Gen ${egg.generation} • ${egg.modules?.length || 0} modules</div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 text-sm">
+            <div class="bg-white/5 p-3 rounded-2xl">
+                <div class="text-xs text-white/50">Base Score</div>
+                <div class="text-2xl font-mono text-amber-400">${baseScore}</div>
+            </div>
+            <div class="bg-white/5 p-3 rounded-2xl">
+                <div class="text-xs text-white/50">Slot Multiplier</div>
+                <div class="font-mono">${oldMult.toFixed(2)}× → <span class="text-emerald-400">${newMult.toFixed(2)}×</span></div>
+                <div class="text-[10px] text-emerald-400">+${gain.toFixed(3)}×</div>
+            </div>
+        </div>
+
+        <div class="bg-white/5 p-3 rounded-2xl text-xs">
+            <div class="text-white/50">Modules</div>
+            <div class="text-white/80">${modList}</div>
+        </div>
+    `;
+
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+function hideIncubationCompleteModal() {
+    const modal = document.getElementById('incubation-complete-modal');
+    if (modal) {
+        modal.classList.remove('flex');
+        modal.classList.add('hidden');
+    }
+    currentSlotForCompletion = null;
+}
+
+function sellIncubatedEgg() {
+    if (currentSlotForCompletion === null) return;
+    const slot = incubatorSlots[currentSlotForCompletion];
+    if (!slot || !slot.currentIncubation) return;
+
+    const egg = slot.currentIncubation.eggData;
+    let finalScore = getEggScore(egg);
+    finalScore *= getCurrentGlobalScoreMultiplier();
+    finalScore *= slot.multiplier;
+
+    const furnaceMult = getCurrentFurnaceMultiplier();
+    if (furnaceMult > 1) finalScore *= furnaceMult;
+
+    finalScore = Math.floor(finalScore);
+    highRollerPoints = (highRollerPoints || 0) + finalScore;
+
+    addFloatingText(width/2, 85, `+${finalScore} Score`, '#fbbf24');
+    slot.currentIncubation = null;
+    hideIncubationCompleteModal();
+    renderIncubatorSlots();
+    updateMainStats();
+}
+
+function returnIncubatedEggToInventory() {
+    if (currentSlotForCompletion === null) return;
+    const slot = incubatorSlots[currentSlotForCompletion];
+    if (!slot || !slot.currentIncubation) return;
+
+    eggs.push(JSON.parse(JSON.stringify(slot.currentIncubation.eggData)));
+    updateEggCountBadge();
+    slot.currentIncubation = null;
+    hideIncubationCompleteModal();
+    renderIncubatorSlots();
+}
+
+function getCurrentGlobalScoreMultiplier() {
+    let m = 1.0;
+    if (creatures.length > 100) m *= 1.12;
+    if (creatures.filter(c => c.isPredator).length > 25) m *= 0.95;
+    return m;
+}
+
+function getCurrentFurnaceMultiplier() {
+    if (typeof burningCrystals !== 'undefined' && burningCrystals > 0 &&
+        typeof furnaceEndTime !== 'undefined' && Date.now() < furnaceEndTime) {
+        return (typeof getBurningMultiplier === 'function') ? getBurningMultiplier() : 1.5;
+    }
+    return 1;
+}
+
+function calculateIncubatorMultiplierGain(eggData) {
+    if (!eggData) return 0.006;
+    const mods = eggData.modules?.length || 0;
+    const tiers = eggData.modules ? eggData.modules.reduce((s, m) => s + (m.tier || 1), 0) : 0;
+    const maxTier = eggData.modules && eggData.modules.length > 0 ? Math.max(...eggData.modules.map(m => m.tier || 1)) : 1;
+    const gen = eggData.generation || 1;
+
+    let gain = 0.0065 + (mods * 0.0009) + (tiers * 0.0012) + ((maxTier - 1) * 0.005) + ((gen - 1) * 0.00035);
+    return Math.min(gain, 0.09);
+}
+
+function getEggScore(eggData) {
+    if (!eggData) return 12;
+    let score = 15;
+    score += (eggData.generation - 1) * 5;
+    score += (eggData.modules?.length || 0) * 6;
+    const totalTier = eggData.modules ? eggData.modules.reduce((s, m) => s + (m.tier || 1), 0) : 0;
+    score += totalTier * 7;
+    const maxTier = eggData.modules && eggData.modules.length > 0 ? Math.max(...eggData.modules.map(m => m.tier || 1)) : 1;
+    score += (maxTier ** 1.65) * 16;
+    return Math.max(12, Math.floor(score));
+}
+
+// ==================== TOP 10 CREATURES MODAL ====================
+function showTopCreaturesModal() {
+    const modal = document.getElementById('top-creatures-modal');
+    if (!modal) {
+        console.error("Modal not found");
+        return;
+    }
+    if (modal.parentElement !== document.body) {
+        document.body.appendChild(modal);
+    }
+    modal.style.cssText = `
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        position: fixed !important;
+        inset: 0 !important;
+        background-color: rgba(0, 0, 0, 0.8) !important;
+        z-index: 99999 !important;
+    `;
+    const listContainer = document.getElementById('top-creatures-list');
+    if (!listContainer) return;
+    listContainer.innerHTML = '';
+
+    let sorted = [...creatures].sort((a, b) => {
+        const tierA = getCreatureTier(a);
+        const tierB = getCreatureTier(b);
+        let scoreA = (a.modules?.length || 0) * 2.5 + (a.killCount || 0) * 4 + (a.childrenCount || 0) * 3 + (a.energy || 0) * 0.6;
+        let scoreB = (b.modules?.length || 0) * 2.5 + (b.killCount || 0) * 4 + (b.childrenCount || 0) * 3 + (b.energy || 0) * 0.6;
+        scoreA += tierA * 12;
+        scoreB += tierB * 12;
+        return scoreB - scoreA;
+    }).slice(0, 10);
+
+    if (sorted.length === 0) {
+        listContainer.innerHTML = `<div class="text-center text-white/60 py-8">No creatures available yet.</div>`;
+    } else {
+        sorted.forEach(creature => {
+            const div = document.createElement('div');
+            div.className = 'flex items-center gap-3 bg-white/5 hover:bg-white/10 rounded-2xl px-3 py-2.5 transition-colors';
+            const creatureTier = getCreatureTier(creature);
+            const canvasId = `top10-preview-${creature.name.replace(/\s+/g, '')}-${Date.now()}`;
+
+                        div.innerHTML = `
+                <canvas id="${canvasId}" width="46" height="46"
+                        class="rounded-xl border border-white/10 bg-[#111113] flex-shrink-0"></canvas>
+                <div class="flex-1 min-w-0">
+                    <div class="font-semibold text-emerald-400">${creature.name}</div>
+                                        <div class="text-xs text-white/60">
+                        Gen ${creature.generation} • ${creature.modules.length > 9999 ? creature.modules.length.toExponential(1) : creature.modules.length} modules (Tier ${creatureTier}) 
+                        • ${creature.killCount || 0} kills 
+                        • <span class="text-amber-400">Score: ${typeof creature.getFinalAwardedScore === 'function' ? creature.getFinalAwardedScore().toLocaleString() : (creature.pointValue || 0)}</span>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 flex-shrink-0">
+                    <button class="extract-btn px-3 py-1 text-xs rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-medium">Extract</button>
+                    <button class="inspect-btn px-3 py-1 text-xs rounded-xl bg-white/10 hover:bg-white/20 text-white/80">Inspect</button>
+                </div>
+            `;
+
+            const extractBtn = div.querySelector('.extract-btn');
+            extractBtn.onclick = (e) => {
+                e.stopImmediatePropagation();
+                extractCreatureToEgg(creature);
+                setTimeout(() => {
+                    hideTopCreaturesModal();
+                    showTopCreaturesModal();
+                }, 100);
+            };
+
+            const inspectBtn = div.querySelector('.inspect-btn');
+            inspectBtn.onclick = (e) => {
+                e.stopImmediatePropagation();
+                selectCreature(creature);
+                trackAlpha = false;
+                isInspectorLocked = true;
+                hideTopCreaturesModal();
+            };
+
+            listContainer.appendChild(div);
+
+            setTimeout(() => {
+                const canvas = document.getElementById(canvasId);
+                if (canvas && typeof drawCreaturePreview === 'function') {
+                    drawCreaturePreview(creature, canvas);
+                }
+            }, 10);
+        });
+    }
+}
+
+function hideTopCreaturesModal() {
+    const modal = document.getElementById('top-creatures-modal');
+    if (modal) {
+        modal.style.cssText = '';
+        modal.classList.remove('flex');
+        modal.classList.add('hidden');
+    }
 }
       //================================================================================
       //CHUNK 3 of 3  —  RUNTIME LOOP + DRAW + HANDLERS
@@ -3094,36 +3428,7 @@ function updateAllIncubatorSystems(timeScale = 1) {
           }
       }
 
-// ==================== SLIDERS (Cheats Store) ====================
-function setupSoundSliders() {
-    // Placeholder for future sound control sliders
-}
 
-function setupSliders() {
-    setupSoundSliders();
-
-    const mappings = [
-        ['cheat-slider-drain',   'cheat-val-drain',   'energyDrain',        3],
-        ['cheat-slider-particle','cheat-val-particle','particleFoodValue',  1],
-        ['cheat-slider-repro',   'cheat-val-repro',   'reproductionChance', 4],
-        ['cheat-slider-vortex',  'cheat-val-vortex',  'vortexMultiplier',   1]
-    ];
-
-    mappings.forEach(([sliderId, valId, key, decimals]) => {
-        const slider = document.getElementById(sliderId);
-        const val = document.getElementById(valId);
-
-        if (slider && val && typeof settings !== 'undefined' && settings[key] !== undefined) {
-            slider.value = settings[key];
-            val.innerText = settings[key].toFixed(decimals);
-
-            slider.oninput = () => {
-                settings[key] = parseFloat(slider.value);
-                val.innerText = settings[key].toFixed(decimals);
-            };
-        }
-    });
-}
       
 
       function setup() {
@@ -4662,7 +4967,7 @@ if (musicVisualizerActive && currentMusicMode) {
                   simTime += (1 / 60) * timeScale;
 
                 updateIncubatorSlotsProgress(timeScale);
-updateAllIncubatorSystems(timeScale);
+
 
 // === Incubation Progress Tick ===
 if (!paused && incubatingEggs.length > 0) {
@@ -8718,8 +9023,6 @@ function showReleaseChoiceModal(incubationId) {
     };
 }
 
-  
-
 function actuallyReleaseIncubatedEgg(incubationId, isEarly = false, destination = 'inventory') {
     const index = incubatingEggs.findIndex(e => e.id === incubationId);
     if (index === -1) return;
@@ -8824,112 +9127,6 @@ function showIncubatingEggDetails(incubationId) {
     document.body.insertAdjacentHTML('beforeend', html);
 }
 
-<script>
-// ==================== MISSING FUNCTIONS (Add these) ====================
-
-function extractCreatureToEgg(creature) {
-    if (!creature || creature.isPredator) {
-        addFloatingText(creature ? creature.x : width/2, creature ? creature.y - 30 : height/2 - 30, 
-            "Cannot extract predators", '#f87171');
-        return;
-    }
-
-    if (eggs.length >= MAX_EGGS) {
-        addFloatingText(creature.x, creature.y - 30, "Egg inventory full!", '#f87171');
-        return;
-    }
-
-    // Create egg from creature
-    const egg = {
-        name: creature.name,
-        modules: JSON.parse(JSON.stringify(creature.modules)),
-        generation: creature.generation,
-        traits: JSON.parse(JSON.stringify(creature.traits)),
-        killCount: creature.killCount || 0,
-        childrenCount: creature.childrenCount || 0,
-        brain: creature.brain ? JSON.parse(JSON.stringify(creature.brain)) : null,
-        pointValue: creature.pointValue || 100
-    };
-
-    eggs.push(egg);
-    updateEggCountBadge();
-
-    // Remove the creature from the world
-    const index = creatures.indexOf(creature);
-    if (index > -1) {
-        creatures.splice(index, 1);
-    }
-
-    if (selectedCreature === creature) {
-        deselectCreature();
-    }
-
-    spawnEffects.push(new SpawnEffect(creature.x, creature.y));
-    addFloatingText(creature.x, creature.y - 25, "Extracted to Egg", '#fbbf24');
-    playTone(720, 'sine', 0.25, 0.6);
-}
-
-function showTopCreaturesModal() {
-    const modal = document.getElementById('top-creatures-modal');
-    const list = document.getElementById('top-creatures-list');
-    if (!modal || !list) return;
-
-    list.innerHTML = '';
-
-    // Sort creatures by score value (highest first)
-    const sorted = [...creatures].sort((a, b) => {
-        const scoreA = a.getFinalAwardedScore ? a.getFinalAwardedScore() : (a.pointValue || 100);
-        const scoreB = b.getFinalAwardedScore ? b.getFinalAwardedScore() : (b.pointValue || 100);
-        return scoreB - scoreA;
-    }).slice(0, 10);
-
-    if (sorted.length === 0) {
-        list.innerHTML = `<div class="text-center text-white/60 py-6">No creatures alive right now.</div>`;
-    } else {
-        sorted.forEach(creature => {
-            const div = document.createElement('div');
-            div.className = 'bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-3 cursor-pointer flex gap-3 items-center';
-
-            const score = creature.getFinalAwardedScore ? creature.getFinalAwardedScore() : (creature.pointValue || 100);
-
-            div.innerHTML = `
-                <div class="flex-1 min-w-0">
-                    <div class="font-semibold text-emerald-400">${creature.name}</div>
-                    <div class="text-xs text-white/60">
-                        Gen ${creature.generation} • ${creature.modules.length} modules • 
-                        <span class="text-red-400">${creature.killCount || 0}</span> kills
-                    </div>
-                </div>
-                <div class="text-right">
-                    <div class="font-mono text-amber-400 font-semibold">${score}</div>
-                    <div class="text-[10px] text-white/50">score</div>
-                </div>
-            `;
-
-            div.onclick = () => {
-                hideTopCreaturesModal();
-                selectedCreature = creature;
-                trackAlpha = false;
-                if (typeof updateInspector === 'function') updateInspector();
-            };
-
-            list.appendChild(div);
-        });
-    }
-
-    modal.classList.remove('hidden');
-    modal.classList.add('flex');
-}
-
-function hideTopCreaturesModal() {
-    const modal = document.getElementById('top-creatures-modal');
-    if (modal) {
-        modal.classList.remove('flex');
-        modal.classList.add('hidden');
-    }
-}
-</script>
-  
 // ==================== GENE VAULT FUNCTIONS ====================
 function showGeneVault() {
     const modal = document.getElementById('gene-vault-modal');
@@ -9238,33 +9435,31 @@ function placeEggInGeneVault(eggIndex, slotNumber) {
 function showEggDetails(index) {
     const egg = eggs[index];
     if (!egg) return;
-
     const previewData = {
         modules: egg.modules || [],
-        isPredator: false
+        isPredator: false,
+        specialization: null
     };
-
     let modulesHTML = '';
     if (egg.modules && egg.modules.length > 0) {
         modulesHTML = egg.modules.map(m => {
             const tier = m.tier || 1;
             const tierLabel = tier > 1 ? ` <span class="text-amber-400">T${tier}</span>` : '';
-            return `<div class="flex justify-between items-center py-px">
-                        <span class="font-mono text-[11px]" style="color: ${m.color}">${m.type}</span>
-                        ${tierLabel}
-                    </div>`;
+            return `
+                <div class="flex justify-between items-center py-px">
+                    <span class="font-mono text-[11px]" style="color: ${m.color}">${m.type}</span>
+                    ${tierLabel}
+                </div>
+            `;
         }).join('');
     } else {
         modulesHTML = `<div class="text-white/50 text-xs py-1">No modules</div>`;
     }
-
     const totalTier = egg.modules ? egg.modules.reduce((sum, m) => sum + (m.tier || 1), 0) : 0;
-
     const detailHTML = `
         <div class="fixed inset-0 bg-black/80 flex items-center justify-center z-[110]" onclick="this.remove()">
-            <div onclick="event.stopImmediatePropagation()" 
+            <div onclick="event.stopImmediatePropagation()"
                  class="modal bg-[#121218] border border-white/10 rounded-3xl max-w-md w-full mx-4 p-5">
-                
                 <div class="flex gap-4 mb-4">
                     <div class="flex-shrink-0">
                         <canvas id="egg-preview-canvas" width="92" height="92"
@@ -9273,7 +9468,6 @@ function showEggDetails(index) {
                     <div class="flex-1 min-w-0">
                         <div class="font-semibold text-xl text-emerald-400">${egg.name}</div>
                         <div class="text-xs text-white/50 mt-0.5">Stored Neural Pattern • Dormant</div>
-                        
                         <div class="flex gap-x-4 mt-3 text-sm">
                             <div><span class="text-white/50 text-xs">Gen</span><br><span class="font-mono">${egg.generation}</span></div>
                             <div><span class="text-white/50 text-xs">Kills</span><br><span class="font-mono text-red-400">${egg.killCount || 0}</span></div>
@@ -9281,7 +9475,6 @@ function showEggDetails(index) {
                         </div>
                     </div>
                 </div>
-
                 <div class="mb-4">
                     <div class="flex justify-between items-center mb-1.5">
                         <div class="inspector-label text-xs">Modules (${totalTier} total tier)</div>
@@ -9290,10 +9483,9 @@ function showEggDetails(index) {
                         ${modulesHTML}
                     </div>
                 </div>
-
                 <div class="flex gap-3 mt-5">
                     <button onclick="deleteEgg(${index}); this.closest('.fixed').remove()"
-                            class="flex-1 px-4 py-2.5 bg-red-500/90 hover:bg-red-500 rounded-2xl text-sm font-medium">
+                            class="flex-1 px-4 py-2.5 bg-red-500/90 hover:bg-red-500 rounded-2xl text-sm font-medium transition-colors">
                         Delete Egg
                     </button>
                     <button onclick="this.closest('.fixed').remove()"
@@ -9304,9 +9496,7 @@ function showEggDetails(index) {
             </div>
         </div>
     `;
-
     document.body.insertAdjacentHTML('beforeend', detailHTML);
-
     setTimeout(() => {
         const canvas = document.getElementById('egg-preview-canvas');
         if (canvas && typeof drawCreaturePreview === 'function') {
