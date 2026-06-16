@@ -6349,44 +6349,85 @@ class VortexParticle {
         this.life = 9999;
         this.size = random(1.6, 2.8);
         this.isSpecial = Math.random() < 0.03;
+        this.specialType = "white";
+
         if (this.isSpecial) {
             this.size = random(3.2, 4.5);
             this.pulse = random(TWO_PI);
+
+            // Mode-based special type
+            if (currentMusicMode === 'evolve') {
+                this.specialType = "yellow";
+            } else if (currentMusicMode === 'prune') {
+                this.specialType = "purple";
+            } else {
+                this.specialType = "white";
+            }
         }
     }
+
     update(vortexDir, vortexStrength) {
         let dx = this.x - centerX;
         let dy = this.y - centerY;
         let distToCenter = sqrt(dx * dx + dy * dy) || 1;
         if (distToCenter < 3.5) { this.life = 0; return; }
+
         let tangentX = -dy, tangentY = dx;
         let len = sqrt(tangentX * tangentX + tangentY * tangentY) || 1;
         this.x += (tangentX / len) * 1.25 * vortexStrength * vortexDir;
         this.y += (tangentY / len) * 1.25 * vortexStrength * vortexDir;
+
         let pull = 0.82 * vortexStrength;
         this.x += (centerX - this.x) * pull / (distToCenter + 0.8);
         this.y += (centerY - this.y) * pull / (distToCenter + 0.8);
+
         if (musicEnabled && musicData.bass > 0.35) {
             let jerk = (musicData.bass - 0.35) * 2.8;
             this.x += random(-jerk, jerk);
             this.y += random(-jerk, jerk);
         }
+
         if (this.isSpecial) {
             this.pulse = (this.pulse || 0) + 0.08;
         }
     }
+
     show() {
         if (this.isSpecial) {
             let pulseSize = this.size + sin(this.pulse) * 1.2;
-            fill(255, 255, 255, 40);
-            noStroke();
-            circle(this.x, this.y, pulseSize * 2.8);
-            fill(255, 255, 255, 90);
-            circle(this.x, this.y, pulseSize * 1.8);
-            fill(255, 255, 255, 255);
-            circle(this.x, this.y, pulseSize);
-            fill(200, 220, 255, 180);
-            circle(this.x, this.y, pulseSize * 0.5);
+
+            if (this.specialType === "yellow") {
+                // Yellow Evolve particle
+                fill(251, 191, 36, 45);
+                noStroke();
+                circle(this.x, this.y, pulseSize * 2.9);
+                fill(251, 191, 36, 150);
+                circle(this.x, this.y, pulseSize * 1.7);
+                fill(255, 255, 200, 255);
+                circle(this.x, this.y, pulseSize * 0.9);
+            } 
+            else if (this.specialType === "purple") {
+                // Purple Prune particle
+                fill(192, 38, 255, 45);
+                noStroke();
+                circle(this.x, this.y, pulseSize * 2.9);
+                fill(192, 38, 255, 150);
+                circle(this.x, this.y, pulseSize * 1.7);
+                fill(255, 200, 255, 255);
+                circle(this.x, this.y, pulseSize * 0.9);
+            } 
+            else {
+                // Normal white Vault Echo
+                fill(255, 255, 255, 40);
+                noStroke();
+                circle(this.x, this.y, pulseSize * 2.8);
+                fill(255, 255, 255, 90);
+                circle(this.x, this.y, pulseSize * 1.8);
+                fill(255, 255, 255, 255);
+                circle(this.x, this.y, pulseSize);
+                fill(200, 220, 255, 180);
+                circle(this.x, this.y, pulseSize * 0.5);
+            }
         } else {
             fill(255, 255, 255, 185);
             noStroke();
@@ -6422,7 +6463,6 @@ class PurpleInfectParticle {
         }
     }
     draw() {
-        console.log("%c[DRAW] PurpleInfectParticle is drawing", "color: #c084fc");
         noStroke();
         fill(180, 60, 255, 65);
         circle(this.x, this.y, this.size * 4.4);
@@ -6463,7 +6503,6 @@ class YellowGlowingParticle {
         }
     }
     draw() {
-        console.log("%c[DRAW] YellowGlowingParticle is drawing", "color: #fde047");
         noStroke();
         fill(255, 200, 50, 65);
         circle(this.x, this.y, this.size * 4.2);
@@ -6515,7 +6554,6 @@ class ModuleParticle {
         }
     }
     draw() {
-        console.log("%c[DRAW] ModuleParticle is drawing", "color: #34d399");
         noStroke();
         let pulse = sin(this.twinkle) * 0.7;
         fill(255, 220, 60, 70);
@@ -6531,10 +6569,66 @@ class ModuleParticle {
 }
 
 // =====================================================
-// PARTICLE EATING LOGIC
+// PARTICLE EATING LOGIC (Updated for special VortexParticles)
 // =====================================================
 function handleParticleEating(creature) {
-    // Purple Infect Particle (Prune Mode)
+    // === NEW: Handle colored special VortexParticles ===
+    for (let i = vortexParticles.length - 1; i >= 0; i--) {
+        let p = vortexParticles[i];
+        if (p.isSpecial && dist(creature.x, creature.y, p.x, p.y) < 18) {
+            if (p.specialType === "yellow") {
+                // Yellow: Gain random module
+                if (!creature.isPredator && creature.modules.length < 13) {
+                    const types = ['harvester', 'sensor', 'mover', 'resistant', 'explorer', 'communicator'];
+                    const colors = {
+                        'harvester': '#34d399', 'sensor': '#38bdf8', 'mover': '#a78bfa',
+                        'resistant': '#f472b6', 'explorer': '#fbbf24', 'communicator': '#c084fc'
+                    };
+                    let newType = random(types);
+                    let ang = random(TWO_PI);
+                    let d = random(5, 9);
+                    creature.modules.push({ type: newType, color: colors[newType], offsetX: cos(ang) * d, offsetY: sin(ang) * d, tier: 1 });
+                    creature.updateSpecialization();
+                    addFloatingText(creature.x, creature.y - 25, "+1 MODULE", '#ffcc33');
+                }
+                creature.energy = min(100, creature.energy + 12);
+            } 
+            else if (p.specialType === "purple") {
+                // Purple: Infect creature
+                creature.purpleFlash = max(creature.purpleFlash || 0, 420);
+                creature.mustEatWhite = true;
+                creature.damageFlash = 80;
+                creature.energy -= 10;
+
+                if (!creature.isPredator && creature.energy < 42 && random() < 0.55) {
+                    creature.isPredator = true;
+                    creature.currentThought = "Infected - Turned predator";
+                } else {
+                    creature.currentThought = "Infected...";
+                }
+                addFloatingText(creature.x, creature.y - 28, "INFECTED", '#c026ff');
+            } 
+            else {
+                // White (normal Vault Echo)
+                let filledSlots = geneVaultSlots.filter(slot => slot !== null);
+                if (filledSlots.length > 0) {
+                    let vaultData = random(filledSlots);
+                    if (vaultData.modules) creature.modules = [...vaultData.modules];
+                    if (vaultData.generation) creature.generation = vaultData.generation;
+                    creature.currentThought = "Echo Infected";
+                    creature.energy = max(creature.energy, 70);
+                }
+                creature.mustEatWhite = true;
+                creature.purpleFlash = 380;
+                addFloatingText(creature.x, creature.y - 28, "VAULT ECHO", '#c026d3');
+            }
+
+            vortexParticles.splice(i, 1);
+            return;
+        }
+    }
+
+    // Purple Infect Particle (Prune Mode) - keep existing
     for (let i = purpleInfectParticles.length - 1; i >= 0; i--) {
         let p = purpleInfectParticles[i];
         if (dist(creature.x, creature.y, p.x, p.y) < 20) {
@@ -6550,7 +6644,8 @@ function handleParticleEating(creature) {
             return;
         }
     }
-    // Yellow Glowing Particle (Evolve Mode)
+
+    // Yellow Glowing Particle (Evolve Mode) - keep existing
     for (let i = yellowGlowingParticles.length - 1; i >= 0; i--) {
         let p = yellowGlowingParticles[i];
         if (dist(creature.x, creature.y, p.x, p.y) < 20) {
@@ -6563,7 +6658,8 @@ function handleParticleEating(creature) {
             return;
         }
     }
-    // Module Particle (Evolve Mode)
+
+    // Module Particle (Evolve Mode) - keep existing
     for (let i = moduleParticles.length - 1; i >= 0; i--) {
         let p = moduleParticles[i];
         if (dist(creature.x, creature.y, p.x, p.y) < 18) {
@@ -6577,10 +6673,28 @@ function handleParticleEating(creature) {
 }
 
 // =====================================================
-// VORTEX ARRIVAL LOGIC
+// VORTEX ARRIVAL LOGIC (Center hit behavior)
 // =====================================================
 function handleParticleVortexArrival() {
-    // Purple Infect Particle → Spawn predators (Prune)
+    for (let i = vortexParticles.length - 1; i >= 0; i--) {
+        let p = vortexParticles[i];
+        if (p.life <= 0 && p.isSpecial) {
+            if (p.specialType === "yellow") {
+                // Yellow center hit → Vault creature + extra module
+                spawnVaultEchoCreature(p.x, p.y, { extraModule: true });
+            } else if (p.specialType === "purple") {
+                // Purple center hit → Vault creature as infected predator
+                spawnVaultEchoCreature(p.x, p.y, { infected: true });
+            } else {
+                // Normal white
+                spawnVaultEchoCreature(p.x, p.y);
+            }
+            vortexParticles.splice(i, 1);
+            continue;
+        }
+    }
+
+    // Keep existing purple/yellow/module arrival logic
     for (let i = purpleInfectParticles.length - 1; i >= 0; i--) {
         let p = purpleInfectParticles[i];
         if (p.isDead() && dist(p.x, p.y, width / 2, height / 2) < 35) {
@@ -6591,7 +6705,7 @@ function handleParticleVortexArrival() {
             purpleInfectParticles.splice(i, 1);
         }
     }
-    // Yellow Glowing Particle → Popcorn into modules (Evolve)
+
     for (let i = yellowGlowingParticles.length - 1; i >= 0; i--) {
         let p = yellowGlowingParticles[i];
         if (p.isDead() && dist(p.x, p.y, width / 2, height / 2) < 35) {
@@ -6602,7 +6716,7 @@ function handleParticleVortexArrival() {
             yellowGlowingParticles.splice(i, 1);
         }
     }
-    // Module Particle reaches vortex → Popcorn into more modules
+
     for (let i = moduleParticles.length - 1; i >= 0; i--) {
         let p = moduleParticles[i];
         if (p.isFloating && p.isDead() && dist(p.x, p.y, width / 2, height / 2) < 32) {
@@ -6619,23 +6733,17 @@ function handleParticleVortexArrival() {
 // MUSIC MODE PARTICLE SPAWNING
 // =====================================================
 function updateMusicModeParticles_v2() {
-    console.log("%c[SPAWN] Music Mode Particles running | Mode:", "color: #00ff9d", currentMusicMode);
     if (!currentMusicMode) return;
 
-    console.log("%c[DEBUG] Reached mode check | currentMusicMode =", "color: orange", currentMusicMode);
-
-    // ==================== PRUNE MODE ====================
     if (currentMusicMode === 'prune') {
         if (random() < 0.24 && purpleInfectParticles.length < 28) {
             purpleInfectParticles.push(new PurpleInfectParticle());
-            console.log("%c[SPAWNED] Purple particle added. Total now:", "color: #c084fc", purpleInfectParticles.length);
         }
         if (random() < 0.035 * (redHazardIntensity || 1) && redHazards.length < 26) {
             redHazards.push(new RedHazard());
         }
     }
 
-    // ==================== EVOLVE MODE ====================
     if (currentMusicMode === 'evolve') {
         if (random() < 0.34 && moduleParticles.length < 55) {
             let clusterSize = floor(random(1, 3.6));
@@ -6648,7 +6756,6 @@ function updateMusicModeParticles_v2() {
         }
     }
 
-    // ==================== REPLICATE MODE ====================
     if (currentMusicMode === 'replicate') {
         if (frameCount % 9 === 0 && random() < 0.85) {
             for (let i = 0; i < 5; i++) {
@@ -6659,6 +6766,7 @@ function updateMusicModeParticles_v2() {
         }
     }
 }
+
 // ==================== MISSING CLASSES ====================
 class Explosion {
     constructor(x, y) {
@@ -6721,16 +6829,20 @@ class RedHazard {
         let dy = this.y - centerY;
         let distToCenter = sqrt(dx * dx + dy * dy) || 1;
         if (distToCenter < 7) { this.explode(); return; }
+
         let tangentX = -dy, tangentY = dx;
         let len = sqrt(tangentX * tangentX + tangentY * tangentY) || 1;
         let rotForce = 1.4 * vortexStrength * vortexDir;
         this.vx += (tangentX / len) * rotForce;
         this.vy += (tangentY / len) * rotForce;
+
         let pull = 0.95 * vortexStrength;
         this.vx += (centerX - this.x) * pull / (distToCenter + 6);
         this.vy += (centerY - this.y) * pull / (distToCenter + 6);
+
         this.x += this.vx;
         this.y += this.vy;
+
         if (musicEnabled && musicData.highs > 0.4) {
             let jerk = (musicData.highs - 0.4) * 3.2;
             this.vx += random(-jerk, jerk);
