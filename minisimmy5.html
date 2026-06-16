@@ -2657,6 +2657,12 @@ function setupSliders() {
 }
 
 // ==================== MODALS (Extract Egg, Top Creatures, etc.) ====================
+// ==================== HELPER: Get Creature Tier (Highest Module Tier) ====================
+function getCreatureTier(creature) {
+    if (!creature || !creature.modules || creature.modules.length === 0) return 1;
+    return Math.max(...creature.modules.map(m => m.tier || 1));
+}
+
 // ==================== EXTRACT TO EGG MODAL ====================
 function showExtractEggModal() {
     const modal = document.getElementById('extract-egg-modal');
@@ -2673,9 +2679,14 @@ function showExtractEggModal() {
     `;
     listContainer.appendChild(balanceDiv);
 
+    // Sort by highest module tier first, then other factors
     let sorted = [...creatures].sort((a, b) => {
-        let scoreA = (a.modules?.length || 0) * 3 + (a.killCount || 0) * 2 + (a.childrenCount || 0);
-        let scoreB = (b.modules?.length || 0) * 3 + (b.killCount || 0) * 2 + (b.childrenCount || 0);
+        const tierA = getCreatureTier(a);
+        const tierB = getCreatureTier(b);
+
+        let scoreA = (a.modules?.length || 0) * 3 + (a.killCount || 0) * 2 + (a.childrenCount || 0) + (tierA * 6);
+        let scoreB = (b.modules?.length || 0) * 3 + (b.killCount || 0) * 2 + (b.childrenCount || 0) + (tierB * 6);
+
         return scoreB - scoreA;
     }).slice(0, 10);
 
@@ -2685,13 +2696,17 @@ function showExtractEggModal() {
         sorted.forEach(creature => {
             const div = document.createElement('div');
             div.className = 'flex items-center justify-between bg-white/5 hover:bg-white/10 rounded-2xl px-4 py-3 cursor-pointer transition-colors mb-1';
+
+            const creatureTier = getCreatureTier(creature);
+
             div.innerHTML = `
                 <div>
                     <div class="font-semibold text-emerald-400">${creature.name}</div>
-                    <div class="text-xs text-white/60">Gen ${creature.generation} • ${creature.modules?.length || 0} modules • ${creature.killCount || 0} kills</div>
+                    <div class="text-xs text-white/60">Gen ${creature.generation} • ${creature.modules?.length || 0} modules (Tier ${creatureTier}) • ${creature.killCount || 0} kills</div>
                 </div>
                 <button class="px-4 py-1.5 text-sm rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-medium">Extract</button>
             `;
+
             div.onclick = () => extractCreatureToEgg(creature);
             listContainer.appendChild(div);
         });
@@ -2781,14 +2796,17 @@ function showTopCreaturesModal() {
 
     listContainer.innerHTML = '';
 
+    // Sort by highest module tier first (new system), then other stats
     let sorted = [...creatures].sort((a, b) => {
+        const tierA = getCreatureTier(a);
+        const tierB = getCreatureTier(b);
+
         let scoreA = (a.modules?.length || 0) * 2.5 + (a.killCount || 0) * 4 + (a.childrenCount || 0) * 3 + (a.energy || 0) * 0.6;
         let scoreB = (b.modules?.length || 0) * 2.5 + (b.killCount || 0) * 4 + (b.childrenCount || 0) * 3 + (b.energy || 0) * 0.6;
 
-        let tierA = a.modules.reduce((sum, m) => sum + (m.tier || 1), 0);
-        let tierB = b.modules.reduce((sum, m) => sum + (m.tier || 1), 0);
-        scoreA += tierA * 1.2;
-        scoreB += tierB * 1.2;
+        // Heavily weight highest module tier
+        scoreA += tierA * 12;
+        scoreB += tierB * 12;
 
         return scoreB - scoreA;
     }).slice(0, 10);
@@ -2800,7 +2818,7 @@ function showTopCreaturesModal() {
             const div = document.createElement('div');
             div.className = 'flex items-center gap-3 bg-white/5 hover:bg-white/10 rounded-2xl px-3 py-2.5 transition-colors';
 
-            const tierTotal = creature.modules.reduce((sum, m) => sum + (m.tier || 1), 0);
+            const creatureTier = getCreatureTier(creature);
             const canvasId = `top10-preview-${creature.name.replace(/\s+/g, '')}-${Date.now()}`;
 
             div.innerHTML = `
@@ -2810,7 +2828,7 @@ function showTopCreaturesModal() {
                 <div class="flex-1 min-w-0">
                     <div class="font-semibold text-emerald-400">${creature.name}</div>
                     <div class="text-xs text-white/60">
-                        Gen ${creature.generation} • ${creature.modules.length} modules (T${tierTotal}) • ${creature.killCount || 0} kills
+                        Gen ${creature.generation} • ${creature.modules.length} modules (Tier ${creatureTier}) • ${creature.killCount || 0} kills
                     </div>
                 </div>
 
