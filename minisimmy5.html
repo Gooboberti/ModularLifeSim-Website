@@ -7778,6 +7778,70 @@ class Creature {
             this.role = this.specialization.charAt(0).toUpperCase() + this.specialization.slice(1);
         }
     }
+  // ==================== PREDATOR HUNTING METHODS ====================
+
+findWeakestPrey() {
+    let closest = null;
+    let lowestValue = Infinity;
+    let searchRadius = 120 + (this.getModuleCount('sensor') * 15);
+
+    // First priority: Weakest non-predator
+    for (let other of creatures) {
+        if (other === this) continue;
+        let d = dist(this.x, this.y, other.x, other.y);
+        if (d > searchRadius) continue;
+
+        if (!other.isPredator) {
+            let value = other.getPointValue();
+            if (value < lowestValue) {
+                lowestValue = value;
+                closest = other;
+            }
+        }
+    }
+
+    // Fallback: Weakest predator if no non-predators nearby
+    if (!closest) {
+        for (let other of creatures) {
+            if (other === this || !other.isPredator) continue;
+            let d = dist(this.x, this.y, other.x, other.y);
+            if (d > searchRadius) continue;
+
+            let value = other.getPointValue();
+            if (value < lowestValue) {
+                lowestValue = value;
+                closest = other;
+            }
+        }
+    }
+
+    return closest;
+}
+
+eatCreature(target) {
+    if (!target || target === this) return;
+
+    // Steal one random module from the victim
+    if (target.modules.length > 0) {
+        let stolenModule = JSON.parse(JSON.stringify(random(target.modules)));
+        this.modules.push(stolenModule);
+        this.updateSpecialization();
+    }
+
+    // Restore energy + count kill
+    this.energy = 100;
+    this.killCount = (this.killCount || 0) + 1;
+    this.currentThought = "Killed prey";
+
+    // Remove victim from the world
+    let index = creatures.indexOf(target);
+    if (index > -1) {
+        creatures.splice(index, 1);
+    }
+
+    spawnEffects.push(new SpawnEffect(target.x, target.y));
+    playPredatorFeedSound();
+}
 
     reproduce() {
         let newModules = this.modules.map(m => ({...m}));
@@ -8010,6 +8074,30 @@ if (!this.isPredator) {
         this.vy *= 0.90;
         this.x = constrain(this.x, 8, width - 8);
         this.y = constrain(this.y, 8, height - 8);
+      // ==================== PREDATOR HUNTING BEHAVIOR ====================
+if (this.isPredator) {
+    let target = this.findWeakestPrey();
+
+    if (target) {
+        let d = dist(this.x, this.y, target.x, target.y);
+
+        if (d > 12) {
+            let dx = target.x - this.x;
+            let dy = target.y - this.y;
+            let len = sqrt(dx * dx + dy * dy) || 1;
+            let huntSpeed = 0.9 + (this.getModuleCount('mover') * 0.08);
+            this.vx += (dx / len) * huntSpeed * timeScale;
+            this.vy += (dy / len) * huntSpeed * timeScale;
+            this.currentThought = "Hunting...";
+        } else {
+            this.eatCreature(target);
+        }
+    } else {
+        this.vx += random(-0.6, 0.6) * timeScale;
+        this.vy += random(-0.6, 0.6) * timeScale;
+        this.currentThought = "Searching for prey";
+    }
+}
         // Energy zones
        // Energy zones (food eating) - Predators no longer eat food
 if (!this.isPredator) {
