@@ -1374,6 +1374,7 @@ let creatures = [];
 let eggs = [];
 const MAX_INCUBATOR_SLOTS = 10;
 let incubatingEggs = []; // { id, eggData, progress (0-100), completed }
+let incubatorSlots = [];
 let nextIncubationId = 1;
 const MAX_EGGS = 10; // Max eggs player can hold
 let predators = [];
@@ -2776,6 +2777,322 @@ function extractCreatureToEgg(creature) {
     }
 
     showExtractEggModal();
+}
+
+// ==================== INCUBATOR SYSTEM (Steady Multiplier, No Levels) ====================
+
+function initializeIncubatorSlots() {
+    if (!incubatorSlots || incubatorSlots.length === 0) {
+        incubatorSlots = [];
+        for (let i = 1; i <= MAX_INCUBATOR_SLOTS; i++) {
+            incubatorSlots.push({
+                id: i,
+                multiplier: 1.0,
+                totalIncubations: 0,
+                currentIncubation: null
+            });
+        }
+    }
+}
+
+// Call this once at the start
+initializeIncubatorSlots();
+
+function showIncubator() {
+    const modal = document.getElementById('incubator-modal');
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    renderIncubatorSlots();
+}
+
+function hideIncubator() {
+    const modal = document.getElementById('incubator-modal');
+    if (modal) {
+        modal.classList.remove('flex');
+        modal.classList.add('hidden');
+    }
+}
+
+function renderIncubatorSlots() {
+    const grid = document.getElementById('incubator-slots-grid');
+    if (!grid) return;
+    grid.innerHTML = '';
+
+    incubatorSlots.forEach((slot, index) => {
+        const hasInc = slot.currentIncubation !== null;
+        const progress = hasInc ? slot.currentIncubation.progress : 0;
+
+        const card = document.createElement('div');
+        card.className = `rounded-2xl border p-4 transition-all ${hasInc ? 'border-amber-500/60 bg-[#0f0a05]' : 'border-amber-500/20 bg-[#0a0a0f]'}`;
+
+        let html = `
+            <div class="flex justify-between items-center mb-2">
+                <div class="text-sm font-semibold text-amber-400">Slot ${slot.id}</div>
+                <div class="font-mono text-xs text-amber-400">${slot.multiplier.toFixed(2)}×</div>
+            </div>
+        `;
+
+        if (hasInc) {
+            const egg = slot.currentIncubation.eggData;
+            html += `
+                <div class="mb-2">
+                    <div class="text-xs text-white/70">Incubating: <span class="text-emerald-400">${egg.name}</span></div>
+                    <div class="w-full bg-white/10 h-2 rounded-full mt-1 overflow-hidden">
+                        <div class="bg-amber-500 h-2 transition-all" style="width:${progress}%"></div>
+                    </div>
+                    <div class="text-[10px] text-right text-white/50">${progress.toFixed(0)}%</div>
+                </div>
+                <button onclick="cancelIncubationInSlot(${index}); event.stopImmediatePropagation();" 
+                        class="w-full py-1 text-xs rounded-xl bg-red-500/80 hover:bg-red-500 text-white">Cancel</button>
+            `;
+        } else {
+            html += `
+                <div class="h-14 flex items-center justify-center border border-white/10 rounded-xl bg-black/30 mb-2">
+                    <div class="text-center">
+                        <div class="text-xs text-white/50">Empty</div>
+                    </div>
+                </div>
+                <button onclick="startIncubationInSlot(${index}); event.stopImmediatePropagation();" 
+                        class="w-full py-1.5 text-xs rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-medium">
+                    Start Incubation
+                </button>
+            `;
+        }
+
+        card.innerHTML = html;
+        grid.appendChild(card);
+    });
+}
+
+function startIncubationInSlot(slotIndex) {
+    if (eggs.length === 0) {
+        alert("You have no eggs.");
+        return;
+    }
+    hideIncubator();
+    showEggSelectionForSlot(slotIndex);
+}
+
+function showEggSelectionForSlot(slotIndex) {
+    const modal = document.createElement('div');
+    modal.className = 'fixed inset-0 bg-black/80 flex items-center justify-center z-[140]';
+    modal.innerHTML = `
+        <div class="bg-[#121218] border border-amber-500/30 rounded-3xl w-full max-w-md mx-4 p-5">
+            <div class="flex justify-between mb-4">
+                <div class="font-semibold text-amber-400">Choose Egg for Slot ${slotIndex + 1}</div>
+                <button class="text-2xl text-white/60 hover:text-white leading-none">&times;</button>
+            </div>
+            <div id="egg-list" class="max-h-[420px] overflow-auto space-y-2"></div>
+        </div>
+    `;
+
+    const close = modal.querySelector('button');
+    close.onclick = () => { modal.remove(); showIncubator(); };
+
+    const list = modal.querySelector('#egg-list');
+
+    eggs.forEach((egg, i) => {
+        const row = document.createElement('div');
+        row.className = 'flex justify-between items-center bg-white/5 hover:bg-white/10 p-3 rounded-2xl cursor-pointer';
+        row.innerHTML = `
+            <div>
+                <div class="text-emerald-400 font-medium">${egg.name}</div>
+                <div class="text-xs text-white/60">Gen ${egg.generation} • ${egg.modules?.length || 0} mods • Score ${getEggScore(egg)}</div>
+            </div>
+            <button class="px-4 py-1 text-xs bg-amber-600 hover:bg-amber-500 rounded-xl text-white">Incubate</button>
+        `;
+        row.querySelector('button').onclick = (e) => {
+            e.stopImmediatePropagation();
+            assignEggToSlot(slotIndex, i);
+            modal.remove();
+            showIncubator();
+        };
+        list.appendChild(row);
+    });
+
+    document.body.appendChild(modal);
+}
+
+function assignEggToSlot(slotIndex, eggIndex) {
+    const slot = incubatorSlots[slotIndex];
+    const egg = eggs[eggIndex];
+    if (!slot || !egg) return;
+
+    slot.currentIncubation = {
+        eggData: JSON.parse(JSON.stringify(egg)),
+        progress: 0
+    };
+    eggs.splice(eggIndex, 1);
+    updateEggCountBadge();
+}
+
+function cancelIncubationInSlot(slotIndex) {
+    const slot = incubatorSlots[slotIndex];
+    if (!slot || !slot.currentIncubation) return;
+
+    if (confirm("Cancel incubation? Egg returns to inventory.")) {
+        eggs.push(JSON.parse(JSON.stringify(slot.currentIncubation.eggData)));
+        updateEggCountBadge();
+        slot.currentIncubation = null;
+        renderIncubatorSlots();
+    }
+}
+
+// Called every frame from the main loop
+function updateIncubatorSlotsProgress(timeScale = 1) {
+    let completed = false;
+
+    incubatorSlots.forEach(slot => {
+        if (slot.currentIncubation) {
+            const inc = slot.currentIncubation;
+            const quality = getEggScore(inc.eggData) / 100;
+            inc.progress += (0.9 * timeScale * (1 + quality));
+
+            if (inc.progress >= 100 && !inc.completed) {
+                inc.completed = true;
+                completed = true;
+            }
+        }
+    });
+
+    if (completed) {
+        // Check and show completion modal for the first completed slot
+        for (let i = 0; i < incubatorSlots.length; i++) {
+            if (incubatorSlots[i].currentIncubation && incubatorSlots[i].currentIncubation.completed) {
+                showIncubationCompleteModal(i);
+                break;
+            }
+        }
+    }
+}
+
+let currentSlotForCompletion = null;
+
+function showIncubationCompleteModal(slotIndex) {
+    const modal = document.getElementById('incubation-complete-modal');
+    const content = document.getElementById('incubation-complete-content');
+    if (!modal || !content) return;
+
+    currentSlotForCompletion = slotIndex;
+    const slot = incubatorSlots[slotIndex];
+    const inc = slot.currentIncubation;
+    const egg = inc.eggData;
+
+    const baseScore = getEggScore(egg);
+    const oldMult = slot.multiplier;
+    const gain = calculateIncubatorMultiplierGain(egg);
+    const newMult = oldMult + gain;
+
+    // Apply gain immediately
+    slot.multiplier = newMult;
+    slot.totalIncubations++;
+
+    const modList = egg.modules && egg.modules.length > 0 
+        ? egg.modules.map(m => `${m.type} T${m.tier || 1}`).join(', ') 
+        : 'None';
+
+    content.innerHTML = `
+        <div class="bg-white/5 rounded-2xl p-4">
+            <div class="text-emerald-400 font-semibold text-lg">${egg.name}</div>
+            <div class="text-xs text-white/60">Gen ${egg.generation} • ${egg.modules?.length || 0} modules</div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 text-sm">
+            <div class="bg-white/5 p-3 rounded-2xl">
+                <div class="text-xs text-white/50">Base Score</div>
+                <div class="text-2xl font-mono text-amber-400">${baseScore}</div>
+            </div>
+            <div class="bg-white/5 p-3 rounded-2xl">
+                <div class="text-xs text-white/50">Slot Multiplier</div>
+                <div class="font-mono">${oldMult.toFixed(2)}× → <span class="text-emerald-400">${newMult.toFixed(2)}×</span></div>
+                <div class="text-[10px] text-emerald-400">+${gain.toFixed(3)}×</div>
+            </div>
+        </div>
+
+        <div class="bg-white/5 p-3 rounded-2xl text-xs">
+            <div class="text-white/50">Modules</div>
+            <div class="text-white/80">${modList}</div>
+        </div>
+    `;
+
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+function hideIncubationCompleteModal() {
+    const modal = document.getElementById('incubation-complete-modal');
+    if (modal) modal.classList.remove('flex', 'hidden');
+    currentSlotForCompletion = null;
+}
+
+function sellIncubatedEgg() {
+    if (currentSlotForCompletion === null) return;
+    const slot = incubatorSlots[currentSlotForCompletion];
+    if (!slot || !slot.currentIncubation) return;
+
+    const egg = slot.currentIncubation.eggData;
+    let finalScore = getEggScore(egg);
+
+    // Global multipliers
+    finalScore *= getCurrentGlobalScoreMultiplier();
+
+    // Slot multiplier
+    finalScore *= slot.multiplier;
+
+    // Live furnace bonus
+    const furnaceMult = getCurrentFurnaceMultiplier();
+    if (furnaceMult > 1) finalScore *= furnaceMult;
+
+    finalScore = Math.floor(finalScore);
+
+    highRollerPoints = (highRollerPoints || 0) + finalScore;
+    addFloatingText(width/2, 85, `+${finalScore} Score`, '#fbbf24');
+
+    slot.currentIncubation = null;
+    hideIncubationCompleteModal();
+    renderIncubatorSlots();
+    updateMainStats();
+}
+
+function returnIncubatedEggToInventory() {
+    if (currentSlotForCompletion === null) return;
+    const slot = incubatorSlots[currentSlotForCompletion];
+    if (!slot || !slot.currentIncubation) return;
+
+    eggs.push(JSON.parse(JSON.stringify(slot.currentIncubation.eggData)));
+    updateEggCountBadge();
+    slot.currentIncubation = null;
+
+    hideIncubationCompleteModal();
+    renderIncubatorSlots();
+}
+
+// Multiplier helpers (expand these later)
+function getCurrentGlobalScoreMultiplier() {
+    let m = 1.0;
+    if (creatures.length > 100) m *= 1.12;
+    if (creatures.filter(c => c.isPredator).length > 25) m *= 0.95;
+    return m;
+}
+
+function getCurrentFurnaceMultiplier() {
+    if (typeof burningCrystals !== 'undefined' && burningCrystals > 0 && 
+        typeof furnaceEndTime !== 'undefined' && Date.now() < furnaceEndTime) {
+        return (typeof getBurningMultiplier === 'function') ? getBurningMultiplier() : 1.5;
+    }
+    return 1;
+}
+
+function calculateIncubatorMultiplierGain(eggData) {
+    if (!eggData) return 0.006;
+    const mods = eggData.modules?.length || 0;
+    const tiers = eggData.modules ? eggData.modules.reduce((s, m) => s + (m.tier || 1), 0) : 0;
+    const maxTier = eggData.modules && eggData.modules.length > 0 ? Math.max(...eggData.modules.map(m => m.tier || 1)) : 1;
+    const gen = eggData.generation || 1;
+
+    let gain = 0.0065 + (mods * 0.0009) + (tiers * 0.0012) + ((maxTier - 1) * 0.005) + ((gen - 1) * 0.00035);
+    return Math.min(gain, 0.09);
 }
 
 // ==================== TOP 10 CREATURES MODAL (with body previews + Extract) ====================
