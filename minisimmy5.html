@@ -4445,99 +4445,80 @@ function deselectCreature() {
     if (energyBar) energyBar.style.width = '0%';
 }
 
-function drawCreaturePreview(creature, canvas) {
-    if (!creature || !canvas) return;
+function drawCreaturePreview(data, canvas) {
+    if (!canvas || !data) return;
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    const cx = canvas.width / 2;
-    const cy = canvas.height / 2;
-    const scale = 2.8;
+    const isSocial = data.socialPredator === true;
+    const isPred = data.isPredator === true;
+    const isInfected = (data.purpleFlash && data.purpleFlash > 0) || data.infected === true;
 
-    const isPredator = creature.isPredator === true;
-    const isSocialPred = creature.socialPredator === true;
-
-    // === Predator Glow ===
-    if (isPredator) {
-        if (isSocialPred) {
-            // Soft orange-red glow for social predators
-            ctx.fillStyle = 'rgba(249, 115, 22, 0.38)';
-            ctx.beginPath();
-            ctx.arc(cx, cy, 46, 0, Math.PI * 2);
-            ctx.fill();
-
-            ctx.fillStyle = 'rgba(249, 115, 22, 0.22)';
-            ctx.beginPath();
-            ctx.arc(cx, cy, 58, 0, Math.PI * 2);
-            ctx.fill();
-        } else {
-            // Normal red glow for regular predators
-            ctx.fillStyle = 'rgba(239, 68, 68, 0.35)';
-            ctx.beginPath();
-            ctx.arc(cx, cy, 42, 0, Math.PI * 2);
-            ctx.fill();
-        }
+    // === Background color based on state ===
+    let bgColor = '#1f2937'; // default dark
+    if (isInfected) {
+        bgColor = '#581c87';      // Purple for infected
+    } else if (isSocial) {
+        bgColor = '#9a3412';      // Orange for social predators
+    } else if (isPred) {
+        bgColor = '#7f1d1d';      // Red for normal predators
     }
 
-    // Background circle
-    ctx.fillStyle = 'rgba(255,255,255,0.03)';
+    // Draw rounded background
+    ctx.fillStyle = bgColor;
     ctx.beginPath();
-    ctx.arc(cx, cy, 38, 0, Math.PI * 2);
+    ctx.roundRect(2, 2, canvas.width - 4, canvas.height - 4, 10);
     ctx.fill();
 
-    // === Core Color ===
-    let coreColor;
-    if (isPredator) {
-        if (isSocialPred) {
-            coreColor = '#f59e0b'; // Warm orange for social predators
-        } else {
-            coreColor = '#ef4444'; // Strong red for normal predators
-        }
-    } else {
-        coreColor = '#facc15';
-        if (creature.specialization === 'harvester') coreColor = '#34d399';
-        if (creature.specialization === 'sensor') coreColor = '#38bdf8';
-        if (creature.specialization === 'mover') coreColor = '#a78bfa';
-        if (creature.specialization === 'resistant') coreColor = '#f472b6';
-        if (creature.specialization === 'explorer') coreColor = '#fbbf24';
-        if (creature.specialization === 'communicator') coreColor = '#c084fc';
-    }
+    // Optional subtle border
+    ctx.strokeStyle = isPred || isSocial || isInfected ? '#ffffff33' : '#ffffff22';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // === Draw creature ===
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
+    const baseSize = 7 + (data.modules ? data.modules.length * 0.16 : 0);
+
+    // Core
+    let coreColor = '#facc15';
+    if (isSocial) coreColor = '#f59e0b';
+    else if (isPred) coreColor = '#ef4444';
+    else if (data.specialization === 'harvester') coreColor = '#34d399';
+    else if (data.specialization === 'sensor') coreColor = '#38bdf8';
+    else if (data.specialization === 'mover') coreColor = '#a78bfa';
+    else if (data.specialization === 'resistant') coreColor = '#f472b6';
+    else if (data.specialization === 'explorer') coreColor = '#fbbf24';
+    else if (data.specialization === 'communicator') coreColor = '#c084fc';
 
     ctx.fillStyle = coreColor;
-    ctx.strokeStyle = isPredator 
-        ? (isSocialPred ? '#fed7aa' : '#fecaca') 
-        : '#fef08c';
-    ctx.lineWidth = isPredator ? 2 : 1.5;
-
+    ctx.strokeStyle = isPred ? '#fecaca' : '#fef08c';
+    ctx.lineWidth = isPred ? 1.8 : 1.2;
     ctx.beginPath();
-    ctx.arc(cx, cy, 11, 0, Math.PI * 2);
+    ctx.arc(cx, cy, baseSize, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
 
-    // === Draw Modules ===
-    for (let m of creature.modules) {
-        const x = cx + (m.offsetX || 0) * scale;
-        const y = cy + (m.offsetY || 0) * scale;
-        const tier = m.tier || 1;
-        const size = 5.5 + (tier - 1) * 1.1;
-
-        // Force red modules if predator (normal predators stay dark red)
-        ctx.fillStyle = isPredator && !isSocialPred ? '#b91c1c' : (m.color || '#facc15');
-        ctx.strokeStyle = 'rgba(255,255,255,0.15)';
-        ctx.lineWidth = 0.8;
-
+    // Honey
+    if (data.honey > 2.5) {
+        ctx.fillStyle = '#f59e0b';
         ctx.beginPath();
-        ctx.arc(x, y, size, 0, Math.PI * 2);
+        ctx.arc(cx + 2.5, cy - 2.5, 2.3 + Math.min(data.honey * 0.07, 5.5), 0, Math.PI * 2);
         ctx.fill();
-        ctx.stroke();
+    }
 
-        // Tier rings
-        if (tier > 1) {
-            ctx.strokeStyle = tier === 5 ? '#fde047' : '#fbbf24';
-            ctx.lineWidth = tier === 2 ? 1.2 : tier === 3 ? 1.6 : 2.0;
+    // Modules
+    if (data.modules && data.modules.length > 0) {
+        for (let m of data.modules) {
+            const tier = m.tier || 1;
+            const size = 3.2 + (tier - 1) * 0.6;
+            const mx = cx + (m.offsetX || 0);
+            const my = cy + (m.offsetY || 0);
+
+            ctx.fillStyle = m.color || '#fbbf24';
             ctx.beginPath();
-            ctx.arc(x, y, size + 2.2, 0, Math.PI * 2);
-            ctx.stroke();
+            ctx.arc(mx, my, size, 0, Math.PI * 2);
+            ctx.fill();
         }
     }
 }
