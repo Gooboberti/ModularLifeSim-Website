@@ -2752,7 +2752,6 @@ function showExtractEggModal() {
         <span class="font-mono text-2xl text-violet-400 font-semibold">${totalScore.toLocaleString()}</span>
     `;
     listContainer.appendChild(balanceDiv);
-
     let sorted = [...creatures].sort((a, b) => {
         const tierA = getCreatureTier(a);
         const tierB = getCreatureTier(b);
@@ -2760,7 +2759,6 @@ function showExtractEggModal() {
         let scoreB = (b.modules?.length || 0) * 3 + (b.killCount || 0) * 2 + (b.childrenCount || 0) + (tierB * 6);
         return scoreB - scoreA;
     }).slice(0, 10);
-
     if (sorted.length === 0) {
         listContainer.innerHTML += `<div class="text-center text-white/60 py-8">No creatures available yet.</div>`;
     } else {
@@ -2806,7 +2804,6 @@ function extractCreatureToEgg(creature) {
     addFloatingText(creature.x, creature.y - 30, "-250,000", '#fbbf24');
     playTone(620, 'sine', 0.18, 0.6);
     setTimeout(() => playTone(880, 'sine', 0.12, 0.4), 110);
-
     let brainData = null;
     if (creature.brain) {
         brainData = {
@@ -2818,7 +2815,6 @@ function extractCreatureToEgg(creature) {
             connectionStrengthHO: JSON.parse(JSON.stringify(creature.brain.connectionStrengthHO || []))
         };
     }
-
     const eggData = {
         name: creature.name,
         generation: creature.generation,
@@ -2828,7 +2824,6 @@ function extractCreatureToEgg(creature) {
         traits: JSON.parse(JSON.stringify(creature.traits || {})),
         brain: brainData
     };
-
     eggs.push(eggData);
     const index = creatures.indexOf(creature);
     if (index > -1) creatures.splice(index, 1);
@@ -2857,10 +2852,8 @@ initializeIncubatorSlots();
 function showIncubator() {
     const modal = document.getElementById('incubator-modal');
     if (!modal) return;
-
     modal.classList.remove('hidden');
     modal.classList.add('flex');
-
     renderIncubatorSlots();
 
     // Add "View Egg Inventory" button at the bottom
@@ -2896,10 +2889,11 @@ function renderIncubatorSlots() {
     incubatorSlots.forEach((slot, index) => {
         const hasInc = slot.currentIncubation !== null;
         const progress = hasInc ? Math.floor(slot.currentIncubation.progress) : 0;
+        const isReady = hasInc && slot.currentIncubation.readyToClaim === true;
 
         const card = document.createElement('div');
-        card.className = `rounded-2xl border p-3 transition-all ${hasInc 
-            ? 'border-amber-500/50 bg-[#0f0a05]' 
+        card.className = `rounded-2xl border p-3 transition-all ${hasInc
+            ? 'border-amber-500/50 bg-[#0f0a05]'
             : 'border-amber-500/20 bg-[#0a0a0f]'}`;
 
         let html = `
@@ -2924,17 +2918,28 @@ function renderIncubatorSlots() {
                         </div>
                         
                         <div class="w-full bg-white/10 h-2 rounded-full overflow-hidden mt-1">
-                            <div class="bg-amber-500 h-2 transition-all" style="width: ${progress}%"></div>
+                            <div class="${isReady ? 'bg-emerald-500' : 'bg-amber-500'} h-2 transition-all" style="width: ${progress}%"></div>
                         </div>
                         <div class="text-[10px] text-right text-white/50 mt-0.5">${progress}%</div>
                     </div>
                 </div>
-
-                <button onclick="cancelIncubationInSlot(${index}); event.stopImmediatePropagation();"
-                        class="w-full py-1 text-xs rounded-xl bg-red-500/90 hover:bg-red-500 text-white font-medium">
-                    Cancel
-                </button>
             `;
+
+            if (isReady) {
+                html += `
+                    <button onclick="claimIncubatedSlot(${index}); event.stopImmediatePropagation();"
+                            class="w-full py-1.5 text-xs rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold animate-pulse">
+                        Claim Reward
+                    </button>
+                `;
+            } else {
+                html += `
+                    <button onclick="cancelIncubationInSlot(${index}); event.stopImmediatePropagation();"
+                            class="w-full py-1 text-xs rounded-xl bg-red-500/90 hover:bg-red-500 text-white font-medium">
+                        Cancel
+                    </button>
+                `;
+            }
         } else {
             html += `
                 <div class="h-12 flex items-center justify-center border border-white/10 rounded-xl bg-black/30 mb-2">
@@ -2950,7 +2955,6 @@ function renderIncubatorSlots() {
         card.innerHTML = html;
         grid.appendChild(card);
 
-        // Draw creature preview
         if (hasInc) {
             setTimeout(() => {
                 const canvas = document.getElementById(`incubator-slot-preview-${slot.id}`);
@@ -2992,7 +2996,6 @@ function showEggSelectionForSlot(slotIndex) {
     eggs.forEach((egg, i) => {
         const row = document.createElement('div');
         row.className = 'flex items-center gap-3 bg-white/5 hover:bg-white/10 p-3 rounded-2xl cursor-pointer';
-
         const canvasId = `egg-choose-preview-${slotIndex}-${i}`;
 
         row.innerHTML = `
@@ -3014,7 +3017,6 @@ function showEggSelectionForSlot(slotIndex) {
 
         list.appendChild(row);
 
-        // Draw preview
         setTimeout(() => {
             const canvas = document.getElementById(canvasId);
             if (canvas && typeof drawCreaturePreview === 'function') {
@@ -3033,8 +3035,11 @@ function assignEggToSlot(slotIndex, eggIndex) {
 
     slot.currentIncubation = {
         eggData: JSON.parse(JSON.stringify(egg)),
-        progress: 0
+        progress: 0,
+        completed: false,
+        readyToClaim: false
     };
+
     eggs.splice(eggIndex, 1);
     updateEggCountBadge();
 }
@@ -3052,29 +3057,39 @@ function cancelIncubationInSlot(slotIndex) {
 }
 
 function updateIncubatorSlotsProgress(timeScale = 1) {
-    let completed = false;
     incubatorSlots.forEach(slot => {
         if (slot.currentIncubation) {
             const inc = slot.currentIncubation;
-            const quality = getEggScore(inc.eggData) / 100;
-            inc.progress += (0.9 * timeScale * (1 + quality));
+
+            const eggScore = getEggScore(inc.eggData) || 500;
+            const difficulty = 1 + (eggScore / 2400);
+
+            const baseGain = 0.27;
+            const gain = baseGain * timeScale / difficulty;
+
+            inc.progress = Math.min(100, inc.progress + gain);
+
             if (inc.progress >= 100 && !inc.completed) {
                 inc.completed = true;
-                completed = true;
+                inc.readyToClaim = true;
             }
         }
     });
-    if (completed) {
-        for (let i = 0; i < incubatorSlots.length; i++) {
-            if (incubatorSlots[i].currentIncubation && incubatorSlots[i].currentIncubation.completed) {
-                showIncubationCompleteModal(i);
-                break;
-            }
-        }
-    }
 }
 
 let currentSlotForCompletion = null;
+
+function claimIncubatedSlot(slotIndex) {
+    const slot = incubatorSlots[slotIndex];
+    if (!slot || !slot.currentIncubation || !slot.currentIncubation.readyToClaim) return;
+
+    const gain = calculateIncubatorMultiplierGain(slot.currentIncubation.eggData);
+    slot.multiplier = Math.min(3.0, slot.multiplier + gain);
+    slot.totalIncubations++;
+
+    currentSlotForCompletion = slotIndex;
+    showIncubationCompleteModal(slotIndex);
+}
 
 function showIncubationCompleteModal(slotIndex) {
     const modal = document.getElementById('incubation-complete-modal');
@@ -3087,12 +3102,9 @@ function showIncubationCompleteModal(slotIndex) {
     const egg = inc.eggData;
 
     const baseScore = getEggScore(egg);
-    const oldMult = slot.multiplier;
     const gain = calculateIncubatorMultiplierGain(egg);
-    const newMult = oldMult + gain;
-
-    slot.multiplier = newMult;
-    slot.totalIncubations++;
+    const oldMult = slot.multiplier - gain;
+    const newMult = slot.multiplier;
 
     const modList = egg.modules && egg.modules.length > 0
         ? egg.modules.map(m => `${m.type} T${m.tier || 1}`).join(', ')
@@ -3103,6 +3115,7 @@ function showIncubationCompleteModal(slotIndex) {
             <div class="text-emerald-400 font-semibold text-lg">${egg.name}</div>
             <div class="text-xs text-white/60">Gen ${egg.generation} • ${egg.modules?.length || 0} modules</div>
         </div>
+
         <div class="grid grid-cols-2 gap-3 text-sm">
             <div class="bg-white/5 p-3 rounded-2xl">
                 <div class="text-xs text-white/50">Base Score</div>
@@ -3114,6 +3127,7 @@ function showIncubationCompleteModal(slotIndex) {
                 <div class="text-[10px] text-emerald-400">+${gain.toFixed(3)}×</div>
             </div>
         </div>
+
         <div class="bg-white/5 p-3 rounded-2xl text-xs">
             <div class="text-white/50">Modules</div>
             <div class="text-white/80">${modList}</div>
@@ -3126,7 +3140,10 @@ function showIncubationCompleteModal(slotIndex) {
 
 function hideIncubationCompleteModal() {
     const modal = document.getElementById('incubation-complete-modal');
-    if (modal) modal.classList.remove('flex', 'hidden');
+    if (modal) {
+        modal.classList.remove('flex');
+        modal.classList.add('hidden');
+    }
     currentSlotForCompletion = null;
 }
 
@@ -3186,6 +3203,7 @@ function calculateIncubatorMultiplierGain(eggData) {
     const tiers = eggData.modules ? eggData.modules.reduce((s, m) => s + (m.tier || 1), 0) : 0;
     const maxTier = eggData.modules && eggData.modules.length > 0 ? Math.max(...eggData.modules.map(m => m.tier || 1)) : 1;
     const gen = eggData.generation || 1;
+
     let gain = 0.0065 + (mods * 0.0009) + (tiers * 0.0012) + ((maxTier - 1) * 0.005) + ((gen - 1) * 0.00035);
     return Math.min(gain, 0.09);
 }
@@ -3241,7 +3259,6 @@ function showTopCreaturesModal() {
         sorted.forEach(creature => {
             const div = document.createElement('div');
             div.className = 'flex items-center gap-3 bg-white/5 hover:bg-white/10 rounded-2xl px-3 py-2.5 transition-colors';
-
             const creatureTier = getCreatureTier(creature);
             const canvasId = `top10-preview-${creature.name.replace(/\s+/g, '')}-${Date.now()}`;
 
