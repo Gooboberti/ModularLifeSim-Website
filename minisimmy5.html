@@ -2732,6 +2732,16 @@ function setupSliders() {
     });
 }
 
+function showEggInventoryFromIncubator() {
+    // Open egg inventory on top without closing the incubator
+    const eggModal = document.getElementById('egg-inventory-modal');
+    if (eggModal) {
+        // Make sure it has high z-index so it appears on top
+        eggModal.style.zIndex = '130';
+    }
+    showEggInventory();
+}
+  
 // ==================== MODALS (Extract Egg, Top Creatures, etc.) ====================
 // ==================== HELPER: Get Creature Tier (Highest Module Tier) ====================
 function getCreatureTier(creature) {
@@ -2842,28 +2852,30 @@ function releaseEggFromIncubatorSlot(slotIndex) {
     const slot = incubatorSlots[slotIndex];
     if (!slot || !slot.currentIncubation) return;
 
+    // Apply slot multiplier bonus even when releasing to swarm
+    const gain = calculateIncubatorMultiplierGain(slot.currentIncubation.eggData);
+    slot.multiplier = Math.min(3.0, slot.multiplier + gain);
+    slot.totalIncubations++;
+
     const eggData = slot.currentIncubation.eggData;
 
     // Create creature from egg and add to swarm
     if (typeof createCreatureFromEgg === 'function') {
         const creature = createCreatureFromEgg(eggData);
         creatures.push(creature);
-
-        // Small bonus for releasing from incubator
         creature.energy = Math.min(100, (creature.energy || 60) + 20);
     } else {
-        // Fallback if the function doesn't exist
-        console.warn("createCreatureFromEgg not found — egg released as basic creature");
+        console.warn("createCreatureFromEgg function not found");
     }
 
-    addFloatingText(width / 2, 75, "Egg released to swarm", '#34d399');
-    playTone(480, 'sine', 0.25, 0.5);
+    addFloatingText(width / 2, 70, `+${gain.toFixed(3)}× Slot Bonus`, '#34d399');
+    addFloatingText(width / 2, 90, "Egg released to swarm", '#a5b4fc');
 
     // Clear the slot
     slot.currentIncubation = null;
     renderIncubatorSlots();
     updateMainStats();
-}  
+}
   
 // ==================== INCUBATOR SYSTEM ====================
 function initializeIncubatorSlots() {
@@ -2889,7 +2901,7 @@ function showIncubator() {
     modal.classList.add('flex');
     renderIncubatorSlots();
 
-    // Remove old footer if it exists
+    // Remove any existing footer button first
     const oldFooter = document.getElementById('incubator-footer-btn');
     if (oldFooter) oldFooter.remove();
 
@@ -2897,7 +2909,7 @@ function showIncubator() {
     footer.id = 'incubator-footer-btn';
     footer.className = 'mt-5 flex justify-center';
     footer.innerHTML = `
-        <button onclick="showEggInventoryOnTop();"
+        <button onclick="showEggInventoryFromIncubator();"
                 class="flex items-center gap-x-2 px-6 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium transition-colors">
             <i class="fa-solid fa-egg"></i>
             <span>View Egg Inventory</span>
