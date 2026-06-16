@@ -8718,6 +8718,8 @@ function showReleaseChoiceModal(incubationId) {
     };
 }
 
+  
+
 function actuallyReleaseIncubatedEgg(incubationId, isEarly = false, destination = 'inventory') {
     const index = incubatingEggs.findIndex(e => e.id === incubationId);
     if (index === -1) return;
@@ -8822,6 +8824,112 @@ function showIncubatingEggDetails(incubationId) {
     document.body.insertAdjacentHTML('beforeend', html);
 }
 
+<script>
+// ==================== MISSING FUNCTIONS (Add these) ====================
+
+function extractCreatureToEgg(creature) {
+    if (!creature || creature.isPredator) {
+        addFloatingText(creature ? creature.x : width/2, creature ? creature.y - 30 : height/2 - 30, 
+            "Cannot extract predators", '#f87171');
+        return;
+    }
+
+    if (eggs.length >= MAX_EGGS) {
+        addFloatingText(creature.x, creature.y - 30, "Egg inventory full!", '#f87171');
+        return;
+    }
+
+    // Create egg from creature
+    const egg = {
+        name: creature.name,
+        modules: JSON.parse(JSON.stringify(creature.modules)),
+        generation: creature.generation,
+        traits: JSON.parse(JSON.stringify(creature.traits)),
+        killCount: creature.killCount || 0,
+        childrenCount: creature.childrenCount || 0,
+        brain: creature.brain ? JSON.parse(JSON.stringify(creature.brain)) : null,
+        pointValue: creature.pointValue || 100
+    };
+
+    eggs.push(egg);
+    updateEggCountBadge();
+
+    // Remove the creature from the world
+    const index = creatures.indexOf(creature);
+    if (index > -1) {
+        creatures.splice(index, 1);
+    }
+
+    if (selectedCreature === creature) {
+        deselectCreature();
+    }
+
+    spawnEffects.push(new SpawnEffect(creature.x, creature.y));
+    addFloatingText(creature.x, creature.y - 25, "Extracted to Egg", '#fbbf24');
+    playTone(720, 'sine', 0.25, 0.6);
+}
+
+function showTopCreaturesModal() {
+    const modal = document.getElementById('top-creatures-modal');
+    const list = document.getElementById('top-creatures-list');
+    if (!modal || !list) return;
+
+    list.innerHTML = '';
+
+    // Sort creatures by score value (highest first)
+    const sorted = [...creatures].sort((a, b) => {
+        const scoreA = a.getFinalAwardedScore ? a.getFinalAwardedScore() : (a.pointValue || 100);
+        const scoreB = b.getFinalAwardedScore ? b.getFinalAwardedScore() : (b.pointValue || 100);
+        return scoreB - scoreA;
+    }).slice(0, 10);
+
+    if (sorted.length === 0) {
+        list.innerHTML = `<div class="text-center text-white/60 py-6">No creatures alive right now.</div>`;
+    } else {
+        sorted.forEach(creature => {
+            const div = document.createElement('div');
+            div.className = 'bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-3 cursor-pointer flex gap-3 items-center';
+
+            const score = creature.getFinalAwardedScore ? creature.getFinalAwardedScore() : (creature.pointValue || 100);
+
+            div.innerHTML = `
+                <div class="flex-1 min-w-0">
+                    <div class="font-semibold text-emerald-400">${creature.name}</div>
+                    <div class="text-xs text-white/60">
+                        Gen ${creature.generation} • ${creature.modules.length} modules • 
+                        <span class="text-red-400">${creature.killCount || 0}</span> kills
+                    </div>
+                </div>
+                <div class="text-right">
+                    <div class="font-mono text-amber-400 font-semibold">${score}</div>
+                    <div class="text-[10px] text-white/50">score</div>
+                </div>
+            `;
+
+            div.onclick = () => {
+                hideTopCreaturesModal();
+                selectedCreature = creature;
+                trackAlpha = false;
+                if (typeof updateInspector === 'function') updateInspector();
+            };
+
+            list.appendChild(div);
+        });
+    }
+
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+function hideTopCreaturesModal() {
+    const modal = document.getElementById('top-creatures-modal');
+    if (modal) {
+        modal.classList.remove('flex');
+        modal.classList.add('hidden');
+    }
+}
+</script>
+  
 // ==================== GENE VAULT FUNCTIONS ====================
 function showGeneVault() {
     const modal = document.getElementById('gene-vault-modal');
