@@ -301,6 +301,9 @@
          max-width: 260px; pointer-events: none;">
                       <div style="font-weight: bold; color: #fbbf24; margin-bottom: 4px;">DEBUG</div>
                       <div id="debug-log"></div>
+                      <div id="debug-simulation-health" style="margin-top:4px; font-size:11px; color:#94a3b8;">
+                          Simulation Health: <span style="color:#4ade80">OK</span>
+                      </div>
                   </div>
                   <!-- Environmental label injected by JS -->
               </div>
@@ -1721,7 +1724,10 @@
               };
 
 
-
+              let debugCreatureUpdateCount = 0;
+              let debugLastCreatureMovement = 0;
+              let debugSimulationHealthy = true;
+            
 
               // ==================== CLASSES ====================
               class FloatingText {
@@ -3175,12 +3181,36 @@
                   const logEl = document.getElementById('debug-log');
                   if (!logEl) return;
 
-                  const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-                  logEl.innerHTML += `<div style="margin: 2px 0;">[${time}] ${msg}</div>`;
+                  const time = new Date().toLocaleTimeString([], {
+                      hour: '2-digit', minute: '2-digit', second: '2-digit',
+                      fractionalSecondDigits: 2
+                  });
 
-                  // Keep only last 8 messages
-                  while (logEl.children.length > 8) {
+                  const div = document.createElement('div');
+                  div.style.margin = '1px 0';
+                  div.style.fontSize = '11px';
+                  div.innerHTML = `[${time}] ${msg}`;
+                  logEl.appendChild(div);
+
+                  // Keep only last 10 lines visible
+                  while (logEl.children.length > 10) {
                       logEl.removeChild(logEl.firstChild);
+                  }
+
+                  // Auto-scroll to bottom
+                  logEl.scrollTop = logEl.scrollHeight;
+              }
+
+              function updateDebugSimulationHealth(healthy, extraInfo = '') {
+                  const statusEl = document.getElementById('debug-simulation-health');
+                  if (!statusEl) return;
+
+                  if (healthy) {
+                      statusEl.innerHTML = `Simulation Health: <span style="color:#4ade80">OK</span> ${extraInfo}`;
+                      debugSimulationHealthy = true;
+                  } else {
+                      statusEl.innerHTML = `Simulation Health: <span style="color:#f87171">STALLED</span> ${extraInfo}`;
+                      debugSimulationHealthy = false;
                   }
               }
               // --- Core Audio Engine ---
@@ -6249,87 +6279,114 @@
 
                   let readyCount = 0;
 
-                  for (let i = creatures.length - 1; i >= 0; i--) {
-                      let c = creatures[i];
-                      c.update(isDay, vortexDir, vortexStrength, timeScale, envMods);
+                  // === PROTECTED CREATURE UPDATE LOOP (with debug) ===
+                  debugCreatureUpdateCount = 0;
+                  let lastMovementThisFrame = false;
 
-                      const energyReady = c.energy > 60;
-                      const cooldownsReady = c.reproCooldown <= 0 && globalReproCooldown <= 0;
-                      const isReady = energyReady && cooldownsReady;
+                  try {
+                      for (let i = creatures.length - 1; i >= 0; i--) {
+                          let c = creatures[i];
+                          c.update(isDay, vortexDir, vortexStrength, timeScale, envMods);
+                          debugCreatureUpdateCount++;
 
-                      if (isReady) readyCount++;
-
-                      if (isReady) {
-                          let chance = settings.reproductionChance * envMods.reproMult;
-
-                          let avoidanceBonus = 1 + (c.hazardsAvoided || 0) * 0.0035;
-                          if ((c.hazardDamageTaken || 0) > 48) avoidanceBonus *= 0.68;
-                          chance *= avoidanceBonus;
-
-                          if (c.energy > 78) {
-                              chance *= 4.2;
-                          } else if (c.energy > 68) {
-                              chance *= 2.35;
+                          // Track if any creature actually moved this frame
+                          if (c.vx !== 0 || c.vy !== 0) {
+                              lastMovementThisFrame = true;
+                              debugLastCreatureMovement = frameCount;
                           }
 
-                          const roll = random();
-                          const effectiveChance = chance * timeScale;
+                          const energyReady = c.energy > 60;
+                          const cooldownsReady = c.reproCooldown <= 0 && globalReproCooldown <= 0;
+                          const isReady = energyReady && cooldownsReady;
 
-                          if (roll < effectiveChance) {
-                              let offspring = c.reproduce();
-                              if (offspring) {
-                                  creatures.push(offspring);
-                                  globalReproCooldown = 2;
-                                  c.reproCooldown = 16;
-                                  c.energy -= 5.5;
-                                  c.children.push(offspring.name);
-                                  c.childrenCount++;
-                                  playBirthSound();
+                          if (isReady) readyCount++;
 
-                                  addFloatingText(c.x, c.y - 14, '+8', '#c084fc');
+                          if (isReady) {
+                              let chance = settings.reproductionChance * envMods.reproMult;
+
+                              let avoidanceBonus = 1 + (c.hazardsAvoided || 0) * 0.0035;
+                              if ((c.hazardDamageTaken || 0) > 48) avoidanceBonus *= 0.68;
+                              chance *= avoidanceBonus;
+
+                              if (c.energy > 78) {
+                                  chance *= 4.2;
+                              } else if (c.energy > 68) {
+                                  chance *= 2.35;
+                              }
+
+                              const roll = random();
+                              const effectiveChance = chance * timeScale;
+
+                              if (roll < effectiveChance) {
+                                  let offspring = c.reproduce();
+                                  if (offspring) {
+                                      creatures.push(offspring);
+                                      globalReproCooldown = 2;
+                                      c.reproCooldown = 16;
+                                      c.energy -= 5.5;
+                                      c.children.push(offspring.name);
+                                      c.childrenCount++;
+                                      playBirthSound();
+
+                                      addFloatingText(c.x, c.y - 14, '+8', '#c084fc');
+                                  }
                               }
                           }
-                      }
 
-                      if (c.energy < 24 && random() < 0.009 * timeScale) {
-                          playTone(195, 'sawtooth', 0.12, 0.016);
-                          c.currentThought = "Hungry";
-                      }
+                          if (c.energy < 24 && random() < 0.009 * timeScale) {
+                              playTone(195, 'sawtooth', 0.12, 0.016);
+                              c.currentThought = "Hungry";
+                          }
 
-                      if (c.energy <= 0) {
-                          let targetIsGreen = isDay;
-                          let releasedEnergy = Math.max(7, Math.floor(c.energy * -0.55) + 11);
-                          energyOrbs.push({ x: c.x, y: c.y, radius: 11, life: 240, energy: releasedEnergy, targetIsGreen, age: 0 });
-                          playDeathSound();
+                          if (c.energy <= 0) {
+                              let targetIsGreen = isDay;
+                              let releasedEnergy = Math.max(7, Math.floor(c.energy * -0.55) + 11);
+                              energyOrbs.push({ x: c.x, y: c.y, radius: 11, life: 240, energy: releasedEnergy, targetIsGreen, age: 0 });
+                              playDeathSound();
 
-                          // === NEW: Inspector death handling (v2.11.1) ===
-                          if (selectedCreature === c) {
-                              let replacement = null;
+                              // === NEW: Inspector death handling (v2.11.1) ===
+                              if (selectedCreature === c) {
+                                  let replacement = null;
 
-                              // Check if a predator is very close (likely killed it)
-                              for (let other of creatures) {
-                                  if (other.isPredator && dist(c.x, c.y, other.x, other.y) < 45) {
-                                      replacement = other;
-                                      break;
+                                  // Check if a predator is very close (likely killed it)
+                                  for (let other of creatures) {
+                                      if (other.isPredator && dist(c.x, c.y, other.x, other.y) < 45) {
+                                          replacement = other;
+                                          break;
+                                      }
+                                  }
+
+                                  // If no predator nearby, switch to current Alpha
+                                  if (!replacement) {
+                                      replacement = getCurrentAlpha();
+                                  }
+
+                                  if (replacement && replacement !== c) {
+                                      selectCreature(replacement);
+                                  } else {
+                                      deselectCreature();
                                   }
                               }
 
-                              // If no predator nearby, switch to current Alpha
-                              if (!replacement) {
-                                  replacement = getCurrentAlpha();
-                              }
-
-                              if (replacement && replacement !== c) {
-                                  selectCreature(replacement);
-                              } else {
-                                  deselectCreature();
-                              }
+                              creatures.splice(i, 1);
+                          } else {
+                              c.show();
                           }
-
-                          creatures.splice(i, 1);
-                      } else {
-                          c.show();
                       }
+
+                      // Update visible health status every ~0.5 seconds
+                      if (frameCount % 30 === 0) {
+                          const statusEl = document.getElementById('debug-simulation-health');
+                          if (statusEl) {
+                              const movementInfo = lastMovementThisFrame ? "moving" : "no movement";
+                              statusEl.innerHTML = `Simulation Health: <span style="color:#4ade80">OK</span> | Updated: ${debugCreatureUpdateCount} | ${movementInfo}`;
+                          }
+                      }
+
+                  } catch (err) {
+                      debugLog(`ERROR in creature update: ${err.message}`);
+                      updateDebugSimulationHealth(false, `Error: ${err.message}`);
+                      console.error("Creature update error:", err);
                   }
 
                   let pressure = Math.max(0, (creatures.length - 11) * 0.005);
@@ -10046,6 +10103,7 @@
 </body>
 </html>
 <!-- ========== CHUNK 3 END ========== -->
+
 <!--
 ================================================================================
 END OF CHUNK 3
