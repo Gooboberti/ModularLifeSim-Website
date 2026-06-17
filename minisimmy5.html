@@ -1442,6 +1442,7 @@ let moduleParticles = [];
 let yellowGlowingParticles = [];
 
 
+
   
 let explosions = [];
 let spawnEffects = [];
@@ -1694,6 +1695,37 @@ let soundParams = {
     infection: { volume: 0.13, duration: 0.38, attack: 0.01, release: 0.30, waveform: 'sawtooth', freqMult: 1.0, detune: 0 },
     hungry: { volume: 0.06, duration: 0.20, attack: 0.01, release: 0.16, waveform: 'triangle', freqMult: 1.0, detune: 0 }
 };
+
+  // ==================== MEMORY CLEANUP SYSTEM ====================
+function cleanupArrays() {
+    // Hard caps to prevent memory from growing forever
+    const caps = {
+        vortexParticles: 160,
+        redHazards: 22,
+        redBeams: 28,
+        purpleInfectParticles: 22,
+        moduleParticles: 40,
+        yellowGlowingParticles: 16,
+        explosions: 10,
+        spawnEffects: 12,
+        floatingTexts: 20,
+        energyOrbs: 35,
+        foodBlooms: 18,
+        pheromones: 50
+    };
+
+    for (let key in caps) {
+        if (window[key] && window[key].length > caps[key]) {
+            window[key].splice(0, window[key].length - caps[key]);
+        }
+    }
+
+    // Remove dead effects
+    explosions = explosions.filter(e => e.life > 0);
+    spawnEffects = spawnEffects.filter(e => e.life > 0);
+    floatingTexts = floatingTexts.filter(f => f.life > 0);
+    redBeams = redBeams.filter(b => b.life > 0);
+}
 
 function updateSoundSettings() {
     soundEnabled.master = document.getElementById('sound-master')?.checked ?? true;
@@ -7642,9 +7674,9 @@ class NeuralNet {
             let sum = this.biasH[i];
             for (let j = 0; j < this.inputSize; j++) {
                 sum += inputs[j] * this.weightsIH[i][j];
-                if (Math.abs(inputs[j]) > 0.2) {
-                    this.connectionStrengthIH[i][j] = Math.min(1, this.connectionStrengthIH[i][j] + 0.0035);
-                }
+                if (Math.abs(inputs[j]) > 0.2 && frameCount % 4 === 0) {
+    this.connectionStrengthIH[i][j] = Math.min(1, this.connectionStrengthIH[i][j] + 0.0035);
+}
             }
             hidden.push(this.sigmoid(sum));
         }
@@ -7654,9 +7686,9 @@ class NeuralNet {
             let sum = this.biasO[i];
             for (let j = 0; j < this.hiddenSize; j++) {
                 sum += hidden[j] * this.weightsHO[i][j];
-                if (Math.abs(hidden[j]) > 0.2) {
-                    this.connectionStrengthHO[i][j] = Math.min(1, this.connectionStrengthHO[i][j] + 0.0035);
-                }
+                if (Math.abs(hidden[j]) > 0.2 && frameCount % 4 === 0) {
+    this.connectionStrengthHO[i][j] = Math.min(1, this.connectionStrengthHO[i][j] + 0.0035);
+}
             }
             outputs.push(this.sigmoid(sum));
         }
@@ -8151,6 +8183,8 @@ class Creature {
                 child.brainOutputs[6] = constrain((child.brainOutputs[6] || 0.5) + bias.predatorTend, 0, 1);
             }
         }
+
+        if (this.children.length > 12) this.children.shift();
         return child;
     }
 
@@ -8631,6 +8665,12 @@ if (musicVisualizerActive) {
     text("MUSIC VISUALIZER IS RUNNING", 20, 32);
     pop();
 }
+
+     // === MEMORY CLEANUP (runs once per second) ===
+    if (frameCount % 60 === 0) {
+        cleanupArrays();
+    } 
+  
 // ==================== RESET SIM ====================
 function resetSim() {
     creatures = [];
