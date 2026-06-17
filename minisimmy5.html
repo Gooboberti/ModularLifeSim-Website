@@ -4789,32 +4789,26 @@ function updateScoreMultipliers() {
         }
     }
 
-    // === Define Multipliers ===
+    // === Additive Multipliers (matches our plan) ===
     const popMult = 1 + Math.min(pop / 180, 1.8);
     const predMult = 1 + Math.min(predatorCount / 45, 1.6);
     const avgModMult = 1 + (avgModules * 0.38);
 
-    let tierMult = 1;
-    tierMult *= 1 + (tierCounts[1] * 0.0015);
-    tierMult *= 1 + (tierCounts[2] * 0.0022);
-    tierMult *= 1 + (tierCounts[3] * 0.0030);
-    tierMult *= 1 + (tierCounts[4] * 0.0040);
-    tierMult *= 1 + (tierCounts[5] * 0.0055);
-    tierMult *= 1 + (tierCounts[6] * 0.0075);
-    tierMult *= 1 + (tierCounts[7] * 0.010);
-    tierMult *= 1 + (tierCounts[8] * 0.014);
-    tierMult *= 1 + (tierCounts[9] * 0.019);
-    tierMult *= 1 + (tierCounts[10] * 0.032);
+    // Tier contribution - additive using central TIER_MULTIPLIERS
+    let tierMult = 0;
+    for (let t = 1; t <= 10; t++) {
+        tierMult += (tierCounts[t] || 0) * (TIER_MULTIPLIERS[t] || 0);
+    }
 
-    // Final total multiplier
-    let totalMult = popMult * predMult * avgModMult * tierMult;
-    totalMult = Math.max(0.6, Math.min(totalMult, 12));
+    // Final total multiplier (additive model)
+    let totalMult = popMult + predMult + avgModMult + tierMult;
+    totalMult = Math.max(0.6, totalMult);
 
     // === Update UI ===
     const scoreEl = document.getElementById('vegas-score');
     const multEl = document.getElementById('score-multiplier');
 
-    // Smart score formatting (exponential earlier to prevent overlap)
+    // Smart score formatting
     if (scoreEl) {
         let displayScore;
         if (totalScore >= 10000000) {
@@ -4829,106 +4823,35 @@ function updateScoreMultipliers() {
 
     if (multEl) multEl.innerText = totalMult.toFixed(2);
 
-    // Update individual multipliers
-    const setMult = (id, value) => {
-        const el = document.getElementById(id);
-        if (el) el.innerText = '×' + value.toFixed(2);
-    };
+    // === Update individual stats with + notation ===
+    const popEl = document.getElementById('mult-pop');
+    if (popEl) popEl.innerText = '+' + popMult.toFixed(2);
 
-    setMult('mult-pop', popMult);
-    setMult('mult-pred', predMult);
-    setMult('mult-avgmod', avgModMult);
+    const predEl = document.getElementById('mult-pred');
+    if (predEl) predEl.innerText = '+' + predMult.toFixed(2);
 
+    const avgEl = document.getElementById('mult-avgmod');
+    if (avgEl) avgEl.innerText = '+' + avgModMult.toFixed(2);
+
+    // === Live Total Contribution per Tier (using TIER_MULTIPLIERS) ===
     for (let t = 1; t <= 10; t++) {
-        let tierMultValue;
-        if (t === 1) tierMultValue = 1 + (tierCounts[1] * 0.0015);
-        else if (t === 2) tierMultValue = 1 + (tierCounts[2] * 0.0022);
-        else if (t === 3) tierMultValue = 1 + (tierCounts[3] * 0.0030);
-        else if (t === 4) tierMultValue = 1 + (tierCounts[4] * 0.0040);
-        else if (t === 5) tierMultValue = 1 + (tierCounts[5] * 0.0055);
-        else if (t === 6) tierMultValue = 1 + (tierCounts[6] * 0.0075);
-        else if (t === 7) tierMultValue = 1 + (tierCounts[7] * 0.010);
-        else if (t === 8) tierMultValue = 1 + (tierCounts[8] * 0.014);
-        else if (t === 9) tierMultValue = 1 + (tierCounts[9] * 0.019);
-        else tierMultValue = 1 + (tierCounts[10] * 0.032);
-
         const el = document.getElementById('mult-tier' + t);
-        if (el) el.innerText = '×' + tierMultValue.toFixed(2);
+        if (el) {
+            const count = tierCounts[t] || 0;
+            const perModule = TIER_MULTIPLIERS[t] || 0;
+            const totalContribution = count * perModule;
+
+            if (count === 0) {
+                el.innerText = '0';
+                el.style.color = '#64748b';
+            } else {
+                el.innerText = '+' + totalContribution.toFixed(2);
+                el.style.color = '';
+            }
+        }
     }
 
     window.currentScoreMultiplier = totalMult;
-}
-  
-              function draw() {
-    // ==================== DEBUG ====================
-    if (frameCount % 60 === 0) {
-        console.log("%c[DEBUG] draw() is running | currentMusicMode =", "color:#f87171", currentMusicMode);
-        console.log("%c[DEBUG] musicVisualizerActive =", "color:#f87171", musicVisualizerActive);
-    }
-    // ===============================================
-
-    background(12, 14, 22);
-
-// ==================== MUSIC VISUALIZER (Real Audio Reactive) ====================
-if (musicVisualizerActive && currentMusicMode) {
-    push();
-    drawingContext.save();
-    resetMatrix();
-    colorMode(RGB, 255);
-    ellipseMode(CENTER);
-    noFill();
-
-    let baseR = musicVisualizerRadius || 280;
-    let glow = musicVisualizerGlow || 1.0;
-    let thickness = musicVisualizerThickness || 6;
-
-    // === REAL AUDIO DATA ===
-    const bass = musicData.bass || 0;
-    const mids = musicData.mids || 0;
-    const highs = musicData.highs || 0;
-
-    // Dynamic radius per band
-    let rOuter = baseR * (1.0 + bass * 0.45);
-    let rMid   = baseR * (1.0 + mids * 0.35);
-    let rInner = baseR * (1.0 + highs * 0.55);
-
-    // Mode color
-    let col = currentMusicMode === 'prune'   ? {r:255, g:40,  b:70} :
-              currentMusicMode === 'replicate'? {r:30,  g:230, b:120} :
-                                               {r:255, g:210, b:50};
-
-    // === OUTER RING (Bass) ===
-    stroke(col.r, col.g, col.b, 200 * glow);
-    strokeWeight(thickness * 3.5 * (0.7 + bass * 1.8));
-    ellipse(width/2, height/2, rOuter * 2.35, rOuter * 2.35);
-
-    // Soft glow
-    stroke(col.r, col.g, col.b, 50 * glow);
-    strokeWeight(thickness * 6);
-    ellipse(width/2, height/2, rOuter * 2.55, rOuter * 2.55);
-
-    // === MIDDLE RING (Mids) ===
-    stroke(col.r * 0.85, col.g * 0.95, col.b, 210 * glow);
-    strokeWeight(thickness * 2.2 * (0.8 + mids * 1.6));
-    ellipse(width/2, height/2, rMid * 1.7, rMid * 1.7);
-
-    // === INNER RING (Highs) ===
-    stroke(255, 255, 255, 230 * glow);
-    strokeWeight(thickness * 1.3 * (0.6 + highs * 2.2));
-    ellipse(width/2, height/2, rInner * 1.1, rInner * 1.1);
-
-    // === CENTRAL PULSE (overall energy) ===
-    let energy = (bass + mids + highs) / 3;
-    let coreSize = baseR * 0.5 * (0.85 + energy * 0.6);
-    fill(col.r, col.g, col.b, 45 * glow);
-    noStroke();
-    ellipse(width/2, height/2, coreSize * 2.1, coreSize * 2.1);
-
-    fill(255, 255, 255, 140 * glow);
-    ellipse(width/2, height/2, coreSize * 1.1, coreSize * 1.1);
-
-    drawingContext.restore();
-    pop();
 }
 // ==================== END MUSIC VISUALIZER ====================
 
