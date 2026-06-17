@@ -1497,6 +1497,16 @@ let redHazardsUnlocked = false;
 let cursorHazardUnlocked = false;
 let freeMode = false;
 
+// ==================== FIXED MULTIPLIER RATES (Upgradeable) ====================
+let MULTIPLIER_RATES = {
+    population: 0.04,      // +0.04 per creature
+    predators: 0.09,       // +0.09 per predator
+    avgModules: 0.45,      // +0.45 per average module
+};
+
+// Tier rates stay in TIER_MULTIPLIERS (already exists in your code)
+
+  
 let redHazardsEnabled = true;
 let redHazardIntensity = 1;
 let cursorHazardActive = false;
@@ -2155,6 +2165,46 @@ function forceEnvironmentalPhase(phase) {
     }
 }
 
+function calculateTotalMultiplier() {
+    if (!creatures || creatures.length === 0) return 1;
+
+    let pop = creatures.length;
+    let predators = creatures.filter(c => c.isPredator).length;
+
+    let totalModules = 0;
+    let tierCounts = {1:0,2:0,3:0,4:0,5:0,6:0,7:0,8:0,9:0,10:0};
+
+    for (let c of creatures) {
+        totalModules += c.modules.length;
+        for (let m of c.modules) {
+            const t = m.tier || 1;
+            if (tierCounts[t] !== undefined) tierCounts[t]++;
+        }
+    }
+
+    const avgModules = totalModules / pop;
+
+    // Calculate additive contributions
+    let total = 0;
+
+    // Population contribution
+    total += pop * MULTIPLIER_RATES.population;
+
+    // Predators contribution
+    total += predators * MULTIPLIER_RATES.predators;
+
+    // Avg Modules contribution
+    total += avgModules * MULTIPLIER_RATES.avgModules;
+
+    // Tier contributions (using your existing TIER_MULTIPLIERS)
+    for (let t = 1; t <= 10; t++) {
+        const rate = TIER_MULTIPLIERS[t] || 0;
+        total += (tierCounts[t] || 0) * rate;
+    }
+
+    return Math.max(0.5, total);
+}  
+  
   
 function createPredatorFromGeneVaultOrRandom() {
     // Try to pull from Gene Vault first
@@ -4434,6 +4484,14 @@ function getScoreMultipliers() {
                       ctx.stroke();
                   }
               }
+// ==================== FIXED MULTIPLIER RATES (Upgradeable) ====================
+let MULTIPLIER_RATES = {
+    population: 0.04,      // +0.04 per creature
+    predators: 0.09,       // +0.09 per predator
+    avgModules: 0.45       // +0.45 per average module
+};
+
+// ==================== UPDATED MAIN STATS + MULTIPLIER SYSTEM ====================
 function updateMainStats() {
     if (!greenZone || !blueZone) return;
 
@@ -4444,7 +4502,6 @@ function updateMainStats() {
     for (let c of creatures) {
         totalModules += c.modules.length;
         if (c.isPredator) predators++;
-
         for (let m of c.modules) {
             const t = m.tier || 1;
             if (tierCounts[t] !== undefined) tierCounts[t]++;
@@ -4455,7 +4512,7 @@ function updateMainStats() {
         ? (totalModules / creatures.length).toFixed(1)
         : "0.0";
 
-    // === Score Display with e+7 exponential ===
+    // === Score Display ===
     const topScoreEl = document.getElementById('top-score');
     if (topScoreEl) topScoreEl.innerText = formatScore(totalScore);
 
@@ -4466,7 +4523,6 @@ function updateMainStats() {
     const popEl = document.getElementById('stat-pop');
     const predEl = document.getElementById('stat-pred');
     const modEl = document.getElementById('stat-modules');
-
     if (popEl) popEl.innerText = creatures.length;
     if (predEl) predEl.innerText = predators;
     if (modEl) modEl.innerText = avgModules;
@@ -4488,56 +4544,83 @@ function updateMainStats() {
         updateTopFurnaceUI();
     }
 
-    // ==================== MULTIPLIER CALCULATION ====================
+    // ==================== NEW FIXED-RATE ADDITIVE MULTIPLIER SYSTEM ====================
     const pop = creatures.length;
     const predatorCount = predators;
     const avgMod = parseFloat(avgModules);
 
-    const popMult = 1 + Math.min(pop / 180, 1.8);
-    const predMult = 1 + Math.min(predatorCount / 45, 1.6);
-    const avgModMult = 1 + (avgMod * 0.38);
+    // Calculate total additive multiplier
+    let totalMult = 0;
 
-    // Tier contribution - now uses the central TIER_MULTIPLIERS object
-let tierMult = 0;
-for (let t = 1; t <= 10; t++) {
-    tierMult += (tierCounts[t] || 0) * (TIER_MULTIPLIERS[t] || 0);
-}
-    let totalMult = popMult + predMult + avgModMult + tierMult;
-    totalMult = Math.max(0.6, totalMult);
+    // Population contribution
+    totalMult += pop * MULTIPLIER_RATES.population;
 
-    // Main multiplier (smaller font)
+    // Predators contribution
+    totalMult += predatorCount * MULTIPLIER_RATES.predators;
+
+    // Avg Modules contribution
+    totalMult += avgMod * MULTIPLIER_RATES.avgModules;
+
+    // Tier contributions (using central TIER_MULTIPLIERS)
+    for (let t = 1; t <= 10; t++) {
+        totalMult += (tierCounts[t] || 0) * (TIER_MULTIPLIERS[t] || 0);
+    }
+
+    totalMult = Math.max(0.5, totalMult);
+
+    // Main multiplier display
     const multEl = document.getElementById('score-multiplier');
     if (multEl) {
         multEl.innerText = totalMult.toFixed(2);
         multEl.style.fontSize = '22px';
     }
 
-    // Individual stat multipliers
+    // Small fixed multipliers next to each category (still visible)
     const setMult = (id, value) => {
         const el = document.getElementById(id);
         if (el) el.innerText = '×' + value.toFixed(2);
     };
 
-    setMult('mult-pop', popMult);
-    setMult('mult-pred', predMult);
-    setMult('mult-avgmod', avgModMult);
-  
-
-   
+    setMult('mult-pop', MULTIPLIER_RATES.population);
+    setMult('mult-pred', MULTIPLIER_RATES.predators);
+    setMult('mult-avgmod', MULTIPLIER_RATES.avgModules);
 
     window.currentScoreMultiplier = totalMult;
-  updateTierMultiplierDisplays();
+
+    // Update tier contribution displays
+    updateTierMultiplierDisplays(tierCounts);
 }
 
-function updateTierMultiplierDisplays() {
+// ==================== UPDATED TIER MULTIPLIER DISPLAYS ====================
+function updateTierMultiplierDisplays(tierCounts = null) {
+    if (!tierCounts) {
+        // Rebuild tierCounts if not passed in
+        tierCounts = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0};
+        for (let c of creatures) {
+            for (let m of c.modules) {
+                const t = m.tier || 1;
+                if (tierCounts[t] !== undefined) tierCounts[t]++;
+            }
+        }
+    }
+
     for (let t = 1; t <= 10; t++) {
         const el = document.getElementById(`mult-tier${t}`);
         if (el) {
-            const val = TIER_MULTIPLIERS[t] || 0;
-            el.innerText = `×${val.toFixed(2)}`;
+            const count = tierCounts[t] || 0;
+            const rate = TIER_MULTIPLIERS[t] || 0;
+            const contribution = count * rate;
+
+            if (count === 0) {
+                el.innerText = '0';
+                el.style.color = '#64748b';
+            } else {
+                el.innerText = '×' + contribution.toFixed(2);
+                el.style.color = '';
+            }
         }
     }
-}  
+}
 
 function selectCreature(creature) {
     selectedCreature = creature;
