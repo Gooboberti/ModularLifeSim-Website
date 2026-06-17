@@ -283,6 +283,10 @@
                     <span id="zoom-level" class="px-2 font-mono text-xs text-white/60">100%</span>
                     <button onclick="playUIClick(); adjustZoom(0.2)" class="rounded-xl px-2.5 py-1 hover:bg-white/10">+</button>
                 </div>
+              <!-- FPS Counter -->
+<div class="flex items-center gap-x-2 text-xs font-mono text-white/60 ml-2">
+    <span id="fps-counter">60</span> FPS
+</div>
             </div>
         </div>
     </div>
@@ -1603,6 +1607,17 @@ let currentSlotForCompletion = null;
 let frameCountForFPS = 0;
 let lastFPSUpdate = 0;
 let currentFPS = 60;
+// ==================== FPS COUNTER ====================
+let fpsHistory = [];
+
+function updateFPS() {
+    fpsHistory.push(frameRate());
+    if (fpsHistory.length > 30) fpsHistory.shift();
+
+    const avgFPS = fpsHistory.reduce((a, b) => a + b, 0) / fpsHistory.length;
+    const fpsEl = document.getElementById('fps-counter');
+    if (fpsEl) fpsEl.innerText = Math.round(avgFPS);
+}
 let miniChartCtx;
 let graphData = { pop: [], modules: [], predators: [], greenFood: [], blueFood: [], hr: [] };
 
@@ -4954,6 +4969,8 @@ function updateScoreMultipliers() {
 }
   
               function draw() {
+              updateFPS();
+                
     // ==================== DEBUG ====================
     if (frameCount % 60 === 0) {
         console.log("%c[DEBUG] draw() is running | currentMusicMode =", "color:#f87171", currentMusicMode);
@@ -7942,12 +7959,16 @@ class Creature {
     }
 
     getLocalGroup(radius) {
-        let group = [];
-        for (let o of creatures) {
-            if (o !== this && dist(this.x, this.y, o.x, o.y) < radius) group.push(o);
-        }
-        return group;
+    let group = [];
+    const r2 = radius * radius;
+    for (let o of creatures) {
+        if (o === this) continue;
+        const dx = this.x - o.x;
+        const dy = this.y - o.y;
+        if (dx * dx + dy * dy < r2) group.push(o);
     }
+    return group;
+}
 
     getLocalSpecializationRarity() {
         let localGroup = this.getLocalGroup(65);
@@ -8230,7 +8251,7 @@ class Creature {
         let detectionQuality = 0.58 + (sensorLevel * 0.11);
         let effectiveHazardDist = hazardInfo.dist * detectionQuality;
         let dodgedThisFrame = false;
-        if (frameCount % 2 === 0 && this.brain) {
+        if (frameCount % 4 === 0 && this.brain) {   // ← was 2, now 4
             const inputs = this.getBrainInputs(hazardInfo, effectiveHazardDist, isDay);
             this.brainOutputs = this.brain.forward(inputs);
         }
@@ -8417,10 +8438,10 @@ class Creature {
                 if (this.energy > 74) this.honey = min(26, this.honey + 0.31 * timeScale);
             }
         }
-        if (frameCount % 170 === 0) {
-            this.checkForTierUpgrades();
-            this.pruneExcessModules();
-        }
+      if (frameCount % 280 === 0) {     // ← was 170, now 280
+    this.checkForTierUpgrades();
+    this.pruneExcessModules();
+}
     }
 
     checkForTierUpgrades() {
