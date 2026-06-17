@@ -4256,10 +4256,11 @@ function addScore(amount) {
 
       
 
-// ==================== POPULATION / PREDATORS / MODULES → SCORE MULTIPLIERS ====================
+      // ==================== POPULATION / PREDATORS / MODULES → SCORE MULTIPLIERS ====================
 function getScoreMultipliers() {
     const pop = creatures.length;
     const predCount = (typeof predators !== 'undefined' && predators) ? predators.length : 0;
+
     // Calculate average modules
     let avgModules = 0;
     if (pop > 0) {
@@ -4269,16 +4270,21 @@ function getScoreMultipliers() {
         }
         avgModules = totalModules / pop;
     }
+
     // === Population Multiplier ===
     // More creatures = more points generated (soft cap)
     const popMult = 1 + Math.min(pop / 90, 1.6);
+
     // === Predator Multiplier ===
     // More predators = higher risk/reward multiplier
     const predMult = 1 + Math.min(predCount / 10, 1.0);
+
     // === Average Modules Multiplier ===
     // Higher average module count = stronger multiplier
     const moduleMult = 1 + Math.min((avgModules - 1.2) * 0.18, 2.5);
-    const totalMult = popMult + predMult + moduleMult;
+
+    const totalMult = popMult * predMult * moduleMult;
+
     return {
         population: popMult,
         predators: predMult,
@@ -4287,155 +4293,184 @@ function getScoreMultipliers() {
     };
 }
 
-function updateGraphData() {
-    try {
-        if (!graphData ||
-            !graphData.pop ||
-            !graphData.modules ||
-            !graphData.predators ||
-            !graphData.greenFood ||
-            !graphData.blueFood) {
-            return;
-        }
-        if (creatures.length === 0) return;
-        let totalModules = 0, predators = 0;
-        for (let c of creatures) {
-            totalModules += c.modules.length;
-            if (c.isPredator) predators++;
-        }
-        const avgModules = creatures.length > 0 ? totalModules / creatures.length : 0;
-        graphData.pop.push(creatures.length);
-        graphData.modules.push(avgModules);
-        graphData.predators.push(predators);
-        graphData.greenFood.push(greenZone.food);
-        graphData.blueFood.push(blueZone.food);
-        // Trim old data
-        const maxPoints = 180;
-        if (graphData.pop.length > maxPoints) {
-            graphData.pop.shift();
-            graphData.modules.shift();
-            graphData.predators.shift();
-            graphData.greenFood.shift();
-            graphData.blueFood.shift();
-        }
-    } catch (e) {
-        // Silently ignore graph errors so the sim doesn't freeze
-        console.warn("Graph update error (non-fatal):", e.message);
-    }
-}
 
-function drawMiniChart() {
-    if (!miniChartCtx || graphData.pop.length < 2) return;
-    const ctx = miniChartCtx;
-    ctx.clearRect(0, 0, 240, 70);
-    const w = 240, h = 70;
-    const padding = 6;
-    const plotW = w - padding * 2;
-    const plotH = h - padding * 2;
-    const maxPop = Math.max(100, ...graphData.pop) * 1.1;
-    const maxMod = Math.max(...graphData.modules, 1) * 1.15;
-    const maxPred = Math.max(...graphData.predators, 1) * 1.15;
-    const maxGreen = Math.max(...graphData.greenFood, 50) * 1.15;
-    const maxBlue = Math.max(...graphData.blueFood, 50) * 1.15;
-    ctx.strokeStyle = '#334155';
-    ctx.lineWidth = 0.5;
-    for (let i = 0; i <= 2; i++) {
-        const y = padding + (i * plotH / 2);
-        ctx.beginPath();
-        ctx.moveTo(padding, y);
-        ctx.lineTo(w - padding, y);
-        ctx.stroke();
-    }
-    if (miniChartVisible.pop) {
-        ctx.strokeStyle = CHART_COLORS.pop;
-        ctx.lineWidth = 1.6;
-        ctx.beginPath();
-        for (let i = 0; i < graphData.pop.length; i++) {
-            const x = padding + (i / (graphData.pop.length - 1)) * plotW;
-            const y = h - padding - (graphData.pop[i] / maxPop) * plotH;
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
-        }
-        ctx.stroke();
-    }
-    if (miniChartVisible.modules) {
-        ctx.strokeStyle = CHART_COLORS.modules;
-        ctx.lineWidth = 1.2;
-        ctx.beginPath();
-        for (let i = 0; i < graphData.modules.length; i++) {
-            const x = padding + (i / (graphData.modules.length - 1)) * plotW;
-            const y = h - padding - (graphData.modules[i] / maxMod) * plotH;
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
-        }
-        ctx.stroke();
-    }
-    if (miniChartVisible.predators) {
-        ctx.strokeStyle = CHART_COLORS.predators;
-        ctx.lineWidth = 1.1;
-        ctx.beginPath();
-        for (let i = 0; i < graphData.predators.length; i++) {
-            const x = padding + (i / (graphData.predators.length - 1)) * plotW;
-            const y = h - padding - (graphData.predators[i] / maxPred) * plotH;
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
-        }
-        ctx.stroke();
-    }
-    if (miniChartVisible.greenFood) {
-        ctx.strokeStyle = CHART_COLORS.greenFood;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        for (let i = 0; i < graphData.greenFood.length; i++) {
-            const x = padding + (i / (graphData.greenFood.length - 1)) * plotW;
-            const y = h - padding - (graphData.greenFood[i] / maxGreen) * plotH;
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
-        }
-        ctx.stroke();
-    }
-    if (miniChartVisible.blueFood) {
-        ctx.strokeStyle = CHART_COLORS.blueFood;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        for (let i = 0; i < graphData.blueFood.length; i++) {
-            const x = padding + (i / (graphData.blueFood.length - 1)) * plotW;
-            const y = h - padding - (graphData.blueFood[i] / maxBlue) * plotH;
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
-        }
-        ctx.stroke();
-    }
-}
+      
 
+
+
+      
+          function updateGraphData() {
+          try {
+              if (!graphData ||
+                  !graphData.pop ||
+                  !graphData.modules ||
+                  !graphData.predators ||
+                  !graphData.greenFood ||
+                  !graphData.blueFood) {
+                  return;
+              }
+              if (creatures.length === 0) return;
+
+              let totalModules = 0, predators = 0;
+
+              for (let c of creatures) {
+                  totalModules += c.modules.length;
+                  if (c.isPredator) predators++;
+              }
+
+              const avgModules = creatures.length > 0 ? totalModules / creatures.length : 0;
+
+              graphData.pop.push(creatures.length);
+              graphData.modules.push(avgModules);
+              graphData.predators.push(predators);
+              graphData.greenFood.push(greenZone.food);
+              graphData.blueFood.push(blueZone.food);
+
+              // Trim old data
+              const maxPoints = 180;
+              if (graphData.pop.length > maxPoints) {
+                  graphData.pop.shift();
+                  graphData.modules.shift();
+                  graphData.predators.shift();
+                  graphData.greenFood.shift();
+                  graphData.blueFood.shift();
+              }
+          } catch (e) {
+              // Silently ignore graph errors so the sim doesn't freeze
+              console.warn("Graph update error (non-fatal):", e.message);
+          }
+      }
+
+              function drawMiniChart() {
+                  if (!miniChartCtx || graphData.pop.length < 2) return;
+                  const ctx = miniChartCtx;
+                  ctx.clearRect(0, 0, 240, 70);
+
+                  const w = 240, h = 70;
+                  const padding = 6;
+                  const plotW = w - padding * 2;
+                  const plotH = h - padding * 2;
+
+                  const maxPop = Math.max(100, ...graphData.pop) * 1.1;
+                  const maxMod = Math.max(...graphData.modules, 1) * 1.15;
+                  const maxPred = Math.max(...graphData.predators, 1) * 1.15;
+                  const maxGreen = Math.max(...graphData.greenFood, 50) * 1.15;
+                  const maxBlue = Math.max(...graphData.blueFood, 50) * 1.15;
+
+                  ctx.strokeStyle = '#334155';
+                  ctx.lineWidth = 0.5;
+                  for (let i = 0; i <= 2; i++) {
+                      const y = padding + (i * plotH / 2);
+                      ctx.beginPath();
+                      ctx.moveTo(padding, y);
+                      ctx.lineTo(w - padding, y);
+                      ctx.stroke();
+                  }
+
+                  if (miniChartVisible.pop) {
+                      ctx.strokeStyle = CHART_COLORS.pop;
+                      ctx.lineWidth = 1.6;
+                      ctx.beginPath();
+                      for (let i = 0; i < graphData.pop.length; i++) {
+                          const x = padding + (i / (graphData.pop.length - 1)) * plotW;
+                          const y = h - padding - (graphData.pop[i] / maxPop) * plotH;
+                          if (i === 0) ctx.moveTo(x, y);
+                          else ctx.lineTo(x, y);
+                      }
+                      ctx.stroke();
+                  }
+
+                  if (miniChartVisible.modules) {
+                      ctx.strokeStyle = CHART_COLORS.modules;
+                      ctx.lineWidth = 1.2;
+                      ctx.beginPath();
+                      for (let i = 0; i < graphData.modules.length; i++) {
+                          const x = padding + (i / (graphData.modules.length - 1)) * plotW;
+                          const y = h - padding - (graphData.modules[i] / maxMod) * plotH;
+                          if (i === 0) ctx.moveTo(x, y);
+                          else ctx.lineTo(x, y);
+                      }
+                      ctx.stroke();
+                  }
+
+                  if (miniChartVisible.predators) {
+                      ctx.strokeStyle = CHART_COLORS.predators;
+                      ctx.lineWidth = 1.1;
+                      ctx.beginPath();
+                      for (let i = 0; i < graphData.predators.length; i++) {
+                          const x = padding + (i / (graphData.predators.length - 1)) * plotW;
+                          const y = h - padding - (graphData.predators[i] / maxPred) * plotH;
+                          if (i === 0) ctx.moveTo(x, y);
+                          else ctx.lineTo(x, y);
+                      }
+                      ctx.stroke();
+                  }
+
+                  // High Roller line temporarily removed from mini chart (still tracked in main UI)
+
+                  if (miniChartVisible.greenFood) {
+                      ctx.strokeStyle = CHART_COLORS.greenFood;
+                      ctx.lineWidth = 1;
+                      ctx.beginPath();
+                      for (let i = 0; i < graphData.greenFood.length; i++) {
+                          const x = padding + (i / (graphData.greenFood.length - 1)) * plotW;
+                          const y = h - padding - (graphData.greenFood[i] / maxGreen) * plotH;
+                          if (i === 0) ctx.moveTo(x, y);
+                          else ctx.lineTo(x, y);
+                      }
+                      ctx.stroke();
+                  }
+
+                  if (miniChartVisible.blueFood) {
+                      ctx.strokeStyle = CHART_COLORS.blueFood;
+                      ctx.lineWidth = 1;
+                      ctx.beginPath();
+                      for (let i = 0; i < graphData.blueFood.length; i++) {
+                          const x = padding + (i / (graphData.blueFood.length - 1)) * plotW;
+                          const y = h - padding - (graphData.blueFood[i] / maxBlue) * plotH;
+                          if (i === 0) ctx.moveTo(x, y);
+                          else ctx.lineTo(x, y);
+                      }
+                      ctx.stroke();
+                  }
+              }
 function updateMainStats() {
     if (!greenZone || !blueZone) return;
+
     let totalModules = 0;
     let predators = 0;
     let tierCounts = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0};
+
     for (let c of creatures) {
         totalModules += c.modules.length;
         if (c.isPredator) predators++;
+
         for (let m of c.modules) {
             const t = m.tier || 1;
             if (tierCounts[t] !== undefined) tierCounts[t]++;
         }
     }
+
     const avgModules = creatures.length > 0
         ? (totalModules / creatures.length).toFixed(1)
         : "0.0";
+
     // === Score Display with e+7 exponential ===
     const topScoreEl = document.getElementById('top-score');
     if (topScoreEl) topScoreEl.innerText = formatScore(totalScore);
+
     const mainScoreEl = document.getElementById('vegas-score');
     if (mainScoreEl) mainScoreEl.innerText = formatScore(totalScore);
+
     // Update other stats
     const popEl = document.getElementById('stat-pop');
     const predEl = document.getElementById('stat-pred');
     const modEl = document.getElementById('stat-modules');
+
     if (popEl) popEl.innerText = creatures.length;
     if (predEl) predEl.innerText = predators;
     if (modEl) modEl.innerText = avgModules;
+
     // Tier counts
     if (document.getElementById('stat-tier1')) document.getElementById('stat-tier1').innerText = tierCounts[1];
     if (document.getElementById('stat-tier2')) document.getElementById('stat-tier2').innerText = tierCounts[2];
@@ -4447,59 +4482,62 @@ function updateMainStats() {
     if (document.getElementById('stat-tier8')) document.getElementById('stat-tier8').innerText = tierCounts[8];
     if (document.getElementById('stat-tier9')) document.getElementById('stat-tier9').innerText = tierCounts[9];
     if (document.getElementById('stat-tier10')) document.getElementById('stat-tier10').innerText = tierCounts[10];
+
     // Update top bar (timer, bonus, glow)
     if (typeof updateTopFurnaceUI === 'function') {
         updateTopFurnaceUI();
     }
-    // ==================== MULTIPLIER CALCULATION (Additive Model) ====================
+
+    // ==================== MULTIPLIER CALCULATION ====================
     const pop = creatures.length;
     const predatorCount = predators;
     const avgMod = parseFloat(avgModules);
+
     const popMult = 1 + Math.min(pop / 180, 1.8);
     const predMult = 1 + Math.min(predatorCount / 45, 1.6);
     const avgModMult = 1 + (avgMod * 0.38);
-    // Tier contribution - uses the central TIER_MULTIPLIERS object
-    let tierMult = 0;
-    for (let t = 1; t <= 10; t++) {
-        tierMult += (tierCounts[t] || 0) * (TIER_MULTIPLIERS[t] || 0);
-    }
+
+    // Tier contribution - now uses the central TIER_MULTIPLIERS object
+let tierMult = 0;
+for (let t = 1; t <= 10; t++) {
+    tierMult += (tierCounts[t] || 0) * (TIER_MULTIPLIERS[t] || 0);
+}
     let totalMult = popMult + predMult + avgModMult + tierMult;
     totalMult = Math.max(0.6, totalMult);
+
     // Main multiplier (smaller font)
     const multEl = document.getElementById('score-multiplier');
     if (multEl) {
         multEl.innerText = totalMult.toFixed(2);
         multEl.style.fontSize = '22px';
     }
-    // Individual stat multipliers with + notation
-    const popMultEl = document.getElementById('mult-pop');
-    if (popMultEl) popMultEl.innerText = '+' + popMult.toFixed(2);
-    const predMultEl = document.getElementById('mult-pred');
-    if (predMultEl) predMultEl.innerText = '+' + predMult.toFixed(2);
-    const avgModMultEl = document.getElementById('mult-avgmod');
-    if (avgModMultEl) avgModMultEl.innerText = '+' + avgModMult.toFixed(2);
+
+    // Individual stat multipliers
+    const setMult = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.innerText = '×' + value.toFixed(2);
+    };
+
+    setMult('mult-pop', popMult);
+    setMult('mult-pred', predMult);
+    setMult('mult-avgmod', avgModMult);
+  
+
+   
 
     window.currentScoreMultiplier = totalMult;
-    updateTierMultiplierDisplays();
+  updateTierMultiplierDisplays();
 }
 
 function updateTierMultiplierDisplays() {
     for (let t = 1; t <= 10; t++) {
         const el = document.getElementById(`mult-tier${t}`);
         if (el) {
-            const count = (typeof tierCounts !== 'undefined' && tierCounts[t]) ? tierCounts[t] : 0;
-            const perModule = TIER_MULTIPLIERS[t] || 0;
-            const totalContribution = count * perModule;
-            if (count === 0) {
-                el.innerText = '0';
-                el.style.color = '#64748b';
-            } else {
-                el.innerText = '+' + totalContribution.toFixed(2);
-                el.style.color = '';
-            }
+            const val = TIER_MULTIPLIERS[t] || 0;
+            el.innerText = `×${val.toFixed(2)}`;
         }
     }
-}
+}  
 
 function selectCreature(creature) {
     selectedCreature = creature;
@@ -4516,24 +4554,28 @@ function deselectCreature() {
         panel.classList.remove('hidden');
         panel.classList.add('block');
     }
+
     // Show placeholder instead of hiding
     const nameEl = document.getElementById('inspect-name');
     if (nameEl) {
         nameEl.innerHTML = `<span class="text-white/50">No creature selected</span>`;
         nameEl.style.color = '#64748b';
     }
+
     // Clear preview canvas
     const preview = document.getElementById('inspect-creature-preview');
     if (preview) {
         const ctx = preview.getContext('2d');
         ctx.clearRect(0, 0, preview.width, preview.height);
     }
+
     // Clear other fields
     const fields = ['inspect-gen', 'inspect-kids', 'inspect-kills', 'inspect-energy-text', 'inspect-thought', 'inspect-modules-list'];
     fields.forEach(id => {
         const el = document.getElementById(id);
         if (el) el.innerHTML = '';
     });
+
     const energyBar = document.getElementById('inspect-energy-bar');
     if (energyBar) energyBar.style.width = '0%';
 }
@@ -4542,14 +4584,17 @@ function drawCreaturePreview(data, canvas) {
     if (!canvas || !data) return;
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+
     const isSocial = data.socialPredator === true;
     const isPred = data.isPredator === true;
     const isInfected = (data.purpleFlash && data.purpleFlash > 0) || data.infected === true;
+
     // Background color
     let bgColor = '#1f2937';
     if (isInfected) bgColor = '#581c87';
     else if (isSocial) bgColor = '#9a3412';
     else if (isPred) bgColor = '#7f1d1d';
+
     ctx.fillStyle = bgColor;
     ctx.beginPath();
     ctx.roundRect(2, 2, canvas.width - 4, canvas.height - 4, 10);
@@ -4557,11 +4602,14 @@ function drawCreaturePreview(data, canvas) {
     ctx.strokeStyle = (isPred || isSocial || isInfected) ? '#ffffff33' : '#ffffff22';
     ctx.lineWidth = 1.5;
     ctx.stroke();
+
     const cx = canvas.width / 2;
     const cy = canvas.height / 2;
+
     const moduleCount = data.modules?.length || 0;
+
     // Core size (smaller = more compact creature)
-    const baseSize = 9.5 + Math.min(moduleCount * 0.22, 5.5);
+const baseSize = 9.5 + Math.min(moduleCount * 0.22, 5.5);
     // Core color
     let coreColor = '#facc15';
     if (isSocial) coreColor = '#f59e0b';
@@ -4572,6 +4620,7 @@ function drawCreaturePreview(data, canvas) {
     else if (data.specialization === 'resistant') coreColor = '#f472b6';
     else if (data.specialization === 'explorer') coreColor = '#fbbf24';
     else if (data.specialization === 'communicator') coreColor = '#c084fc';
+
     // Draw core
     ctx.fillStyle = coreColor;
     ctx.strokeStyle = isPred ? '#fecaca' : '#fef08c';
@@ -4580,6 +4629,7 @@ function drawCreaturePreview(data, canvas) {
     ctx.arc(cx, cy, baseSize, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
+
     // Honey
     if (data.honey > 2.5) {
         ctx.fillStyle = '#f59e0b';
@@ -4587,14 +4637,17 @@ function drawCreaturePreview(data, canvas) {
         ctx.arc(cx + 3, cy - 3, 3 + Math.min(data.honey * 0.1, 6), 0, Math.PI * 2);
         ctx.fill();
     }
+
     // Modules - larger and more visible
     if (data.modules && moduleCount > 0) {
         const spreadScale = 2.45;
+
         for (let m of data.modules) {
             const tier = m.tier || 1;
-            const size = 5.8 + (tier - 1) * 1.25; // bigger modules
+            const size = 5.8 + (tier - 1) * 1.25;     // bigger modules
             const mx = cx + (m.offsetX || 0) * spreadScale;
             const my = cy + (m.offsetY || 0) * spreadScale;
+
             ctx.fillStyle = m.color || '#fbbf24';
             ctx.beginPath();
             ctx.arc(mx, my, size, 0, Math.PI * 2);
@@ -4602,70 +4655,84 @@ function drawCreaturePreview(data, canvas) {
         }
     }
 }
-
 // ==================== Inspector Update (Clean + Neural Net) ====================
 function updateInspector() {
     if (!selectedCreature) return;
     const c = selectedCreature;
+
     // Draw the creature preview
     const previewCanvas = document.getElementById('inspect-creature-preview');
     if (previewCanvas) {
         drawCreaturePreview(c, previewCanvas);
     }
+
     // Name + Alpha badge
     const nameEl = document.getElementById('inspect-name');
     if (nameEl) nameEl.innerText = c.name;
+
     if (typeof updateInspectorAlphaBadge === 'function') {
         updateInspectorAlphaBadge(c);
     }
+
     // Basic stats
     const genEl = document.getElementById('inspect-gen');
     if (genEl) genEl.innerText = c.generation;
+
     const kidsEl = document.getElementById('inspect-kids');
     if (kidsEl) kidsEl.innerText = c.childrenCount;
+
     const killsEl = document.getElementById('inspect-kills');
     if (killsEl) killsEl.innerText = c.killCount;
+
      // === Score Value (Final awarded value with ALL bonuses) ===
     const scoreValueEl = document.getElementById('inspect-score-value');
     if (scoreValueEl) {
-        const finalScore = typeof c.getFinalAwardedScore === 'function'
-            ? c.getFinalAwardedScore()
+        const finalScore = typeof c.getFinalAwardedScore === 'function' 
+            ? c.getFinalAwardedScore() 
             : (c.pointValue || 0);
         scoreValueEl.innerText = finalScore.toLocaleString();
     }
+
     // === REMAINING LIFE (with color warning) ===
     const lifeEl = document.getElementById('inspect-life');
     if (lifeEl) {
         const remainingFrames = Math.max(0, c.maxAge - c.age);
         const secondsLeft = Math.floor(remainingFrames / 60);
+
         lifeEl.innerText = `${secondsLeft}s`;
+
         // Color changes when close to dying of old age
         if (secondsLeft <= 10) {
-            lifeEl.style.color = '#f87171'; // Red
+            lifeEl.style.color = '#f87171';      // Red
             lifeEl.style.fontWeight = '700';
         } else if (secondsLeft <= 20) {
-            lifeEl.style.color = '#fb923c'; // Orange
+            lifeEl.style.color = '#fb923c';      // Orange
             lifeEl.style.fontWeight = '600';
         } else {
-            lifeEl.style.color = '#fbbf24'; // Amber (normal)
+            lifeEl.style.color = '#fbbf24';      // Amber (normal)
             lifeEl.style.fontWeight = '600';
         }
     }
+
     // Thought / Role
     const thoughtEl = document.getElementById('inspect-thought');
     if (thoughtEl) {
         thoughtEl.innerText = (c.currentThought || '–') + (c.role ? ' • ' + c.role : '');
     }
+
     // Energy bar
     const energyPct = Math.max(0, Math.min(100, c.energy));
     const energyBar = document.getElementById('inspect-energy-bar');
     if (energyBar) energyBar.style.width = energyPct + '%';
+
     const energyText = document.getElementById('inspect-energy-text');
     if (energyText) energyText.innerText = Math.floor(c.energy) + '%';
+
     // Modules list
     const modulesList = document.getElementById('inspect-modules-list');
     if (modulesList) {
         modulesList.innerHTML = '';
+
         if (c.modules.length === 0) {
             const empty = document.createElement('div');
             empty.className = 'text-white/40 text-xs italic';
@@ -4685,11 +4752,13 @@ function updateInspector() {
             }
         }
     }
+
     // ==================== NEURAL NET VISUALIZER ====================
     // Draw the live 12 → 12 → 7 neural network
     if (typeof drawNeuralNet === 'function') {
         drawNeuralNet(c);
     }
+
     // Update the 7 brain output text values
     const brainOutputs = c.brainOutputs || [];
     for (let i = 0; i < 7; i++) {
@@ -4699,17 +4768,18 @@ function updateInspector() {
         }
     }
 }
-
 // =====================================================
 // SCORE MULTIPLIER SYSTEM (Updated with smart formatting)
 // =====================================================
 function updateScoreMultipliers() {
     if (!creatures || creatures.length === 0) return;
+
     // === Calculate base values ===
     const pop = creatures.length;
     const predatorCount = creatures.filter(c => c.isPredator).length;
     const totalModules = creatures.reduce((sum, c) => sum + c.modules.length, 0);
     const avgModules = totalModules / pop;
+
     // Count modules per tier
     const tierCounts = Array(11).fill(0);
     for (let c of creatures) {
@@ -4718,22 +4788,33 @@ function updateScoreMultipliers() {
             if (tier >= 1 && tier <= 10) tierCounts[tier]++;
         }
     }
-    // === Additive Multipliers (matches our plan) ===
+
+    // === Define Multipliers ===
     const popMult = 1 + Math.min(pop / 180, 1.8);
     const predMult = 1 + Math.min(predatorCount / 45, 1.6);
     const avgModMult = 1 + (avgModules * 0.38);
-    // Tier contribution - additive using central TIER_MULTIPLIERS
-    let tierMult = 0;
-    for (let t = 1; t <= 10; t++) {
-        tierMult += (tierCounts[t] || 0) * (TIER_MULTIPLIERS[t] || 0);
-    }
-    // Final total multiplier (additive model)
-    let totalMult = popMult + predMult + avgModMult + tierMult;
-    totalMult = Math.max(0.6, totalMult);
+
+    let tierMult = 1;
+    tierMult *= 1 + (tierCounts[1] * 0.0015);
+    tierMult *= 1 + (tierCounts[2] * 0.0022);
+    tierMult *= 1 + (tierCounts[3] * 0.0030);
+    tierMult *= 1 + (tierCounts[4] * 0.0040);
+    tierMult *= 1 + (tierCounts[5] * 0.0055);
+    tierMult *= 1 + (tierCounts[6] * 0.0075);
+    tierMult *= 1 + (tierCounts[7] * 0.010);
+    tierMult *= 1 + (tierCounts[8] * 0.014);
+    tierMult *= 1 + (tierCounts[9] * 0.019);
+    tierMult *= 1 + (tierCounts[10] * 0.032);
+
+    // Final total multiplier
+    let totalMult = popMult * predMult * avgModMult * tierMult;
+    totalMult = Math.max(0.6, Math.min(totalMult, 12));
+
     // === Update UI ===
     const scoreEl = document.getElementById('vegas-score');
     const multEl = document.getElementById('score-multiplier');
-    // Smart score formatting
+
+    // Smart score formatting (exponential earlier to prevent overlap)
     if (scoreEl) {
         let displayScore;
         if (totalScore >= 10000000) {
@@ -4745,60 +4826,167 @@ function updateScoreMultipliers() {
         }
         scoreEl.innerText = displayScore;
     }
+
     if (multEl) multEl.innerText = totalMult.toFixed(2);
-    // === Update individual stats with + notation ===
-    const popEl = document.getElementById('mult-pop');
-    if (popEl) popEl.innerText = '+' + popMult.toFixed(2);
-    const predEl = document.getElementById('mult-pred');
-    if (predEl) predEl.innerText = '+' + predMult.toFixed(2);
-    const avgEl = document.getElementById('mult-avgmod');
-    if (avgEl) avgEl.innerText = '+' + avgModMult.toFixed(2);
-    // === Live Total Contribution per Tier (using TIER_MULTIPLIERS) ===
+
+    // Update individual multipliers
+    const setMult = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.innerText = '×' + value.toFixed(2);
+    };
+
+    setMult('mult-pop', popMult);
+    setMult('mult-pred', predMult);
+    setMult('mult-avgmod', avgModMult);
+
     for (let t = 1; t <= 10; t++) {
+        let tierMultValue;
+        if (t === 1) tierMultValue = 1 + (tierCounts[1] * 0.0015);
+        else if (t === 2) tierMultValue = 1 + (tierCounts[2] * 0.0022);
+        else if (t === 3) tierMultValue = 1 + (tierCounts[3] * 0.0030);
+        else if (t === 4) tierMultValue = 1 + (tierCounts[4] * 0.0040);
+        else if (t === 5) tierMultValue = 1 + (tierCounts[5] * 0.0055);
+        else if (t === 6) tierMultValue = 1 + (tierCounts[6] * 0.0075);
+        else if (t === 7) tierMultValue = 1 + (tierCounts[7] * 0.010);
+        else if (t === 8) tierMultValue = 1 + (tierCounts[8] * 0.014);
+        else if (t === 9) tierMultValue = 1 + (tierCounts[9] * 0.019);
+        else tierMultValue = 1 + (tierCounts[10] * 0.032);
+
         const el = document.getElementById('mult-tier' + t);
-        if (el) {
-            const count = tierCounts[t] || 0;
-            const perModule = TIER_MULTIPLIERS[t] || 0;
-            const totalContribution = count * perModule;
-            if (count === 0) {
-                el.innerText = '0';
-                el.style.color = '#64748b';
-            } else {
-                el.innerText = '+' + totalContribution.toFixed(2);
-                el.style.color = '';
-            }
-        }
+        if (el) el.innerText = '×' + tierMultValue.toFixed(2);
     }
+
     window.currentScoreMultiplier = totalMult;
 }
-
-// ==================== PAUSED DRAW + INCUBATION ====================
-if (paused) {
-    try {
-        drawWorld();
-        updateMainStats();
-        if (miniChartCtx) drawMiniChart();
-    } catch (e) {
-        console.warn("Paused draw error:", e);
+  
+              function draw() {
+    // ==================== DEBUG ====================
+    if (frameCount % 60 === 0) {
+        console.log("%c[DEBUG] draw() is running | currentMusicMode =", "color:#f87171", currentMusicMode);
+        console.log("%c[DEBUG] musicVisualizerActive =", "color:#f87171", musicVisualizerActive);
     }
-    return;
-}
+    // ===============================================
 
-simTime += (1 / 60) * timeScale;
-updateIncubatorSlotsProgress(timeScale);
+    background(12, 14, 22);
+
+// ==================== MUSIC VISUALIZER (Real Audio Reactive) ====================
+if (musicVisualizerActive && currentMusicMode) {
+    push();
+    drawingContext.save();
+    resetMatrix();
+    colorMode(RGB, 255);
+    ellipseMode(CENTER);
+    noFill();
+
+    let baseR = musicVisualizerRadius || 280;
+    let glow = musicVisualizerGlow || 1.0;
+    let thickness = musicVisualizerThickness || 6;
+
+    // === REAL AUDIO DATA ===
+    const bass = musicData.bass || 0;
+    const mids = musicData.mids || 0;
+    const highs = musicData.highs || 0;
+
+    // Dynamic radius per band
+    let rOuter = baseR * (1.0 + bass * 0.45);
+    let rMid   = baseR * (1.0 + mids * 0.35);
+    let rInner = baseR * (1.0 + highs * 0.55);
+
+    // Mode color
+    let col = currentMusicMode === 'prune'   ? {r:255, g:40,  b:70} :
+              currentMusicMode === 'replicate'? {r:30,  g:230, b:120} :
+                                               {r:255, g:210, b:50};
+
+    // === OUTER RING (Bass) ===
+    stroke(col.r, col.g, col.b, 200 * glow);
+    strokeWeight(thickness * 3.5 * (0.7 + bass * 1.8));
+    ellipse(width/2, height/2, rOuter * 2.35, rOuter * 2.35);
+
+    // Soft glow
+    stroke(col.r, col.g, col.b, 50 * glow);
+    strokeWeight(thickness * 6);
+    ellipse(width/2, height/2, rOuter * 2.55, rOuter * 2.55);
+
+    // === MIDDLE RING (Mids) ===
+    stroke(col.r * 0.85, col.g * 0.95, col.b, 210 * glow);
+    strokeWeight(thickness * 2.2 * (0.8 + mids * 1.6));
+    ellipse(width/2, height/2, rMid * 1.7, rMid * 1.7);
+
+    // === INNER RING (Highs) ===
+    stroke(255, 255, 255, 230 * glow);
+    strokeWeight(thickness * 1.3 * (0.6 + highs * 2.2));
+    ellipse(width/2, height/2, rInner * 1.1, rInner * 1.1);
+
+    // === CENTRAL PULSE (overall energy) ===
+    let energy = (bass + mids + highs) / 3;
+    let coreSize = baseR * 0.5 * (0.85 + energy * 0.6);
+    fill(col.r, col.g, col.b, 45 * glow);
+    noStroke();
+    ellipse(width/2, height/2, coreSize * 2.1, coreSize * 2.1);
+
+    fill(255, 255, 255, 140 * glow);
+    ellipse(width/2, height/2, coreSize * 1.1, coreSize * 1.1);
+
+    drawingContext.restore();
+    pop();
+}
+// ==================== END MUSIC VISUALIZER ====================
+
+    if (paused) {
+        try {
+            drawWorld();
+            updateMainStats();
+            if (miniChartCtx) drawMiniChart();
+        } catch (e) {
+            console.warn("Paused draw error:", e);
+        }
+        return;
+    }
+
+                  if (paused) {
+                      drawWorld();
+                      updateMainStats();
+
+                          updateMainStats();
+
+          // Live trends graph update
+          if (frameCount % 25 === 0 && miniChartCtx) {
+              drawMiniChart();
+          }
+
+          fill(255, 255, 255, 190);
+          textAlign(LEFT);
+          textSize(12);
+          textFont('Inter, system-ui');
+          if (isDay) {
+              text('DAY', 16, 24);
+          } else {
+              text('NIGHT', 16, 24);
+          }
+
+                      if (miniChartCtx) drawMiniChart();
+                      return;
+                  }
+
+                  simTime += (1 / 60) * timeScale;
+
+                updateIncubatorSlotsProgress(timeScale);
+
 
 // === Incubation Progress Tick ===
 if (!paused && incubatingEggs.length > 0) {
     for (let i = incubatingEggs.length - 1; i >= 0; i--) {
         let inc = incubatingEggs[i];
-        let progressGain = 0.016 * timeScale;
+        let progressGain = 0.016 * timeScale; // ~1% per second at 1x speed
         inc.progress = Math.min(100, inc.progress + progressGain);
+
         if (inc.progress >= 100 && !inc.completed) {
             inc.completed = true;
             addFloatingText(width/2, 80, "Incubation Complete!", '#a78bfa');
         }
     }
 }
+
                   const timeEl = document.getElementById('sim-time');
                   if (timeEl) timeEl.innerText = formatSimTime(simTime);
 
