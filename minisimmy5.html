@@ -3689,6 +3689,21 @@ let bullets = [];
 let lastShotTime = 0;
 let showMobileControls = false;
 
+// ==================== TIER MULTIPLIERS (Single Source of Truth) ====================
+const TIER_MULTIPLIERS = {
+    1: 0.01,
+    2: 0.04,
+    3: 0.06,
+    4: 0.10,
+    5: 0.25,
+    6: 0.30,
+    7: 0.40,
+    8: 0.60,
+    9: 0.80,
+    10: 2.0     // Tier X is extremely strong
+};
+
+  
 // =====================================================
 // ENERGY WALL TOGGLE
 // =====================================================
@@ -4472,19 +4487,11 @@ function updateMainStats() {
     const predMult = 1 + Math.min(predatorCount / 45, 1.6);
     const avgModMult = 1 + (avgMod * 0.38);
 
-    // Tier contribution - ADDITIVE
-    let tierMult = 0;
-    tierMult += tierCounts[1] * 0.01;
-    tierMult += tierCounts[2] * 0.04;
-    tierMult += tierCounts[3] * 0.06;
-    tierMult += tierCounts[4] * 0.10;
-    tierMult += tierCounts[5] * 0.25;
-    tierMult += tierCounts[6] * 0.3;
-    tierMult += tierCounts[7] * 0.4;
-    tierMult += tierCounts[8] * 0.6;
-    tierMult += tierCounts[9] * 0.8;
-    tierMult += tierCounts[10] * 2;
-
+    // Tier contribution - now uses the central TIER_MULTIPLIERS object
+let tierMult = 0;
+for (let t = 1; t <= 10; t++) {
+    tierMult += (tierCounts[t] || 0) * (TIER_MULTIPLIERS[t] || 0);
+}
     let totalMult = popMult + predMult + avgModMult + tierMult;
     totalMult = Math.max(0.6, totalMult);
 
@@ -4504,6 +4511,7 @@ function updateMainStats() {
     setMult('mult-pop', popMult);
     setMult('mult-pred', predMult);
     setMult('mult-avgmod', avgModMult);
+  
 
     // Tier multipliers - show 0 when count is zero
     for (let t = 1; t <= 10; t++) {
@@ -4533,6 +4541,16 @@ function updateMainStats() {
 
     window.currentScoreMultiplier = totalMult;
 }
+
+function updateTierMultiplierDisplays() {
+    for (let t = 1; t <= 10; t++) {
+        const el = document.getElementById(`mult-tier${t}`);
+        if (el) {
+            const val = TIER_MULTIPLIERS[t] || 0;
+            el.innerText = `×${val.toFixed(2)}`;
+        }
+    }
+}  
 
 function selectCreature(creature) {
     selectedCreature = creature;
@@ -8643,6 +8661,7 @@ function resetSim() {
 
     if (miniChartCtx) drawMiniChart();
     updateMainStats();
+    updateTierMultiplierDisplays();
 }
 // ==================== SPACESHIP CONTROLS ====================
 document.addEventListener('keydown', function(e) {
