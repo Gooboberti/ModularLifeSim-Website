@@ -6676,6 +6676,7 @@ function spawnCreatureFromVortexCenter(x, y, vortexDir, vortexStrength) {
     });
 
     newCreature.updateSpecialization();
+    newCreature._updateTotalTiers();
     newCreature.energy = 36;
     newCreature.currentThought = "Born from the vortex";
 
@@ -7274,6 +7275,7 @@ function handleParticleEating(creature) {
                     let d = random(5, 9);
                     creature.modules.push({ type: newType, color: colors[newType], offsetX: cos(ang) * d, offsetY: sin(ang) * d, tier: 1 });
                     creature.updateSpecialization();
+                    newCreature._updateTotalTiers();
                     addFloatingText(creature.x, creature.y - 25, "+1 MODULE", '#ffcc33');
                 }
                 creature.energy = min(100, creature.energy + 12);
@@ -7441,15 +7443,14 @@ function updateMusicModeParticles_v2() {
         }
     }
 
-    if (currentMusicMode === 'replicate') {
-        if (frameCount % 9 === 0 && random() < 0.85) {
-            for (let i = 0; i < 5; i++) {
-                if (vortexParticles.length < 240) {
-                    vortexParticles.push(new VortexParticle(true));
-                }
-            }
+   if (currentMusicMode === 'replicate') {
+    if (frameCount % 9 === 0 && random() < 0.75 && vortexParticles.length < 180) {
+        const toAdd = Math.min(4, 180 - vortexParticles.length);
+        for (let i = 0; i < toAdd; i++) {
+            vortexParticles.push(new VortexParticle(true));
         }
     }
+}
 }
 
 // ==================== MISSING CLASSES ====================
@@ -7820,6 +7821,11 @@ class Creature {
             }
         }
         this.updateSpecialization();
+
+        // === Total Tier Cache ===
+        this._totalTiers = 0;
+        this._updateTotalTiers();
+      
         const baseSeconds = 15;
         const secondsPerGen = 3;
         let lifespanSeconds = baseSeconds + (this.generation - 1) * secondsPerGen;
@@ -7894,8 +7900,17 @@ class Creature {
     getModuleCount(type) { return this.modules.filter(m => m.type === type).length; }
 
     getTieredModuleCount(type) {
-        return this.modules.filter(m => m.type === type).reduce((sum, m) => sum + (m.tier || 1), 0);
-    }
+    return this.modules.filter(m => m.type === type).reduce((sum, m) => sum + (m.tier || 1), 0);
+}
+
+// ==================== TOTAL TIER CACHE ====================
+_updateTotalTiers() {
+    this._totalTiers = this.modules.reduce((sum, m) => sum + (m.tier || 1), 0);
+}
+
+getTotalTiers() {
+    return this._totalTiers;
+}
 
     getEfficiencyBonus() {
         let bonus = 0;
@@ -8080,6 +8095,7 @@ class Creature {
         }
         this.modules = newModules;
         this.updateSpecialization();
+        this._updateTotalTiers();
     }
 
     updateSpecialization() {
@@ -8251,7 +8267,7 @@ class Creature {
         let detectionQuality = 0.58 + (sensorLevel * 0.11);
         let effectiveHazardDist = hazardInfo.dist * detectionQuality;
         let dodgedThisFrame = false;
-        if (frameCount % 4 === 0 && this.brain) {   // ← was 2, now 4
+        if (frameCount % 5 === 0 && this.brain) {   
             const inputs = this.getBrainInputs(hazardInfo, effectiveHazardDist, isDay);
             this.brainOutputs = this.brain.forward(inputs);
         }
@@ -8465,6 +8481,7 @@ class Creature {
                     }
                 }
             }
+          this._updateTotalTiers();   // ← Add this line
         }
     }
 
