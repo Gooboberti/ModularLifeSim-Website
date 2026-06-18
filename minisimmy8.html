@@ -1,9 +1,11 @@
 <!doctype html>
+<!-- MiniSimmy mobile-opt build 2026-06-17 | DeviceProfile + PointerInput + touch/mouse canvas + CPU/memory tuning -->
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>MiniSimmy2</title>
+    <meta name="minisimmy-build" content="mobile-opt-2026-06-17" />
+    <title>MiniSimmy2 (Mobile Opt)</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2334d399'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%230a0a0f'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -132,6 +134,20 @@
     z-index: 2;
     background-color: transparent !important;
     opacity: 1 !important;
+    touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+}
+
+@media (max-width: 860px) {
+    #canvas-container {
+        width: 100% !important;
+        max-width: 100vw;
+    }
+    #canvas-container canvas {
+        width: 100% !important;
+        height: auto !important;
+    }
 }
     </style>
   </head>
@@ -292,15 +308,18 @@
               </div>
 
               <!-- Canvas -->
-              <div id="canvas-container" class="relative mx-auto w-[820px] flex-shrink-0 overflow-hidden rounded-3xl border border-white/10 shadow-2xl">
+              <div id="canvas-container" class="relative mx-auto w-full max-w-[820px] flex-shrink-0 overflow-hidden rounded-3xl border border-white/10 shadow-2xl">
                   <!-- DEBUG BOX -->
                   <div id="mobile-debug"
-                       style="position: absolute; top: 10px; left: 10px; z-index: 9999;
+                       style="display: none; position: absolute; top: 10px; left: 10px; z-index: 9999;
          background: rgba(0,0,0,0.75); color: #fff; font-family: monospace;
          font-size: 13px; padding: 8px 12px; border-radius: 8px;
          max-width: 260px; pointer-events: none;">
                       <div style="font-weight: bold; color: #fbbf24; margin-bottom: 4px;">DEBUG</div>
                       <div id="debug-log"></div>
+                      <div id="debug-simulation-health" style="margin-top:4px; font-size:11px; color:#94a3b8;">
+                          Simulation Health: <span style="color:#4ade80">OK</span>
+                      </div>
                   </div>
                   <!-- Environmental label injected by JS -->
               </div>
@@ -1493,6 +1512,103 @@
               let totalScore = 0;
               let totalPredatorKills = 0;
               let lastScoreUpdate = 0;
+              let lastScoreSimTime = 0;
+              let furnaceIntervalId = null;
+              let spaceshipControlsBound = false;
+              const DEBUG_MODE = false;
+
+              const DeviceProfile = (() => {
+                  const ua = navigator.userAgent || '';
+                  const maxTouch = navigator.maxTouchPoints || 0;
+                  const isCoarsePointer = window.matchMedia('(pointer: coarse)').matches;
+                  const isNarrow = window.innerWidth < 1024;
+                  const isMobileUA = /iPhone|iPad|iPod|Android|Mobile/i.test(ua);
+                  const isTouch = maxTouch > 0 || isCoarsePointer;
+                  const isMobile = isMobileUA || (isTouch && isCoarsePointer && isNarrow);
+                  const mem = navigator.deviceMemory;
+                  const cores = navigator.hardwareConcurrency;
+                  const lowSpec = (mem && mem <= 4) || (cores && cores <= 4);
+                  const tier = isMobile && lowSpec ? 'low' : isMobile ? 'medium' : 'high';
+                  const tiers = {
+                      high: {
+                          frameRate: 60, uiInterval: 6, inspectorInterval: 3, chartInterval: 6,
+                          vortexInit: 110, vortexMax: 130, particleCapMult: 1,
+                          autoSelectCreature: true, alphaTrackInterval: 60,
+                          creatureHitRadius: 13, wallHitRadius: 18, hazardRemoveRadius: 25,
+                          fpsDisplayInterval: 6, floatingTextPasses: 2,
+                      },
+                      medium: {
+                          frameRate: 30, uiInterval: 30, inspectorInterval: 15, chartInterval: 18,
+                          vortexInit: 55, vortexMax: 70, particleCapMult: 0.75,
+                          autoSelectCreature: false, alphaTrackInterval: 180,
+                          creatureHitRadius: 24, wallHitRadius: 26, hazardRemoveRadius: 32,
+                          fpsDisplayInterval: 30, floatingTextPasses: 1,
+                      },
+                      low: {
+                          frameRate: 24, uiInterval: 45, inspectorInterval: 20, chartInterval: 30,
+                          vortexInit: 40, vortexMax: 50, particleCapMult: 0.6,
+                          autoSelectCreature: false, alphaTrackInterval: 240,
+                          creatureHitRadius: 28, wallHitRadius: 30, hazardRemoveRadius: 36,
+                          fpsDisplayInterval: 45, floatingTextPasses: 1,
+                      },
+                  };
+                  return Object.freeze({ isMobile, isTouch, isCoarsePointer, tier, ...tiers[tier] });
+              })();
+              const IS_MOBILE = DeviceProfile.isMobile;
+              const UI_UPDATE_INTERVAL = DeviceProfile.uiInterval;
+              const INSPECTOR_UPDATE_INTERVAL = DeviceProfile.inspectorInterval;
+
+              const PointerInput = {
+                  x: 0, y: 0, lastActionAt: 0,
+                  setFromClient(clientX, clientY) {
+                      const el = document.querySelector('#canvas-container canvas');
+                      if (!el || typeof width === 'undefined') {
+                          this.x = clientX;
+                          this.y = clientY;
+                          return;
+                      }
+                      const rect = el.getBoundingClientRect();
+                      this.x = (clientX - rect.left) * (width / rect.width);
+                      this.y = (clientY - rect.top) * (height / rect.height);
+                  },
+                  consumeAction() {
+                      const now = performance.now();
+                      if (DeviceProfile.isTouch && now - this.lastActionAt < 380) return false;
+                      this.lastActionAt = now;
+                      return true;
+                  },
+              };
+
+              const DOMCache = {};
+
+              function gamePointer() {
+                  const el = document.querySelector('#canvas-container canvas');
+                  if (!el || typeof mouseX === 'undefined') {
+                      return { x: PointerInput.x, y: PointerInput.y };
+                  }
+                  const rect = el.getBoundingClientRect();
+                  const scaled = Math.abs(rect.width - width) > 2;
+                  if (scaled || DeviceProfile.isTouch) {
+                      return { x: PointerInput.x || mouseX, y: PointerInput.y || mouseY };
+                  }
+                  return { x: mouseX, y: mouseY };
+              }
+
+              function cacheMainDOM() {
+                  DOMCache.topScore = document.getElementById('top-score');
+                  DOMCache.vegasScore = document.getElementById('vegas-score');
+                  DOMCache.statPop = document.getElementById('stat-pop');
+                  DOMCache.statPred = document.getElementById('stat-pred');
+                  DOMCache.statModules = document.getElementById('stat-modules');
+                  DOMCache.scoreMultiplier = document.getElementById('score-multiplier');
+                  DOMCache.fpsCounter = document.getElementById('fps-counter');
+                  DOMCache.simTime = document.getElementById('sim-time');
+                  for (let t = 1; t <= 10; t++) {
+                      DOMCache['statTier' + t] = document.getElementById('stat-tier' + t);
+                  }
+              }
+
+              let lastInspectorModuleSig = '';
               let unlockedSpeeds = { 2: true, 4: true };
               let redHazardsUnlocked = false;
               let cursorHazardUnlocked = false;
@@ -1507,7 +1623,7 @@
 
               // Tier rates stay in TIER_MULTIPLIERS (already exists in your code)
 
-              let redHazardsEnabled = true;
+              let redHazardsEnabled = false;
               let redHazardIntensity = 1;
               let cursorHazardActive = false;
 
@@ -1622,12 +1738,13 @@
               // ==================== FPS COUNTER ====================
               let fpsHistory = [];
               function updateFPS() {
-                  fpsHistory.push(frameRate());
-                  if (fpsHistory.length > 30) fpsHistory.shift();
-
-                  const avgFPS = fpsHistory.reduce((a, b) => a + b, 0) / fpsHistory.length;
-                  const fpsEl = document.getElementById('fps-counter');
-                  if (fpsEl) fpsEl.innerText = Math.round(avgFPS);
+                  const displayFps = currentFPS > 0 ? currentFPS : Math.round(frameRate());
+                  const fpsEl = DOMCache.fpsCounter || document.getElementById('fps-counter');
+                  if (!fpsEl) return;
+                  fpsEl.innerText = displayFps;
+                  if (displayFps >= 50) fpsEl.style.color = '#34d399';
+                  else if (displayFps >= 30) fpsEl.style.color = '#fbbf24';
+                  else fpsEl.style.color = '#f87171';
               }
               let miniChartCtx;
               let graphData = { pop: [], modules: [], predators: [], greenFood: [], blueFood: [], hr: [] };
@@ -1721,7 +1838,10 @@
               };
 
 
-
+              let debugCreatureUpdateCount = 0;
+              let debugLastCreatureMovement = 0;
+              let debugSimulationHealthy = true;
+            
 
               // ==================== CLASSES ====================
               class FloatingText {
@@ -2116,7 +2236,7 @@
                                   c.purpleFlash = max(c.purpleFlash || 0, 38);
                                   c.hazardDamageTaken = (c.hazardDamageTaken || 0) + damage;
                                   let dx = c.x - this.x;
-                                  let dy = c.y - this.x;
+                                  let dy = c.y - this.y;
                                   let len = sqrt(dx * dx + dy * dy) || 1;
                                   c.vx += (dx / len) * 1.7;
                                   c.vy += (dy / len) * 1.7;
@@ -2411,17 +2531,7 @@
 
                   // NEW: Final awarded score including ALL global bonuses + furnace multiplier
                   getFinalAwardedScore(killedByBullet = false) {
-                      let base = this.getPointValue(killedByBullet);
-
-                      // Apply global map multipliers (population, predators, avg modules, tier counts)
-                      let finalScore = base * (typeof totalMult !== 'undefined' ? totalMult : 1);
-
-                      // Apply live Furnace multiplier if active
-                      if (typeof getBurningMultiplier === 'function') {
-                          finalScore *= getBurningMultiplier();
-                      }
-
-                      return Math.floor(finalScore);
+                      return ScoreEngine.computeAwardedAmount(this.getPointValue(killedByBullet));
                   }
 
                   // ==================== NEW: Lifespan Gain Method ====================
@@ -2538,9 +2648,10 @@
                       const dangerRadius = 130;
                       for (let h of redHazards) {
                           let d = dist(this.x, this.y, h.x, h.y);
+                          if (d < dangerRadius) nearbyCount++;
                           if (d < nearestDist) {
                               nearestDist = d;
-                              nearestAngle = atan2(h.y - this.y, h.x - this.y);
+                              nearestAngle = atan2(h.y - this.y, h.x - this.x);
                           }
                       }
                       let normDist = (nearestDist < Infinity) ? constrain(1 - (nearestDist / dangerRadius), 0, 1) : 0;
@@ -2708,6 +2819,8 @@
                       // Restore energy + count kill
                       this.energy = 100;
                       this.killCount = (this.killCount || 0) + 1;
+                      totalPredatorKills++;
+                      ScoreEngine.award(28);
                       this.currentThought = "Killed prey - Returning to normal";
                       // === NEW: Turn back into a normal creature after eating ===
                       this.isPredator = false;
@@ -3098,25 +3211,26 @@
 
               // ==================== MEMORY CLEANUP SYSTEM ====================
               function cleanupArrays() {
-                  // Hard caps to prevent memory from growing forever
-                  const caps = {
-                      vortexParticles: 160,
-                      redHazards: 22,
-                      redBeams: 28,
-                      purpleInfectParticles: 22,
-                      moduleParticles: 40,
-                      yellowGlowingParticles: 16,
-                      explosions: 10,
-                      spawnEffects: 12,
-                      floatingTexts: 20,
-                      energyOrbs: 35,
-                      foodBlooms: 18,
-                      pheromones: 50
-                  };
+                  const capMult = DeviceProfile.particleCapMult;
+                  const cap = (n) => Math.max(4, Math.round(n * capMult));
+                  const caps = [
+                      [vortexParticles, cap(160)],
+                      [redHazards, cap(22)],
+                      [redBeams, cap(28)],
+                      [purpleInfectParticles, cap(22)],
+                      [moduleParticles, cap(40)],
+                      [yellowGlowingParticles, cap(16)],
+                      [explosions, cap(10)],
+                      [spawnEffects, cap(12)],
+                      [floatingTexts, cap(20)],
+                      [energyOrbs, cap(35)],
+                      [foodBlooms, cap(18)],
+                      [pheromones, cap(50)]
+                  ];
 
-                  for (let key in caps) {
-                      if (window[key] && window[key].length > caps[key]) {
-                          window[key].splice(0, window[key].length - caps[key]);
+                  for (const [arr, cap] of caps) {
+                      if (arr && arr.length > cap) {
+                          arr.splice(0, arr.length - cap);
                       }
                   }
 
@@ -3172,15 +3286,40 @@
 
               // ==================== MOBILE DEBUG HELPER ====================
               function debugLog(msg) {
+                  if (!DEBUG_MODE) return;
                   const logEl = document.getElementById('debug-log');
                   if (!logEl) return;
 
-                  const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-                  logEl.innerHTML += `<div style="margin: 2px 0;">[${time}] ${msg}</div>`;
+                  const time = new Date().toLocaleTimeString([], {
+                      hour: '2-digit', minute: '2-digit', second: '2-digit',
+                      fractionalSecondDigits: 2
+                  });
 
-                  // Keep only last 8 messages
-                  while (logEl.children.length > 8) {
+                  const div = document.createElement('div');
+                  div.style.margin = '1px 0';
+                  div.style.fontSize = '11px';
+                  div.innerHTML = `[${time}] ${msg}`;
+                  logEl.appendChild(div);
+
+                  // Keep only last 10 lines visible
+                  while (logEl.children.length > 10) {
                       logEl.removeChild(logEl.firstChild);
+                  }
+
+                  // Auto-scroll to bottom
+                  logEl.scrollTop = logEl.scrollHeight;
+              }
+
+              function updateDebugSimulationHealth(healthy, extraInfo = '') {
+                  const statusEl = document.getElementById('debug-simulation-health');
+                  if (!statusEl) return;
+
+                  if (healthy) {
+                      statusEl.innerHTML = `Simulation Health: <span style="color:#4ade80">OK</span> ${extraInfo}`;
+                      debugSimulationHealthy = true;
+                  } else {
+                      statusEl.innerHTML = `Simulation Health: <span style="color:#f87171">STALLED</span> ${extraInfo}`;
+                      debugSimulationHealthy = false;
                   }
               }
               // --- Core Audio Engine ---
@@ -3286,8 +3425,9 @@
               function playCursorDamageSound(creature) {
                   if (!canPlaySound('cursor')) return;
                   if (activeVoices > MAX_VOICES) return;
-                  activeVoices++;
-                  const ctx = getAudioContext();
+                  const p = soundParams.cursor;
+                  const freq = 220 + (creature?.modules?.length || 0) * 18;
+                  playTone(freq, p.waveform, p.duration, p.volume * 0.85, p.detune, p.attack, p.release);
               }
 
               function playBirthSound() {
@@ -3694,74 +3834,171 @@
                   }
               }
 
-              function calculateTotalMultiplier() {
-                  if (!creatures || creatures.length === 0) return 1;
+              // ==================== MASTER SCORING ENGINE ====================
+              // Single source of truth for multipliers, passive ticks, and instant awards.
+              // The sidebar additive system (pop/pred/modules/tiers) is authoritative.
+              const ScoreEngine = {
+                  _cache: null,
+                  _cacheFrame: -1,
 
-                  let pop = creatures.length;
-                  let predators = creatures.filter(c => c.isPredator).length;
+                  analyzePopulation() {
+                      const tierCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0 };
+                      let totalModules = 0;
+                      let predators = 0;
+                      const pop = creatures.length;
 
-                  let totalModules = 0;
-                  let tierCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0 };
-
-                  for (let c of creatures) {
-                      totalModules += c.modules.length;
-                      for (let m of c.modules) {
-                          const t = m.tier || 1;
-                          if (tierCounts[t] !== undefined) tierCounts[t]++;
+                      for (let c of creatures) {
+                          totalModules += c.modules.length;
+                          if (c.isPredator) predators++;
+                          for (let m of c.modules) {
+                              const t = m.tier || 1;
+                              if (tierCounts[t] !== undefined) tierCounts[t]++;
+                          }
                       }
+
+                      return {
+                          pop,
+                          predators,
+                          avgModules: pop > 0 ? totalModules / pop : 0,
+                          tierCounts,
+                          totalModules
+                      };
+                  },
+
+                  computeAdditiveMultiplier(stats) {
+                      let total = 0;
+                      total += stats.pop * MULTIPLIER_RATES.population;
+                      total += stats.predators * MULTIPLIER_RATES.predators;
+                      total += stats.avgModules * MULTIPLIER_RATES.avgModules;
+                      for (let t = 1; t <= 10; t++) {
+                          total += (stats.tierCounts[t] || 0) * (TIER_MULTIPLIERS[t] || 0);
+                      }
+                      return Math.max(0.5, total);
+                  },
+
+                  computeBreakdown(stats) {
+                      const tiers = {};
+                      for (let t = 1; t <= 10; t++) {
+                          tiers[t] = (stats.tierCounts[t] || 0) * (TIER_MULTIPLIERS[t] || 0);
+                      }
+                      return {
+                          population: stats.pop * MULTIPLIER_RATES.population,
+                          predators: stats.predators * MULTIPLIER_RATES.predators,
+                          avgModules: stats.avgModules * MULTIPLIER_RATES.avgModules,
+                          tiers
+                      };
+                  },
+
+                  getSurvivalBandMultiplier(pop) {
+                      if (pop < 10) return 5.0;
+                      if (pop < 30) return 3.5;
+                      if (pop < 50) return 2.6;
+                      if (pop < 80) return 2.0;
+                      if (pop < 100) return 1.6;
+                      if (pop < 150) return 1.3;
+                      return 1.0;
+                  },
+
+                  getMultiplierSnapshot() {
+                      if (this._cacheFrame === frameCount && this._cache) return this._cache;
+
+                      const stats = this.analyzePopulation();
+                      const additiveMult = this.computeAdditiveMultiplier(stats);
+                      const furnaceMult = (typeof getBurningMultiplier === 'function') ? getBurningMultiplier() : 1;
+
+                      this._cache = {
+                          stats,
+                          additiveMult,
+                          furnaceMult,
+                          survivalBand: this.getSurvivalBandMultiplier(stats.pop),
+                          breakdown: this.computeBreakdown(stats)
+                      };
+                      this._cacheFrame = frameCount;
+                      window.currentScoreMultiplier = additiveMult;
+                      return this._cache;
+                  },
+
+                  syncCurrency() {
+                      highRollerPoints = totalScore;
+                      window.highRollerPoints = totalScore;
+                  },
+
+                  addPoints(amount) {
+                      if (amount <= 0) return 0;
+                      totalScore += amount;
+                      this.syncCurrency();
+                      return amount;
+                  },
+
+                  spend(amount) {
+                      if (amount <= 0 || totalScore < amount) return false;
+                      totalScore -= amount;
+                      this.syncCurrency();
+                      return true;
+                  },
+
+                  computeAwardedAmount(baseAmount, options = {}) {
+                      const { applyGlobalMult = true, applyFurnace = true } = options;
+                      let amount = baseAmount;
+                      const snap = this.getMultiplierSnapshot();
+                      if (applyGlobalMult) amount *= snap.additiveMult;
+                      if (applyFurnace) amount *= snap.furnaceMult;
+                      return Math.floor(amount);
+                  },
+
+                  award(baseAmount, options = {}) {
+                      return this.addPoints(this.computeAwardedAmount(baseAmount, options));
+                  },
+
+                  tickPassive() {
+                      if (paused) return;
+
+                      const now = Date.now();
+                      if (now - lastScoreUpdate < 180) return;
+                      lastScoreUpdate = now;
+
+                      const deltaMinutes = (simTime - lastScoreSimTime) / 60;
+                      lastScoreSimTime = simTime;
+                      if (deltaMinutes <= 0) return;
+
+                      const snap = this.getMultiplierSnapshot();
+                      const pileBonus = calculatePileBonus();
+                      const predBonusPerMinute = totalPredatorKills * 0.5;
+                      const minuteRate = (12 + pileBonus + predBonusPerMinute) * snap.survivalBand;
+                      const points = Math.floor(minuteRate * deltaMinutes * snap.additiveMult * snap.furnaceMult);
+                      this.addPoints(points);
+                  },
+
+                  format(num) {
+                      if (num >= 10000000) return num.toExponential(2).replace('+', '');
+                      if (num >= 1000000) return (num / 1000000).toFixed(2) + 'M';
+                      return Math.floor(num).toLocaleString();
                   }
+              };
 
-                  const avgModules = totalModules / pop;
-
-                  // Calculate additive contributions
-                  let total = 0;
-
-                  // Population contribution
-                  total += pop * MULTIPLIER_RATES.population;
-
-                  // Predators contribution
-                  total += predators * MULTIPLIER_RATES.predators;
-
-                  // Avg Modules contribution
-                  total += avgModules * MULTIPLIER_RATES.avgModules;
-
-                  // Tier contributions (using your existing TIER_MULTIPLIERS)
-                  for (let t = 1; t <= 10; t++) {
-                      const rate = TIER_MULTIPLIERS[t] || 0;
-                      total += (tierCounts[t] || 0) * rate;
-                  }
-
-                  return Math.max(0.5, total);
+              function formatScore(num) {
+                  return ScoreEngine.format(num);
               }
 
               function createPredatorFromGeneVaultOrRandom() {
-                  // Try to pull from Gene Vault first
-                  if (geneVault && geneVault.length > 0) {
-                      let template = random(geneVault);
-                      let predator = new Creature(template.x || random(width), template.y || random(height));
-
-                      // Copy some traits from the vault creature
+                  const filledSlots = geneVaultSlots.filter(s => s !== null);
+                  if (filledSlots.length > 0) {
+                      let template = random(filledSlots);
+                      let predator = new Creature(random(width), random(height));
                       predator.modules = JSON.parse(JSON.stringify(template.modules || []));
                       predator.generation = (template.generation || 1) + 1;
                       predator.isPredator = true;
                       predator.energy = 120;
-                      predator.size = 18;
-
                       return predator;
                   }
 
-                  // Fallback: create a random low-level predator
                   let predator = new Creature(random(width), random(height));
                   predator.isPredator = true;
                   predator.energy = 100;
-                  predator.size = 17;
-
-                  // Give it a couple basic modules
-                  const basicTypes = ['Mover', 'Sensor', 'Harvester'];
+                  const basicTypes = ['mover', 'sensor', 'harvester'];
                   for (let i = 0; i < 2; i++) {
                       predator.modules.push({ type: random(basicTypes), tier: 1 });
                   }
-
                   return predator;
               }
 
@@ -3910,19 +4147,6 @@
                   drawLayer(hiddenCount, midX, 'H', Array(hiddenCount).fill(0.5));
                   drawLayer(outputCount, rightX, 'O', brainOutputs, true);
               }
-              function formatScore(num) {
-                  if (num >= 10000000) {
-                      // Exponential notation starts at 10 million (e+7)
-                      return num.toExponential(2).replace('+', '');
-                  }
-                  else if (num >= 1000000) {
-                      return (num / 1000000).toFixed(2) + 'M';
-                  }
-                  else {
-                      return Math.floor(num).toLocaleString();
-                  }
-              }
-
               function updateEvolveEnvironmentalCycle() {
                   if (currentMusicMode !== 'evolve') return;
                   evolveEnvTimer++;
@@ -4179,7 +4403,8 @@
               }
 
               function startFurnaceTimer() {
-                  setInterval(() => {
+                  if (furnaceIntervalId) clearInterval(furnaceIntervalId);
+                  furnaceIntervalId = setInterval(() => {
                       if (burningCrystals > 0 && furnaceEndTime <= Date.now()) {
                           burningCrystals = 0;
                           furnaceEndTime = 0;
@@ -4189,6 +4414,8 @@
               }
 
               function setupSpaceshipControls() {
+                  if (spaceshipControlsBound) return;
+                  spaceshipControlsBound = true;
                   document.addEventListener('keydown', function (e) {
                       if (!spaceshipActive) return;
 
@@ -4339,6 +4566,103 @@
                   modal.classList.add('hidden');
               }
 
+              function showModal(id) {
+                  const modal = document.getElementById(id);
+                  if (!modal) return;
+                  modal.classList.remove('hidden');
+                  modal.classList.add('flex');
+              }
+
+              function hideModal(id) {
+                  const modal = document.getElementById(id);
+                  if (!modal) return;
+                  modal.classList.remove('flex');
+                  modal.classList.add('hidden');
+              }
+
+              function showCheatsModal() {
+                  updateCheatsUI();
+                  showModal('cheats-modal');
+              }
+
+              function hideCheatsModal() {
+                  hideModal('cheats-modal');
+              }
+
+              function hideLegendModal() {
+                  hideModal('legend-modal');
+              }
+
+              function hideAnalyticsModal() {
+                  hideModal('analytics-modal');
+                  analyticsModalOpen = false;
+              }
+
+              function resetMiniGraphSelection() {
+                  miniChartVisible = {
+                      pop: true,
+                      predators: true,
+                      hr: true,
+                      modules: true,
+                      greenFood: true,
+                      blueFood: true
+                  };
+                  if (miniChartCtx) drawMiniChart();
+              }
+
+              function updateCheatsUI() {
+                  const balanceEl = document.getElementById('cheats-balance');
+                  if (balanceEl) balanceEl.innerText = totalScore.toLocaleString();
+
+                  const redBtn = document.getElementById('buy-red-btn');
+                  if (redBtn) {
+                      if (redHazardsUnlocked) {
+                          redBtn.textContent = redHazardsEnabled ? 'Enabled' : 'Disabled';
+                          redBtn.disabled = true;
+                      } else {
+                          redBtn.textContent = 'Enable';
+                          redBtn.disabled = totalScore < 180;
+                      }
+                  }
+
+                  const cursorBtn = document.getElementById('buy-cursor-btn');
+                  if (cursorBtn) {
+                      if (cursorHazardUnlocked) {
+                          cursorBtn.textContent = cursorHazardActive ? 'Active' : 'Inactive';
+                          cursorBtn.disabled = true;
+                      } else {
+                          cursorBtn.textContent = 'Enable';
+                          cursorBtn.disabled = totalScore < 240;
+                      }
+                  }
+              }
+
+              function updateQuickButtons() {
+                  const redBtn = document.getElementById('quick-red-btn');
+                  if (redBtn) {
+                      redBtn.classList.toggle('bg-red-500/30', redHazardsEnabled && redHazardsUnlocked);
+                      redBtn.classList.toggle('border-red-400/50', redHazardsEnabled && redHazardsUnlocked);
+                  }
+                  const cursorBtn = document.getElementById('quick-cursor-btn');
+                  if (cursorBtn) {
+                      cursorBtn.classList.toggle('bg-orange-500/30', cursorHazardActive && cursorHazardUnlocked);
+                      cursorBtn.classList.toggle('border-orange-400/50', cursorHazardActive && cursorHazardUnlocked);
+                  }
+              }
+
+              function buyRedHazards() {
+                  if (redHazardsUnlocked || !ScoreEngine.spend(180)) return;
+                  redHazardsUnlocked = true;
+                  redHazardsEnabled = true;
+                  if (redHazards.length < 6) {
+                      for (let i = 0; i < 6; i++) redHazards.push(new RedHazard());
+                  }
+                  addFloatingText(width / 2, 80, '-180', '#f87171');
+                  updateCheatsUI();
+                  updateQuickButtons();
+                  updateMainStats();
+              }
+
               // ==================== END FURNACE + CONVERSION ====================
 
               function generateSciFiName() {
@@ -4458,11 +4782,10 @@
                       alert(`Your Egg Inventory is full (${MAX_EGGS} max).`);
                       return;
                   }
-                  if (totalScore < 250000) {
+                  if (!ScoreEngine.spend(250000)) {
                       alert("You need 250,000 High Roller Points.");
                       return;
                   }
-                  totalScore -= 250000;
                   updateMainStats();
                   updateEggCountBadge();
                   addFloatingText(creature.x, creature.y - 30, "-250,000", '#fbbf24');
@@ -4854,15 +5177,8 @@
                   if (!slot || !slot.currentIncubation) return;
 
                   const egg = slot.currentIncubation.eggData;
-                  let finalScore = getEggScore(egg);
-                  finalScore *= getCurrentGlobalScoreMultiplier();
-                  finalScore *= slot.multiplier;
-
-                  const furnaceMult = getCurrentFurnaceMultiplier();
-                  if (furnaceMult > 1) finalScore *= furnaceMult;
-
-                  finalScore = Math.floor(finalScore);
-                  highRollerPoints = (highRollerPoints || 0) + finalScore;
+                  const baseScore = getEggScore(egg) * slot.multiplier;
+                  const finalScore = ScoreEngine.award(baseScore);
 
                   addFloatingText(width / 2, 85, `+${finalScore} Score`, '#fbbf24');
                   slot.currentIncubation = null;
@@ -4881,21 +5197,6 @@
                   slot.currentIncubation = null;
                   hideIncubationCompleteModal();
                   renderIncubatorSlots();
-              }
-
-              function getCurrentGlobalScoreMultiplier() {
-                  let m = 1.0;
-                  if (creatures.length > 100) m *= 1.12;
-                  if (creatures.filter(c => c.isPredator).length > 25) m *= 0.95;
-                  return m;
-              }
-
-              function getCurrentFurnaceMultiplier() {
-                  if (typeof burningCrystals !== 'undefined' && burningCrystals > 0 &&
-                      typeof furnaceEndTime !== 'undefined' && Date.now() < furnaceEndTime) {
-                      return (typeof getBurningMultiplier === 'function') ? getBurningMultiplier() : 1.5;
-                  }
-                  return 1;
               }
 
               function calculateIncubatorMultiplierGain(eggData) {
@@ -5059,20 +5360,24 @@
                   const vortexVal = document.getElementById('cheat-val-vortex');
                   if (vortexSlider && vortexVal) {
                       vortexSlider.oninput = () => {
-                          settings.vortexStrength = parseFloat(vortexSlider.value);
-                          vortexVal.innerText = settings.vortexStrength.toFixed(1);
+                          settings.vortexMultiplier = parseFloat(vortexSlider.value);
+                          vortexVal.innerText = settings.vortexMultiplier.toFixed(1);
                       };
                   }
               }
 
               function setup() {
+                  console.info('[MiniSimmy] build=mobile-opt-2026-06-17 tier=' + DeviceProfile.tier + ' mobile=' + DeviceProfile.isMobile);
                   debugLog("Setup started");
 
                   let canvas = createCanvas(820, 580);
+                  pixelDensity(1);
+                  frameRate(DeviceProfile.frameRate);
                   debugLog("createCanvas called");
 
                   canvas.parent('canvas-container');
                   canvas.mousePressed(handleMousePress);
+                  setupCanvasPointerInput(canvas);
                   debugLog("Canvas parented");
 
                   centerX = width / 2;
@@ -5088,10 +5393,11 @@
                   }
                   debugLog("Creatures created");
 
-                  updateScoreMultipliers();
+                  ScoreEngine.getMultiplierSnapshot();
                   debugLog("Score multipliers updated");
 
-                  for (let i = 0; i < 110; i++) {
+                  const vortexCount = DeviceProfile.vortexInit;
+                  for (let i = 0; i < vortexCount; i++) {
                       vortexParticles.push(new VortexParticle());
                   }
                   debugLog("Vortex particles created");
@@ -5118,6 +5424,7 @@
 
                   // === Delayed initialization for mobile reliability ===
                   setTimeout(() => {
+                      cacheMainDOM();
                       createEnvLabel();
                       debugLog("createEnvLabel done (delayed)");
 
@@ -5138,7 +5445,7 @@
 
                       debugLog("Before auto-select (delayed)");
 
-                      if (creatures.length > 0) {
+                      if (DeviceProfile.autoSelectCreature && creatures.length > 0) {
                           debugLog("Creatures exist, checking alpha...");
                           const alpha = getCurrentAlpha();
                           debugLog("getCurrentAlpha returned: " + (alpha ? "yes" : "no"));
@@ -5150,6 +5457,8 @@
                               debugLog("Selecting first creature...");
                               selectCreature(creatures[0]);
                           }
+                      } else if (IS_MOBILE) {
+                          trackAlpha = false;
                       }
                       debugLog("After auto-select (delayed)");
                       debugLog("Setup finished");
@@ -5157,16 +5466,7 @@
               }
 
               function draw() {
-                  debugLog("Draw running");
-                  updateFPS();
-
-                  // ==================== DEBUG ====================
-                  if (frameCount % 60 === 0) {
-                      console.log("%c[DEBUG] draw() is running | currentMusicMode =", "color:#f87171", currentMusicMode);
-                      console.log("%c[DEBUG] musicVisualizerActive =", "color:#f87171", musicVisualizerActive);
-                  }
-                  // ===============================================
-
+                  if (frameCount % DeviceProfile.fpsDisplayInterval === 0) updateFPS();
                   background(12, 14, 22);
 
                   // ==================== MUSIC VISUALIZER (Real Audio Reactive) ====================
@@ -5243,31 +5543,6 @@
                       return;
                   }
 
-                  if (paused) {
-                      drawWorld();
-                      updateMainStats();
-
-                      updateMainStats();
-
-                      // Live trends graph update
-                      if (frameCount % 25 === 0 && miniChartCtx) {
-                          drawMiniChart();
-                      }
-
-                      fill(255, 255, 255, 190);
-                      textAlign(LEFT);
-                      textSize(12);
-                      textFont('Inter, system-ui');
-                      if (isDay) {
-                          text('DAY', 16, 24);
-                      } else {
-                          text('NIGHT', 16, 24);
-                      }
-
-                      if (miniChartCtx) drawMiniChart();
-                      return;
-                  }
-
                   simTime += (1 / 60) * timeScale;
 
                   updateIncubatorSlotsProgress(timeScale);
@@ -5287,22 +5562,13 @@
                       }
                   }
 
-                  const timeEl = document.getElementById('sim-time');
+                  const timeEl = DOMCache.simTime || document.getElementById('sim-time');
                   if (timeEl) timeEl.innerText = formatSimTime(simTime);
 
-                  // FPS calculation
                   frameCountForFPS++;
                   const now = Date.now();
                   if (now - lastFPSUpdate > 500) {
                       currentFPS = Math.round((frameCountForFPS * 1000) / (now - lastFPSUpdate));
-                      const fpsEl = document.getElementById('fps-counter');
-                      if (fpsEl) {
-                          fpsEl.innerText = currentFPS;
-                          // Color code performance
-                          if (currentFPS >= 50) fpsEl.style.color = '#34d399';
-                          else if (currentFPS >= 30) fpsEl.style.color = '#fbbf24';
-                          else fpsEl.style.color = '#f87171';
-                      }
                       frameCountForFPS = 0;
                       lastFPSUpdate = now;
                   }
@@ -5452,7 +5718,7 @@
                                   c.hazardDamageTaken = (c.hazardDamageTaken || 0) + baseDamage;
 
                                   let dx = c.x - h.x;
-                                  let dy = c.y - h.x;
+                                  let dy = c.y - h.y;
                                   let len = sqrt(dx * dx + dy * dy) || 1;
                                   c.vx += (dx / len) * 2.2;
                                   c.vy += (dy / len) * 2.2;
@@ -5472,7 +5738,7 @@
                                           other.hazardDamageTaken = (other.hazardDamageTaken || 0) + oDamage;
 
                                           let odx = other.x - h.x;
-                                          let ody = other.y - h.x;
+                                          let ody = other.y - h.y;
                                           let olen = sqrt(odx * odx + ody * ody) || 1;
                                           other.vx += (odx / olen) * 1;
                                           other.vy += (ody / olen) * 1;
@@ -5518,11 +5784,8 @@
                       }
                   }
 
-                  // Draw floating texts (in world space)
-                  if (showDamageNumbers) {
-                      for (let ft of floatingTexts) {
-                          ft.show();
-                      }
+                  if (showDamageNumbers && DeviceProfile.floatingTextPasses >= 2) {
+                      for (let ft of floatingTexts) ft.show();
                   }
 
                   // === Draw Energy Walls (with splitting behavior) ===
@@ -5988,11 +6251,10 @@
                       }
                   }
 
-                  // Dynamic particle throttling (performance-aware) - restored
-                  let maxVortexParticles = 130;
-                  if (currentFPS < 45) maxVortexParticles = 80;
-                  if (currentFPS < 30) maxVortexParticles = 50;
-                  if (creatures.length > 120) maxVortexParticles = Math.min(maxVortexParticles, 70);
+                  let maxVortexParticles = DeviceProfile.vortexMax;
+                  if (currentFPS < 45) maxVortexParticles = Math.round(maxVortexParticles * 0.65);
+                  if (currentFPS < 30) maxVortexParticles = Math.round(maxVortexParticles * 0.45);
+                  if (creatures.length > 120) maxVortexParticles = Math.min(maxVortexParticles, Math.round(DeviceProfile.vortexMax * 0.55));
 
                   if (frameCount % Math.max(1, Math.floor(2 / timeScale)) === 0 && vortexParticles.length < maxVortexParticles) {
                       vortexParticles.push(new VortexParticle(true));
@@ -6249,91 +6511,120 @@
 
                   let readyCount = 0;
 
-                  for (let i = creatures.length - 1; i >= 0; i--) {
-                      let c = creatures[i];
-                      c.update(isDay, vortexDir, vortexStrength, timeScale, envMods);
+                  // === PROTECTED CREATURE UPDATE LOOP (with debug) ===
+                  debugCreatureUpdateCount = 0;
+                  let lastMovementThisFrame = false;
 
-                      const energyReady = c.energy > 60;
-                      const cooldownsReady = c.reproCooldown <= 0 && globalReproCooldown <= 0;
-                      const isReady = energyReady && cooldownsReady;
+                  debugLog("Before creature loop");
 
-                      if (isReady) readyCount++;
+                  try {
+                      for (let i = creatures.length - 1; i >= 0; i--) {
+                          let c = creatures[i];
+                          c.update(isDay, vortexDir, vortexStrength, timeScale, envMods);
+                          debugCreatureUpdateCount++;
 
-                      if (isReady) {
-                          let chance = settings.reproductionChance * envMods.reproMult;
-
-                          let avoidanceBonus = 1 + (c.hazardsAvoided || 0) * 0.0035;
-                          if ((c.hazardDamageTaken || 0) > 48) avoidanceBonus *= 0.68;
-                          chance *= avoidanceBonus;
-
-                          if (c.energy > 78) {
-                              chance *= 4.2;
-                          } else if (c.energy > 68) {
-                              chance *= 2.35;
+                          // Track if any creature actually moved this frame
+                          if (c.vx !== 0 || c.vy !== 0) {
+                              lastMovementThisFrame = true;
+                              debugLastCreatureMovement = frameCount;
                           }
 
-                          const roll = random();
-                          const effectiveChance = chance * timeScale;
+                          const energyReady = c.energy > 60;
+                          const cooldownsReady = c.reproCooldown <= 0 && globalReproCooldown <= 0;
+                          const isReady = energyReady && cooldownsReady;
 
-                          if (roll < effectiveChance) {
-                              let offspring = c.reproduce();
-                              if (offspring) {
-                                  creatures.push(offspring);
-                                  globalReproCooldown = 2;
-                                  c.reproCooldown = 16;
-                                  c.energy -= 5.5;
-                                  c.children.push(offspring.name);
-                                  c.childrenCount++;
-                                  playBirthSound();
+                          if (isReady) readyCount++;
 
-                                  addFloatingText(c.x, c.y - 14, '+8', '#c084fc');
+                          if (isReady) {
+                              let chance = settings.reproductionChance * envMods.reproMult;
+
+                              let avoidanceBonus = 1 + (c.hazardsAvoided || 0) * 0.0035;
+                              if ((c.hazardDamageTaken || 0) > 48) avoidanceBonus *= 0.68;
+                              chance *= avoidanceBonus;
+
+                              if (c.energy > 78) {
+                                  chance *= 4.2;
+                              } else if (c.energy > 68) {
+                                  chance *= 2.35;
+                              }
+
+                              const roll = random();
+                              const effectiveChance = chance * timeScale;
+
+                              if (roll < effectiveChance) {
+                                  let offspring = c.reproduce();
+                                  if (offspring) {
+                                      creatures.push(offspring);
+                                      globalReproCooldown = 2;
+                                      c.reproCooldown = 16;
+                                      c.energy -= 5.5;
+                                      c.children.push(offspring.name);
+                                      c.childrenCount++;
+                                      playBirthSound();
+                                      addFloatingText(c.x, c.y - 14, '+8', '#c084fc');
+                                  }
                               }
                           }
-                      }
 
-                      if (c.energy < 24 && random() < 0.009 * timeScale) {
-                          playTone(195, 'sawtooth', 0.12, 0.016);
-                          c.currentThought = "Hungry";
-                      }
+                          if (c.energy < 24 && random() < 0.009 * timeScale) {
+                              playTone(195, 'sawtooth', 0.12, 0.016);
+                              c.currentThought = "Hungry";
+                          }
 
-                      if (c.energy <= 0) {
-                          let targetIsGreen = isDay;
-                          let releasedEnergy = Math.max(7, Math.floor(c.energy * -0.55) + 11);
-                          energyOrbs.push({ x: c.x, y: c.y, radius: 11, life: 240, energy: releasedEnergy, targetIsGreen, age: 0 });
-                          playDeathSound();
+                          if (c.energy <= 0) {
+                              let targetIsGreen = isDay;
+                              let releasedEnergy = Math.max(7, Math.floor(c.energy * -0.55) + 11);
+                              energyOrbs.push({ x: c.x, y: c.y, radius: 11, life: 240, energy: releasedEnergy, targetIsGreen, age: 0 });
+                              playDeathSound();
 
-                          // === NEW: Inspector death handling (v2.11.1) ===
-                          if (selectedCreature === c) {
-                              let replacement = null;
+                              // === NEW: Inspector death handling (v2.11.1) ===
+                              if (selectedCreature === c) {
+                                  let replacement = null;
 
-                              // Check if a predator is very close (likely killed it)
-                              for (let other of creatures) {
-                                  if (other.isPredator && dist(c.x, c.y, other.x, other.y) < 45) {
-                                      replacement = other;
-                                      break;
+                                  // Check if a predator is very close (likely killed it)
+                                  for (let other of creatures) {
+                                      if (other.isPredator && dist(c.x, c.y, other.x, other.y) < 45) {
+                                          replacement = other;
+                                          break;
+                                      }
+                                  }
+
+                                  // If no predator nearby, switch to current Alpha
+                                  if (!replacement) {
+                                      replacement = getCurrentAlpha();
+                                  }
+
+                                  if (replacement && replacement !== c) {
+                                      selectCreature(replacement);
+                                  } else {
+                                      deselectCreature();
                                   }
                               }
 
-                              // If no predator nearby, switch to current Alpha
-                              if (!replacement) {
-                                  replacement = getCurrentAlpha();
-                              }
-
-                              if (replacement && replacement !== c) {
-                                  selectCreature(replacement);
-                              } else {
-                                  deselectCreature();
-                              }
+                              creatures.splice(i, 1);
+                          } else {
+                              c.show();
                           }
-
-                          creatures.splice(i, 1);
-                      } else {
-                          c.show();
                       }
+
+                      debugLog("After creature loop");
+
+                      if (DEBUG_MODE && frameCount % 10 === 0) {
+                          const statusEl = document.getElementById('debug-simulation-health');
+                          if (statusEl) {
+                              const movementInfo = lastMovementThisFrame ? "moving" : "no movement";
+                              statusEl.innerHTML = `Health: <span style="color:#4ade80">OK</span> | Creatures: ${creatures.length} | Updated: ${debugCreatureUpdateCount} | ${movementInfo}`;
+                          }
+                      }
+
+                  } catch (err) {
+                      debugLog(`ERROR in creature update: ${err.message}`);
+                      updateDebugSimulationHealth(false, `Error: ${err.message}`);
+                      console.error("Creature update error:", err);
                   }
 
+                  // Pressure + evolution recording (keep these)
                   let pressure = Math.max(0, (creatures.length - 11) * 0.005);
-
                   for (let c of creatures) c.energy -= pressure * timeScale;
 
                   if (frameCount % Math.max(1, Math.floor(55 / timeScale)) === 0 && creatures.length > 0) {
@@ -6779,10 +7070,10 @@
                       circle(p.x, p.y, p.size * 0.5);
                   }
 
-                  // Draw floating texts again on top (screen space for better visibility)
                   if (showDamageNumbers) {
-                      for (let ft of floatingTexts) {
-                          ft.show();
+                      const skipHeavy = IS_MOBILE && floatingTexts.length > 12 && frameCount % 2 !== 0;
+                      if (!skipHeavy) {
+                          for (let ft of floatingTexts) ft.show();
                       }
                   }
 
@@ -6796,8 +7087,7 @@
                       text('NIGHT', 16, 24);
                   }
 
-                  // Live Music Debug - Improved frequency bands
-                  if (musicEnabled) {
+                  if (musicEnabled && !IS_MOBILE) {
                       fill(180, 255, 200, 210);
                       textSize(10);
                       text(
@@ -6812,8 +7102,7 @@
                       );
                   }
 
-                  // === Live Trends Chart Update (every ~6 frames) ===
-                  if (frameCount % 6 === 0 && typeof drawMiniChart === 'function' && miniChartCtx) {
+                  if (frameCount % DeviceProfile.chartInterval === 0 && typeof drawMiniChart === 'function' && miniChartCtx) {
                       drawMiniChart();
                   }
 
@@ -6821,18 +7110,20 @@
                   if (typeof updateVegasScore === 'function') {
                       updateVegasScore();
                   }
-                  updateMainStats();
-                  updatePrestigePreview();
-                  updatePrestigeButtonGlow();
+                  if (frameCount % UI_UPDATE_INTERVAL === 0) {
+                      updateMainStats();
+                      updatePrestigePreview();
+                      updatePrestigeButtonGlow();
+                  }
                   // ==================== AUTO-TRACK CURRENT ALPHA ====================
-                  if (trackAlpha && frameCount % 60 === 0) {   // Check every ~1 second
+                  if (trackAlpha && frameCount % DeviceProfile.alphaTrackInterval === 0) {
                       const alpha = getCurrentAlpha();
-                      if (alpha) {
-                          selectCreature(alpha);   // This keeps the inspector showing the current best creature
+                      if (alpha && alpha !== selectedCreature) {
+                          selectCreature(alpha);
                       }
                   }
 
-                  if (selectedCreature) {
+                  if (selectedCreature && frameCount % INSPECTOR_UPDATE_INTERVAL === 0) {
                       updateInspector();
                   }
                   // ==================== MUSIC MODE LOGIC ====================
@@ -6873,8 +7164,10 @@
                       modules: [],
                       predators: [],
                       greenFood: [],
-                      blueFood: []
+                      blueFood: [],
+                      hr: []
                   };
+                  lastScoreSimTime = 0;
                   greenZone.food = 320;
                   blueZone.food = 320;
                   globalReproCooldown = 0;
@@ -6905,6 +7198,7 @@
                   deselectCreature();
                   totalScore = 0;
                   totalPredatorKills = 0;
+                  ScoreEngine.syncCurrency();
 
                   const scoreEl = document.getElementById('vegas-score');
                   if (scoreEl) scoreEl.innerText = '0';
@@ -6923,7 +7217,7 @@
                   for (let i = 0; i < 9; i++) {
                       creatures.push(new Creature(random(width), random(height)));
                   }
-                  for (let i = 0; i < 110; i++) {
+                  for (let i = 0; i < DeviceProfile.vortexInit; i++) {
                       vortexParticles.push(new VortexParticle());
                   }
                   for (let i = 0; i < 6; i++) {
@@ -7073,6 +7367,7 @@
 
               function setTimeScale(scale) {
                   if (scale === 8) return;
+                  if ((scale === 2 || scale === 4) && !unlockedSpeeds[scale]) return;
                   timeScale = scale;
                   document.querySelectorAll('[id^="speed-"]').forEach(el => {
                       el.classList.remove('active', 'bg-emerald-500', 'text-[#0a0a0f]');
@@ -7397,8 +7692,7 @@
               }
 
               function buyCursorHazard() {
-                  if (totalScore < 240) return;
-                  totalScore -= 240;
+                  if (!ScoreEngine.spend(240)) return;
                   cursorHazardUnlocked = true;
                   cursorHazardActive = true;
 
@@ -7430,9 +7724,7 @@
                   else if (speed === 4) cost = 280;
                   else if (speed === 8) cost = 520;
 
-                  if (totalScore < cost || unlockedSpeeds[speed]) return;
-
-                  totalScore -= cost;
+                  if (unlockedSpeeds[speed] || !ScoreEngine.spend(cost)) return;
                   unlockedSpeeds[speed] = true;
 
                   // Auto-enable the speed
@@ -7492,57 +7784,7 @@
               }
 
               function updateVegasScore() {
-                  if (paused) return;
-
-                  const now = Date.now();
-                  if (now - lastScoreUpdate < 180) return;
-                  lastScoreUpdate = now;
-
-                  // Calculate points earned this tick based on time passed
-                  const minutes = simTime / 60;
-                  let baseScore = Math.floor(minutes * 12);
-
-                  let multiplier = 1.0;
-                  const pop = creatures.length;
-
-                  if (pop < 10) multiplier = 5.0;
-                  else if (pop < 30) multiplier = 3.5;
-                  else if (pop < 50) multiplier = 2.6;
-                  else if (pop < 80) multiplier = 2.0;
-                  else if (pop < 100) multiplier = 1.6;
-                  else if (pop < 150) multiplier = 1.3;
-
-                  const pileBonus = calculatePileBonus();
-                  baseScore += pileBonus;
-
-                  const predKillBonus = totalPredatorKills * 28;
-                  baseScore += predKillBonus;
-
-                  const popPredModuleMults = getScoreMultipliers();
-                  const furnaceMult = getBurningMultiplier();
-
-                  // Calculate how much to ADD this tick (not replace)
-                  const pointsThisTick = Math.floor(
-                      baseScore * multiplier * furnaceMult * popPredModuleMults.total
-                  );
-
-                  // Only add if positive (prevents going down)
-                  if (pointsThisTick > 0) {
-                      totalScore += pointsThisTick;
-                  }
-
-                  // Update UI
-                  const scoreEl = document.getElementById('vegas-score');
-                  if (scoreEl) scoreEl.innerText = totalScore.toLocaleString();
-
-                  const multEl = document.getElementById('vegas-multiplier');
-                  if (multEl) multEl.innerText = multiplier.toFixed(1) + '×';
-
-                  const pileEl = document.getElementById('pile-bonus');
-                  if (pileEl) pileEl.innerText = '+' + pileBonus;
-
-                  const killsEl = document.getElementById('pred-kills');
-                  if (killsEl) killsEl.innerText = totalPredatorKills;
+                  ScoreEngine.tickPassive();
               }
 
               // ==================== SCORE BREAKDOWN MODAL ====================
@@ -7551,9 +7793,9 @@
                   modal.className = 'fixed inset-0 z-[200] flex items-center justify-center bg-black/80';
                   modal.onclick = () => modal.remove();
 
-                  const mults = getScoreMultipliers();
+                  const snap = ScoreEngine.getMultiplierSnapshot();
+                  const bd = snap.breakdown;
                   const isBurning = burningCrystals > 0 && furnaceEndTime > Date.now();
-                  const furnaceMult = getBurningMultiplier();
 
                   let html = `
                   <div onclick="event.stopImmediatePropagation()"
@@ -7565,13 +7807,12 @@
                                   <i class="fa-solid fa-chart-line text-emerald-400"></i>
                                   <span>Score Breakdown</span>
                               </h3>
-                              <div class="text-xs text-white/50 mt-0.5">Live multipliers & bonuses</div>
+                              <div class="text-xs text-white/50 mt-0.5">Additive multipliers (matches sidebar)</div>
                           </div>
                           <button onclick="this.closest('.fixed').remove()"
                                   class="text-3xl leading-none text-white/60 hover:text-white">&times;</button>
                       </div>
 
-                      <!-- Current Total -->
                       <div class="mb-5 rounded-2xl border border-emerald-500/30 bg-[#0a0a0f] p-4">
                           <div class="text-xs text-white/50">CURRENT HIGH ROLLER POINTS</div>
                           <div class="font-mono text-4xl font-bold text-emerald-400 tabular-nums">
@@ -7580,50 +7821,36 @@
                       </div>
 
                       <div class="space-y-3 text-sm">
-              `;
-
-                  // Population Multiplier
-                  html += `
                   <div class="flex justify-between items-center rounded-xl bg-white/5 px-4 py-2.5">
                       <div class="flex items-center gap-x-2">
                           <i class="fa-solid fa-users text-emerald-400 w-4"></i>
-                          <span>Population</span>
+                          <span>Population (${snap.stats.pop})</span>
                       </div>
-                      <div class="font-mono text-emerald-400">×${mults.population.toFixed(2)}</div>
+                      <div class="font-mono text-emerald-400">+${bd.population.toFixed(2)}</div>
                   </div>
-              `;
-
-                  // Predator Multiplier
-                  html += `
                   <div class="flex justify-between items-center rounded-xl bg-white/5 px-4 py-2.5">
                       <div class="flex items-center gap-x-2">
                           <i class="fa-solid fa-skull text-red-400 w-4"></i>
-                          <span>Predators</span>
+                          <span>Predators (${snap.stats.predators})</span>
                       </div>
-                      <div class="font-mono text-red-400">×${mults.predators.toFixed(2)}</div>
+                      <div class="font-mono text-red-400">+${bd.predators.toFixed(2)}</div>
                   </div>
-              `;
-
-                  // Avg Modules Multiplier
-                  html += `
                   <div class="flex justify-between items-center rounded-xl bg-white/5 px-4 py-2.5">
                       <div class="flex items-center gap-x-2">
                           <i class="fa-solid fa-microchip text-violet-400 w-4"></i>
-                          <span>Avg Modules</span>
+                          <span>Avg Modules (${snap.stats.avgModules.toFixed(1)})</span>
                       </div>
-                      <div class="font-mono text-violet-400">×${mults.avgModules.toFixed(2)}</div>
+                      <div class="font-mono text-violet-400">+${bd.avgModules.toFixed(2)}</div>
                   </div>
-              `;
-
-                  // Combined Multiplier
-                  html += `
                   <div class="flex justify-between items-center rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 font-semibold">
-                      <span>Combined Multiplier</span>
-                      <span class="font-mono text-emerald-400">×${mults.total.toFixed(2)}</span>
+                      <span>Total × Mult</span>
+                      <span class="font-mono text-emerald-400">×${snap.additiveMult.toFixed(2)}</span>
                   </div>
-              `;
+                  <div class="flex justify-between items-center rounded-xl bg-white/5 px-4 py-2.5">
+                      <span>Survival Band (passive only)</span>
+                      <span class="font-mono text-amber-400">×${snap.survivalBand.toFixed(1)}</span>
+                  </div>`;
 
-                  // Furnace Bonus
                   if (isBurning) {
                       html += `
                       <div class="flex justify-between items-center rounded-xl bg-orange-500/10 px-4 py-2.5">
@@ -7631,9 +7858,8 @@
                               <i class="fa-solid fa-fire text-orange-400 w-4"></i>
                               <span>Furnace Bonus</span>
                           </div>
-                          <div class="font-mono text-orange-400">×${furnaceMult}</div>
-                      </div>
-                  `;
+                          <div class="font-mono text-orange-400">×${snap.furnaceMult.toLocaleString()}</div>
+                      </div>`;
                   }
 
                   html += `</div></div>`;
@@ -7641,54 +7867,8 @@
                   document.body.appendChild(modal);
               }
 
-              // ==================== CENTRAL SCORING FUNCTION ====================
               function addScore(amount) {
-                  if (amount <= 0) return;
-
-                  const mults = getScoreMultipliers();
-                  const finalAmount = amount * mults.total;
-
-                  totalScore += finalAmount;
-
-                  // Optional: show floating text with multiplier (you can remove this if you want)
-                  // addFloatingText(width/2, 60, `+${Math.floor(finalAmount)}`, '#34d399');
-              }
-
-              // ==================== POPULATION / PREDATORS / MODULES → SCORE MULTIPLIERS ====================
-              function getScoreMultipliers() {
-                  const pop = creatures.length;
-                  const predCount = (typeof predators !== 'undefined' && predators) ? predators.length : 0;
-
-                  // Calculate average modules
-                  let avgModules = 0;
-                  if (pop > 0) {
-                      let totalModules = 0;
-                      for (let c of creatures) {
-                          totalModules += c.modules.length;
-                      }
-                      avgModules = totalModules / pop;
-                  }
-
-                  // === Population Multiplier ===
-                  // More creatures = more points generated (soft cap)
-                  const popMult = 1 + Math.min(pop / 90, 1.6);
-
-                  // === Predator Multiplier ===
-                  // More predators = higher risk/reward multiplier
-                  const predMult = 1 + Math.min(predCount / 10, 1.0);
-
-                  // === Average Modules Multiplier ===
-                  // Higher average module count = stronger multiplier
-                  const moduleMult = 1 + Math.min((avgModules - 1.2) * 0.18, 2.5);
-
-                  const totalMult = popMult * predMult * moduleMult;
-
-                  return {
-                      population: popMult,
-                      predators: predMult,
-                      avgModules: moduleMult,
-                      total: totalMult
-                  };
+                  ScoreEngine.award(amount);
               }
 
               function updateGraphData() {
@@ -7831,88 +8011,39 @@
               function updateMainStats() {
                   if (!greenZone || !blueZone) return;
 
-                  let totalModules = 0;
-                  let predators = 0;
-                  let tierCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0 };
+                  const snap = ScoreEngine.getMultiplierSnapshot();
+                  const { pop, predators, avgModules, tierCounts } = snap.stats;
+                  const avgModulesDisplay = pop > 0 ? avgModules.toFixed(1) : "0.0";
 
-                  for (let c of creatures) {
-                      totalModules += c.modules.length;
-                      if (c.isPredator) predators++;
-                      for (let m of c.modules) {
-                          const t = m.tier || 1;
-                          if (tierCounts[t] !== undefined) tierCounts[t]++;
-                      }
-                  }
-
-                  const avgModules = creatures.length > 0
-                      ? (totalModules / creatures.length).toFixed(1)
-                      : "0.0";
-
-                  // === Score Display ===
-                  const topScoreEl = document.getElementById('top-score');
+                  const topScoreEl = DOMCache.topScore || document.getElementById('top-score');
                   if (topScoreEl) topScoreEl.innerText = formatScore(totalScore);
 
-                  const mainScoreEl = document.getElementById('vegas-score');
+                  const mainScoreEl = DOMCache.vegasScore || document.getElementById('vegas-score');
                   if (mainScoreEl) mainScoreEl.innerText = formatScore(totalScore);
 
-                  // ==================== UPDATE MAIN STATS (Stacked Layout) ====================
-                  const popEl = document.getElementById('stat-pop');
-                  const predEl = document.getElementById('stat-pred');
-                  const modEl = document.getElementById('stat-modules');
+                  const popEl = DOMCache.statPop || document.getElementById('stat-pop');
+                  const predEl = DOMCache.statPred || document.getElementById('stat-pred');
+                  const modEl = DOMCache.statModules || document.getElementById('stat-modules');
 
-                  if (popEl) popEl.innerText = creatures.length;
+                  if (popEl) popEl.innerText = pop;
                   if (predEl) predEl.innerText = predators;
-                  if (modEl) modEl.innerText = avgModules;
+                  if (modEl) modEl.innerText = avgModulesDisplay;
 
-                  // Tier counts
-                  if (document.getElementById('stat-tier1')) document.getElementById('stat-tier1').innerText = tierCounts[1];
-                  if (document.getElementById('stat-tier2')) document.getElementById('stat-tier2').innerText = tierCounts[2];
-                  if (document.getElementById('stat-tier3')) document.getElementById('stat-tier3').innerText = tierCounts[3];
-                  if (document.getElementById('stat-tier4')) document.getElementById('stat-tier4').innerText = tierCounts[4];
-                  if (document.getElementById('stat-tier5')) document.getElementById('stat-tier5').innerText = tierCounts[5];
-                  if (document.getElementById('stat-tier6')) document.getElementById('stat-tier6').innerText = tierCounts[6];
-                  if (document.getElementById('stat-tier7')) document.getElementById('stat-tier7').innerText = tierCounts[7];
-                  if (document.getElementById('stat-tier8')) document.getElementById('stat-tier8').innerText = tierCounts[8];
-                  if (document.getElementById('stat-tier9')) document.getElementById('stat-tier9').innerText = tierCounts[9];
-                  if (document.getElementById('stat-tier10')) document.getElementById('stat-tier10').innerText = tierCounts[10];
+                  for (let t = 1; t <= 10; t++) {
+                      const el = DOMCache['statTier' + t] || document.getElementById('stat-tier' + t);
+                      if (el) el.innerText = tierCounts[t];
+                  }
 
-                  // Update top bar (timer, bonus, glow)
                   if (typeof updateTopFurnaceUI === 'function') {
                       updateTopFurnaceUI();
                   }
 
-                  // ==================== NEW FIXED-RATE ADDITIVE MULTIPLIER SYSTEM ====================
-                  const pop = creatures.length;
-                  const predatorCount = predators;
-                  const avgMod = parseFloat(avgModules);
-
-                  // Calculate total additive multiplier
-                  let totalMult = 0;
-
-                  // Population contribution
-                  totalMult += pop * MULTIPLIER_RATES.population;
-
-                  // Predators contribution
-                  totalMult += predatorCount * MULTIPLIER_RATES.predators;
-
-                  // Avg Modules contribution
-                  totalMult += avgMod * MULTIPLIER_RATES.avgModules;
-
-                  // Tier contributions (using central TIER_MULTIPLIERS)
-                  for (let t = 1; t <= 10; t++) {
-                      totalMult += (tierCounts[t] || 0) * (TIER_MULTIPLIERS[t] || 0);
-                  }
-
-                  totalMult = Math.max(0.5, totalMult);
-
-                  // Main multiplier display
-                  const multEl = document.getElementById('score-multiplier');
+                  const multEl = DOMCache.scoreMultiplier || document.getElementById('score-multiplier');
                   if (multEl) {
-                      multEl.innerText = totalMult.toFixed(2);
+                      multEl.innerText = snap.additiveMult.toFixed(2);
                       multEl.style.fontSize = '22px';
                   }
 
-                  // ==================== SMALL FIXED MULTIPLIERS (Below the big numbers) ====================
                   const setMult = (id, value) => {
                       const el = document.getElementById(id);
                       if (el) el.innerText = '×' + value.toFixed(2);
@@ -7922,9 +8053,6 @@
                   setMult('mult-pred', MULTIPLIER_RATES.predators);
                   setMult('mult-avgmod', MULTIPLIER_RATES.avgModules);
 
-                  window.currentScoreMultiplier = totalMult;
-
-                  // Update tier contribution displays
                   updateTierMultiplierDisplays(tierCounts);
               }
 
@@ -8084,11 +8212,13 @@
               function updateInspector() {
                   if (!selectedCreature) return;
                   const c = selectedCreature;
+                  const moduleSig = c.modules.length + ':' + c.modules.map(m => `${m.type}-${m.tier || 1}`).join(',');
 
-                  // Draw the creature preview
-                  const previewCanvas = document.getElementById('inspect-creature-preview');
-                  if (previewCanvas) {
-                      drawCreaturePreview(c, previewCanvas);
+                  if (frameCount % (INSPECTOR_UPDATE_INTERVAL * 2) === 0) {
+                      const previewCanvas = document.getElementById('inspect-creature-preview');
+                      if (previewCanvas) {
+                          drawCreaturePreview(c, previewCanvas);
+                      }
                   }
 
                   // Name + Alpha badge
@@ -8153,9 +8283,9 @@
                   const energyText = document.getElementById('inspect-energy-text');
                   if (energyText) energyText.innerText = Math.floor(c.energy) + '%';
 
-                  // Modules list
                   const modulesList = document.getElementById('inspect-modules-list');
-                  if (modulesList) {
+                  if (modulesList && moduleSig !== lastInspectorModuleSig) {
+                      lastInspectorModuleSig = moduleSig;
                       modulesList.innerHTML = '';
 
                       if (c.modules.length === 0) {
@@ -8178,9 +8308,9 @@
                       }
                   }
 
-                  // ==================== NEURAL NET VISUALIZER ====================
-                  // Draw the live 12 → 12 → 7 neural network
-                  if (typeof drawNeuralNet === 'function') {
+                  if (!IS_MOBILE && typeof drawNeuralNet === 'function') {
+                      drawNeuralNet(c);
+                  } else if (IS_MOBILE && frameCount % (INSPECTOR_UPDATE_INTERVAL * 4) === 0 && typeof drawNeuralNet === 'function') {
                       drawNeuralNet(c);
                   }
 
@@ -8193,97 +8323,6 @@
                       }
                   }
               }
-              // =====================================================
-              // SCORE MULTIPLIER SYSTEM (Updated with smart formatting)
-              // =====================================================
-              function updateScoreMultipliers() {
-                  if (!creatures || creatures.length === 0) return;
-
-                  // === Calculate base values ===
-                  const pop = creatures.length;
-                  const predatorCount = creatures.filter(c => c.isPredator).length;
-                  const totalModules = creatures.reduce((sum, c) => sum + c.modules.length, 0);
-                  const avgModules = totalModules / pop;
-
-                  // Count modules per tier
-                  const tierCounts = Array(11).fill(0);
-                  for (let c of creatures) {
-                      for (let m of c.modules) {
-                          const tier = m.tier || 1;
-                          if (tier >= 1 && tier <= 10) tierCounts[tier]++;
-                      }
-                  }
-
-                  // === Define Multipliers ===
-                  const popMult = 1 + Math.min(pop / 180, 1.8);
-                  const predMult = 1 + Math.min(predatorCount / 45, 1.6);
-                  const avgModMult = 1 + (avgModules * 0.38);
-
-                  let tierMult = 1;
-                  tierMult *= 1 + (tierCounts[1] * 0.0015);
-                  tierMult *= 1 + (tierCounts[2] * 0.0022);
-                  tierMult *= 1 + (tierCounts[3] * 0.0030);
-                  tierMult *= 1 + (tierCounts[4] * 0.0040);
-                  tierMult *= 1 + (tierCounts[5] * 0.0055);
-                  tierMult *= 1 + (tierCounts[6] * 0.0075);
-                  tierMult *= 1 + (tierCounts[7] * 0.010);
-                  tierMult *= 1 + (tierCounts[8] * 0.014);
-                  tierMult *= 1 + (tierCounts[9] * 0.019);
-                  tierMult *= 1 + (tierCounts[10] * 0.032);
-
-                  // Final total multiplier
-                  let totalMult = popMult * predMult * avgModMult * tierMult;
-                  totalMult = Math.max(0.6, Math.min(totalMult, 12));
-
-                  // === Update UI ===
-                  const scoreEl = document.getElementById('vegas-score');
-                  const multEl = document.getElementById('score-multiplier');
-
-                  // Smart score formatting (exponential earlier to prevent overlap)
-                  if (scoreEl) {
-                      let displayScore;
-                      if (totalScore >= 10000000) {
-                          displayScore = totalScore.toExponential(2).replace('+', '');
-                      } else if (totalScore >= 1000000) {
-                          displayScore = (totalScore / 1000000).toFixed(2) + 'M';
-                      } else {
-                          displayScore = Math.floor(totalScore).toLocaleString();
-                      }
-                      scoreEl.innerText = displayScore;
-                  }
-
-                  if (multEl) multEl.innerText = totalMult.toFixed(2);
-
-                  // Update individual multipliers
-                  const setMult = (id, value) => {
-                      const el = document.getElementById(id);
-                      if (el) el.innerText = '×' + value.toFixed(2);
-                  };
-
-                  setMult('mult-pop', popMult);
-                  setMult('mult-pred', predMult);
-                  setMult('mult-avgmod', avgModMult);
-
-                  for (let t = 1; t <= 10; t++) {
-                      let tierMultValue;
-                      if (t === 1) tierMultValue = 1 + (tierCounts[1] * 0.0015);
-                      else if (t === 2) tierMultValue = 1 + (tierCounts[2] * 0.0022);
-                      else if (t === 3) tierMultValue = 1 + (tierCounts[3] * 0.0030);
-                      else if (t === 4) tierMultValue = 1 + (tierCounts[4] * 0.0040);
-                      else if (t === 5) tierMultValue = 1 + (tierCounts[5] * 0.0055);
-                      else if (t === 6) tierMultValue = 1 + (tierCounts[6] * 0.0075);
-                      else if (t === 7) tierMultValue = 1 + (tierCounts[7] * 0.010);
-                      else if (t === 8) tierMultValue = 1 + (tierCounts[8] * 0.014);
-                      else if (t === 9) tierMultValue = 1 + (tierCounts[9] * 0.019);
-                      else tierMultValue = 1 + (tierCounts[10] * 0.032);
-
-                      const el = document.getElementById('mult-tier' + t);
-                      if (el) el.innerText = '×' + tierMultValue.toFixed(2);
-                  }
-
-                  window.currentScoreMultiplier = totalMult;
-              }
-
               function spawnCreatureFromVortexCenter(x, y, vortexDir, vortexStrength) {
                   let newCreature = new Creature(x, y);
                   newCreature.modules = [];
@@ -8456,24 +8495,89 @@
                   for (let c of creatures) c.show();
               }
 
+              function tryRemovePlacedHazardAt(px, py) {
+                  for (let i = placedHazards.length - 1; i >= 0; i--) {
+                      let h = placedHazards[i];
+                      if (dist(px, py, h.x, h.y) < DeviceProfile.hazardRemoveRadius) {
+                          placedHazards.splice(i, 1);
+                          addFloatingText(px, py, "Hazard removed", '#f87171');
+                          return true;
+                      }
+                  }
+                  return false;
+              }
+
+              function tryCycleWallFilterAt(px, py) {
+                  for (let w of energyWalls) {
+                      let d = distToLineSegment(px, py, w.x1, w.y1, w.x2, w.y2);
+                      if (d < DeviceProfile.wallHitRadius) {
+                          const modes = ["repel_all", "allow_harvesters", "allow_low_energy", "allow_predators"];
+                          let currentIndex = modes.indexOf(w.filterMode || "repel_all");
+                          w.filterMode = modes[(currentIndex + 1) % modes.length];
+                          addFloatingText(px, py - 20, w.filterMode.replace("_", " "), '#a5b4fc');
+                          return true;
+                      }
+                  }
+                  return false;
+              }
+
+              function setupCanvasPointerInput(p5Canvas) {
+                  const el = p5Canvas?.elt || document.querySelector('#canvas-container canvas');
+                  if (!el) return;
+
+                  let longPressTimer = null;
+                  const clearLongPress = () => {
+                      if (longPressTimer) clearTimeout(longPressTimer);
+                      longPressTimer = null;
+                  };
+                  const syncPointer = (e) => {
+                      if (e.clientX != null) PointerInput.setFromClient(e.clientX, e.clientY);
+                  };
+
+                  el.addEventListener('pointerdown', (e) => {
+                      syncPointer(e);
+                      if (DeviceProfile.isTouch && e.pointerType === 'touch') {
+                          clearLongPress();
+                          const cx = e.clientX;
+                          const cy = e.clientY;
+                          longPressTimer = setTimeout(() => {
+                              PointerInput.setFromClient(cx, cy);
+                              const { x, y } = gamePointer();
+                              if (!tryRemovePlacedHazardAt(x, y)) tryCycleWallFilterAt(x, y);
+                          }, 600);
+                      }
+                  }, { passive: true });
+
+                  el.addEventListener('pointermove', (e) => {
+                      syncPointer(e);
+                      if (energyWallMode && isDrawingWall && e.pointerType === 'touch') e.preventDefault();
+                  }, { passive: false });
+
+                  el.addEventListener('pointerup', clearLongPress);
+                  el.addEventListener('pointercancel', clearLongPress);
+              }
+
               function handleMousePress() {
+                  if (!PointerInput.consumeAction()) return;
+
+                  const { x: px, y: py } = gamePointer();
+                  const hitR = DeviceProfile.creatureHitRadius;
+
                   for (let c of creatures) {
-                      if (dist(mouseX, mouseY, c.x, c.y) < 13) {
+                      if (dist(px, py, c.x, c.y) < hitR) {
                           trackAlpha = false;
                           selectCreature(c);
                           return;
                       }
                   }
 
-
-                  // Click on Energy Wall to delete it (only on left click)
                   if (mouseButton === LEFT && energyWalls.length > 0) {
-                      let closestDist = 18;
+                      let closestDist = DeviceProfile.wallHitRadius;
                       let closestIndex = -1;
 
                       for (let i = 0; i < energyWalls.length; i++) {
                           let w = energyWalls[i];
-                          let d = distToLineSegment(mouseX, mouseY, w.x1, w.y1, w.x2, w.y2);
+                          let d = distToLineSegment(px, py, w.x1, w.y1, w.x2, w.y2);
                           if (d < closestDist) {
                               closestDist = d;
                               closestIndex = i;
@@ -8482,44 +8586,36 @@
 
                       if (closestIndex !== -1) {
                           energyWalls.splice(closestIndex, 1);
-                          return; // consumed the click
+                          return;
                       }
                   }
 
-                  // Click to place / move Hazard spots (new chain system)
                   if (cursorHazardActive) {
                       let nearCreature = false;
                       for (let c of creatures) {
-                          if (dist(mouseX, mouseY, c.x, c.y) < 18) {
+                          if (dist(px, py, c.x, c.y) < hitR + 5) {
                               nearCreature = true;
                               break;
                           }
                       }
                       if (!nearCreature) {
-                          // Always allow placing up to maxPlacedHazards (3 total)
                           if (placedHazards.length < maxPlacedHazards) {
-                              // Place new hazard orb
                               placedHazards.push({
-                                  x: mouseX,
-                                  y: mouseY,
-                                  timer: 99999, // Permanent until manually removed
+                                  x: px, y: py,
+                                  timer: 99999,
                                   shakeTimer: 0,
                                   exploding: false
                               });
                               if (beamCharge > 0) beamCharge--;
-                          } else {
-                              // Move the oldest one if already at max
-                              if (placedHazards.length > 0) {
-                                  let oldest = placedHazards.shift();
-                                  placedHazards.push({
-                                      x: mouseX,
-                                      y: mouseY,
-                                      timer: 99999,
-                                      shakeTimer: 0,
-                                      exploding: false
-                                  });
-                                  if (beamCharge > 0) beamCharge--;
-                              }
+                          } else if (placedHazards.length > 0) {
+                              placedHazards.shift();
+                              placedHazards.push({
+                                  x: px, y: py,
+                                  timer: 99999,
+                                  shakeTimer: 0,
+                                  exploding: false
+                              });
+                              if (beamCharge > 0) beamCharge--;
                           }
                       }
                   }
@@ -8527,55 +8623,38 @@
 
               // === Energy Wall Drawing (click + drag) ===
               function mousePressed() {
-                  // Right-click handling
-                  if (mouseButton === RIGHT) {
-                      // Remove placed hazard if clicking near one
-                      for (let i = placedHazards.length - 1; i >= 0; i--) {
-                          let h = placedHazards[i];
-                          if (dist(mouseX, mouseY, h.x, h.y) < 25) {
-                              placedHazards.splice(i, 1);
-                              addFloatingText(mouseX, mouseY, "Hazard removed", '#f87171');
-                              return;
-                          }
-                      }
+                  const { x: px, y: py } = gamePointer();
 
-                      // Right-click on a wall to cycle its filter mode (existing)
-                      for (let w of energyWalls) {
-                          let d = distToLineSegment(mouseX, mouseY, w.x1, w.y1, w.x2, w.y2);
-                          if (d < 18) {
-                              const modes = ["repel_all", "allow_harvesters", "allow_low_energy", "allow_predators"];
-                              let currentIndex = modes.indexOf(w.filterMode || "repel_all");
-                              w.filterMode = modes[(currentIndex + 1) % modes.length];
-                              addFloatingText(mouseX, mouseY - 20, w.filterMode.replace("_", " "), '#a5b4fc');
-                              return;
-                          }
-                      }
+                  if (mouseButton === RIGHT) {
+                      if (tryRemovePlacedHazardAt(px, py)) return;
+                      if (tryCycleWallFilterAt(px, py)) return;
                       return;
                   }
 
                   if (!energyWallMode) return;
 
-                  // Only start drawing if not clicking on a creature
                   for (let c of creatures) {
-                      if (dist(mouseX, mouseY, c.x, c.y) < 14) return;
+                      if (dist(px, py, c.x, c.y) < DeviceProfile.creatureHitRadius + 1) return;
                   }
 
                   isDrawingWall = true;
-                  wallStartX = mouseX;
-                  wallStartY = mouseY;
-                  currentWallPreview = { x1: wallStartX, y1: wallStartY, x2: mouseX, y2: mouseY };
+                  wallStartX = px;
+                  wallStartY = py;
+                  currentWallPreview = { x1: wallStartX, y1: wallStartY, x2: px, y2: py };
               }
 
               function mouseDragged() {
                   if (!energyWallMode || !isDrawingWall) return;
-                  currentWallPreview = { x1: wallStartX, y1: wallStartY, x2: mouseX, y2: mouseY };
+                  const { x: px, y: py } = gamePointer();
+                  currentWallPreview = { x1: wallStartX, y1: wallStartY, x2: px, y2: py };
               }
 
               function mouseReleased() {
                   if (!energyWallMode || !isDrawingWall) return;
 
-                  const dx = mouseX - wallStartX;
-                  const dy = mouseY - wallStartY;
+                  const { x: px, y: py } = gamePointer();
+                  const dx = px - wallStartX;
+                  const dy = py - wallStartY;
                   const length = sqrt(dx * dx + dy * dy);
 
                   // Only create wall if drag was long enough (avoid accidental clicks)
@@ -8585,18 +8664,17 @@
                       const lengthCost = Math.floor(length * 0.9);
                       const totalCost = baseCost + lengthCost;
 
-                      if (totalScore >= totalCost) {
-                          totalScore -= totalCost;
+                      if (ScoreEngine.spend(totalCost)) {
                           addFloatingText(wallStartX, wallStartY - 15, `-${totalCost}`, '#c026ff');
 
-                          const length = sqrt((mouseX - wallStartX) ** 2 + (mouseY - wallStartY) ** 2);
+                          const length = sqrt((px - wallStartX) ** 2 + (py - wallStartY) ** 2);
                           // v1.95 Clean creation
                           const isFilter = currentWallFilterMode === "custom_filter";
                           energyWalls.push({
                               x1: wallStartX,
                               y1: wallStartY,
-                              x2: mouseX,
-                              y2: mouseY,
+                              x2: px,
+                              y2: py,
                               life: 1800 + length * 1.8,
                               maxLife: 1800 + length * 1.8,
                               hitFlash: 0,
@@ -9821,6 +9899,7 @@
                   // Reset the simulation
                   resetSim();
                   totalScore = 0;
+                  ScoreEngine.syncCurrency();
 
                   updateMainStats();
                   updateAetheriumUI();
@@ -9828,13 +9907,6 @@
                   updatePrestigePreview();
 
                   addFloatingText(width / 2, height / 2 - 20, `+${dustGained.toFixed(2)} Dust`, '#fbbf24');
-              }
-
-              function formatScore(n) {
-                  if (n >= 100000000) {
-                      return n.toExponential(2);
-                  }
-                  return Math.floor(n).toLocaleString();
               }
 
               function injectPulseAnimationStyle() {
@@ -9936,19 +10008,32 @@
 
                       const date = new Date(save.timestamp).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
-                      div.innerHTML = `
-                      <div class="flex-1 min-w-0 pr-3">
-                          <div class="font-medium text-emerald-400 truncate">${save.name}</div>
-                          <div class="text-xs text-white/50">${date}</div>
-                      </div>
-                      <div class="flex gap-2 flex-shrink-0">
-                          <button class="px-3 py-1 text-xs rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white">Load</button>
-                          <button class="px-3 py-1 text-xs rounded-xl bg-red-500/80 hover:bg-red-500 text-white">Delete</button>
-                      </div>
-                  `;
+                      const info = document.createElement('div');
+                      info.className = 'flex-1 min-w-0 pr-3';
+                      const nameEl = document.createElement('div');
+                      nameEl.className = 'font-medium text-emerald-400 truncate';
+                      nameEl.textContent = save.name;
+                      const dateEl = document.createElement('div');
+                      dateEl.className = 'text-xs text-white/50';
+                      dateEl.textContent = date;
+                      info.appendChild(nameEl);
+                      info.appendChild(dateEl);
 
-                      div.querySelector('button').onclick = () => loadSave(index);
-                      div.querySelectorAll('button')[1].onclick = () => {
+                      const actions = document.createElement('div');
+                      actions.className = 'flex gap-2 flex-shrink-0';
+                      const loadBtn = document.createElement('button');
+                      loadBtn.className = 'px-3 py-1 text-xs rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white';
+                      loadBtn.textContent = 'Load';
+                      const deleteBtn = document.createElement('button');
+                      deleteBtn.className = 'px-3 py-1 text-xs rounded-xl bg-red-500/80 hover:bg-red-500 text-white';
+                      deleteBtn.textContent = 'Delete';
+                      actions.appendChild(loadBtn);
+                      actions.appendChild(deleteBtn);
+                      div.appendChild(info);
+                      div.appendChild(actions);
+
+                      loadBtn.onclick = () => loadSave(index);
+                      deleteBtn.onclick = () => {
                           if (confirm(`Delete save "${save.name}"?`)) {
                               let currentSaves = JSON.parse(localStorage.getItem('minisimmy_saves') || '[]');
                               currentSaves.splice(index, 1);
@@ -9975,10 +10060,10 @@
                   if (!confirm(`Load "${save.name}"?\nThis will replace your inventories, vault, incubator slots, and currencies.\nCreatures on the map will NOT be affected.`)) return;
 
                   // === Restore currencies ===
-                  totalScore = save.totalScore || 0;
+                  totalScore = save.totalScore ?? save.highRollerPoints ?? 0;
                   aetheriumCrystals = save.aetheriumCrystals || 0;
                   aetheriumDust = save.aetheriumDust || 0;
-                  highRollerPoints = save.highRollerPoints || 0;
+                  ScoreEngine.syncCurrency();
 
                   // === Restore Gene Vault ===
                   if (save.geneVaultSlots) geneVaultSlots = save.geneVaultSlots;
