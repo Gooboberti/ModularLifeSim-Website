@@ -506,9 +506,9 @@
 
                       <!-- Preview + Name -->
                       <div class="flex items-start gap-3">
-                          <div class="flex-shrink-0">
-                              <canvas id="inspect-creature-preview" width="82" height="82"
-                                      class="creature-preview-canvas w-[82px] h-[82px] block rounded-xl border border-white/10 bg-[#111113]"></canvas>
+                          <div class="h-[82px] w-[82px] flex-shrink-0 overflow-hidden rounded-xl border border-white/10 bg-[#111113]">
+                              <canvas id="inspect-creature-preview" data-preview-size="82"
+                                      class="creature-preview-canvas block h-[82px] w-[82px] max-h-[82px] max-w-[82px] rounded-xl"></canvas>
                           </div>
                           <div class="min-w-0 flex-1">
                               <div id="inspect-name" class="text-[15px] font-semibold text-emerald-400 leading-tight"></div>
@@ -5605,7 +5605,7 @@
 
                           html += `
                           <div class="flex gap-3 mb-2">
-                              <canvas id="${canvasId}" width="48" height="48"
+                              <canvas id="${canvasId}" data-preview-size="48"
                                       class="creature-preview-canvas w-12 h-12 block flex-shrink-0 rounded-xl border border-white/10 bg-[#111113]"></canvas>
 
                               <div class="flex-1 min-w-0">
@@ -5754,7 +5754,7 @@
                       const canvasId = `egg-choose-preview-${slotIndex}-${i}`;
 
                       row.innerHTML = `
-                      <canvas id="${canvasId}" width="46" height="46"
+                      <canvas id="${canvasId}" data-preview-size="46"
                               class="creature-preview-canvas w-[46px] h-[46px] block flex-shrink-0 rounded-xl border border-white/10 bg-[#111113]"></canvas>
                       <div class="flex-1 min-w-0">
                           <div class="text-emerald-400 font-medium">${egg.name}</div>
@@ -6031,7 +6031,7 @@
                           const canvasId = `top10-preview-${creature.name.replace(/\s+/g, '')}-${Date.now()}`;
 
                           div.innerHTML = `
-                          <canvas id="${canvasId}" width="46" height="46"
+                          <canvas id="${canvasId}" data-preview-size="46"
                                   class="creature-preview-canvas w-[46px] h-[46px] block flex-shrink-0 rounded-xl border border-white/10 bg-[#111113]"></canvas>
                           <div class="flex-1 min-w-0">
                               <div class="font-semibold text-emerald-400">${creature.name}</div>
@@ -8589,7 +8589,9 @@
                   // Clear preview canvas
                   const preview = document.getElementById('inspect-creature-preview');
                   if (preview) {
+                      delete preview.dataset.lastSig;
                       const ctx = preview.getContext('2d');
+                      ctx.setTransform(1, 0, 0, 1, 0, 0);
                       ctx.clearRect(0, 0, preview.width, preview.height);
                   }
 
@@ -8604,8 +8606,21 @@
                   if (energyBar) energyBar.style.width = '0%';
               }
 
+              function getPreviewLogicalSize(canvas, fallback = 48) {
+                  const stored = canvas.dataset.previewSize;
+                  if (stored) return parseInt(stored, 10) || fallback;
+
+                  const attr = parseInt(canvas.getAttribute('width'), 10);
+                  if (attr > 0 && attr <= 128) {
+                      canvas.dataset.previewSize = String(attr);
+                      return attr;
+                  }
+                  canvas.dataset.previewSize = String(fallback);
+                  return fallback;
+              }
+
               function prepareCreaturePreviewCanvas(canvas, logicalSize = 48) {
-                  const size = logicalSize || 48;
+                  const size = getPreviewLogicalSize(canvas, logicalSize || 48);
                   const dpr = Math.min(window.devicePixelRatio || 1, 2);
                   const targetW = Math.round(size * dpr);
                   const targetH = Math.round(size * dpr);
@@ -8614,8 +8629,6 @@
                       canvas.width = targetW;
                       canvas.height = targetH;
                   }
-                  canvas.style.width = size + 'px';
-                  canvas.style.height = size + 'px';
 
                   const ctx = canvas.getContext('2d');
                   ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -8624,12 +8637,11 @@
                   return { ctx, size };
               }
 
-              function drawCreaturePreview(data, canvas) {
+              function drawCreaturePreview(data, canvas, options = {}) {
                   if (!canvas || !data) return;
 
-                  const attrSize = parseInt(canvas.getAttribute('width'), 10);
-                  const logicalSize = attrSize || parseInt(canvas.style.width, 10) || 48;
-                  const { ctx, size } = prepareCreaturePreviewCanvas(canvas, logicalSize);
+                  const { fit = true, scale: fixedScale = 0.72 } = options;
+                  const { ctx, size } = prepareCreaturePreviewCanvas(canvas);
 
                   const isSocial = data.socialPredator === true;
                   const isPred = data.isPredator === true;
@@ -8668,7 +8680,9 @@
                   }
 
                   const padding = 5;
-                  const fitScale = Math.min((size * 0.5 - padding) / maxExtent, 1);
+                  const fitScale = fit
+                      ? Math.min((size * 0.5 - padding) / maxExtent, 1)
+                      : fixedScale;
                   const cx = size / 2;
                   const cy = size / 2;
 
@@ -8723,10 +8737,12 @@
                   const c = selectedCreature;
                   const moduleSig = c.modules.length + ':' + c.modules.map(m => `${m.type}-${m.tier || 1}`).join(',');
 
-                  if (frameCount % (INSPECTOR_UPDATE_INTERVAL * 2) === 0) {
-                      const previewCanvas = document.getElementById('inspect-creature-preview');
-                      if (previewCanvas) {
-                          drawCreaturePreview(c, previewCanvas);
+                  const previewCanvas = document.getElementById('inspect-creature-preview');
+                  if (previewCanvas) {
+                      const previewSig = c.name + ':' + moduleSig + ':' + (c.isPredator ? 'P' : 'N');
+                      if (previewCanvas.dataset.lastSig !== previewSig) {
+                          previewCanvas.dataset.lastSig = previewSig;
+                          drawCreaturePreview(c, previewCanvas, { fit: false, scale: 0.68 });
                       }
                   }
 
@@ -9835,7 +9851,7 @@
 
                           card.innerHTML = `
                           <div class="flex items-center gap-3">
-                              <canvas id="${canvasId}" width="52" height="52"
+                              <canvas id="${canvasId}" data-preview-size="52"
                                       class="creature-preview-canvas w-[52px] h-[52px] block flex-shrink-0 rounded-xl border border-white/10 bg-[#111113]"></canvas>
                               <div>
                                   <div class="font-semibold text-emerald-400">${egg.name}</div>
@@ -10296,7 +10312,7 @@
                           const canvasId = `vault-choose-preview-${index}`;
                           card.innerHTML = `
                           <div class="flex items-center gap-3">
-                              <canvas id="${canvasId}" width="52" height="52"
+                              <canvas id="${canvasId}" data-preview-size="52"
                                       class="creature-preview-canvas w-[52px] h-[52px] block flex-shrink-0 rounded-xl border border-white/10 bg-[#111113]"></canvas>
                               <div class="flex-1 min-w-0">
                                   <div class="font-semibold text-emerald-400">${egg.name}</div>
@@ -10364,7 +10380,7 @@
                           card.innerHTML = `
                           <div class="flex justify-between items-center">
                               <div class="flex items-center gap-3">
-                                  <canvas id="${canvasId}" width="48" height="48"
+                                  <canvas id="${canvasId}" data-preview-size="48"
                                           class="creature-preview-canvas w-12 h-12 block flex-shrink-0 rounded-xl border border-white/10 bg-[#111113]"></canvas>
                                   <div>
                                       <div class="font-semibold text-emerald-400">${egg.name}</div>
