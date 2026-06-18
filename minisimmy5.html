@@ -1,10 +1,10 @@
 <!doctype html>
-<!-- MiniSimmy mobile-opt build 2026-06-17d | Wall filters + cursor hazard deploy + red beam glow -->
+<!-- MiniSimmy mobile-opt build 2026-06-17e | ScoreEngine unification + createCreatureFromEgg -->
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="minisimmy-build" content="mobile-opt-2026-06-17d" />
+    <meta name="minisimmy-build" content="mobile-opt-2026-06-17e" />
     <title>MiniSimmy2 (Mobile Opt v4)</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2334d399'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%230a0a0f'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -3167,7 +3167,8 @@
                       this.energy = 100;
                       this.killCount = (this.killCount || 0) + 1;
                       totalPredatorKills++;
-                      ScoreEngine.award(28);
+                      const killPts = ScoreEngine.award(28);
+                      if (killPts > 0) addFloatingText(this.x, this.y - 20, `+${killPts}`, '#fbbf24');
                       this.currentThought = "Killed prey - Returning to normal";
                       // === NEW: Turn back into a normal creature after eating ===
                       this.isPredator = false;
@@ -3225,6 +3226,7 @@
                       if (this.age > this.maxAge) {
                           this.energy = 0;
                           this.currentThought = "Died of old age";
+                          ScoreEngine.awardCreature(this, { showFloat: PerfScale.lod < 2 });
                           const index = creatures.indexOf(this);
                           if (index > -1) creatures.splice(index, 1);
                           if (selectedCreature === this) deselectCreature();
@@ -4319,6 +4321,55 @@
                       return this.addPoints(this.computeAwardedAmount(baseAmount, options));
                   },
 
+                  awardCreature(creature, options = {}) {
+                      if (!creature || typeof creature.getPointValue !== 'function') return 0;
+                      const {
+                          killedByBullet = false,
+                          showFloat = true,
+                          floatColor = '#fbbf24',
+                          x,
+                          y
+                      } = options;
+                      const awarded = this.award(creature.getPointValue(killedByBullet));
+                      if (showFloat && awarded > 0 && typeof addFloatingText === 'function') {
+                          addFloatingText(x ?? creature.x, (y ?? creature.y) - 18, `+${awarded}`, floatColor);
+                      }
+                      return awarded;
+                  },
+
+                  calculatePileBonus() {
+                      if (creatures.length < 3) return 0;
+
+                      let totalClosePairs = 0;
+                      const radius = 38;
+
+                      for (let i = 0; i < creatures.length; i++) {
+                          let closeCount = 0;
+                          for (let j = 0; j < creatures.length; j++) {
+                              if (i === j) continue;
+                              if (dist(creatures[i].x, creatures[i].y, creatures[j].x, creatures[j].y) < radius) {
+                                  closeCount++;
+                              }
+                          }
+                          if (closeCount >= 2) {
+                              totalClosePairs += closeCount;
+                          }
+                      }
+
+                      const avgClustering = totalClosePairs / creatures.length;
+                      return Math.floor(avgClustering * 1.8);
+                  },
+
+                  getBalance() {
+                      return totalScore;
+                  },
+
+                  setBalance(value) {
+                      totalScore = Math.max(0, Math.floor(value));
+                      this.syncCurrency();
+                      return totalScore;
+                  },
+
                   tickPassive() {
                       if (paused) return;
 
@@ -4331,7 +4382,7 @@
                       if (deltaMinutes <= 0) return;
 
                       const snap = this.getMultiplierSnapshot();
-                      const pileBonus = calculatePileBonus();
+                      const pileBonus = this.calculatePileBonus();
                       const predBonusPerMinute = totalPredatorKills * 0.5;
                       const minuteRate = (12 + pileBonus + predBonusPerMinute) * snap.survivalBand;
                       const points = Math.floor(minuteRate * deltaMinutes * snap.additiveMult * snap.furnaceMult);
@@ -4347,6 +4398,10 @@
 
               function formatScore(num) {
                   return ScoreEngine.format(num);
+              }
+
+              function addScore(baseAmount, options = {}) {
+                  return ScoreEngine.award(baseAmount, options);
               }
 
               function createPredatorFromGeneVaultOrRandom() {
@@ -5175,6 +5230,37 @@
                   showExtractEggModal();
               }
 
+              function createCreatureFromEgg(eggData) {
+                  if (!eggData) return null;
+
+                  const creature = new Creature(
+                      random(width * 0.2, width * 0.8),
+                      random(height * 0.2, height * 0.8),
+                      eggData.modules ? JSON.parse(JSON.stringify(eggData.modules)) : null,
+                      eggData.generation || 1,
+                      eggData.traits || null
+                  );
+
+                  if (eggData.name) creature.name = eggData.name;
+                  if (eggData.killCount) creature.killCount = eggData.killCount;
+                  if (eggData.childrenCount) creature.childrenCount = eggData.childrenCount;
+                  creature.currentThought = "Released from Incubator";
+
+                  if (eggData.brain && creature.brain) {
+                      const b = eggData.brain;
+                      creature.brain.weightsIH = JSON.parse(JSON.stringify(b.weightsIH));
+                      creature.brain.weightsHO = JSON.parse(JSON.stringify(b.weightsHO));
+                      creature.brain.biasH = [...b.biasH];
+                      creature.brain.biasO = [...b.biasO];
+                      creature.brain.connectionStrengthIH = JSON.parse(JSON.stringify(b.connectionStrengthIH || []));
+                      creature.brain.connectionStrengthHO = JSON.parse(JSON.stringify(b.connectionStrengthHO || []));
+                  }
+
+                  creature.updateSpecialization();
+                  creature.calculatePointValue();
+                  return creature;
+              }
+
               function releaseEggFromIncubatorSlot(slotIndex) {
                   const slot = incubatorSlots[slotIndex];
                   if (!slot || !slot.currentIncubation) return;
@@ -5186,13 +5272,11 @@
 
                   const eggData = slot.currentIncubation.eggData;
 
-                  // Create creature from egg and add to swarm
-                  if (typeof createCreatureFromEgg === 'function') {
-                      const creature = createCreatureFromEgg(eggData);
+                  const creature = createCreatureFromEgg(eggData);
+                  if (creature) {
                       creatures.push(creature);
                       creature.energy = Math.min(100, (creature.energy || 60) + 20);
-                  } else {
-                      console.warn("createCreatureFromEgg function not found");
+                      spawnEffects.push(new SpawnEffect(creature.x, creature.y));
                   }
 
                   addFloatingText(width / 2, 70, `+${gain.toFixed(3)}× Slot Bonus`, '#34d399');
@@ -5481,6 +5565,8 @@
                   const egg = inc.eggData;
 
                   const baseScore = getEggScore(egg);
+                  const sellBase = baseScore * slot.multiplier;
+                  const awardedScore = ScoreEngine.computeAwardedAmount(sellBase);
                   const gain = calculateIncubatorMultiplierGain(egg);
                   const oldMult = slot.multiplier - gain;
                   const newMult = slot.multiplier;
@@ -5497,8 +5583,9 @@
 
                   <div class="grid grid-cols-2 gap-3 text-sm">
                       <div class="bg-white/5 p-3 rounded-2xl">
-                          <div class="text-xs text-white/50">Base Score</div>
-                          <div class="text-2xl font-mono text-amber-400">${baseScore}</div>
+                          <div class="text-xs text-white/50">Sell Value (with mults)</div>
+                          <div class="text-2xl font-mono text-amber-400">${awardedScore.toLocaleString()}</div>
+                          <div class="text-[10px] text-white/40">Base ${baseScore} × slot ${newMult.toFixed(2)}</div>
                       </div>
                       <div class="bg-white/5 p-3 rounded-2xl">
                           <div class="text-xs text-white/50">Slot Multiplier</div>
@@ -5533,7 +5620,7 @@
 
                   const egg = slot.currentIncubation.eggData;
                   const baseScore = getEggScore(egg) * slot.multiplier;
-                  const finalScore = ScoreEngine.award(baseScore);
+                  const finalScore = addScore(baseScore);
 
                   addFloatingText(width / 2, 85, `+${finalScore} Score`, '#fbbf24');
                   slot.currentIncubation = null;
@@ -5627,7 +5714,7 @@
                                                   <div class="text-xs text-white/60">
                                   Gen ${creature.generation} • ${creature.modules.length > 9999 ? creature.modules.length.toExponential(1) : creature.modules.length} modules (Tier ${creatureTier})
                                   • ${creature.killCount || 0} kills
-                                  • <span class="text-amber-400">Score: ${typeof creature.getFinalAwardedScore === 'function' ? creature.getFinalAwardedScore().toLocaleString() : (creature.pointValue || 0)}</span>
+                                  • <span class="text-amber-400">Score: ${creature.getFinalAwardedScore().toLocaleString()}</span>
                               </div>
                           </div>
                           <div class="flex items-center gap-2 flex-shrink-0">
@@ -5722,7 +5809,7 @@
               }
 
               function setup() {
-                  console.info('[MiniSimmy] build=mobile-opt-2026-06-17d tier=' + DeviceProfile.tier + ' walls=filters hazards=deploy');
+                  console.info('[MiniSimmy] build=mobile-opt-2026-06-17e tier=' + DeviceProfile.tier + ' score=ScoreEngine walls=filters hazards=deploy');
                   debugLog("Setup started");
 
                   let canvas = createCanvas(820, 580);
@@ -6689,8 +6776,8 @@
                               else blueZone.food = min(blueZone.maxFood, blueZone.food + 16);
                               playDepositSound();
 
-                              // Points for successful deposit
-                              addFloatingText(b.x, b.y - 10, '+12', '#fbbf24');
+                              const depositPts = addScore(12);
+                              if (depositPts > 0) addFloatingText(b.x, b.y - 10, `+${depositPts}`, '#fbbf24');
                           } else {
                               staticFoodPatches.push({
                                   x: b.x,
@@ -6785,8 +6872,8 @@
                           else blueZone.food = min(blueZone.maxFood, blueZone.food + o.energy);
                           playEatSound(o.targetIsGreen);
 
-                          // Floating points when orb is absorbed
-                          addFloatingText(o.x, o.y - 8, `+${Math.floor(o.energy * 0.8)}`, '#4ade80');
+                          const orbPts = addScore(Math.floor(o.energy * 0.8));
+                          if (orbPts > 0) addFloatingText(o.x, o.y - 8, `+${orbPts}`, '#4ade80');
 
                           energyOrbs.splice(i, 1);
                       }
@@ -6853,7 +6940,8 @@
                                       c.children.push(offspring.name);
                                       c.childrenCount++;
                                       playBirthSound();
-                                      addFloatingText(c.x, c.y - 14, '+8', '#c084fc');
+                                      const birthPts = addScore(8);
+                                      if (birthPts > 0) addFloatingText(c.x, c.y - 14, `+${birthPts}`, '#c084fc');
                                   }
                               }
                           }
@@ -6864,6 +6952,8 @@
                           }
 
                           if (c.energy <= 0) {
+                              const killedByBullet = !!c._killedByBullet;
+                              ScoreEngine.awardCreature(c, { killedByBullet, showFloat: PerfScale.lod < 2 });
                               let targetIsGreen = isDay;
                               let releasedEnergy = Math.max(7, Math.floor(c.energy * -0.55) + 11);
                               energyOrbs.push({ x: c.x, y: c.y, radius: 11, life: 240, energy: releasedEnergy, targetIsGreen, age: 0 });
@@ -7111,6 +7201,7 @@
                               let c = bulletHits[0];
                               {
                                   // High damage - designed for 1-2 shot kills
+                                  c._killedByBullet = true;
                                   c.energy -= 82;
                                   c.damageFlash = 70;
                                   c.purpleFlash = max(c.purpleFlash || 0, 95);
@@ -7213,10 +7304,7 @@
                       drawMiniChart();
                   }
 
-                  // Make sure score and UI keep updating
-                  if (typeof updateVegasScore === 'function') {
-                      updateVegasScore();
-                  }
+                  ScoreEngine.tickPassive();
                   if (frameCount % UI_UPDATE_INTERVAL === 0) {
                       updateMainStats();
                       updatePrestigePreview();
@@ -7300,9 +7388,8 @@
                   if (speed1) speed1.classList.add('active', 'bg-emerald-500', 'text-[#0a0a0f]');
 
                   deselectCreature();
-                  totalScore = 0;
+                  ScoreEngine.setBalance(0);
                   totalPredatorKills = 0;
-                  ScoreEngine.syncCurrency();
 
                   const scoreEl = document.getElementById('vegas-score');
                   if (scoreEl) scoreEl.innerText = '0';
@@ -7734,7 +7821,7 @@
                   if (freeMode) {
                       btn.classList.add('bg-yellow-500/80', 'text-black');
                       btn.classList.remove('bg-white/10');
-                      totalScore = Math.max(totalScore, 800000);
+                      ScoreEngine.setBalance(Math.max(totalScore, 800000));
                   } else {
                       btn.classList.remove('bg-yellow-500/80', 'text-black');
                       btn.classList.add('bg-white/10');
@@ -7857,33 +7944,6 @@
                   toggleCursorHazardQuick();
               }
 
-              function calculatePileBonus() {
-                  if (creatures.length < 3) return 0;
-
-                  let totalClosePairs = 0;
-                  const radius = 38;
-
-                  for (let i = 0; i < creatures.length; i++) {
-                      let closeCount = 0;
-                      for (let j = 0; j < creatures.length; j++) {
-                          if (i === j) continue;
-                          if (dist(creatures[i].x, creatures[i].y, creatures[j].x, creatures[j].y) < radius) {
-                              closeCount++;
-                          }
-                      }
-                      if (closeCount >= 2) {
-                          totalClosePairs += closeCount;
-                      }
-                  }
-
-                  const avgClustering = totalClosePairs / creatures.length;
-                  return Math.floor(avgClustering * 1.8);
-              }
-
-              function updateVegasScore() {
-                  ScoreEngine.tickPassive();
-              }
-
               // ==================== SCORE BREAKDOWN MODAL ====================
               function showScoreBreakdownModal() {
                   const modal = document.createElement('div');
@@ -7962,10 +8022,6 @@
                   html += `</div></div>`;
                   modal.innerHTML = html;
                   document.body.appendChild(modal);
-              }
-
-              function addScore(amount) {
-                  ScoreEngine.award(amount);
               }
 
               function updateGraphData() {
@@ -8156,14 +8212,7 @@
               // ==================== TIER MULTIPLIER DISPLAYS (Fixed Rates) ====================
               function updateTierMultiplierDisplays(tierCounts = null) {
                   if (!tierCounts) {
-                      // Rebuild tierCounts if not passed in
-                      tierCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0 };
-                      for (let c of creatures) {
-                          for (let m of c.modules) {
-                              const t = m.tier || 1;
-                              if (tierCounts[t] !== undefined) tierCounts[t]++;
-                          }
-                      }
+                      tierCounts = ScoreEngine.getMultiplierSnapshot().stats.tierCounts;
                   }
 
                   for (let t = 1; t <= 10; t++) {
@@ -8339,10 +8388,7 @@
                   // === Score Value (Final awarded value with ALL bonuses) ===
                   const scoreValueEl = document.getElementById('inspect-score-value');
                   if (scoreValueEl) {
-                      const finalScore = typeof c.getFinalAwardedScore === 'function'
-                          ? c.getFinalAwardedScore()
-                          : (c.pointValue || 0);
-                      scoreValueEl.innerText = finalScore.toLocaleString();
+                      scoreValueEl.innerText = c.getFinalAwardedScore().toLocaleString();
                   }
 
                   // === REMAINING LIFE (with color warning) ===
@@ -10228,8 +10274,7 @@
 
                   // Reset the simulation
                   resetSim();
-                  totalScore = 0;
-                  ScoreEngine.syncCurrency();
+                  ScoreEngine.setBalance(0);
 
                   updateMainStats();
                   updateAetheriumUI();
@@ -10390,10 +10435,9 @@
                   if (!confirm(`Load "${save.name}"?\nThis will replace your inventories, vault, incubator slots, and currencies.\nCreatures on the map will NOT be affected.`)) return;
 
                   // === Restore currencies ===
-                  totalScore = save.totalScore ?? save.highRollerPoints ?? 0;
+                  ScoreEngine.setBalance(save.totalScore ?? save.highRollerPoints ?? 0);
                   aetheriumCrystals = save.aetheriumCrystals || 0;
                   aetheriumDust = save.aetheriumDust || 0;
-                  ScoreEngine.syncCurrency();
 
                   // === Restore Gene Vault ===
                   if (save.geneVaultSlots) geneVaultSlots = save.geneVaultSlots;
