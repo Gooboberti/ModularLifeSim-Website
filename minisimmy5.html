@@ -4,7 +4,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="minisimmy-build" content="mobile-opt-2026-06-17f" />
+    <meta name="minisimmy-build" content="mobile-opt-2026-06-17i" />
     <title>MiniSimmy2 (Mobile Opt v4)</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2334d399'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%230a0a0f'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -529,11 +529,14 @@
                                   <span class="text-white/50">Remaining Life:</span>
                                   <span id="inspect-life" class="font-mono font-semibold"></span>
                               </div>
-                              <button onclick="playUIClick(); confirmExtractToEgg()"
-                                      class="mt-2 flex items-center gap-x-1.5 rounded-xl bg-amber-500/90 px-3 py-1 text-xs font-medium text-white hover:bg-amber-500 active:scale-[0.985]">
-                                  <i class="fa-solid fa-egg text-amber-300"></i>
-                                  <span>Extract to Egg</span>
-                              </button>
+                              <div id="inspect-extract-wrap" class="mt-2">
+                                  <button id="inspect-extract-btn" onclick="confirmExtractToEgg()"
+                                          class="flex w-full items-center justify-center gap-x-1.5 rounded-xl bg-amber-500/90 px-3 py-1.5 text-xs font-semibold text-white transition-all hover:bg-amber-500 active:scale-[0.985]">
+                                      <i class="fa-solid fa-egg text-amber-200"></i>
+                                      <span id="inspect-extract-label">Extract to Egg</span>
+                                  </button>
+                                  <div id="inspect-extract-hint" class="mt-1 text-center text-[10px] leading-snug text-white/45"></div>
+                              </div>
                           </div>
                       </div>
                       <!-- Energy -->
@@ -1478,6 +1481,7 @@
               let incubatorModalOpen = false;
               let nextIncubationId = 1;
               const MAX_EGGS = 10; // Max eggs player can hold
+              const EXTRACT_EGG_COST = 250000;
               let predators = [];
               let vortexParticles = [];
               let pheromones = [];
@@ -3136,7 +3140,7 @@
                       this.killCount = (this.killCount || 0) + 1;
                       totalPredatorKills++;
                       const killPts = ScoreEngine.award(28);
-                      if (killPts > 0) addFloatingText(this.x, this.y - 20, `+${killPts}`, '#fbbf24');
+                      if (killPts > 0) addFloatingText(this.x, this.y - 20, `+${formatScore(killPts)}`, '#fbbf24');
                       this.currentThought = "Killed prey - Returning to normal";
                       // === NEW: Turn back into a normal creature after eating ===
                       this.isPredator = false;
@@ -4336,7 +4340,7 @@
                       } = options;
                       const awarded = this.award(creature.getPointValue(killedByBullet));
                       if (showFloat && awarded > 0 && typeof addFloatingText === 'function') {
-                          addFloatingText(x ?? creature.x, (y ?? creature.y) - 18, `+${awarded}`, floatColor);
+                          addFloatingText(x ?? creature.x, (y ?? creature.y) - 18, `+${formatScore(awarded)}`, floatColor);
                       }
                       return awarded;
                   },
@@ -4394,14 +4398,21 @@
                   },
 
                   format(num) {
-                      if (num >= 10000000) return num.toExponential(2).replace('+', '');
-                      if (num >= 1000000) return (num / 1000000).toFixed(2) + 'M';
-                      return Math.floor(num).toLocaleString();
+                      const n = Number(num);
+                      if (!isFinite(n)) return '0';
+                      const abs = Math.floor(Math.abs(n));
+                      const sign = n < 0 ? '-' : '';
+                      if (abs >= 1000000) return sign + abs.toExponential(2).replace('+', '');
+                      return sign + abs.toLocaleString();
                   }
               };
 
               function formatScore(num) {
                   return ScoreEngine.format(num);
+              }
+
+              function formatEggScore(eggData) {
+                  return formatScore(getEggScore(eggData));
               }
 
               function addScore(baseAmount, options = {}) {
@@ -5020,7 +5031,7 @@
 
               function updateCheatsUI() {
                   const balanceEl = document.getElementById('cheats-balance');
-                  if (balanceEl) balanceEl.innerText = totalScore.toLocaleString();
+                  if (balanceEl) balanceEl.innerText = formatScore(totalScore);
 
                   const redBtn = document.getElementById('buy-red-btn');
                   if (redBtn) {
@@ -5151,7 +5162,7 @@
                   balanceDiv.className = 'mb-4 px-1 flex justify-between items-center text-sm border-b border-white/10 pb-3';
                   balanceDiv.innerHTML = `
                   <span class="text-white/60">Your Balance</span>
-                  <span class="font-mono text-2xl text-violet-400 font-semibold">${totalScore.toLocaleString()}</span>
+                  <span class="font-mono text-2xl text-violet-400 font-semibold">${formatScore(totalScore)}</span>
               `;
                   listContainer.appendChild(balanceDiv);
                   let sorted = [...creatures].sort((a, b) => {
@@ -5191,28 +5202,88 @@
                   }
               }
 
+              function playExtractEggClickSound() {
+                  playUIClick();
+                  playTone(640, 'sine', 0.08, 0.42);
+                  setTimeout(() => playTone(920, 'triangle', 0.1, 0.34), 55);
+              }
+
+              function playExtractEggSuccessSound() {
+                  playTone(620, 'sine', 0.18, 0.55);
+                  setTimeout(() => playTone(880, 'sine', 0.14, 0.45), 90);
+                  setTimeout(() => playTone(1100, 'sine', 0.16, 0.38), 170);
+              }
+
+              function playExtractEggFailSound() {
+                  playTone(220, 'sawtooth', 0.18, 0.45);
+              }
+
+              function getExtractEggBlockReason(creature) {
+                  if (!creature) return 'No creature selected';
+                  if (creature.isPredator) return 'Predators cannot be extracted';
+                  if (eggs.length >= MAX_EGGS) return `Egg inventory full (${MAX_EGGS}/${MAX_EGGS})`;
+                  if (totalScore < EXTRACT_EGG_COST) return `Need ${formatScore(EXTRACT_EGG_COST)} points`;
+                  return null;
+              }
+
+              function updateInspectorExtractButton(creature = selectedCreature) {
+                  const btn = document.getElementById('inspect-extract-btn');
+                  const hint = document.getElementById('inspect-extract-hint');
+                  const label = document.getElementById('inspect-extract-label');
+                  if (!btn || !hint || !label) return;
+
+                  const blockReason = getExtractEggBlockReason(creature);
+                  const canExtract = !blockReason;
+
+                  label.textContent = `Extract to Egg (${formatScore(EXTRACT_EGG_COST)})`;
+                  btn.disabled = !canExtract;
+                  btn.classList.toggle('opacity-45', !canExtract);
+                  btn.classList.toggle('cursor-not-allowed', !canExtract);
+                  btn.classList.toggle('hover:bg-amber-500', canExtract);
+                  btn.classList.toggle('ring-1', canExtract);
+                  btn.classList.toggle('ring-amber-300/40', canExtract);
+
+                  if (!creature) {
+                      hint.textContent = 'Select a creature to extract';
+                      hint.className = 'mt-1 text-center text-[10px] leading-snug text-white/45';
+                  } else if (creature.isPredator) {
+                      hint.textContent = 'Predators cannot be preserved as eggs';
+                      hint.className = 'mt-1 text-center text-[10px] leading-snug text-red-400/90';
+                  } else if (eggs.length >= MAX_EGGS) {
+                      hint.textContent = 'Free up egg inventory space first';
+                      hint.className = 'mt-1 text-center text-[10px] leading-snug text-amber-300/90';
+                  } else if (totalScore < EXTRACT_EGG_COST) {
+                      hint.textContent = `Need ${formatScore(EXTRACT_EGG_COST)} • you have ${formatScore(totalScore)}`;
+                      hint.className = 'mt-1 text-center text-[10px] leading-snug text-amber-300/90';
+                  } else {
+                      hint.textContent = 'Preserves brain + modules • creature leaves the swarm';
+                      hint.className = 'mt-1 text-center text-[10px] leading-snug text-emerald-300/80';
+                  }
+              }
+
               function extractCreatureToEgg(creature, options = {}) {
-                  const { refreshExtractModal = false } = options;
+                  const { refreshExtractModal = false, fromInspector = false } = options;
 
                   if (!creature) return false;
-                  if (creature.isPredator) {
-                      addFloatingText(creature.x, creature.y - 30, "Predators cannot be extracted", '#f87171');
-                      playTone(220, 'sawtooth', 0.25, 0.6);
+                  const blockReason = getExtractEggBlockReason(creature);
+                  if (blockReason) {
+                      const fx = fromInspector ? width / 2 : creature.x;
+                      const fy = fromInspector ? 110 : creature.y - 30;
+                      addFloatingText(fx, fy, blockReason, '#f87171');
+                      playExtractEggFailSound();
+                      if (!fromInspector) alert(blockReason);
                       return false;
                   }
-                  if (eggs.length >= MAX_EGGS) {
-                      alert(`Your Egg Inventory is full (${MAX_EGGS} max).`);
-                      return false;
-                  }
-                  if (!ScoreEngine.spend(250000)) {
-                      alert("You need 250,000 High Roller Points.");
+                  if (!ScoreEngine.spend(EXTRACT_EGG_COST)) {
+                      const msg = `Need ${formatScore(EXTRACT_EGG_COST)} High Roller Points`;
+                      addFloatingText(fromInspector ? width / 2 : creature.x, fromInspector ? 110 : creature.y - 30, msg, '#f87171');
+                      playExtractEggFailSound();
                       return false;
                   }
                   updateMainStats();
                   updateEggCountBadge();
-                  addFloatingText(creature.x, creature.y - 30, "-250,000", '#fbbf24');
-                  playTone(620, 'sine', 0.18, 0.6);
-                  setTimeout(() => playTone(880, 'sine', 0.12, 0.4), 110);
+                  addFloatingText(creature.x, creature.y - 30, `-${formatScore(EXTRACT_EGG_COST)}`, '#fbbf24');
+                  playExtractEggSuccessSound();
                   let brainData = null;
                   if (creature.brain) {
                       brainData = {
@@ -5236,8 +5307,13 @@
                   eggs.push(eggData);
                   const index = creatures.indexOf(creature);
                   if (index > -1) creatures.splice(index, 1);
+                  if (fromInspector) {
+                      addFloatingText(width / 2, 88, `Egg created: ${eggData.name}`, '#34d399');
+                  }
                   if (selectedCreature === creature) {
                       deselectCreature();
+                  } else {
+                      updateInspectorExtractButton(selectedCreature);
                   }
                   if (refreshExtractModal) {
                       showExtractEggModal();
@@ -5328,8 +5404,24 @@
               }
 
               function normalizeIncubatorSlots() {
-                  incubatorSlots.forEach(slot => {
+                  while (incubatorSlots.length < MAX_INCUBATOR_SLOTS) {
+                      incubatorSlots.push({
+                          id: incubatorSlots.length + 1,
+                          multiplier: 1.0,
+                          totalIncubations: 0,
+                          currentIncubation: null,
+                          automation: createDefaultSlotAutomation()
+                      });
+                  }
+                  if (incubatorSlots.length > MAX_INCUBATOR_SLOTS) {
+                      incubatorSlots.length = MAX_INCUBATOR_SLOTS;
+                  }
+                  incubatorSlots.forEach((slot, index) => {
+                      slot.id = index + 1;
                       ensureSlotAutomation(slot);
+                      if (slot.currentIncubation && typeof slot.currentIncubation.progress !== 'number') {
+                          slot.currentIncubation.progress = 0;
+                      }
                   });
               }
 
@@ -5348,6 +5440,92 @@
                   const min = Math.floor(totalSec / 60);
                   const sec = totalSec % 60;
                   return `${min}:${sec.toString().padStart(2, '0')}`;
+              }
+
+              function captureEggModuleSnapshot(eggData) {
+                  const modules = eggData?.modules || [];
+                  const maxTierByType = {};
+                  for (const m of modules) {
+                      const tier = m.tier || 1;
+                      maxTierByType[m.type] = Math.max(maxTierByType[m.type] || 0, tier);
+                  }
+                  return {
+                      moduleCount: modules.length,
+                      maxTierByType: { ...maxTierByType }
+                  };
+              }
+
+              function getEggMaxTierByType(eggData) {
+                  const map = {};
+                  for (const m of (eggData?.modules || [])) {
+                      const tier = m.tier || 1;
+                      map[m.type] = Math.max(map[m.type] || 0, tier);
+                  }
+                  return map;
+              }
+
+              function detectEggTierUpgrades(beforeMap, afterMap) {
+                  const upgrades = [];
+                  for (const type in afterMap) {
+                      const before = beforeMap[type] || 0;
+                      const after = afterMap[type] || 0;
+                      if (before > 0 && after > before) {
+                          upgrades.push({ type, from: before, to: after });
+                      }
+                  }
+                  return upgrades;
+              }
+
+              function checkEggModuleTierUpgrades(eggData) {
+                  if (!eggData?.modules?.length) return [];
+                  const upgrades = [];
+                  const typeTierCounts = {};
+                  for (const m of eggData.modules) {
+                      const key = m.type + '-' + (m.tier || 1);
+                      typeTierCounts[key] = (typeTierCounts[key] || 0) + 1;
+                  }
+                  for (const key in typeTierCounts) {
+                      if (typeTierCounts[key] >= 3) {
+                          const [type, tierStr] = key.split('-');
+                          const currentTier = parseInt(tierStr, 10);
+                          const nextTier = Math.min(10, currentTier + 1);
+                          for (const m of eggData.modules) {
+                              if (m.type === type && (m.tier || 1) === currentTier) {
+                                  m.tier = nextTier;
+                                  upgrades.push({ type, from: currentTier, to: nextTier });
+                                  break;
+                              }
+                          }
+                      }
+                  }
+                  return upgrades;
+              }
+
+              function formatIncubationTierUpgrades(upgrades) {
+                  if (!upgrades || upgrades.length === 0) {
+                      return '<span class="text-white/45">No tier upgrades</span>';
+                  }
+                  const seen = new Set();
+                  const lines = [];
+                  for (const u of upgrades) {
+                      const key = `${u.type}-${u.from}-${u.to}`;
+                      if (seen.has(key)) continue;
+                      seen.add(key);
+                      lines.push(`<span class="text-violet-300">${u.type}</span> <span class="text-white/50">T${u.from}</span> → <span class="text-emerald-400 font-mono">T${u.to}</span>`);
+                  }
+                  return lines.join('<br>');
+              }
+
+              function ensureIncubationTracking(inc, eggData) {
+                  if (!inc.startSnapshot) {
+                      inc.startSnapshot = captureEggModuleSnapshot(eggData);
+                  }
+                  if (typeof inc.modulesAddedDuringIncubation !== 'number') {
+                      inc.modulesAddedDuringIncubation = 0;
+                  }
+                  if (!Array.isArray(inc.tierUpgrades)) {
+                      inc.tierUpgrades = [];
+                  }
               }
 
               function addAutomationModulesToEgg(eggData, count) {
@@ -5384,8 +5562,20 @@
                   slot.multiplier = Math.min(3.0, slot.multiplier + multGain);
                   slot.totalIncubations++;
 
+                  ensureIncubationTracking(inc, egg);
+
                   const moduleCount = Math.floor(random(1, 4));
+                  const tiersBefore = getEggMaxTierByType(egg);
                   addAutomationModulesToEgg(egg, moduleCount);
+                  inc.modulesAddedDuringIncubation += moduleCount;
+
+                  const tierUpgradeResults = checkEggModuleTierUpgrades(egg);
+                  const tiersAfter = getEggMaxTierByType(egg);
+                  const detectedUpgrades = detectEggTierUpgrades(tiersBefore, tiersAfter);
+                  const allUpgrades = tierUpgradeResults.length > 0 ? tierUpgradeResults : detectedUpgrades;
+                  if (allUpgrades.length > 0) {
+                      inc.tierUpgrades.push(...allUpgrades);
+                  }
 
                   const scoreAfter = getEggScore(egg);
                   const scoreDelta = Math.max(0, scoreAfter - scoreBefore);
@@ -5445,6 +5635,22 @@
                   playTone(520, 'sine', 0.14, 0.45);
                   setTimeout(() => playTone(780, 'sine', 0.12, 0.35), 90);
                   addFloatingText(width / 2, 72, extending ? '+5 min Auto' : 'Slot Automated', '#a78bfa');
+                  renderIncubatorSlots();
+              }
+
+              function cancelIncubatorAutomation(slotIndex) {
+                  const slot = incubatorSlots[slotIndex];
+                  if (!slot) return;
+
+                  const auto = ensureSlotAutomation(slot);
+                  const active = isSlotAutomated(slot);
+                  if (!active && auto.endsAt <= Date.now()) return;
+
+                  if (!confirm('Stop automation on this slot?\nCrystals already spent will not be refunded.')) return;
+
+                  auto.endsAt = 0;
+                  playTone(280, 'sine', 0.12, 0.35);
+                  addFloatingText(width / 2, 72, 'Automation Cancelled', '#f87171');
                   renderIncubatorSlots();
               }
 
@@ -5532,13 +5738,12 @@
                       html += `<div class="text-white/70 mt-1 leading-relaxed">
                           Session: <span data-inc-session-cycles class="font-mono text-amber-300">${auto.session.cyclesCompleted}</span> cycles •
                           <span data-inc-session-modules class="font-mono text-sky-300">+${auto.session.modulesAdded}</span> modules •
-                          <span data-inc-session-score class="font-mono text-amber-300">+${auto.session.scoreGained}</span> egg score
+                          <span data-inc-session-score class="font-mono text-amber-300">+${formatScore(auto.session.scoreGained)}</span> egg score
                       </div>`;
                   }
 
                   if (slot.currentIncubation) {
-                      const eggScore = getEggScore(slot.currentIncubation.eggData);
-                      html += `<div class="text-white/45 mt-1">Egg score now: <span data-inc-egg-score class="font-mono text-amber-400/90">${eggScore}</span></div>`;
+                      html += `<div class="text-white/45 mt-1">Egg score now: <span data-inc-egg-score class="font-mono text-amber-400/90">${formatEggScore(slot.currentIncubation.eggData)}</span></div>`;
                   }
 
                   if (!active) {
@@ -5558,6 +5763,10 @@
                                       : 'bg-white/5 text-white/35 cursor-not-allowed'}"
                                   ${aetheriumCrystals >= INCUBATOR_AUTOMATION_CRYSTAL_COST ? '' : 'disabled'}>
                               Extend +5 min (1 Crystal)
+                          </button>
+                          <button onclick="cancelIncubatorAutomation(${index}); event.stopImmediatePropagation();"
+                                  class="w-full mt-1.5 py-1.5 text-[11px] rounded-lg font-medium bg-red-500/80 hover:bg-red-500 text-white">
+                              Cancel Automation
                           </button>`;
                   }
 
@@ -5577,7 +5786,7 @@
                       const isReady = hasInc && slot.currentIncubation.readyToClaim === true && !automated;
 
                       const card = document.createElement('div');
-                      card.dataset.incSlot = String(slot.id);
+                      card.dataset.incIndex = String(index);
                       if (hasInc && slot.currentIncubation?.eggData) {
                           const egg = slot.currentIncubation.eggData;
                           card.dataset.eggSig = (egg.modules?.length || 0) + ':' + (egg.modules?.map(m => `${m.type}-${m.tier || 1}`).join(',') || '');
@@ -5600,7 +5809,7 @@
 
                       if (hasInc) {
                           const egg = slot.currentIncubation.eggData;
-                          const canvasId = `incubator-slot-preview-${slot.id}`;
+                          const canvasId = `incubator-slot-preview-${index}`;
                           const barColor = automated ? 'bg-violet-500' : (isReady ? 'bg-emerald-500' : 'bg-amber-500');
 
                           html += `
@@ -5663,7 +5872,7 @@
 
                       if (hasInc) {
                           setTimeout(() => {
-                              const canvas = document.getElementById(`incubator-slot-preview-${slot.id}`);
+                              const canvas = document.getElementById(`incubator-slot-preview-${index}`);
                               if (canvas && slot.currentIncubation.eggData && typeof drawCreaturePreview === 'function') {
                                   drawCreaturePreview(slot.currentIncubation.eggData, canvas);
                               }
@@ -5676,8 +5885,9 @@
                   const grid = document.getElementById('incubator-slots-grid');
                   if (!grid) return;
 
-                  incubatorSlots.forEach(slot => {
-                      const card = grid.querySelector(`[data-inc-slot="${slot.id}"]`);
+                  const cards = grid.children;
+                  incubatorSlots.forEach((slot, index) => {
+                      const card = cards[index] || grid.querySelector(`[data-inc-index="${index}"]`);
                       if (!card) return;
 
                       const inc = slot.currentIncubation;
@@ -5709,7 +5919,7 @@
 
                       const eggScoreEl = card.querySelector('[data-inc-egg-score]');
                       if (eggScoreEl && inc?.eggData) {
-                          eggScoreEl.textContent = getEggScore(inc.eggData);
+                          eggScoreEl.textContent = formatEggScore(inc.eggData);
                       }
 
                       const cyclesEl = card.querySelector('[data-inc-session-cycles]');
@@ -5717,7 +5927,7 @@
                       const scoreEl = card.querySelector('[data-inc-session-score]');
                       if (cyclesEl) cyclesEl.textContent = auto.session.cyclesCompleted;
                       if (modulesEl) modulesEl.textContent = '+' + auto.session.modulesAdded;
-                      if (scoreEl) scoreEl.textContent = '+' + auto.session.scoreGained;
+                      if (scoreEl) scoreEl.textContent = '+' + formatScore(auto.session.scoreGained);
                   });
               }
 
@@ -5758,7 +5968,7 @@
                               class="creature-preview-canvas w-[46px] h-[46px] block flex-shrink-0 rounded-xl border border-white/10 bg-[#111113]"></canvas>
                       <div class="flex-1 min-w-0">
                           <div class="text-emerald-400 font-medium">${egg.name}</div>
-                          <div class="text-xs text-white/60">Gen ${egg.generation} • ${egg.modules?.length || 0} mods • Score ${getEggScore(egg)}</div>
+                          <div class="text-xs text-white/60">Gen ${egg.generation} • ${egg.modules?.length || 0} mods • Score ${formatEggScore(egg)}</div>
                       </div>
                       <button class="px-4 py-1 text-xs bg-amber-600 hover:bg-amber-500 rounded-xl text-white">Incubate</button>
                   `;
@@ -5788,11 +5998,15 @@
                   const egg = eggs[eggIndex];
                   if (!slot || !egg) return;
 
+                  const eggCopy = JSON.parse(JSON.stringify(egg));
                   slot.currentIncubation = {
-                      eggData: JSON.parse(JSON.stringify(egg)),
+                      eggData: eggCopy,
                       progress: 0,
                       completed: false,
-                      readyToClaim: false
+                      readyToClaim: false,
+                      startSnapshot: captureEggModuleSnapshot(eggCopy),
+                      modulesAddedDuringIncubation: 0,
+                      tierUpgrades: []
                   };
 
                   eggs.splice(eggIndex, 1);
@@ -5869,6 +6083,10 @@
                   const oldMult = slot.multiplier - gain;
                   const newMult = slot.multiplier;
 
+                  ensureIncubationTracking(inc, egg);
+                  const modulesAdded = inc.modulesAddedDuringIncubation || 0;
+                  const startCount = inc.startSnapshot?.moduleCount ?? (egg.modules?.length || 0);
+                  const currentCount = egg.modules?.length || 0;
                   const modList = egg.modules && egg.modules.length > 0
                       ? egg.modules.map(m => `${m.type} T${m.tier || 1}`).join(', ')
                       : 'None';
@@ -5876,14 +6094,24 @@
                   content.innerHTML = `
                   <div class="bg-white/5 rounded-2xl p-4">
                       <div class="text-emerald-400 font-semibold text-lg">${egg.name}</div>
-                      <div class="text-xs text-white/60">Gen ${egg.generation} • ${egg.modules?.length || 0} modules</div>
+                      <div class="text-xs text-white/60">Gen ${egg.generation} • ${currentCount} modules <span class="text-white/35">(started with ${startCount})</span></div>
+                  </div>
+
+                  <div class="bg-white/5 p-3 rounded-2xl text-xs border border-sky-500/20">
+                      <div class="text-white/50 mb-1.5 font-medium uppercase tracking-wide text-[10px]">Incubation Gains</div>
+                      <div class="flex items-center justify-between gap-3 mb-1.5">
+                          <span class="text-white/60">Modules gained</span>
+                          <span class="font-mono text-sky-300 text-sm">+${modulesAdded}</span>
+                      </div>
+                      <div class="text-white/60 mb-1">Tier upgrades</div>
+                      <div class="leading-relaxed">${formatIncubationTierUpgrades(inc.tierUpgrades)}</div>
                   </div>
 
                   <div class="grid grid-cols-2 gap-3 text-sm">
                       <div class="bg-white/5 p-3 rounded-2xl">
                           <div class="text-xs text-white/50">Sell Value (with mults)</div>
-                          <div class="text-2xl font-mono text-amber-400">${awardedScore.toLocaleString()}</div>
-                          <div class="text-[10px] text-white/40">Base ${baseScore} × slot ${newMult.toFixed(2)}</div>
+                          <div class="text-2xl font-mono text-amber-400">${formatScore(awardedScore)}</div>
+                          <div class="text-[10px] text-white/40">Base ${formatEggScore(egg)} × slot ${newMult.toFixed(2)}</div>
                       </div>
                       <div class="bg-white/5 p-3 rounded-2xl">
                           <div class="text-xs text-white/50">Slot Multiplier</div>
@@ -5893,7 +6121,7 @@
                   </div>
 
                   <div class="bg-white/5 p-3 rounded-2xl text-xs">
-                      <div class="text-white/50">Modules</div>
+                      <div class="text-white/50">Modules Now</div>
                       <div class="text-white/80">${modList}</div>
                   </div>
               `;
@@ -5920,7 +6148,7 @@
                   const baseScore = getEggScore(egg) * slot.multiplier;
                   const finalScore = addScore(baseScore);
 
-                  addFloatingText(width / 2, 85, `+${finalScore} Score`, '#fbbf24');
+                  addFloatingText(width / 2, 85, `+${formatScore(finalScore)} Score`, '#fbbf24');
                   slot.currentIncubation = null;
                   ensureSlotAutomation(slot).endsAt = 0;
                   hideIncubationCompleteModal();
@@ -6038,7 +6266,7 @@
                                                   <div class="text-xs text-white/60">
                                   Gen ${creature.generation} • ${creature.modules.length > 9999 ? creature.modules.length.toExponential(1) : creature.modules.length} modules (Tier ${creatureTier})
                                   • ${creature.killCount || 0} kills
-                                  • <span class="text-amber-400">Score: ${creature.getFinalAwardedScore().toLocaleString()}</span>
+                                  • <span class="text-amber-400">Score: ${formatScore(creature.getFinalAwardedScore())}</span>
                               </div>
                           </div>
                           <div class="flex items-center gap-2 flex-shrink-0">
@@ -6131,7 +6359,7 @@
               }
 
               function setup() {
-                  console.info('[MiniSimmy] build=mobile-opt-2026-06-17f tier=' + DeviceProfile.tier + ' incubator=automation zoom=buttons-only');
+                  console.info('[MiniSimmy] build=mobile-opt-2026-06-17i tier=' + DeviceProfile.tier + ' cursor-hazard=purple-beams');
                   debugLog("Setup started");
 
                   let canvas = createCanvas(820, 580);
@@ -6311,7 +6539,7 @@
 
                   updateIncubatorSlotsProgress(timeScale);
 
-                  if (incubatorModalOpen && frameCount % 30 === 0) {
+                  if (incubatorModalOpen && frameCount % 15 === 0) {
                       updateIncubatorSlotsLive();
                   }
 
@@ -7102,7 +7330,7 @@
                               playDepositSound();
 
                               const depositPts = addScore(12);
-                              if (depositPts > 0) addFloatingText(b.x, b.y - 10, `+${depositPts}`, '#fbbf24');
+                              if (depositPts > 0) addFloatingText(b.x, b.y - 10, `+${formatScore(depositPts)}`, '#fbbf24');
                           } else {
                               staticFoodPatches.push({
                                   x: b.x,
@@ -7198,7 +7426,7 @@
                           playEatSound(o.targetIsGreen);
 
                           const orbPts = addScore(Math.floor(o.energy * 0.8));
-                          if (orbPts > 0) addFloatingText(o.x, o.y - 8, `+${orbPts}`, '#4ade80');
+                          if (orbPts > 0) addFloatingText(o.x, o.y - 8, `+${formatScore(orbPts)}`, '#4ade80');
 
                           energyOrbs.splice(i, 1);
                       }
@@ -7266,7 +7494,7 @@
                                       c.childrenCount++;
                                       playBirthSound();
                                       const birthPts = addScore(8);
-                                      if (birthPts > 0) addFloatingText(c.x, c.y - 14, `+${birthPts}`, '#c084fc');
+                                      if (birthPts > 0) addFloatingText(c.x, c.y - 14, `+${formatScore(birthPts)}`, '#c084fc');
                                   }
                               }
                           }
@@ -8340,7 +8568,7 @@
                               <i class="fa-solid fa-fire text-orange-400 w-4"></i>
                               <span>Furnace Bonus</span>
                           </div>
-                          <div class="font-mono text-orange-400">×${snap.furnaceMult.toLocaleString()}</div>
+                          <div class="font-mono text-orange-400">×${formatScore(snap.furnaceMult)}</div>
                       </div>`;
                   }
 
@@ -8532,6 +8760,10 @@
                   setMult('mult-avgmod', MULTIPLIER_RATES.avgModules);
 
                   updateTierMultiplierDisplays(tierCounts);
+
+                  if (selectedCreature) {
+                      updateInspectorExtractButton(selectedCreature);
+                  }
               }
 
               // ==================== TIER MULTIPLIER DISPLAYS (Fixed Rates) ====================
@@ -8604,6 +8836,8 @@
 
                   const energyBar = document.getElementById('inspect-energy-bar');
                   if (energyBar) energyBar.style.width = '0%';
+
+                  updateInspectorExtractButton(null);
               }
 
               function getPreviewLogicalSize(canvas, fallback = 48) {
@@ -8767,8 +9001,10 @@
                   // === Score Value (Final awarded value with ALL bonuses) ===
                   const scoreValueEl = document.getElementById('inspect-score-value');
                   if (scoreValueEl) {
-                      scoreValueEl.innerText = c.getFinalAwardedScore().toLocaleString();
+                      scoreValueEl.innerText = formatScore(c.getFinalAwardedScore());
                   }
+
+                  updateInspectorExtractButton(c);
 
                   // === REMAINING LIFE (with color warning) ===
                   const lifeEl = document.getElementById('inspect-life');
@@ -9121,21 +9357,49 @@
                   updateQuickButtons();
               }
 
+              function applyPurpleInfectionToCreature(creature, options = {}) {
+                  const { showFloat = false, flashStrength = 420 } = options;
+                  if (!creature) return;
+
+                  const wasInfected = (creature.purpleFlash || 0) > 24 || creature.mustEatWhite;
+
+                  creature.purpleFlash = max(creature.purpleFlash || 0, flashStrength);
+                  creature.mustEatWhite = true;
+                  creature.damageFlash = max(creature.damageFlash || 0, 72);
+                  creature.energy = max(0, creature.energy - 8 * timeScale);
+
+                  if (!creature.isPredator && creature.energy < 42 && random() < 0.55) {
+                      creature.isPredator = true;
+                      creature.currentThought = "Infected - Turned predator";
+                  } else if (!wasInfected) {
+                      creature.currentThought = "Infected...";
+                  }
+
+                  if (showFloat && !wasInfected) {
+                      addFloatingText(creature.x, creature.y - 28, "INFECTED", '#c026ff');
+                      playTone(420, 'sawtooth', 0.22, 0.5);
+                  }
+              }
+
               function drawGlowingHazardBeam(wx1, wy1, wx2, wy2, pulse) {
                   const s1 = Viewport.worldToScreen(wx1, wy1);
                   const s2 = Viewport.worldToScreen(wx2, wy2);
                   const glow = 0.55 + sin(frameCount * 0.14 + pulse) * 0.25;
                   push();
-                  drawingContext.shadowBlur = 18;
-                  drawingContext.shadowColor = 'rgba(239,68,68,0.85)';
-                  stroke(255, 70, 70, 45 * glow);
-                  strokeWeight(14);
+                  drawingContext.shadowBlur = 24;
+                  drawingContext.shadowColor = 'rgba(192,38,255,0.9)';
+                  stroke(124, 58, 237, 38 * glow);
+                  strokeWeight(18);
                   line(s1.x, s1.y, s2.x, s2.y);
-                  drawingContext.shadowBlur = 10;
-                  stroke(239, 68, 68, 170 * glow);
-                  strokeWeight(6);
+                  drawingContext.shadowBlur = 14;
+                  stroke(168, 85, 247, 120 * glow);
+                  strokeWeight(10);
                   line(s1.x, s1.y, s2.x, s2.y);
-                  stroke(255, 170, 170, 220);
+                  drawingContext.shadowBlur = 8;
+                  stroke(192, 38, 255, 200 * glow);
+                  strokeWeight(5);
+                  line(s1.x, s1.y, s2.x, s2.y);
+                  stroke(233, 213, 255, 235);
                   strokeWeight(2.2);
                   line(s1.x, s1.y, s2.x, s2.y);
                   drawingContext.shadowBlur = 0;
@@ -9173,7 +9437,6 @@
                           if (d < 42) {
                               c.energy = max(0, c.energy - (2.6 + random(0.2, 1.0)) * timeScale);
                               c.damageFlash = max(c.damageFlash || 0, 35);
-                              c.purpleFlash = max(c.purpleFlash || 0, 48);
                               if (d > 3) {
                                   let dx = c.x - h.x;
                                   let dy = c.y - h.y;
@@ -9199,8 +9462,7 @@
                       for (let bi = 0; bi < beamHits.length; bi++) {
                           const c = beamHits[bi];
                           if (distToLineSegment(c.x, c.y, a.x, a.y, b.x, b.y) < 11) {
-                              c.purpleFlash = max(c.purpleFlash || 0, 50);
-                              c.energy = max(0, c.energy - 1.4 * timeScale);
+                              applyPurpleInfectionToCreature(c, { showFloat: true });
                           }
                       }
                   }
@@ -9215,6 +9477,13 @@
                               playAbsorbSound();
                           }
                       }
+                      const followHits = SpatialGrid.queryRadius((ptr.x + last.x) / 2, (ptr.y + last.y) / 2, dist(ptr.x, ptr.y, last.x, last.y) / 2 + 12);
+                      for (let fi = 0; fi < followHits.length; fi++) {
+                          const c = followHits[fi];
+                          if (distToLineSegment(c.x, c.y, ptr.x, ptr.y, last.x, last.y) < 11) {
+                              applyPurpleInfectionToCreature(c, { showFloat: true });
+                          }
+                      }
                   }
 
                   for (let i = placedHazards.length - 1; i >= 0; i--) {
@@ -9225,8 +9494,16 @@
                       if (h.timer <= 0) {
                           const hazardBlast = SpatialGrid.queryRadius(h.x, h.y, 65);
                           for (let hi = 0; hi < hazardBlast.length; hi++) {
-                              hazardBlast[hi].purpleFlash = max(hazardBlast[hi].purpleFlash || 0, 140);
+                              hazardBlast[hi].damageFlash = max(hazardBlast[hi].damageFlash || 0, 90);
                               hazardBlast[hi].energy = max(0, hazardBlast[hi].energy - 25);
+                              const blastDist = dist(h.x, h.y, hazardBlast[hi].x, hazardBlast[hi].y);
+                              if (blastDist > 3) {
+                                  let dx = hazardBlast[hi].x - h.x;
+                                  let dy = hazardBlast[hi].y - h.y;
+                                  let len = blastDist || 1;
+                                  hazardBlast[hi].vx += (dx / len) * 2.4;
+                                  hazardBlast[hi].vy += (dy / len) * 2.4;
+                              }
                           }
                           explosions.push(new Explosion(h.x, h.y));
                           playExplosionSound();
@@ -10829,7 +11106,7 @@
                   if (save.nextIncubationId) nextIncubationId = save.nextIncubationId;
 
                   // === Restore Incubator Slot Bonuses ===
-                  if (save.incubatorSlots && save.incubatorSlots.length === MAX_INCUBATOR_SLOTS) {
+                  if (save.incubatorSlots && save.incubatorSlots.length > 0) {
                       incubatorSlots = save.incubatorSlots;
                       normalizeIncubatorSlots();
                   } else {
@@ -10865,11 +11142,13 @@
               }
               // ==================== END SAVE MANAGER ====================
               function confirmExtractToEgg() {
+                  playExtractEggClickSound();
                   if (!selectedCreature) {
-                      alert("No creature selected.");
+                      addFloatingText(width / 2, 100, 'No creature selected', '#f87171');
+                      playExtractEggFailSound();
                       return;
                   }
-                  extractCreatureToEgg(selectedCreature);
+                  extractCreatureToEgg(selectedCreature, { fromInspector: true });
               }
 
 
