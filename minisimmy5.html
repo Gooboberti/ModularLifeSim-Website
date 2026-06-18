@@ -4,7 +4,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-18k" />
+    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-18t" />
     <title>MiniSimmy Orbital Ship v2</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2334d399'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%230a0a0f'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -73,13 +73,94 @@
     </script>
     <script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&display=swap" />
     <style>
-        body { font-family: 'Inter', system-ui, sans-serif; }
+        body { font-family: 'Inter', system-ui, sans-serif; padding-bottom: 56px; }
         .font-display { font-family: 'Space Grotesk', 'Inter', system-ui, sans-serif; font-weight: 600; }
         .time-btn { transition: all 0.1s ease; }
         .time-btn.active { background-color: #34d399; color: #0a0a0f; font-weight: 600; }
         .stat-value { font-variant-numeric: tabular-nums; }
         .inspector-label { font-size: 10px; color: #64748b; }
+        .inspect-mod-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            width: 100%;
+            max-height: 148px;
+            overflow-y: auto;
+            padding: 6px;
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.08);
+            background: rgba(255,255,255,0.04);
+        }
+        .inspect-mod-panel::-webkit-scrollbar { width: 3px; }
+        .inspect-mod-panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
+        .inspect-mod-summary {
+            font-size: 9px;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            color: rgba(255,255,255,0.42);
+            text-transform: uppercase;
+            padding-bottom: 2px;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            margin-bottom: 1px;
+        }
+        .inspect-mod-row {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            padding: 4px 5px;
+            border-radius: 8px;
+            background: rgba(0,0,0,0.22);
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        .inspect-mod-row-head {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            min-width: 0;
+        }
+        .inspect-mod-orb {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            border: 1px solid rgba(255,255,255,0.28);
+            box-shadow: 0 0 6px rgba(0,0,0,0.35);
+        }
+        .inspect-mod-name {
+            font-size: 9px;
+            font-weight: 600;
+            color: rgba(255,255,255,0.88);
+            line-height: 1.1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .inspect-mod-tiers {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 3px;
+            padding-left: 15px;
+        }
+        .inspect-mod-tier-pill {
+            font-size: 8px;
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+            padding: 1px 5px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: rgba(255,255,255,0.72);
+            line-height: 1.3;
+        }
+        .inspect-mod-empty {
+            font-size: 9px;
+            color: rgba(255,255,255,0.38);
+            font-style: italic;
+            text-align: center;
+            padding: 6px 2px;
+        }
         .modal { animation: fadeInScale 0.2s ease forwards; }
         @keyframes fadeInScale { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
         .hazard-cursor { cursor: none !important; }
@@ -106,6 +187,10 @@
         @keyframes prestige-glow {
             0%, 100% { box-shadow: 0 0 12px #c026ff, 0 0 24px #a21caf; }
             50% { box-shadow: 0 0 22px #e879f9, 0 0 38px #c026ff; }
+        }
+        @keyframes pulse-orange {
+            0%, 100% { box-shadow: 0 0 14px rgba(249, 115, 22, 0.35), 0 0 24px rgba(251, 146, 60, 0.2); }
+            50% { box-shadow: 0 0 22px rgba(251, 146, 60, 0.5), 0 0 36px rgba(249, 115, 22, 0.35); }
         }
 /* === Background Image for Main Game Area === */
 #canvas-container {
@@ -177,23 +262,231 @@
 .music-mode-btn.active-mode {
     box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.65), 0 0 14px rgba(52, 211, 153, 0.35);
 }
+.crystal-pink { color: #f472b6 !important; }
 .stat-upgrade-btn {
+    position: relative;
     cursor: pointer;
     transition: background 0.15s ease, box-shadow 0.15s ease;
 }
 .stat-upgrade-btn:hover {
     background: rgba(255, 255, 255, 0.12) !important;
-    box-shadow: 0 0 0 1px rgba(52, 211, 153, 0.35);
+    box-shadow: 0 0 0 1px rgba(244, 114, 182, 0.35);
+}
+.crystal-upgrade-hint {
+    position: absolute;
+    top: 3px;
+    right: 4px;
+    font-size: 7px;
+    color: #f472b6;
+    pointer-events: none;
+    opacity: 0.92;
+    filter: drop-shadow(0 0 3px rgba(244, 114, 182, 0.5));
+}
+.crystal-cost-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+}
+.crystal-cost-inline .fa-gem { font-size: 7px; }
+.music-modes-heading {
+    text-align: center;
+    line-height: 1.25;
+    margin-bottom: 2px;
+}
+.economy-panel-heading {
+    text-align: center;
+    line-height: 1.3;
+    width: 100%;
+}
+.economy-flow-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 3px 5px;
+    font-size: 8px;
+    color: rgba(255, 255, 255, 0.48);
+}
+.economy-flow-line .flow-sep {
+    color: rgba(255, 255, 255, 0.18);
+}
+.economy-flow-line .flow-prestige { color: rgba(244, 114, 182, 0.88); }
+.economy-flow-line .flow-furnace { color: rgba(251, 146, 60, 0.88); }
+.economy-flow-line .flow-crystal { color: rgba(167, 139, 250, 0.88); }
+.economy-flow-line .flow-dust-icon { color: #fb923c; }
+
+.top-meta-cluster {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.top-meta-card {
+    display: flex;
+    align-items: center;
+}
+.incubator-modal-panel {
+    display: flex;
+    flex-direction: column;
+    max-height: min(92vh, 900px);
+    overflow: hidden;
+}
+#incubator-slots-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(245, 158, 11, 0.35) transparent;
+}
+#incubator-slots-scroll::-webkit-scrollbar { width: 6px; }
+#incubator-slots-scroll::-webkit-scrollbar-thumb {
+    background: rgba(245, 158, 11, 0.35);
+    border-radius: 3px;
+}
+.incubator-slot-card {
+    padding: 0.5rem;
+}
+.incubator-slot-card .creature-preview-canvas {
+    width: 2.5rem;
+    height: 2.5rem;
+}
+body.is-mobile .incubator-modal-panel {
+    max-height: 94vh;
+}
+body.is-mobile #incubator-slots-scroll {
+    max-height: 58vh;
+}
+.top-meta-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 34px;
+    padding: 0 12px;
+    border-radius: 1rem;
+    border: 1px solid transparent;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    transition: transform 0.12s ease, filter 0.15s ease;
+}
+.top-meta-btn:hover {
+    filter: brightness(1.08);
+}
+.top-meta-btn:active {
+    transform: scale(0.97);
+}
+.top-meta-btn-vault {
+    border-color: rgba(139, 92, 246, 0.45);
+    background: linear-gradient(145deg, rgba(76, 29, 149, 0.65), rgba(124, 58, 237, 0.35));
+    color: #e9d5ff;
+}
+.top-meta-btn-vault i { font-size: 0.7rem; }
+.top-meta-btn-incubator {
+    border-color: rgba(245, 158, 11, 0.45);
+    background: linear-gradient(145deg, rgba(146, 64, 14, 0.6), rgba(217, 119, 6, 0.35));
+    color: #fde68a;
+}
+.top-meta-btn-incubator i { font-size: 0.7rem; }
+.top-meta-caption {
+    font-size: 7px;
+    line-height: 1.25;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.36);
+    max-width: 7.5rem;
+}
+.top-bar-right-cluster {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+}
+.crystal-level-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    font-size: 9px;
+    color: rgba(244, 114, 182, 0.85);
+    font-family: ui-monospace, monospace;
+}
+.crystal-upgrade-hint-wrap {
+    position: absolute;
+    top: 3px;
+    right: 4px;
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    pointer-events: none;
+    line-height: 1;
+}
+.crystal-upgrade-hint-wrap .fa-gem {
+    font-size: 7px;
+    color: #f472b6;
+    filter: drop-shadow(0 0 3px rgba(244, 114, 182, 0.5));
+}
+.crystal-upgrade-hint-wrap .crystal-level-label {
+    font-size: 7px;
+    font-family: ui-monospace, monospace;
+    color: rgba(244, 114, 182, 0.9);
+}
+.inc-quick-slot-btn {
+    min-width: 1.65rem;
+    height: 1.35rem;
+    padding: 0 0.2rem;
+    border-radius: 0.45rem;
+    font-size: 9px;
+    font-weight: 600;
+    font-family: ui-monospace, monospace;
+    line-height: 1;
+    transition: background 0.15s, opacity 0.15s;
+}
+.inc-quick-slot-btn.is-ready {
+    background: rgba(245, 158, 11, 0.25);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.45);
+}
+.inc-quick-slot-btn.is-ready:hover { background: rgba(245, 158, 11, 0.4); }
+.inc-quick-slot-btn.is-occupied {
+    background: rgba(139, 92, 246, 0.15);
+    color: rgba(167, 139, 250, 0.55);
+    border: 1px solid rgba(139, 92, 246, 0.25);
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+.inc-quick-slot-btn.is-locked {
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(255, 255, 255, 0.28);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    cursor: not-allowed;
 }
 .speed-btn-locked {
     opacity: 0.45;
 }
 
-.tutorial-toggle-btn {
+#game-bottom-dock {
     position: fixed;
-    bottom: 14px;
-    left: 14px;
+    bottom: 12px;
+    left: 12px;
     z-index: 520;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    max-width: calc(100vw - 24px);
+}
+#bottom-audio-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(10, 10, 15, 0.92);
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(8px);
+}
+.tutorial-toggle-btn {
+    position: static;
     display: flex;
     align-items: center;
     gap: 6px;
@@ -208,6 +501,7 @@
     backdrop-filter: blur(8px);
     transition: all 0.15s ease;
     touch-action: manipulation;
+    flex-shrink: 0;
 }
 .tutorial-toggle-btn:hover { background: rgba(52, 211, 153, 0.15); }
 .tutorial-toggle-btn.off { opacity: 0.55; border-color: rgba(255,255,255,0.2); color: #94a3b8; }
@@ -300,6 +594,105 @@
     line-height: 1.25;
     overflow: hidden;
     text-overflow: ellipsis;
+    text-shadow: 0 0 7px color-mix(in srgb, currentColor 50%, transparent),
+                 0 0 14px color-mix(in srgb, currentColor 22%, transparent);
+}
+.save-load-btn {
+    border-radius: 10px;
+    border: 1px solid rgba(52, 211, 153, 0.28);
+    background: linear-gradient(135deg, rgba(5, 46, 22, 0.55), rgba(16, 185, 129, 0.12));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.save-load-btn:hover {
+    border-color: rgba(52, 211, 153, 0.45);
+    background: linear-gradient(135deg, rgba(5, 46, 22, 0.7), rgba(16, 185, 129, 0.2));
+}
+.stats-analytics-thumb {
+    display: block;
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 148px;
+    height: 26px;
+    margin: 0 6px;
+    padding: 2px 5px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(8, 10, 16, 0.72);
+    cursor: pointer;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.stats-analytics-thumb:hover {
+    border-color: rgba(52, 211, 153, 0.32);
+    box-shadow: 0 0 10px rgba(52, 211, 153, 0.1);
+}
+.stats-analytics-thumb canvas {
+    display: block;
+    width: 100%;
+    height: 20px;
+}
+.day-night-badge {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 12;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 9px 3px 7px;
+    border-radius: 999px;
+    font-family: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    pointer-events: none;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: color 0.35s ease, background 0.35s ease, box-shadow 0.35s ease;
+}
+.day-night-badge__dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.day-night-badge.is-day {
+    color: #fde68a;
+    background: rgba(251, 191, 36, 0.14);
+    box-shadow: 0 0 18px rgba(251, 191, 36, 0.14);
+}
+.day-night-badge.is-day .day-night-badge__dot {
+    background: #fbbf24;
+    box-shadow: 0 0 8px rgba(251, 191, 36, 0.8);
+}
+.day-night-badge.is-night {
+    color: #c7d2fe;
+    background: rgba(67, 56, 202, 0.2);
+    box-shadow: 0 0 18px rgba(99, 102, 241, 0.18);
+}
+.day-night-badge.is-night .day-night-badge__dot {
+    background: #818cf8;
+    box-shadow: 0 0 8px rgba(129, 140, 248, 0.75);
+}
+.analytics-preset-btn {
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+    padding: 4px 10px;
+    font-size: 10px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.55);
+    transition: all 0.15s ease;
+}
+.analytics-preset-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.85);
+}
+.analytics-preset-btn.active {
+    border-color: rgba(52, 211, 153, 0.4);
+    background: rgba(16, 185, 129, 0.12);
+    color: #6ee7b7;
 }
 .tier-mult-grid .stat-upgrade-btn {
     padding: 0.4rem 0.55rem;
@@ -399,14 +792,11 @@ body.is-mobile #game-tool-bar > div:nth-child(2) {
     flex-shrink: 0;
 }
 
-body.is-mobile #game-tool-bar > div:last-child {
+body.is-mobile #bottom-audio-controls .desktop-only {
     display: none;
 }
-
-body.is-mobile #game-hint-bar {
-    font-size: 9px;
-    line-height: 1.3;
-    padding: 0 0.25rem;
+body.is-mobile #bottom-audio-controls input[type="range"] {
+    width: 2.5rem;
 }
 
 /* Portrait: map on top, stats/inspector below */
@@ -428,19 +818,27 @@ body.is-mobile.mobile-portrait #game-sidebar {
 }
 
 body.is-mobile.mobile-portrait #vegas-score {
-    font-size: 2rem !important;
-}
-
-body.is-mobile.mobile-portrait #top-points-wrapper {
-    width: auto !important;
-    min-width: 0;
-    flex: 1 1 7rem;
+    font-size: 1.45rem !important;
 }
 
 body.is-mobile.mobile-portrait #game-top-bar-row1 .economy-cluster {
     flex-wrap: wrap;
     justify-content: flex-end;
     gap: 0.35rem;
+}
+body.is-mobile .top-meta-btn {
+    height: 32px;
+    padding: 0 8px;
+    font-size: 9px;
+}
+body.is-mobile .top-meta-caption {
+    font-size: 6px;
+    max-width: 6.5rem;
+}
+body.is-mobile .top-bar-right-cluster {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
 }
 
 /* Landscape: map left, sidebar right */
@@ -467,7 +865,149 @@ body.is-mobile.mobile-landscape #game-sidebar {
 }
 
 body.is-mobile.mobile-landscape #vegas-score {
-    font-size: 1.75rem !important;
+    font-size: 1.35rem !important;
+}
+
+.sidebar-score-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+.sidebar-furnace-heading {
+    min-width: 0;
+}
+.sidebar-score-heading {
+    text-align: right;
+    flex-shrink: 0;
+}
+.sidebar-score-col {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    flex-shrink: 0;
+    margin-left: auto;
+    text-align: right;
+}
+.sidebar-score-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 6px;
+    width: 100%;
+}
+.sidebar-furnace-group {
+    display: flex;
+    align-items: flex-end;
+    gap: 3px;
+    flex-shrink: 0;
+}
+.sidebar-furnace-mult {
+    display: none;
+    align-items: center;
+    gap: 2px;
+    padding-bottom: 5px;
+    font-family: ui-monospace, monospace;
+    font-size: 10px;
+    font-weight: 600;
+    color: #fb923c;
+    line-height: 1;
+    white-space: nowrap;
+}
+.sidebar-furnace-mult.is-visible {
+    display: inline-flex;
+}
+.sidebar-furnace-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 2.1rem;
+    height: 2.1rem;
+    flex-shrink: 0;
+    border-radius: 12px;
+    border: 1px solid rgba(249, 115, 22, 0.35);
+    background: linear-gradient(145deg, rgba(154, 52, 18, 0.55), rgba(234, 88, 12, 0.28));
+    color: #fdba74;
+    transition: border-color 0.15s ease, background 0.15s ease, transform 0.12s ease;
+}
+.sidebar-furnace-btn:hover {
+    border-color: rgba(251, 146, 60, 0.55);
+    background: linear-gradient(145deg, rgba(194, 65, 12, 0.65), rgba(234, 88, 12, 0.38));
+}
+.sidebar-furnace-btn.is-burning {
+    border-color: rgba(251, 146, 60, 0.65);
+    box-shadow: 0 0 14px rgba(249, 115, 22, 0.35);
+}
+.sidebar-furnace-timer {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    min-width: 2rem;
+    padding: 1px 4px;
+    border-radius: 999px;
+    border: 1px solid rgba(249, 115, 22, 0.45);
+    background: rgba(8, 8, 12, 0.92);
+    font-family: ui-monospace, monospace;
+    font-size: 8px;
+    color: #fb923c;
+    line-height: 1.2;
+}
+.sidebar-furnace-timer.is-visible {
+    display: flex;
+}
+.sidebar-bonus-stack {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: flex-end;
+    gap: 2px;
+    min-width: 0;
+    max-width: 5.5rem;
+    padding: 0 2px 1px;
+}
+.sidebar-bonus-stack:empty {
+    display: none;
+}
+.sidebar-bonus-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-family: ui-monospace, monospace;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+.sidebar-bonus-chip .chip-label {
+    font-size: 7px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.32);
+    margin-right: 1px;
+}
+.sidebar-score-wrap {
+    flex-shrink: 0;
+    cursor: pointer;
+    border-radius: 10px;
+    padding: 2px 0 2px 4px;
+    transition: box-shadow 0.2s ease;
+    text-align: right;
+}
+#vegas-score {
+    text-align: right;
+}
+.sidebar-score-wrap.furnace-active #vegas-score {
+    color: #fb923c;
+    text-shadow: 0 0 16px rgba(251, 146, 60, 0.55), 0 0 32px rgba(249, 115, 22, 0.28);
+}
+.sidebar-score-wrap.furnace-active {
+    animation: pulse-orange 1.6s infinite ease-in-out;
 }
 
 body.is-mobile.mobile-landscape #game-top-bar-row1 .economy-cluster {
@@ -502,123 +1042,74 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
               <div id="game-top-bar" class="game-fixed-width mx-auto mb-2">
 
                   <!-- Row 1: Title + Main Menu + Economy cluster -->
-                  <div id="game-top-bar-row1" class="mb-1.5 flex items-center justify-between">
+                  <div id="game-top-bar-row1" class="mb-1 flex items-center justify-between">
 
-                      <!-- LEFT GROUP: Title + Main Menu Button -->
-                      <div class="flex items-center gap-x-3">
-
-                          <!-- Small Title -->
-                          <div class="text-sm font-semibold tracking-tight text-white/80">
-                              MiniSimmy2
-                          </div>
-
-                          <!-- Main Menu Button -->
+                      <!-- LEFT GROUP: Menu + Save/Load -->
+                      <div class="flex items-center gap-x-2">
                           <button onclick="playUIClick(); goToMainMenu()"
                                   class="flex items-center gap-x-2 rounded-2xl border border-white/10 bg-white/5 px-3.5 py-1.5 text-xs font-medium text-white transition-all hover:bg-white/10 active:scale-[0.985]">
                               <i class="fa-solid fa-bars"></i>
-                              <span>Main Menu</span>
+                              <span>MiniSimm2 Menu</span>
                           </button>
-
+                          <button onclick="playUIClick(); showSaveManager()"
+                                  class="save-load-btn flex items-center gap-x-1 rounded-xl px-2 py-1 text-[10px] font-medium text-emerald-100/90 transition-all active:scale-[0.98]">
+                              <i class="fa-solid fa-save text-[8px] opacity-80"></i>
+                              <span>Save / Load</span>
+                          </button>
                       </div>
 
                       <!-- Flexible spacer -->
                       <div class="flex-1"></div>
 
-                      <!-- RIGHT: Crystals | Dust | Furnace + Bonus | Points | Prestige -->
+                      <!-- RIGHT: Vault + Incubator + Prestige -->
                       <div id="economy-section" class="economy-cluster flex items-center gap-x-1.5">
-
-                          <!-- Combined Economy Button -->
-                          <button onclick="playUIClick(); showInventory()" id="top-economy-btn"
-                                  class="flex items-center gap-x-3 rounded-2xl border border-white/10 bg-white/10 px-4 py-1.5 text-xs font-semibold text-white transition-all hover:bg-white/15 active:scale-[0.985]">
-
-                              <!-- Crystals -->
-                              <div class="flex items-center gap-x-1.5">
-                                  <i class="fa-solid fa-gem text-pink-400"></i>
-                                  <span id="top-crystals" class="font-mono tabular-nums">0</span>
-                              </div>
-
-                              <div class="h-3 w-px bg-white/20"></div>
-
-                              <!-- Dust -->
-                              <div class="flex items-center gap-x-1.5">
-                                  <i class="fa-solid fa-flask text-orange-400"></i>
-                                  <span id="top-dust" class="font-mono tabular-nums">0.00</span>
-                              </div>
-                          </button>
-
-                          <!-- Furnace + Bonus -->
-                          <div class="flex items-center gap-x-1">
-                              <div class="relative">
-                                  <button onclick="playUIClick(); showFurnaceModal()" id="top-furnace-btn"
-                                          class="flex items-center gap-x-1.5 rounded-2xl bg-orange-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-orange-700">
-                                      <i class="fa-solid fa-fire"></i>
-                                      <span>Furnace</span>
-                                  </button>
-                                  <div id="top-furnace-timer"
-                                       class="absolute -top-1 -right-1 hidden items-center justify-center rounded-full border border-orange-500/50 bg-black/80 px-1.5 py-px font-mono text-[9px] text-orange-400">
-                                      --:--
+                          <div class="top-bar-right-cluster">
+                              <div id="vault-nav-section" class="top-meta-cluster">
+                                  <div class="top-meta-card">
+                                      <button type="button" onclick="playUIClick(); showGeneVault()" id="top-gene-vault-btn"
+                                              class="top-meta-btn top-meta-btn-vault" title="Gene Vault — extract eggs, preserve genes across Prestige">
+                                          <i class="fa-solid fa-dna"></i>
+                                          <span>Gene Vault</span>
+                                      </button>
+                                  </div>
+                                  <div class="top-meta-card">
+                                      <button type="button" onclick="playUIClick(); showIncubator()" id="top-incubator-btn"
+                                              class="top-meta-btn top-meta-btn-incubator" title="Incubator — incubate eggs, stack modules &amp; multipliers">
+                                          <i class="fa-solid fa-egg"></i>
+                                          <span>Incubator</span>
+                                      </button>
                                   </div>
                               </div>
-                              <!-- Furnace Bonus -->
-                              <span id="top-furnace-bonus"
-                                    class="hidden items-center px-1.5 py-0.5 font-mono text-xs font-semibold text-orange-400">x1</span>
-                          </div>
 
-                          <!-- Points -->
-                          <div onclick="playUIClick(); showScoreBreakdownModal()"
-                               class="flex w-44 cursor-pointer items-center justify-between gap-x-1.5 rounded-2xl border border-white/10 bg-white/5 px-3 py-1.5 text-xs transition-all hover:bg-white/10 active:scale-[0.985]"
-                               id="top-points-wrapper">
-                              <span class="text-white/50">Points</span>
-                              <span id="top-score" class="font-mono font-semibold text-emerald-400">0</span>
-                          </div>
+                              <!-- Prestige Preview + Button -->
+                              <div class="flex min-w-[210px] items-center gap-x-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-1.5 text-xs">
+                                  <span class="whitespace-nowrap text-white/50">Prestige for</span>
+                                  <div class="flex min-w-[88px] items-center justify-end gap-1">
+                                      <i class="fa-solid fa-vial text-[10px] text-orange-400/90" aria-hidden="true"></i>
+                                      <span id="prestige-dust-preview" class="text-right font-mono text-[11px] font-semibold text-amber-400">0 mg</span>
+                                  </div>
 
-                          <!-- Prestige Preview + Button -->
-                          <div class="flex min-w-[210px] items-center gap-x-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-1.5 text-xs">
-                              <span class="whitespace-nowrap text-white/50">Prestige for</span>
-                              <span id="prestige-dust-preview" class="min-w-[88px] text-right font-mono text-[11px] font-semibold text-amber-400">0 mg</span>
-
-                              <button onclick="playUIClick(); prestige()" id="prestige-btn"
-                                      class="ml-auto flex items-center gap-x-1.5 rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 px-3.5 py-1 text-xs font-semibold text-white hover:from-violet-600 hover:to-fuchsia-600 active:scale-[0.985]">
-                                  <i class="fa-solid fa-infinity"></i>
-                                  <span>Prestige</span>
-                              </button>
+                                  <button onclick="playUIClick(); prestige()" id="prestige-btn"
+                                          class="ml-auto flex items-center gap-x-1.5 rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 px-3.5 py-1 text-xs font-semibold text-white hover:from-violet-600 hover:to-fuchsia-600 active:scale-[0.985]">
+                                      <i class="fa-solid fa-infinity"></i>
+                                      <span>Prestige</span>
+                                  </button>
+                              </div>
                           </div>
                       </div>
                   </div>
 
-                  <!-- Row 2: Gene Vault + Save/Load | Sim Time + Speed + Zoom -->
-                  <div id="game-top-bar-row2" class="flex items-center justify-between">
+                  <!-- Row 2: Sim Time (left) | Speed + Crystals/Dust flush right -->
+                  <div id="game-top-bar-row2" class="flex items-end justify-between">
 
-                      <!-- LEFT: Gene Vault + Save/Load -->
-                      <div id="vault-nav-section" class="flex items-center gap-x-2">
-                          <button onclick="playUIClick(); showGeneVault()"
-                                  class="flex items-center gap-x-1.5 rounded-2xl border border-violet-500/50 bg-violet-600 px-3.5 py-1.5 text-xs font-medium text-white transition-transform hover:bg-violet-700 active:scale-[0.985]">
-                              <i class="fa-solid fa-dna"></i>
-                              <span>Gene Vault</span>
-                          </button>
-
-                          <button onclick="playUIClick(); showIncubator()"
-                                  class="flex items-center gap-x-1.5 rounded-2xl border border-amber-500/50 bg-amber-600 px-3.5 py-1.5 text-xs font-medium text-white transition-transform hover:bg-amber-700 active:scale-[0.985]">
-                              <i class="fa-solid fa-egg"></i>
-                              <span>Incubator</span>
-                          </button>
-
-                          <button onclick="playUIClick(); showSaveManager()"
-                                  class="flex items-center gap-x-2 rounded-2xl border border-emerald-500/50 bg-emerald-600/90 px-3.5 py-1.5 text-xs font-medium text-white transition-all hover:bg-emerald-600 active:scale-[0.985]">
-                              <i class="fa-solid fa-save"></i>
-                              <span>Save / Load</span>
-                          </button>
-                      </div>
-
-                      <!-- RIGHT: Sim Time + Speed + Zoom -->
-                      <div class="flex items-center gap-x-2">
-                          <!-- Sim Time -->
-                          <div class="flex items-center gap-x-1.5 rounded-2xl border border-white/10 bg-white/5 px-3 py-1 font-mono text-xs sm:text-sm">
+                      <div id="sim-time-wrap" class="flex shrink-0 items-center">
+                          <div class="flex items-center gap-x-1.5 whitespace-nowrap rounded-2xl border border-white/10 bg-white/5 px-3 py-1 font-mono text-xs sm:text-sm">
                               <span class="text-white/50">Sim Time:</span>
                               <span id="sim-time" class="font-semibold text-emerald-400">00:00</span>
                           </div>
+                      </div>
 
-                          <!-- Speed + Pause -->
+                      <div class="top-bar-right-cluster">
                           <div id="speed-music-section" class="flex flex-col items-end gap-0.5">
                               <div class="flex items-center rounded-2xl border border-white/10 bg-[#121218] p-1 text-xs">
                                   <button onclick="playUIClick(); togglePause()" id="pause-btn"
@@ -628,40 +1119,35 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                                   </button>
                                   <div class="mx-1 h-4 w-px bg-white/20"></div>
                                   <button onclick="playUIClick(); handleSpeedClick(0.25)" id="speed-0.25" class="time-btn active rounded-xl bg-emerald-500 px-2 py-1 font-semibold text-[#0a0a0f]">0.25×</button>
-                                  <button onclick="playUIClick(); handleSpeedClick(0.5)" id="speed-0.5" class="time-btn rounded-xl px-2 py-1 hover:bg-white/10" title="1💎 / 5 min">0.5×</button>
-                                  <button onclick="playUIClick(); handleSpeedClick(1)" id="speed-1" class="time-btn rounded-xl px-2 py-1 hover:bg-white/10" title="2💎 / 5 min">1×</button>
-                                  <button onclick="playUIClick(); handleSpeedClick(2)" id="speed-2" class="time-btn rounded-xl px-2 py-1 hover:bg-white/10" title="4💎 / 5 min">2×</button>
+                                  <button onclick="playUIClick(); handleSpeedClick(0.5)" id="speed-0.5" class="time-btn rounded-xl px-2 py-1 hover:bg-white/10" title="1 Crystal / 5 min">0.5×</button>
+                                  <button onclick="playUIClick(); handleSpeedClick(1)" id="speed-1" class="time-btn rounded-xl px-2 py-1 hover:bg-white/10" title="2 Crystals / 5 min">1×</button>
+                                  <button onclick="playUIClick(); handleSpeedClick(2)" id="speed-2" class="time-btn rounded-xl px-2 py-1 hover:bg-white/10" title="4 Crystals / 5 min">2×</button>
                               </div>
-                              <div id="speed-boost-timer" class="font-mono text-[9px] text-white/40"></div>
+                              <div id="speed-boost-timer" class="text-right font-mono text-[9px] text-white/40"></div>
                           </div>
 
-                          <!-- Music Modes -->
-                          <div class="flex flex-col items-end gap-0.5">
-                              <div class="flex items-center gap-1 rounded-2xl border border-white/10 bg-[#121218] px-1.5 py-1">
-                                  <button type="button" onclick="handleMusicModeClick('prune')" id="music-mode-prune"
-                                          class="music-mode-btn locked relative flex h-7 w-7 items-center justify-center rounded-lg border border-red-500/35 bg-red-500/15 text-red-400"
-                                          title="Prune — locked until rental">
-                                      <i class="fa-solid fa-skull text-[10px]"></i>
-                                  </button>
-                                  <button type="button" onclick="handleMusicModeClick('replicate')" id="music-mode-replicate"
-                                          class="music-mode-btn locked relative flex h-7 w-7 items-center justify-center rounded-lg border border-emerald-500/35 bg-emerald-500/15 text-emerald-400"
-                                          title="Replicate — locked until rental">
-                                      <i class="fa-solid fa-seedling text-[10px]"></i>
-                                  </button>
-                                  <button type="button" onclick="handleMusicModeClick('evolve')" id="music-mode-evolve"
-                                          class="music-mode-btn locked relative flex h-7 w-7 items-center justify-center rounded-lg border border-violet-500/35 bg-violet-500/15 text-violet-400"
-                                          title="Evolve — locked until rental">
-                                      <i class="fa-solid fa-dna text-[10px]"></i>
-                                  </button>
-                                  <button type="button" onclick="playUIClick(); purchaseToolRental('music')" id="tool-purchase-music-bar"
-                                          class="flex flex-col items-center justify-center rounded-lg border border-emerald-500/40 bg-emerald-600/80 px-1.5 py-0.5 text-[8px] font-semibold leading-tight text-white hover:bg-emerald-500"
-                                          title="Unlock music modes + 4× sim speed for 5 min">
-                                      <span>1💎</span><span>5m</span>
-                                  </button>
+                          <div class="flex min-w-[210px] flex-col items-end gap-1 self-end">
+                              <div class="economy-panel-heading rounded-xl border border-pink-500/20 bg-pink-500/5 px-2 py-1">
+                                  <div class="economy-flow-line">
+                                      <span class="flow-prestige"><i class="fa-solid fa-infinity text-[7px]"></i> Prestige = <i class="fa-solid fa-flask flow-dust-icon text-[7px]"></i> Dust</span>
+                                      <span class="flow-sep">·</span>
+                                      <span class="flow-furnace"><i class="fa-solid fa-fire text-[7px]"></i> Burn @ Furnace = ×Score</span>
+                                      <span class="flow-sep">·</span>
+                                      <span class="flow-crystal"><i class="fa-solid fa-flask flow-dust-icon text-[7px]"></i> Dust = <i class="fa-solid fa-gem crystal-pink text-[7px]"></i> Crystals</span>
+                                  </div>
                               </div>
-                              <div id="music-rental-timer-bar" class="max-w-[11rem] text-right font-mono text-[9px] leading-tight text-white/40">
-                                  Music locked • 1💎 = <span class="text-amber-300">4× speed</span>
-                              </div>
+                              <button onclick="playUIClick(); showInventory()" id="top-economy-btn"
+                                      class="flex w-full items-center justify-center gap-x-3 rounded-2xl border border-white/10 bg-white/10 px-4 py-1.5 text-xs font-semibold text-white transition-all hover:bg-white/15 active:scale-[0.985]">
+                                  <div class="flex items-center gap-x-1.5">
+                                      <i class="fa-solid fa-gem crystal-pink"></i>
+                                      <span id="top-crystals" class="font-mono tabular-nums">0</span>
+                                  </div>
+                                  <div class="h-3 w-px bg-white/20"></div>
+                                  <div class="flex items-center gap-x-1.5">
+                                      <i class="fa-solid fa-flask text-orange-400"></i>
+                                      <span id="top-dust" class="font-mono tabular-nums">0.00</span>
+                                  </div>
+                              </button>
                           </div>
                       </div>
                   </div>
@@ -669,6 +1155,10 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
 
               <!-- Canvas -->
               <div id="canvas-container" class="game-fixed-width relative mx-auto w-full max-w-[820px] flex-shrink-0 overflow-hidden rounded-3xl border border-white/10 shadow-2xl">
+                  <div id="day-night-badge" class="day-night-badge is-day" aria-hidden="true">
+                      <span class="day-night-badge__dot"></span>
+                      <span class="day-night-badge__text">Day</span>
+                  </div>
                   <!-- DEBUG BOX -->
                   <div id="mobile-debug"
                        style="display: none; position: absolute; top: 10px; left: 10px; z-index: 9999;
@@ -706,42 +1196,44 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
               </div>
 
 
-              <div id="game-hint-bar" class="game-fixed-width mx-auto mt-1 text-center text-[10px] text-white/40 mobile-compact-hide">
-                  Ship: on-map orbit + fire • Space / ←/→ • Click creature to inspect
-              </div>
-
               <!-- Quick Tool Toggles -->
-              <div id="game-tool-bar" class="game-fixed-width mx-auto mt-3 flex items-center justify-between">
+              <div id="game-tool-bar" class="game-fixed-width mx-auto mt-3 flex items-start justify-center gap-3 overflow-x-auto pb-1">
 
-                  <!-- LEFT: Mute + Volume + Zoom/FPS -->
-                  <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <button type="button" id="audio-mute-btn" onclick="toggleAudioMute()"
-                              class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border border-white/20 bg-white/10 text-base text-white transition-all hover:bg-white/20 active:scale-[0.95]"
-                              title="Mute all audio">
-                          <i id="audio-mute-icon" class="fa-solid fa-volume-high"></i>
-                      </button>
-                      <div class="flex items-center gap-x-1" title="Music volume">
-                          <i class="fa-solid fa-music text-[10px] text-emerald-400/80"></i>
-                          <input type="range" id="music-volume-slider" class="h-1 w-14 cursor-pointer accent-emerald-400"
-                                 min="0" max="100" value="80" oninput="setMusicVolumeFromSlider(this.value)">
+                  <!-- Music Modes (left of Hazards) -->
+                  <div id="bottom-music-section" class="tool-rental-card flex min-w-[168px] flex-shrink-0 flex-col items-stretch gap-1 rounded-2xl border border-white/10 bg-[#0a0a0f]/80 px-2 py-1.5">
+                      <div class="music-modes-heading px-0.5">
+                          <div class="text-sm font-bold tracking-tight text-white/92">Music Modes</div>
+                          <div class="text-[9px] text-white/45">Rent for 4× speed &amp; unique world effects</div>
                       </div>
-                      <div class="flex items-center gap-x-1" title="Sound effects volume">
-                          <i class="fa-solid fa-volume-low text-[10px] text-white/50"></i>
-                          <input type="range" id="sfx-volume-slider" class="h-1 w-14 cursor-pointer accent-white/60"
-                                 min="0" max="100" value="65" oninput="setSfxVolumeFromSlider(this.value)">
+                      <div class="flex items-center justify-center gap-1 rounded-xl border border-white/10 bg-[#121218] px-1.5 py-1">
+                          <button type="button" onclick="handleMusicModeClick('prune')" id="music-mode-prune"
+                                  class="music-mode-btn locked relative flex h-7 w-7 items-center justify-center rounded-lg border border-red-500/35 bg-red-500/15 text-red-400"
+                                  title="Prune — locked until rental">
+                              <i class="fa-solid fa-skull text-[10px]"></i>
+                          </button>
+                          <button type="button" onclick="handleMusicModeClick('replicate')" id="music-mode-replicate"
+                                  class="music-mode-btn locked relative flex h-7 w-7 items-center justify-center rounded-lg border border-emerald-500/35 bg-emerald-500/15 text-emerald-400"
+                                  title="Replicate — locked until rental">
+                              <i class="fa-solid fa-seedling text-[10px]"></i>
+                          </button>
+                          <button type="button" onclick="handleMusicModeClick('evolve')" id="music-mode-evolve"
+                                  class="music-mode-btn locked relative flex h-7 w-7 items-center justify-center rounded-lg border border-violet-500/35 bg-violet-500/15 text-violet-400"
+                                  title="Evolve — locked until rental">
+                              <i class="fa-solid fa-dna text-[10px]"></i>
+                          </button>
+                          <button type="button" onclick="playUIClick(); purchaseToolRental('music')" id="tool-purchase-music-bar"
+                                  class="flex flex-col items-center justify-center rounded-lg border border-emerald-500/40 bg-emerald-600/80 px-1.5 py-0.5 text-[8px] font-semibold leading-tight text-white hover:bg-emerald-500"
+                                  title="Unlock music modes + 4× sim speed for 5 min">
+                                  <span class="crystal-cost-inline"><i class="fa-solid fa-gem crystal-pink"></i>1</span><span>5m</span>
+                          </button>
                       </div>
-                      <div class="flex items-center rounded-xl border border-white/10 bg-[#121218] p-0.5 text-xs">
-                          <button onclick="playUIClick(); adjustZoom(-0.2)" class="rounded-lg px-2 py-1 hover:bg-white/10" title="Zoom out">−</button>
-                          <span id="zoom-level" class="px-1.5 font-mono text-[10px] text-white/60">100%</span>
-                          <button onclick="playUIClick(); adjustZoom(0.2)" class="rounded-lg px-2 py-1 hover:bg-white/10" title="Zoom in">+</button>
-                      </div>
-                      <div class="desktop-only flex items-center gap-x-1 text-[10px] font-mono text-white/50" title="Frames per second">
-                          <span id="fps-counter">60</span><span>FPS</span>
+                      <div id="music-rental-timer-bar" class="min-h-[12px] text-center font-mono text-[9px] leading-tight text-white/40">
+                          Music locked • <span class="crystal-cost-inline"><i class="fa-solid fa-gem crystal-pink"></i>1</span> = <span class="text-amber-300">4× speed</span>
                       </div>
                   </div>
 
-                  <!-- CENTER: Main Tools -->
-                  <div id="tools-section" class="flex flex-wrap justify-center gap-3">
+                  <!-- Main Tools -->
+                  <div id="tools-section" class="flex flex-shrink-0 flex-wrap justify-center gap-3">
                       <div class="tool-rental-card flex min-w-[104px] flex-col items-stretch gap-1 rounded-2xl border border-white/10 bg-[#0a0a0f]/80 px-2 py-1.5">
                           <button type="button" onclick="handleHazardFieldsToolClick()" id="quick-red-btn"
                                   class="flex items-center justify-center gap-x-1.5 rounded-xl px-2.5 py-1.5 text-sm font-medium transition-all hover:bg-white/10 active:scale-[0.98]">
@@ -751,7 +1243,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                           <div id="tool-timer-hazard" class="min-h-[12px] text-center font-mono text-[9px] leading-none text-white/40"></div>
                           <div class="flex gap-1">
                               <button type="button" onclick="purchaseToolRental('hazard')" id="tool-purchase-hazard"
-                                      class="flex-1 rounded-lg bg-red-600/90 px-1 py-1 text-[9px] font-semibold text-white hover:bg-red-500">1💎 5m</button>
+                                      class="flex-1 rounded-lg bg-red-600/90 px-1 py-1 text-[9px] font-semibold text-white hover:bg-red-500"><span class="crystal-cost-inline"><i class="fa-solid fa-gem crystal-pink"></i>1</span> 5m</button>
                               <button type="button" onclick="cancelToolRental('hazard')" id="tool-cancel-hazard"
                                       class="flex-1 rounded-lg bg-white/10 px-1 py-1 text-[9px] font-medium text-white/70 hover:bg-white/20">Cancel</button>
                           </div>
@@ -765,7 +1257,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                           <div id="tool-timer-cursor" class="min-h-[12px] text-center font-mono text-[9px] leading-none text-white/40"></div>
                           <div class="flex gap-1">
                               <button type="button" onclick="purchaseToolRental('cursor')" id="tool-purchase-cursor"
-                                      class="flex-1 rounded-lg bg-orange-600/90 px-1 py-1 text-[9px] font-semibold text-white hover:bg-orange-500">1💎 5m</button>
+                                      class="flex-1 rounded-lg bg-orange-600/90 px-1 py-1 text-[9px] font-semibold text-white hover:bg-orange-500"><span class="crystal-cost-inline"><i class="fa-solid fa-gem crystal-pink"></i>1</span> 5m</button>
                               <button type="button" onclick="cancelToolRental('cursor')" id="tool-cancel-cursor"
                                       class="flex-1 rounded-lg bg-white/10 px-1 py-1 text-[9px] font-medium text-white/70 hover:bg-white/20">Cancel</button>
                           </div>
@@ -779,7 +1271,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                           <div id="tool-timer-wall" class="min-h-[12px] text-center font-mono text-[9px] leading-none text-white/40"></div>
                           <div class="flex gap-1">
                               <button type="button" onclick="purchaseToolRental('wall')" id="tool-purchase-wall"
-                                      class="flex-1 rounded-lg bg-violet-600/90 px-1 py-1 text-[9px] font-semibold text-white hover:bg-violet-500">1💎 5m</button>
+                                      class="flex-1 rounded-lg bg-violet-600/90 px-1 py-1 text-[9px] font-semibold text-white hover:bg-violet-500"><span class="crystal-cost-inline"><i class="fa-solid fa-gem crystal-pink"></i>1</span> 5m</button>
                               <button type="button" onclick="cancelToolRental('wall')" id="tool-cancel-wall"
                                       class="flex-1 rounded-lg bg-white/10 px-1 py-1 text-[9px] font-medium text-white/70 hover:bg-white/20">Cancel</button>
                           </div>
@@ -793,37 +1285,63 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                           <div id="tool-timer-ship" class="min-h-[12px] text-center font-mono text-[9px] leading-none text-white/40"></div>
                           <div class="flex gap-1">
                               <button type="button" onclick="purchaseToolRental('ship')" id="tool-purchase-ship"
-                                      class="flex-1 rounded-lg bg-emerald-600/90 px-1 py-1 text-[9px] font-semibold text-white hover:bg-emerald-500">1💎 5m</button>
+                                      class="flex-1 rounded-lg bg-emerald-600/90 px-1 py-1 text-[9px] font-semibold text-white hover:bg-emerald-500"><span class="crystal-cost-inline"><i class="fa-solid fa-gem crystal-pink"></i>1</span> 5m</button>
                               <button type="button" onclick="cancelToolRental('ship')" id="tool-cancel-ship"
                                       class="flex-1 rounded-lg bg-white/10 px-1 py-1 text-[9px] font-medium text-white/70 hover:bg-white/20">Cancel</button>
                           </div>
                       </div>
                   </div>
-
-                  <!-- RIGHT: Spacer for balance -->
-                  <div class="w-9"></div>
               </div>
 
           </div>
           <!-- ==================== END MAIN CANVAS AREA ==================== -->
           <!-- ==================== RIGHT SIDEBAR (Refined v3) ==================== -->
           <div id="game-sidebar" class="flex max-h-[calc(100vh-140px)] w-full flex-col gap-y-3 self-start overflow-auto rounded-3xl border border-white/10 bg-[#121218] p-4 xl:max-h-[calc(100vh-120px)] xl:w-80 2xl:w-[22rem]">
-              <!-- ========== SCORE ========== -->
-              <div class="rounded-2xl border border-white/10 bg-[#0a0a0f] p-3">
-                  <div>
-                      <div class="text-[10px] font-semibold tracking-wider text-white/60">SCORE</div>
-                      <div id="vegas-score"
-                           class="font-mono text-[42px] leading-none font-bold text-amber-400 tabular-nums">0</div>
+              <!-- ========== SCORE + FURNACE + BONUSES ========== -->
+              <div class="sidebar-score-panel rounded-2xl border border-white/10 bg-[#0a0a0f] p-2.5">
+                  <div class="sidebar-score-header">
+                      <div class="sidebar-furnace-heading">
+                          <div class="text-[10px] font-semibold tracking-wider text-white/60">FURNACE</div>
+                      </div>
+                      <div class="sidebar-score-heading">
+                          <div class="text-[10px] font-semibold tracking-wider text-white/60">SCORE</div>
+                      </div>
+                  </div>
+                  <div class="sidebar-score-row">
+                      <div class="sidebar-furnace-group">
+                          <div class="relative shrink-0">
+                              <button type="button" onclick="playUIClick(); showFurnaceModal()" id="sidebar-furnace-btn"
+                                      class="sidebar-furnace-btn"
+                                      title="Burn Dust in the Furnace for a mass temporary score multiplier! BURN MORE DUST!">
+                                  <i class="fa-solid fa-fire text-xs"></i>
+                              </button>
+                              <div id="sidebar-furnace-timer" class="sidebar-furnace-timer">--:--</div>
+                          </div>
+                          <span id="sidebar-furnace-mult" class="sidebar-furnace-mult" aria-hidden="true"></span>
+                      </div>
+                      <div id="sidebar-bonus-stack" class="sidebar-bonus-stack" aria-live="polite"></div>
+                      <div class="sidebar-score-col">
+                          <div onclick="playUIClick(); showScoreBreakdownModal()" id="sidebar-score-wrap"
+                               class="sidebar-score-wrap" title="High Roller Points — tap for breakdown">
+                              <div id="vegas-score"
+                                   class="font-mono text-[28px] leading-none font-bold text-amber-400 tabular-nums">0</div>
+                          </div>
+                      </div>
                   </div>
               </div>
               <!-- ========== CURRENT STATS + TOTAL MULTIPLIER ========== -->
               <div id="stats-section">
                   <!-- Header line with multiplier on the right -->
-                  <div class="mb-1.5 flex items-center justify-between">
-                      <div class="text-xs font-semibold tracking-wider text-white/70">CURRENT STATS</div>
+                  <div class="mb-1.5 flex items-center justify-between gap-1">
+                      <div class="shrink-0 text-xs font-semibold tracking-wider text-white/70">CURRENT STATS</div>
+
+                      <button type="button" id="stats-analytics-thumb" onclick="playUIClick(); showAnalyticsModal()"
+                              class="stats-analytics-thumb" title="Live trends — click to expand analytics">
+                          <canvas id="stats-thumb-chart" width="148" height="20"></canvas>
+                      </button>
 
                       <!-- Total Multiplier (moved here, right-aligned) -->
-                      <div class="text-right">
+                      <div class="shrink-0 text-right">
                           <div class="text-[10px] text-white/60">× MULT</div>
                           <div id="score-multiplier"
                                class="font-mono text-[22px] font-bold text-emerald-400 leading-none">1.00</div>
@@ -848,7 +1366,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                       </div>
                   </div>
                   <div class="mt-2">
-                      <div class="mb-1 text-[10px] text-white/50">Module Tier Multipliers <span class="text-white/30">(tap to upgrade)</span></div>
+                      <div class="mb-1 text-[10px] text-white/50">Module Tier Multipliers <span class="text-white/30">(tap <i class="fa-solid fa-gem crystal-pink text-[8px]"></i> to upgrade)</span></div>
                       <div class="tier-mult-grid grid grid-cols-2 gap-2 text-center text-xs sm:grid-cols-5 sm:gap-1">
                           <div onclick="playUIClick(); showMultiplierUpgradeModal('tier', 1)" class="stat-upgrade-btn rounded-xl bg-white/5 p-1">
                               <div class="text-[9px] text-white/50">I</div>
@@ -920,11 +1438,14 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   </div>
                   <div class="space-y-2 rounded-2xl border border-white/10 bg-[#0a0a0f] p-2.5">
 
-                      <!-- Preview + Name -->
+                      <!-- Preview + Name + Modules column -->
                       <div class="flex items-start gap-3">
-                          <div class="h-[82px] w-[82px] flex-shrink-0 overflow-hidden rounded-xl border border-white/10 bg-[#111113]">
-                              <canvas id="inspect-creature-preview" data-preview-size="82"
-                                      class="creature-preview-canvas block h-[82px] w-[82px] max-h-[82px] max-w-[82px] rounded-xl"></canvas>
+                          <div class="flex w-[92px] flex-shrink-0 flex-col gap-1.5 self-stretch">
+                              <div class="h-[82px] w-[82px] overflow-hidden rounded-xl border border-white/10 bg-[#111113]">
+                                  <canvas id="inspect-creature-preview" data-preview-size="82"
+                                          class="creature-preview-canvas block h-[82px] w-[82px] max-h-[82px] max-w-[82px] rounded-xl"></canvas>
+                              </div>
+                              <div id="inspect-modules-list" class="inspect-mod-panel flex-1"></div>
                           </div>
                           <div class="min-w-0 flex-1">
                               <div id="inspect-title-block" class="min-h-[3.75rem]">
@@ -937,13 +1458,10 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                                   <div><span class="text-white/50">Kids:</span> <span id="inspect-kids" class="font-mono"></span></div>
                                   <div><span class="text-white/50">Kills:</span> <span id="inspect-kills" class="font-mono text-red-400"></span></div>
                               </div>
-                              <!-- NEW: Score Value -->
                               <div class="mt-0.5 text-xs">
                                   <span class="text-white/50">Score Value:</span>
                                   <span id="inspect-score-value" class="font-mono font-semibold text-amber-400"></span>
                               </div>
-
-                              <!-- NEW: Remaining Life with color warning -->
                               <div class="mt-1 text-xs flex items-center gap-x-1.5">
                                   <span class="text-white/50">Remaining Life:</span>
                                   <span id="inspect-life" class="font-mono font-semibold"></span>
@@ -972,11 +1490,6 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                       <div>
                           <div class="text-xs text-white/60 mb-0.5">Thought / Role</div>
                           <div id="inspect-thought" class="rounded-xl bg-white/5 px-2.5 py-1 text-xs text-white/90 min-h-[22px]"></div>
-                      </div>
-                      <!-- Modules -->
-                      <div>
-                          <div class="text-xs text-white/60 mb-0.5">Modules</div>
-                          <div id="inspect-modules-list" class="max-h-12 space-y-0.5 overflow-auto rounded-xl bg-white/5 p-2 text-xs"></div>
                       </div>
                       <!-- ========== NEURAL NET ========== -->
                       <div class="border-t border-white/10 pt-2.5">
@@ -1156,7 +1669,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                           </div>
                           <div class="flex gap-1.5">
                               <button type="button" onclick="purchaseToolRental('music')" id="tool-purchase-music"
-                                      class="rounded-lg bg-emerald-600/90 px-2.5 py-1 text-[10px] font-semibold text-white hover:bg-emerald-500">1💎 5m</button>
+                                      class="rounded-lg bg-emerald-600/90 px-2.5 py-1 text-[10px] font-semibold text-white hover:bg-emerald-500"><span class="crystal-cost-inline"><i class="fa-solid fa-gem crystal-pink"></i>1</span> 5m</button>
                               <button type="button" onclick="cancelToolRental('music')" id="tool-cancel-music"
                                       class="rounded-lg bg-white/10 px-2.5 py-1 text-[10px] font-medium text-white/70 hover:bg-white/20">Cancel</button>
                           </div>
@@ -1344,7 +1857,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                           <div class="space-y-2 text-sm">
                               <div class="flex justify-between"><span class="text-white/60">Population</span> <span id="modal-pop" class="font-mono font-semibold text-emerald-400">—</span></div>
                               <div class="flex justify-between"><span class="text-white/60">Predators</span> <span id="modal-pred" class="font-mono font-semibold text-red-400">—</span></div>
-                              <div class="flex justify-between"><span class="text-white/60">Avg Modules</span> <span id="modal-modules" class="font-mono font-semibold text-sky-400">—</span></div>
+                              <div class="flex justify-between"><span class="text-white/60">Avg Modules</span> <span id="modal-modules" class="font-mono font-semibold text-violet-400">—</span></div>
                               <div class="flex justify-between"><span class="text-white/60">Green Food</span> <span id="modal-green" class="font-mono text-emerald-400">—</span></div>
                               <div class="flex justify-between"><span class="text-white/60">Blue Food</span> <span id="modal-blue" class="font-mono text-blue-400">—</span></div>
                           </div>
@@ -1353,27 +1866,33 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                       <!-- Large Trends Chart -->
                       <div class="rounded-2xl border border-white/10 bg-[#0a0a0f] p-4 lg:col-span-2">
                           <div class="mb-2 flex items-center justify-between text-sm font-semibold text-white/70">
-                              <span>Trends (Last ~10 minutes)</span>
-                              <span class="text-[10px] text-white/40">Click lines below to toggle</span>
+                              <span>Trends (rolling window)</span>
+                              <span class="text-[10px] text-white/40">Presets or custom filters below</span>
+                          </div>
+                          <div id="analytics-presets" class="mb-3 flex flex-wrap gap-1.5">
+                              <button type="button" data-analytics-preset="ecosystem" onclick="playUIClick(); applyAnalyticsPreset('ecosystem')" class="analytics-preset-btn active">Ecosystem</button>
+                              <button type="button" data-analytics-preset="food" onclick="playUIClick(); applyAnalyticsPreset('food')" class="analytics-preset-btn">Food Supply</button>
+                              <button type="button" data-analytics-preset="population" onclick="playUIClick(); applyAnalyticsPreset('population')" class="analytics-preset-btn">Population</button>
+                              <button type="button" data-analytics-preset="all" onclick="playUIClick(); applyAnalyticsPreset('all')" class="analytics-preset-btn">All Metrics</button>
                           </div>
                           <canvas id="analytics-chart" width="800" height="280" class="w-full rounded-xl bg-[#0a0a0f]"></canvas>
 
                           <!-- Line toggles -->
                           <div class="mt-3 flex flex-wrap gap-2 text-xs">
                               <label class="flex cursor-pointer items-center gap-x-1.5 rounded-xl bg-white/5 px-3 py-1">
-                                  <input type="checkbox" id="toggle-pop" checked onchange="updateAnalyticsChart()" /> <span class="text-emerald-400">Population</span>
+                                  <input type="checkbox" id="toggle-pop" checked onchange="onAnalyticsFilterChange()" /> <span class="text-emerald-400">Population</span>
                               </label>
                               <label class="flex cursor-pointer items-center gap-x-1.5 rounded-xl bg-white/5 px-3 py-1">
-                                  <input type="checkbox" id="toggle-pred" checked onchange="updateAnalyticsChart()" /> <span class="text-red-400">Predators</span>
+                                  <input type="checkbox" id="toggle-pred" checked onchange="onAnalyticsFilterChange()" /> <span class="text-red-400">Predators</span>
                               </label>
                               <label class="flex cursor-pointer items-center gap-x-1.5 rounded-xl bg-white/5 px-3 py-1">
-                                  <input type="checkbox" id="toggle-modules" checked onchange="updateAnalyticsChart()" /> <span class="text-sky-400">Avg Modules</span>
+                                  <input type="checkbox" id="toggle-modules" checked onchange="onAnalyticsFilterChange()" /> <span class="text-violet-400">Avg Modules</span>
                               </label>
                               <label class="flex cursor-pointer items-center gap-x-1.5 rounded-xl bg-white/5 px-3 py-1">
-                                  <input type="checkbox" id="toggle-green" checked onchange="updateAnalyticsChart()" /> <span class="text-emerald-400">Green Food</span>
+                                  <input type="checkbox" id="toggle-green" onchange="onAnalyticsFilterChange()" /> <span class="text-emerald-400">Green Food</span>
                               </label>
                               <label class="flex cursor-pointer items-center gap-x-1.5 rounded-xl bg-white/5 px-3 py-1">
-                                  <input type="checkbox" id="toggle-blue" checked onchange="updateAnalyticsChart()" /> <span class="text-sky-400">Blue Food</span>
+                                  <input type="checkbox" id="toggle-blue" onchange="onAnalyticsFilterChange()" /> <span class="text-sky-400">Blue Food</span>
                               </label>
                           </div>
                       </div>
@@ -1381,7 +1900,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
 
                   <div class="mt-5 flex justify-end gap-3">
                       <button onclick="hideAnalyticsModal()" class="rounded-2xl bg-white/10 px-6 py-2 text-sm hover:bg-white/20">Close</button>
-                      <button onclick="resetMiniGraphSelection()" class="rounded-2xl bg-white/5 px-5 py-2 text-sm text-white/70 hover:bg-white/10">Reset Mini Graph Lines</button>
+                      <button onclick="playUIClick(); applyAnalyticsPreset('ecosystem')" class="rounded-2xl bg-white/5 px-5 py-2 text-sm text-white/70 hover:bg-white/10">Reset to Ecosystem</button>
                   </div>
               </div>
           </div>
@@ -1633,36 +2152,38 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
           <!-- ==================== NEW INCUBATOR MODAL (Amber/Gold Theme) ==================== -->
           <div id="incubator-modal"
                onclick="if (event.target.id === 'incubator-modal') hideIncubator()"
-               class="fixed inset-0 z-[100] flex hidden items-center justify-center bg-black/80">
+               class="fixed inset-0 z-[100] flex hidden items-center justify-center bg-black/80 p-2 sm:p-3">
 
               <div onclick="event.stopImmediatePropagation()"
-                   class="modal mx-4 w-full max-w-5xl rounded-3xl border border-amber-500/30 bg-[#121218] p-6">
+                   class="incubator-modal-panel modal mx-auto w-full max-w-7xl rounded-3xl border border-amber-500/30 bg-[#121218] p-4 sm:p-5">
 
-                  <div class="mb-6 flex items-center justify-between">
-                      <div>
-                          <h3 class="flex items-center gap-x-3 text-2xl font-semibold">
+                  <div class="mb-3 flex shrink-0 items-start justify-between gap-3">
+                      <div class="min-w-0 flex-1">
+                          <h3 class="flex items-center gap-x-2 text-xl font-semibold">
                               <i class="fa-solid fa-egg text-amber-400"></i>
                               <span>Incubator</span>
                           </h3>
-                          <p class="mt-1 text-sm text-white/50">Slot 1 free • unlock more like Gene Vault (50💎 → 1B💎) • Multiplier applies each cycle automatically • 1💎 automates 5 min</p>
+                          <p class="mt-1 text-xs leading-snug text-white/50">Upgrade eggs per slot → higher sell value &amp; score boost when occupied. Cycles grow modules, sell bonus, score mult, and rare module gain. Unlock (<span class="crystal-cost-inline"><i class="fa-solid fa-gem crystal-pink"></i>1</span>→<span class="crystal-cost-inline"><i class="fa-solid fa-gem crystal-pink"></i>256</span>), upgrade slots, automate <span class="crystal-cost-inline"><i class="fa-solid fa-gem crystal-pink"></i>1</span>/5m.</p>
                       </div>
-                      <button onclick="playUIClick(); hideIncubator()" class="text-3xl leading-none text-white/60 hover:text-white">×</button>
+                      <div id="incubator-footer-btn" class="flex shrink-0 items-center gap-2">
+                          <button type="button" id="incubator-view-eggs-btn"
+                                  class="flex items-center gap-x-1.5 whitespace-nowrap rounded-2xl bg-emerald-600 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-emerald-500 sm:px-5 sm:text-sm">
+                              <i class="fa-solid fa-egg"></i>
+                              <span>Egg Inventory</span>
+                          </button>
+                          <button onclick="playUIClick(); hideIncubator()" class="px-1 text-2xl leading-none text-white/60 hover:text-white">×</button>
+                      </div>
                   </div>
 
-                  <div id="incubator-slots-grid" class="grid grid-cols-2 gap-3 sm:grid-cols-5">
-                      <!-- Populated by JavaScript -->
+                  <div id="incubator-slots-scroll">
+                      <div id="incubator-slots-grid" class="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-5">
+                          <!-- Populated by JavaScript -->
+                      </div>
                   </div>
 
-                  <div class="mt-6 text-center text-xs text-white/50">
-                      Automation (1 Crystal / 5 min): auto-completes cycles, adds modules to the egg, and permanently improves the slot.
-                  </div>
-
-                  <div id="incubator-footer-btn" class="mt-5 flex justify-center">
-                      <button type="button" id="incubator-view-eggs-btn"
-                              class="flex items-center gap-x-2 rounded-2xl bg-emerald-600 px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-emerald-500">
-                          <i class="fa-solid fa-egg"></i>
-                          <span>View Egg Inventory</span>
-                      </button>
+                  <div class="mt-3 flex shrink-0 items-center justify-between gap-3 border-t border-white/10 pt-2 text-[10px] leading-snug text-white/40">
+                      <span>Automation (<span class="crystal-cost-inline"><i class="fa-solid fa-gem crystal-pink"></i>1</span>/5m): auto-cycles, adds modules, improves slot.</span>
+                      <span class="text-right text-white/35">Quick-assign via Egg Inventory → tap slot # on any egg</span>
                   </div>
               </div>
           </div>
@@ -1841,7 +2362,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   <div class="mb-3 rounded-2xl border border-white/10 bg-white/5 p-4">
                       <div class="flex items-center justify-between">
                           <div class="flex items-center gap-x-3">
-                              <i class="fa-solid fa-gem text-2xl text-pink-400"></i>
+                              <i class="fa-solid fa-gem crystal-pink text-2xl"></i>
                               <div>
                                   <div class="font-semibold">Aetherium Crystals</div>
                               </div>
@@ -2043,14 +2564,51 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   return Math.pow(2, slotNumber - 2);
               }
 
-              const SLOT_OCCUPANCY_SCORE_MULT_BASE = 100;
-
-              function getSlotOccupancyScoreMultiplier(slotNumber) {
-                  return SLOT_OCCUPANCY_SCORE_MULT_BASE * Math.pow(2, slotNumber - 1);
+              function getIncubatorSlotUpgradeCost(upgradeLevel) {
+                  return Math.pow(2, upgradeLevel || 0);
               }
 
-              function formatSlotScoreMultiplierLabel(slotNumber, active = false) {
-                  const mult = getSlotOccupancyScoreMultiplier(slotNumber);
+              function getIncubatorSlotPowerFactor(slot) {
+                  if (!slot) return 1;
+                  const level = slot.upgradeLevel || 0;
+                  const usage = Math.log1p(slot.totalIncubations || 0) * 0.02;
+                  const moduleBonus = (slot.moduleGainBonus || 0) * 0.05;
+                  return 1 + level * 0.08 + usage + moduleBonus;
+              }
+
+              function getIncubatorSlotSellFactor(slot) {
+                  if (!slot) return 1;
+                  const level = slot.upgradeLevel || 0;
+                  const usage = Math.log1p(slot.totalIncubations || 0) * 0.02;
+                  return 1 + level * 0.1 + usage;
+              }
+
+              function formatCrystalLevelBadge(level) {
+                  if (!level) return '';
+                  return `<span class="crystal-level-badge">${crystalGemIcon()}Lv.${level}</span>`;
+              }
+
+              function crystalCostWithLevel(cost, level) {
+                  const costHtml = typeof cost === 'number'
+                      ? crystalCostInline(formatIncubatorSlotCost(cost))
+                      : cost;
+                  const lvl = level || 0;
+                  return `${costHtml}${lvl > 0 ? `<span class="text-[9px] font-mono text-pink-300/80 ml-0.5">Lv.${lvl}</span>` : ''}`;
+              }
+
+              const SLOT_OCCUPANCY_SCORE_MULT_BASE = 100;
+
+              function getSlotOccupancyScoreMultiplier(slotNumber, slotData = null) {
+                  const base = SLOT_OCCUPANCY_SCORE_MULT_BASE * Math.pow(2, slotNumber - 1);
+                  if (!slotData) return base;
+                  const level = slotData.upgradeLevel || 0;
+                  const scoreBoost = slotData.scoreMultBonus || 0;
+                  return base * (1 + level * 0.05 + scoreBoost);
+              }
+
+              function formatSlotScoreMultiplierLabel(slotNumber, active = false, slotData = null) {
+                  const slot = slotData || incubatorSlots[slotNumber - 1];
+                  const mult = getSlotOccupancyScoreMultiplier(slotNumber, slot);
                   const label = mult >= 1e6 ? formatMultiplierRate(mult) : formatMultiplier(mult);
                   return '×' + label + (active ? ' score' : ' when occupied');
               }
@@ -2078,7 +2636,8 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                           vaultOccupied++;
                       }
                       if (isIncubatorSlotOccupied(n)) {
-                          incubatorMult *= mult;
+                          const incSlot = incubatorSlots[n - 1];
+                          incubatorMult *= getSlotOccupancyScoreMultiplier(n, incSlot);
                           incubatorOccupied++;
                       }
                   }
@@ -2481,7 +3040,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
               }
 
               function cacheMainDOM() {
-                  DOMCache.topScore = document.getElementById('top-score');
+
                   DOMCache.vegasScore = document.getElementById('vegas-score');
                   DOMCache.statPop = document.getElementById('stat-pop');
                   DOMCache.statPred = document.getElementById('stat-pred');
@@ -2744,23 +3303,206 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   else if (displayFps >= 30) fpsEl.style.color = '#fbbf24';
                   else fpsEl.style.color = '#f87171';
               }
-              let miniChartCtx;
               let graphData = { pop: [], modules: [], predators: [], greenFood: [], blueFood: [], hr: [] };
-              const CHART_COLORS = {
-                  pop: '#34d399',
-                  predators: '#f87171',
-                  hr: '#c084fc',
-                  modules: '#60a5fa',
-                  greenFood: '#10b981',
-                  blueFood: '#38bdf8'
-              };
-              let miniChartVisible = {
-                  pop: true,
-                  predators: true,
-                  hr: true,
-                  modules: true,
-                  greenFood: true,
-                  blueFood: true
+
+              const AnalyticsInspector = {
+                  STORAGE_KEY: 'minisimmy_analytics_preset_v2',
+                  channels: {
+                      pop: { dataKey: 'pop', color: '#34d399', defaultMax: 100, lineWidth: 1.6 },
+                      predators: { dataKey: 'predators', color: '#f87171', defaultMax: 1, lineWidth: 1.4 },
+                      modules: { dataKey: 'modules', color: '#a78bfa', defaultMax: 1, lineWidth: 1.3 },
+                      greenFood: { dataKey: 'greenFood', color: '#10b981', defaultMax: 50, lineWidth: 1.1 },
+                      blueFood: { dataKey: 'blueFood', color: '#38bdf8', defaultMax: 50, lineWidth: 1.1 }
+                  },
+                  presets: {
+                      ecosystem: { keys: ['pop', 'predators', 'modules'] },
+                      food: { keys: ['greenFood', 'blueFood'] },
+                      population: { keys: ['pop'] },
+                      all: { keys: ['pop', 'predators', 'modules', 'greenFood', 'blueFood'] }
+                  },
+                  activePreset: 'ecosystem',
+                  visible: { pop: true, predators: true, modules: true, greenFood: false, blueFood: false },
+                  thumbCtx: null,
+                  modalCtx: null,
+                  lastThumbDataLen: -1,
+
+                  init() {
+                      const thumbCanvas = document.getElementById('stats-thumb-chart');
+                      if (thumbCanvas) this.thumbCtx = thumbCanvas.getContext('2d');
+                      const modalCanvas = document.getElementById('analytics-chart');
+                      if (modalCanvas) this.modalCtx = modalCanvas.getContext('2d');
+                      this.loadPreset();
+                      this.drawThumb();
+                  },
+
+                  loadPreset() {
+                      try {
+                          const saved = localStorage.getItem(this.STORAGE_KEY);
+                          if (saved && this.presets[saved]) this.applyPreset(saved, false);
+                          else this.applyPreset('ecosystem', false);
+                      } catch (e) {
+                          this.applyPreset('ecosystem', false);
+                      }
+                  },
+
+                  applyPreset(id, save = true) {
+                      const preset = this.presets[id];
+                      if (!preset) return;
+                      this.activePreset = id;
+                      Object.keys(this.visible).forEach((k) => { this.visible[k] = false; });
+                      preset.keys.forEach((k) => { if (k in this.visible) this.visible[k] = true; });
+                      if (save) {
+                          try { localStorage.setItem(this.STORAGE_KEY, id); } catch (e) { /* ignore */ }
+                      }
+                      this.syncToggleCheckboxes();
+                      this.syncPresetButtons();
+                      this.invalidate();
+                      this.drawThumb();
+                      if (analyticsModalOpen) {
+                          this.updateModalStats();
+                          this.drawModal();
+                      }
+                  },
+
+                  syncVisibleFromToggles() {
+                      const map = {
+                          pop: 'toggle-pop',
+                          predators: 'toggle-pred',
+                          modules: 'toggle-modules',
+                          greenFood: 'toggle-green',
+                          blueFood: 'toggle-blue'
+                      };
+                      Object.entries(map).forEach(([key, id]) => {
+                          const el = document.getElementById(id);
+                          if (el) this.visible[key] = !!el.checked;
+                      });
+                      if (!Object.values(this.visible).some(Boolean)) {
+                          this.applyPreset('ecosystem');
+                          return;
+                      }
+                      this.activePreset = 'custom';
+                      this.syncPresetButtons();
+                  },
+
+                  syncToggleCheckboxes() {
+                      const map = {
+                          pop: 'toggle-pop',
+                          predators: 'toggle-pred',
+                          modules: 'toggle-modules',
+                          greenFood: 'toggle-green',
+                          blueFood: 'toggle-blue'
+                      };
+                      Object.entries(map).forEach(([key, id]) => {
+                          const el = document.getElementById(id);
+                          if (el) el.checked = !!this.visible[key];
+                      });
+                  },
+
+                  syncPresetButtons() {
+                      document.querySelectorAll('[data-analytics-preset]').forEach((btn) => {
+                          btn.classList.toggle('active', btn.dataset.analyticsPreset === this.activePreset);
+                      });
+                  },
+
+                  invalidate() {
+                      this.lastThumbDataLen = -1;
+                  },
+
+                  tick() {
+                      if (!graphData.pop || graphData.pop.length < 2) return;
+                      const len = graphData.pop.length;
+                      if (len === this.lastThumbDataLen) return;
+                      this.lastThumbDataLen = len;
+                      this.drawThumb();
+                      if (analyticsModalOpen) {
+                          this.updateModalStats();
+                          this.drawModal();
+                      }
+                  },
+
+                  getSeriesMax(key) {
+                      const ch = this.channels[key];
+                      const arr = graphData[ch.dataKey];
+                      if (!arr || arr.length === 0) return ch.defaultMax;
+                      let max = ch.defaultMax;
+                      for (let i = 0; i < arr.length; i++) {
+                          if (arr[i] > max) max = arr[i];
+                      }
+                      return max * 1.12;
+                  },
+
+                  drawChart(ctx, width, height, options = {}) {
+                      if (!ctx || !graphData.pop || graphData.pop.length < 2) return;
+                      const padding = options.padding ?? 4;
+                      const plotW = width - padding * 2;
+                      const plotH = height - padding * 2;
+                      const pointCount = graphData.pop.length;
+                      const xStep = pointCount > 1 ? plotW / (pointCount - 1) : plotW;
+
+                      ctx.clearRect(0, 0, width, height);
+
+                      if (!options.skipGrid) {
+                          ctx.strokeStyle = 'rgba(51, 65, 85, 0.55)';
+                          ctx.lineWidth = 0.5;
+                          for (let i = 0; i <= 2; i++) {
+                              const y = padding + (i * plotH / 2);
+                              ctx.beginPath();
+                              ctx.moveTo(padding, y);
+                              ctx.lineTo(width - padding, y);
+                              ctx.stroke();
+                          }
+                      }
+
+                      const activeKeys = Object.keys(this.channels).filter((k) => this.visible[k]);
+                      for (const key of activeKeys) {
+                          const ch = this.channels[key];
+                          const arr = graphData[ch.dataKey];
+                          if (!arr || arr.length < 2) continue;
+                          const maxVal = this.getSeriesMax(key);
+                          const lw = (ch.lineWidth || 1.2) * (options.lineScale || 1);
+
+                          ctx.strokeStyle = ch.color;
+                          ctx.lineWidth = lw;
+                          ctx.lineJoin = 'round';
+                          ctx.lineCap = 'round';
+                          ctx.beginPath();
+                          for (let i = 0; i < arr.length; i++) {
+                              const x = padding + i * xStep;
+                              const y = height - padding - (arr[i] / maxVal) * plotH;
+                              if (i === 0) ctx.moveTo(x, y);
+                              else ctx.lineTo(x, y);
+                          }
+                          ctx.stroke();
+                      }
+                  },
+
+                  drawThumb() {
+                      if (!this.thumbCtx) return;
+                      this.drawChart(this.thumbCtx, 148, 20, { padding: 3, lineScale: 0.85, skipGrid: true });
+                  },
+
+                  drawModal() {
+                      if (!this.modalCtx) return;
+                      this.drawChart(this.modalCtx, 800, 280, { padding: 10, lineScale: 1 });
+                  },
+
+                  updateModalStats() {
+                      let predators = 0, totalModules = 0;
+                      for (const c of creatures) {
+                          totalModules += c.modules.length;
+                          if (c.isPredator) predators++;
+                      }
+                      const avgModules = creatures.length > 0 ? totalModules / creatures.length : 0;
+                      const set = (id, val) => {
+                          const el = document.getElementById(id);
+                          if (el) el.textContent = val;
+                      };
+                      set('modal-pop', String(creatures.length));
+                      set('modal-pred', String(predators));
+                      set('modal-modules', avgModules.toFixed(1));
+                      set('modal-green', String(Math.floor(greenZone.food)));
+                      set('modal-blue', String(Math.floor(blueZone.food)));
+                  }
               };
               let environmentPhase = 0;
               let envCycleLength = 2200;
@@ -5144,7 +5886,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   const active = isToolRentalActive('music');
                   const timerText = active
                       ? formatAutomationTime(getToolRentalRemainingMs('music')) + ' left • 4× speed active'
-                      : 'Locked — 1💎 unlocks modes + 4× speed for 5 min';
+                      : 'Locked — 1 crystal unlocks modes + 4× speed for 5 min';
 
                   const timerEl = document.getElementById('music-rental-timer');
                   const barTimerEl = document.getElementById('music-rental-timer-bar');
@@ -5159,7 +5901,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   if (barTimerEl) {
                       barTimerEl.innerHTML = active
                           ? `<span class="text-emerald-300">${timerText}</span>`
-                          : `Music locked • 1💎 unlocks modes + <span class="text-amber-300">4× speed</span> for 5 min`;
+                          : `Music locked • ${crystalCostInline(1)} unlocks modes + <span class="text-amber-300">4× speed</span> for 5 min`;
                   }
 
                   for (const mode of ['prune', 'replicate', 'evolve']) {
@@ -5927,6 +6669,51 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   return sign + abs.toFixed(3);
               }
 
+              function crystalGemIcon(extraClass = '') {
+                  return `<i class="fa-solid fa-gem crystal-pink${extraClass ? ' ' + extraClass : ''}" aria-hidden="true"></i>`;
+              }
+
+              function crystalCostInline(n) {
+                  return `<span class="crystal-cost-inline">${crystalGemIcon()}${n}</span>`;
+              }
+
+              function mountCrystalUpgradeHints() {
+                  document.querySelectorAll('#stats-section .grid.grid-cols-3 .stat-upgrade-btn, .tier-mult-grid .stat-upgrade-btn').forEach((el) => {
+                      if (el.querySelector('.crystal-upgrade-hint-wrap')) return;
+                      const wrap = document.createElement('span');
+                      wrap.className = 'crystal-upgrade-hint-wrap';
+                      wrap.innerHTML = `${crystalGemIcon()}<span class="crystal-level-label"></span>`;
+                      wrap.setAttribute('aria-hidden', 'true');
+                      el.appendChild(wrap);
+                  });
+                  updateCrystalUpgradeLevelHints();
+              }
+
+              function updateCrystalUpgradeLevelHints() {
+                  const statMap = [
+                      ['showMultiplierUpgradeModal(\'population\')', permanentBoostCounts.population],
+                      ['showMultiplierUpgradeModal(\'predators\')', permanentBoostCounts.predators],
+                      ['showMultiplierUpgradeModal(\'avgModules\')', permanentBoostCounts.avgModules]
+                  ];
+                  document.querySelectorAll('#stats-section .stat-upgrade-btn').forEach((el) => {
+                      const onclick = el.getAttribute('onclick') || '';
+                      const match = statMap.find(([key]) => onclick.includes(key));
+                      const label = el.querySelector('.crystal-level-label');
+                      if (label && match) {
+                          label.textContent = match[1] > 0 ? `Lv.${match[1]}` : '';
+                      }
+                  });
+                  for (let tier = 1; tier <= 10; tier++) {
+                      const count = permanentBoostCounts.tiers[tier] || 0;
+                      document.querySelectorAll('.tier-mult-grid .stat-upgrade-btn').forEach((el) => {
+                          if ((el.getAttribute('onclick') || '').includes(`'tier', ${tier}`)) {
+                              const label = el.querySelector('.crystal-level-label');
+                              if (label) label.textContent = count > 0 ? `Lv.${count}` : '';
+                          }
+                      });
+                  }
+              }
+
               function formatMultiplier(n) {
                   if (n >= 1e6) return n.toExponential(2);
                   else if (n >= 1000) return Math.floor(n).toLocaleString();
@@ -6296,22 +7083,45 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   hideModal('legend-modal');
               }
 
+              function showAnalyticsModal() {
+                  analyticsModalOpen = true;
+                  showModal('analytics-modal');
+                  AnalyticsInspector.syncToggleCheckboxes();
+                  AnalyticsInspector.syncPresetButtons();
+                  AnalyticsInspector.updateModalStats();
+                  AnalyticsInspector.drawModal();
+              }
+
               function hideAnalyticsModal() {
                   hideModal('analytics-modal');
                   analyticsModalOpen = false;
               }
 
-              function resetMiniGraphSelection() {
-                  miniChartVisible = {
-                      pop: true,
-                      predators: true,
-                      hr: true,
-                      modules: true,
-                      greenFood: true,
-                      blueFood: true
-                  };
-                  if (miniChartCtx) drawMiniChart();
+              function applyAnalyticsPreset(id) {
+                  AnalyticsInspector.applyPreset(id);
               }
+
+              function onAnalyticsFilterChange() {
+                  AnalyticsInspector.syncVisibleFromToggles();
+                  AnalyticsInspector.invalidate();
+                  AnalyticsInspector.drawThumb();
+                  AnalyticsInspector.drawModal();
+              }
+
+              function updateAnalyticsChart() {
+                  AnalyticsInspector.drawModal();
+              }
+
+              function updateAnalyticsStats() {
+                  AnalyticsInspector.updateModalStats();
+              }
+
+              window.showAnalyticsModal = showAnalyticsModal;
+              window.hideAnalyticsModal = hideAnalyticsModal;
+              window.applyAnalyticsPreset = applyAnalyticsPreset;
+              window.onAnalyticsFilterChange = onAnalyticsFilterChange;
+              window.updateAnalyticsChart = updateAnalyticsChart;
+              window.updateAnalyticsStats = updateAnalyticsStats;
 
               function updateCheatsUI() {
                   const balanceEl = document.getElementById('cheats-balance');
@@ -6323,7 +7133,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                           redBtn.textContent = redHazardsEnabled ? 'Rented • On' : 'Rented • Off';
                           redBtn.disabled = false;
                       } else {
-                          redBtn.textContent = 'Rent 1💎';
+                          redBtn.innerHTML = `Rent ${crystalCostInline(1)}`;
                           redBtn.disabled = aetheriumCrystals < TOOL_RENTAL_CRYSTAL_COST;
                       }
                   }
@@ -6891,7 +7701,9 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   egg.generation = (egg.generation || 1) + 1;
                   ensureIncubationTracking(inc, egg);
 
-                  const moduleCount = Math.floor(random(1, 4));
+                  const power = getIncubatorSlotPowerFactor(slot);
+                  let moduleCount = Math.floor(random(1, 4 + Math.min(2, (slot.moduleGainBonus || 0) * 0.15)));
+                  if (Math.random() < 0.04 * power) moduleCount += 1;
                   const tiersBefore = getEggMaxTierByType(egg);
                   addAutomationModulesToEgg(egg, moduleCount);
                   inc.modulesAddedDuringIncubation = (inc.modulesAddedDuringIncubation || 0) + moduleCount;
@@ -6906,7 +7718,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   }
 
                   const scoreAfter = getEggScore(egg);
-                  const multGain = calculateIncubatorMultiplierGain(egg);
+                  const multGain = calculateIncubatorMultiplierGain(egg, slot);
                   const scoreDelta = Math.max(0, scoreAfter - scoreBefore);
 
                   return {
@@ -6966,6 +7778,29 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   renderIncubatorSlots();
               }
 
+              function purchaseIncubatorSlotUpgrade(slotIndex) {
+                  const slotNumber = slotIndex + 1;
+                  if (!isIncubatorSlotUnlocked(slotNumber)) return;
+
+                  const slot = incubatorSlots[slotIndex];
+                  if (!slot) return;
+
+                  const level = slot.upgradeLevel || 0;
+                  const cost = getIncubatorSlotUpgradeCost(level);
+                  if (aetheriumCrystals < cost) {
+                      addFloatingText(width / 2, 72, `Need ${formatIncubatorSlotCost(cost)} crystals`, '#f87171');
+                      return;
+                  }
+
+                  aetheriumCrystals -= cost;
+                  updateAetheriumUI();
+                  slot.upgradeLevel = level + 1;
+
+                  playTone(620, 'sine', 0.14, 0.45);
+                  addFloatingText(width / 2, 72, `Slot ${slotNumber} upgraded to Lv.${slot.upgradeLevel}`, '#f472b6');
+                  renderIncubatorSlots();
+              }
+
               function finishIncubationCycle(slot) {
                   const inc = slot.currentIncubation;
                   if (!inc || !inc.eggData) return null;
@@ -6979,12 +7814,26 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   slot.multiplier = Math.min(3.0, slot.multiplier + multGain);
                   slot.totalIncubations++;
 
+                  const power = getIncubatorSlotPowerFactor(slot);
+                  const scoreMultGain = 0.0012 * power;
+                  slot.scoreMultBonus = (slot.scoreMultBonus || 0) + scoreMultGain;
+
+                  const moduleGainChance = 0.003 * power;
+                  let moduleGainHit = false;
+                  if (Math.random() < moduleGainChance) {
+                      slot.moduleGainBonus = (slot.moduleGainBonus || 0) + 1;
+                      moduleGainHit = true;
+                      addFloatingText(width / 2, 96, 'Slot module gain +1!', '#f472b6');
+                  }
+
                   slot.lastCycleBoost = {
                       multGain,
                       oldMult,
                       newMult: slot.multiplier,
                       modules: rewards.moduleCount,
                       generation: rewards.generation,
+                      scoreMultGain,
+                      moduleGainHit,
                       at: Date.now()
                   };
 
@@ -7012,6 +7861,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   if (incubatorModalOpen) {
                       updateIncubatorSlotsLive();
                   }
+                  updateMainStats();
 
                   return rewards;
               }
@@ -7047,6 +7897,9 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                           id: slotNum,
                           unlocked: slotNum === 1,
                           multiplier: 1.0,
+                          upgradeLevel: 0,
+                          scoreMultBonus: 0,
+                          moduleGainBonus: 0,
                           totalIncubations: 0,
                           currentIncubation: null,
                           lastCycleBoost: null,
@@ -7063,6 +7916,9 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                           slot.unlocked = slot.id === 1 || !!slot.currentIncubation || (slot.totalIncubations || 0) > 0;
                       }
                       if (!slot.lastCycleBoost) slot.lastCycleBoost = null;
+                      if (slot.upgradeLevel === undefined) slot.upgradeLevel = 0;
+                      if (slot.scoreMultBonus === undefined) slot.scoreMultBonus = 0;
+                      if (slot.moduleGainBonus === undefined) slot.moduleGainBonus = 0;
                       ensureSlotAutomation(slot);
                       if (slot.currentIncubation) {
                           if (typeof slot.currentIncubation.progress !== 'number') {
@@ -7298,6 +8154,9 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                               id: i,
                               unlocked: i === 1,
                               multiplier: 1.0,
+                              upgradeLevel: 0,
+                              scoreMultBonus: 0,
+                              moduleGainBonus: 0,
                               totalIncubations: 0,
                               currentIncubation: null,
                               lastCycleBoost: null,
@@ -7348,7 +8207,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   const hasSession = auto.session.cyclesCompleted > 0 || auto.session.modulesAdded > 0 || auto.session.scoreGained > 0;
                   const canAutomate = !!slot.currentIncubation && aetheriumCrystals >= INCUBATOR_AUTOMATION_CRYSTAL_COST;
 
-                  let html = `<div class="mt-2 rounded-xl border ${active ? 'border-violet-500/50 bg-violet-500/10' : 'border-white/10 bg-black/25'} p-2 text-[10px]">`;
+                  let html = `<div class="mt-1 rounded-lg border ${active ? 'border-violet-500/50 bg-violet-500/10' : 'border-white/10 bg-black/25'} p-1.5 text-[9px]">`;
 
                   if (active) {
                       html += `
@@ -7394,7 +8253,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                                       ? 'bg-violet-600 hover:bg-violet-500 text-white'
                                       : 'bg-white/5 text-white/35 cursor-not-allowed'}"
                                   ${canAutomate ? '' : 'disabled'}>
-                              Automate 5 min (1 Crystal)
+                              Automate 5 min (${crystalCostInline(INCUBATOR_AUTOMATION_CRYSTAL_COST)})
                           </button>`;
                   } else {
                       html += `
@@ -7403,7 +8262,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                                       ? 'bg-violet-600/80 hover:bg-violet-500 text-white'
                                       : 'bg-white/5 text-white/35 cursor-not-allowed'}"
                                   ${aetheriumCrystals >= INCUBATOR_AUTOMATION_CRYSTAL_COST ? '' : 'disabled'}>
-                              Extend +5 min (1 Crystal)
+                              Extend +5 min (${crystalCostInline(INCUBATOR_AUTOMATION_CRYSTAL_COST)})
                           </button>
                           <button onclick="cancelIncubatorAutomation(${index}); event.stopImmediatePropagation();"
                                   class="w-full mt-1.5 py-1.5 text-[11px] rounded-lg font-medium bg-red-500/80 hover:bg-red-500 text-white">
@@ -7428,15 +8287,15 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                           const cost = getDoublingSlotCost(slotNumber);
                           const card = document.createElement('div');
                           card.dataset.incIndex = String(index);
-                          card.className = 'rounded-2xl border border-amber-500/40 bg-[#0a0a0f] p-3 transition-all hover:border-amber-400/70';
+                          card.className = 'incubator-slot-card rounded-2xl border border-amber-500/40 bg-[#0a0a0f] transition-all hover:border-amber-400/70';
                           card.innerHTML = `
-                              <div class="flex justify-between items-center mb-2">
-                                  <div class="text-sm font-semibold text-amber-400">Slot ${slotNumber}</div>
-                                  <div class="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] text-amber-400">LOCKED</div>
+                              <div class="flex justify-between items-center mb-1.5">
+                                  <div class="text-xs font-semibold text-amber-400">Slot ${slotNumber}</div>
+                                  <div class="rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[9px] text-amber-400">LOCKED</div>
                               </div>
-                              <div class="flex h-24 flex-col items-center justify-center rounded-xl border border-white/10 bg-black/30 text-center">
-                                  <i class="fa-solid fa-lock mb-1 text-xl text-amber-400"></i>
-                                  <div class="text-xs text-white/70">Unlock for <span class="font-mono text-amber-400">${formatIncubatorSlotCost(cost)}</span> Crystals</div>
+                              <div class="flex h-[4.5rem] flex-col items-center justify-center rounded-xl border border-white/10 bg-black/30 text-center">
+                                  <i class="fa-solid fa-lock mb-0.5 text-lg text-amber-400"></i>
+                                  <div class="text-xs text-white/70">Unlock for ${crystalCostInline(formatIncubatorSlotCost(cost))}</div>
                                   <button onclick="purchaseIncubatorSlot(${index}); event.stopImmediatePropagation();"
                                           class="mt-2 rounded-lg bg-amber-600 px-3 py-1 text-[10px] font-semibold text-white hover:bg-amber-500 ${aetheriumCrystals < cost ? 'opacity-40' : ''}"
                                           ${aetheriumCrystals < cost ? 'disabled' : ''}>
@@ -7459,21 +8318,26 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                           const egg = slot.currentIncubation.eggData;
                           card.dataset.eggSig = (egg.modules?.length || 0) + ':' + (egg.modules?.map(m => `${m.type}-${m.tier || 1}`).join(',') || '');
                       }
-                      card.className = `rounded-2xl border p-3 transition-all ${automated
+                      card.className = `incubator-slot-card rounded-2xl border transition-all ${automated
                           ? 'border-violet-500/45 bg-[#0c0818] ring-1 ring-violet-500/20'
                           : hasInc
                               ? 'border-amber-500/50 bg-[#0f0a05]'
                               : 'border-amber-500/20 bg-[#0a0a0f]'}`;
 
+                      const upgradeLevel = slot.upgradeLevel || 0;
+                      const upgradeCost = getIncubatorSlotUpgradeCost(upgradeLevel);
+                      const canUpgrade = aetheriumCrystals >= upgradeCost;
+
                       let html = `
-                      <div class="flex justify-between items-center mb-1.5">
-                          <div class="text-sm font-semibold text-amber-400 flex items-center gap-1.5">
+                      <div class="flex justify-between items-center mb-1">
+                          <div class="text-xs font-semibold text-amber-400 flex items-center gap-1 flex-wrap">
                               Slot ${slot.id}
+                              ${upgradeLevel > 0 ? formatCrystalLevelBadge(upgradeLevel) : ''}
                               ${automated ? '<span class="text-[9px] px-1.5 py-0.5 rounded bg-violet-500/30 text-violet-200 font-bold">AUTO</span>' : ''}
                           </div>
                           <div class="text-right">
-                              <div data-inc-score-mult class="font-mono text-[9px] px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300">${hasInc ? formatSlotScoreMultiplierLabel(slotNumber, true) : formatSlotScoreMultiplierLabel(slotNumber, false)}</div>
-                              <div data-inc-mult-badge class="font-mono text-xs px-2 py-0.5 rounded bg-black/40 text-amber-400 mt-0.5">${slot.multiplier.toFixed(3)}×</div>
+                              <div data-inc-score-mult class="font-mono text-[9px] px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300">${hasInc ? formatSlotScoreMultiplierLabel(slotNumber, true, slot) : formatSlotScoreMultiplierLabel(slotNumber, false, slot)}</div>
+                              <div data-inc-mult-badge class="font-mono text-xs px-2 py-0.5 rounded bg-black/40 text-amber-400 mt-0.5">${slot.multiplier.toFixed(3)}× sell</div>
                               ${lastBoost ? `<div data-inc-last-mult class="font-mono text-[9px] text-emerald-400 mt-0.5">+${lastBoost.multGain.toFixed(3)}× last cycle</div>` : '<div data-inc-last-mult class="font-mono text-[9px] text-transparent mt-0.5">—</div>'}
                           </div>
                       </div>
@@ -7485,20 +8349,20 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                           const barColor = automated ? 'bg-violet-500' : (isReady ? 'bg-emerald-500' : 'bg-amber-500');
 
                           html += `
-                          <div class="flex gap-3 mb-2">
-                              <canvas id="${canvasId}" data-preview-size="48"
-                                      class="creature-preview-canvas w-12 h-12 block flex-shrink-0 rounded-xl border border-white/10 bg-[#111113]"></canvas>
+                          <div class="flex gap-2 mb-1.5">
+                              <canvas id="${canvasId}" data-preview-size="40"
+                                      class="creature-preview-canvas w-10 h-10 block flex-shrink-0 rounded-lg border border-white/10 bg-[#111113]"></canvas>
 
                               <div class="flex-1 min-w-0">
-                                  <div class="text-xs text-white/80 mb-0.5">
-                                      ${automated ? 'Auto-incubating' : 'Incubating'}: <span class="text-emerald-400 font-medium">${egg.name}</span>
+                                  <div class="text-[11px] text-white/80 truncate">
+                                      ${automated ? 'Auto' : 'Inc'}: <span class="text-emerald-400 font-medium">${egg.name}</span>
                                   </div>
-                                  <div class="text-[10px] text-white/45">${egg.modules?.length || 0} modules</div>
+                                  <div class="text-[9px] text-white/45">${egg.modules?.length || 0} mods</div>
 
-                                  <div class="w-full bg-white/10 h-2 rounded-full overflow-hidden mt-1">
-                                      <div data-inc-progress-bar class="${barColor} h-2 transition-all" style="width: ${progress}%"></div>
+                                  <div class="w-full bg-white/10 h-1.5 rounded-full overflow-hidden mt-0.5">
+                                      <div data-inc-progress-bar class="${barColor} h-1.5 transition-all" style="width: ${progress}%"></div>
                                   </div>
-                                  <div data-inc-progress-pct class="text-[10px] text-right text-white/50 mt-0.5">${progress}%</div>
+                                  <div data-inc-progress-pct class="text-[9px] text-right text-white/50">${progress}%</div>
                               </div>
                           </div>
                       `;
@@ -7506,10 +8370,16 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                           html += renderIncubatorAutomationPanel(slot, index);
 
                           if (lastBoost) {
+                              const scoreLine = lastBoost.scoreMultGain
+                                  ? ` • <span class="font-mono text-violet-300">+${(lastBoost.scoreMultGain * 100).toFixed(2)}%</span> score`
+                                  : '';
+                              const modGainLine = lastBoost.moduleGainHit
+                                  ? ' • <span class="text-pink-300">Module gain!</span>'
+                                  : '';
                               html += `<div data-inc-cycle-banner class="mt-1 rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-2 py-1 text-[10px] leading-relaxed text-white/75">
-                                  Last cycle: <span class="font-mono text-emerald-300">+${lastBoost.multGain.toFixed(3)}×</span> slot bonus •
+                                  Last cycle: <span class="font-mono text-emerald-300">+${lastBoost.multGain.toFixed(3)}×</span> sell •
                                   <span class="font-mono text-sky-300">+${lastBoost.modules}</span> modules •
-                                  Gen <span class="font-mono text-amber-300">${lastBoost.generation}</span>
+                                  Gen <span class="font-mono text-amber-300">${lastBoost.generation}</span>${scoreLine}${modGainLine}
                               </div>`;
                           }
 
@@ -7539,16 +8409,25 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                           }
                       } else {
                           html += `
-                          <div class="h-12 flex flex-col items-center justify-center border border-white/10 rounded-xl bg-black/30 mb-2">
-                              <div class="text-xs text-white/50">Empty Slot</div>
-                              <div class="font-mono text-[9px] text-white/35">${formatSlotScoreMultiplierLabel(slotNumber, false)}</div>
+                          <div class="h-9 flex flex-col items-center justify-center border border-white/10 rounded-lg bg-black/30 mb-1.5">
+                              <div class="text-[10px] text-white/50">Empty</div>
+                              <div class="font-mono text-[8px] text-white/35">${formatSlotScoreMultiplierLabel(slotNumber, false, slot)}</div>
                           </div>
                           <button onclick="startIncubationInSlot(${index}); event.stopImmediatePropagation();"
-                                  class="w-full py-1.5 text-xs rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-medium">
-                              Start Incubation
+                                  class="w-full py-1 text-[11px] rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-medium">
+                              Start
                           </button>
                       `;
                       }
+
+                      html += `
+                          <button onclick="purchaseIncubatorSlotUpgrade(${index}); event.stopImmediatePropagation();"
+                                  class="w-full mt-1.5 py-1 text-[10px] rounded-lg font-medium transition-colors ${canUpgrade
+                                      ? 'bg-pink-600/80 hover:bg-pink-500 text-white'
+                                      : 'bg-white/5 text-white/35 cursor-not-allowed'}"
+                                  ${canUpgrade ? '' : 'disabled'}>
+                              Upgrade Slot ${crystalCostWithLevel(upgradeCost, upgradeLevel)}
+                          </button>`;
 
                       card.innerHTML = html;
                       grid.appendChild(card);
@@ -7611,9 +8490,13 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                       }
                       if (cycleBanner && slot.lastCycleBoost) {
                           const b = slot.lastCycleBoost;
-                          cycleBanner.innerHTML = `Last cycle: <span class="font-mono text-emerald-300">+${b.multGain.toFixed(3)}×</span> slot bonus •
+                          const scoreLine = b.scoreMultGain
+                              ? ` • <span class="font-mono text-violet-300">+${(b.scoreMultGain * 100).toFixed(2)}%</span> score`
+                              : '';
+                          const modGainLine = b.moduleGainHit ? ' • <span class="text-pink-300">Module gain!</span>' : '';
+                          cycleBanner.innerHTML = `Last cycle: <span class="font-mono text-emerald-300">+${b.multGain.toFixed(3)}×</span> sell •
                               <span class="font-mono text-sky-300">+${b.modules}</span> modules •
-                              Gen <span class="font-mono text-amber-300">${b.generation}</span>`;
+                              Gen <span class="font-mono text-amber-300">${b.generation}</span>${scoreLine}${modGainLine}`;
                       }
 
                       const eggScoreEl = card.querySelector('[data-inc-egg-score]');
@@ -7652,6 +8535,10 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
               }
 
               function showEggSelectionForSlot(slotIndex) {
+                  if (!isIncubatorSlotUnlocked(slotIndex + 1)) {
+                      addFloatingText(width / 2, 72, `Slot ${slotIndex + 1} is locked`, '#f87171');
+                      return;
+                  }
                   const modal = document.createElement('div');
                   modal.className = 'fixed inset-0 bg-black/80 flex items-center justify-center z-[140]';
                   modal.innerHTML = `
@@ -7705,9 +8592,20 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
               }
 
               function assignEggToSlot(slotIndex, eggIndex) {
+                  const slotNumber = slotIndex + 1;
+                  if (!isIncubatorSlotUnlocked(slotNumber)) {
+                      addFloatingText(width / 2, 72, `Slot ${slotNumber} is locked`, '#f87171');
+                      return false;
+                  }
+
                   const slot = incubatorSlots[slotIndex];
                   const egg = eggs[eggIndex];
-                  if (!slot || !egg) return;
+                  if (!slot || !egg) return false;
+
+                  if (slot.currentIncubation) {
+                      addFloatingText(width / 2, 72, `Slot ${slotNumber} is occupied`, '#f87171');
+                      return false;
+                  }
 
                   const eggCopy = ensureEggDataName(JSON.parse(JSON.stringify(egg)));
                   slot.currentIncubation = {
@@ -7724,6 +8622,9 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
 
                   eggs.splice(eggIndex, 1);
                   updateEggCountBadge();
+                  renderIncubatorSlots();
+                  addFloatingText(width / 2, 72, `Egg assigned to Slot ${slotNumber}`, '#34d399');
+                  return true;
               }
 
               function cancelIncubationInSlot(slotIndex) {
@@ -7793,7 +8694,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   const egg = inc.eggData;
 
                   const baseScore = getEggScore(egg);
-                  const sellBase = baseScore * slot.multiplier;
+                  const sellBase = baseScore * slot.multiplier * getIncubatorSlotSellFactor(slot);
                   const awardedScore = ScoreEngine.computeAwardedAmount(sellBase);
                   const gain = inc.lastMultGain || slot.lastCycleBoost?.multGain || 0;
                   const newMult = slot.multiplier;
@@ -7861,7 +8762,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   if (!slot || !slot.currentIncubation) return;
 
                   const egg = slot.currentIncubation.eggData;
-                  const baseScore = getEggScore(egg) * slot.multiplier;
+                  const baseScore = getEggScore(egg) * slot.multiplier * getIncubatorSlotSellFactor(slot);
                   const finalScore = addScore(baseScore);
 
                   addFloatingText(width / 2, 85, `+${formatScore(finalScore)} Score`, '#fbbf24');
@@ -7908,7 +8809,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   playTone(520, 'sine', 0.12, 0.4);
               }
 
-              function calculateIncubatorMultiplierGain(eggData) {
+              function calculateIncubatorMultiplierGain(eggData, slot = null) {
                   if (!eggData) return 0.006;
                   const mods = eggData.modules?.length || 0;
                   const tiers = eggData.modules ? eggData.modules.reduce((s, m) => s + (m.tier || 1), 0) : 0;
@@ -7916,6 +8817,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   const gen = eggData.generation || 1;
 
                   let gain = 0.0065 + (mods * 0.0009) + (tiers * 0.0012) + ((maxTier - 1) * 0.005) + ((gen - 1) * 0.00035);
+                  if (slot) gain *= getIncubatorSlotPowerFactor(slot);
                   return Math.min(gain, 0.09);
               }
 
@@ -8174,9 +9076,9 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                           <section><h4 class="mb-1 font-semibold text-violet-400">Gene Vault & Incubator Slots</h4>
                           <p>Slot 1 is free. Each additional slot costs twice the previous (1, 2, 4, 8… crystals). Active incubation or a stored vault egg occupies a slot and applies its score bonus.</p></section>
                           <section><h4 class="mb-1 font-semibold text-emerald-400">Tools & Ship</h4>
-                          <p><b>Hazard Fields</b> spawn damaging red zones. <b>Cursor Hazard</b> paints danger with your mouse. <b>Modular Walls</b> block movement (filter modes available). <b>Orbital Ship</b> orbits and fires — kills build combo streaks. All rent for <b>1💎 / 5 min</b>. Timers keep running while paused.</p></section>
+                          <p><b>Hazard Fields</b> spawn damaging red zones. <b>Cursor Hazard</b> paints danger with your mouse. <b>Modular Walls</b> block movement (filter modes available). <b>Orbital Ship</b> orbits and fires — kills build combo streaks. All rent for <b><span class="crystal-cost-inline"><i class="fa-solid fa-gem crystal-pink"></i>1</span> / 5 min</b>. Timers keep running while paused.</p></section>
                           <section><h4 class="mb-1 font-semibold text-emerald-400">Speed & Music Modes</h4>
-                          <p>0.25× is free. Faster speeds cost crystals for 5 minutes. Music rental (1💎 / 5 min) unlocks <b>Prune</b> (drought + infection), <b>Replicate</b> (fertile growth), and <b>Evolve</b> (cycling environments) at <b>4× sim speed</b>. FlowForge ambient music plays when modes are off.</p></section>
+                          <p>0.25× is free. Faster speeds cost crystals for 5 minutes. Music rental (<span class="crystal-cost-inline"><i class="fa-solid fa-gem crystal-pink"></i>1</span> / 5 min) unlocks <b>Prune</b> (drought + infection), <b>Replicate</b> (fertile growth), and <b>Evolve</b> (cycling environments) at <b>4× sim speed</b>. FlowForge ambient music plays when modes are off.</p></section>
                           <section><h4 class="mb-1 font-semibold text-amber-400">Traits & Adaptation</h4>
                           <p>Creatures inherit <b>traits</b>: pheromone sensitivity, exploration bias, vortex resistance, and hazard avoidance. Successfully dodging hazards raises <b>adaptation level</b> (fed into neural inputs). Starving creatures may turn <b>predator</b>.</p></section>
                           <section><h4 class="mb-1 font-semibold text-amber-400">Prestige & Saves</h4>
@@ -8336,7 +9238,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                           </div>`;
                       document.body.appendChild(card);
                       card.style.left = '14px';
-                      card.style.bottom = '64px';
+                      card.style.bottom = '58px';
                       this.activeCornerPopup = card;
 
                       card.querySelector('.tutorial-guide').onclick = () => this.showFullGameGuide();
@@ -8436,19 +9338,19 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
 
                   tips: [
                       { sel: '#top-economy-btn', tip: 'Crystals & Dust — tap to open inventory.' },
-                      { sel: '#top-furnace-btn', tip: 'Burn crystals for a massive temporary score multiplier.' },
-                      { sel: '#top-points-wrapper', tip: 'High Roller Points — tap for a full breakdown.' },
+                      { sel: '#sidebar-furnace-btn', tip: 'Burn Dust in the Furnace for a mass temporary score multiplier! BURN MORE DUST!' },
+                      { sel: '#sidebar-score-wrap', tip: 'High Roller Points — tap for a full breakdown.' },
                       { sel: '#prestige-btn', tip: 'Prestige resets progress for permanent Dust.' },
-                      { sel: 'button[onclick*="showGeneVault"]', tip: 'Store eggs permanently. Occupied vault slots boost score!' },
-                      { sel: 'button[onclick*="showIncubator"]', tip: 'Grow eggs over cycles. Occupied slots boost score too.' },
+                      { sel: '#top-gene-vault-btn', tip: 'Extract eggs from creatures — store in Gene Vault to preserve genes across Prestige.' },
+                      { sel: '#top-incubator-btn', tip: 'Incubate eggs over cycles to hatch stronger creatures and stack long-term multipliers.' },
                       { sel: 'button[onclick*="showSaveManager"]', tip: 'Save and load your colony.' },
                       { sel: '#pause-btn', tip: 'Pause or resume the simulation.' },
                       { sel: '#speed-0.25', tip: 'Free slow speed — great for learning.' },
-                      { sel: '#speed-0.5', tip: '1💎 for 5 minutes at this speed.' },
+                      { sel: '#speed-0.5', tip: '1 crystal for 5 minutes at this speed.' },
                       { sel: '#music-mode-prune', tip: 'Prune mode — drought + culling (rent to unlock).' },
                       { sel: '#music-mode-replicate', tip: 'Replicate mode — fertile growth beats.' },
                       { sel: '#music-mode-evolve', tip: 'Evolve mode — cycling environments + merges.' },
-                      { sel: '#tool-purchase-music-bar', tip: '1💎 unlocks music modes + 4× speed for 5 min.' },
+                      { sel: '#tool-purchase-music-bar', tip: '1 crystal unlocks music modes + 4× speed for 5 min.' },
                       { sel: '#audio-mute-btn', tip: 'Mute all audio.' },
                       { sel: '#music-volume-slider', tip: 'Music & ambient volume.' },
                       { sel: '#quick-red-btn', tip: 'Hazard Fields — damaging red zones.' },
@@ -8472,7 +9374,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   firstPopups: [
                       { id: 'welcome', title: 'Welcome to MiniSimmy!', body: 'Tips auto-rotate slowly through the entire game guide. Use <b>Previous</b> / <b>Next tip</b> to browse, or click <b>Stop tips</b> when you are done. They loop until you stop them.' },
                       { id: 'intro-click', title: 'Click a Creature', body: 'Click any creature on the map to open the <b>Inspector</b> in the sidebar. You can view modules, stats, and special actions.' },
-                      { id: 'intro-score', title: 'Your Score', body: 'Watch <b>High Roller Points</b> climb in the sidebar and top bar. More creatures and higher multipliers = faster gains.' },
+                      { id: 'intro-score', title: 'Your Score', body: 'Watch <b>High Roller Points</b> climb in the sidebar. Active multipliers stack between the furnace and score. More creatures = faster gains.' },
                       { id: 'intro-mult', title: '× MULT Matters', body: 'Your total multiplier combines population, predators, avg modules, and module tiers. Bigger <b>× MULT</b> = every point earned is worth more.' },
                       { id: 'intro-crystals', title: 'Crystals & Dust', body: 'Tap the gem icon for inventory. <b>Crystals</b> buy upgrades and rentals. <b>Dust</b> comes from Prestige and the Furnace.' },
                       { id: 'perm-boost-intro', title: 'Permanent Boosts', body: 'Click Population, Predators, Avg Modules, or any Tier multiplier to spend crystals. Each boost <b>doubles in power</b>.' },
@@ -8480,9 +9382,9 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                       { id: 'intro-incubator', title: 'Incubator', body: 'Open <b>Incubator</b> from the top bar. Start a cycle to grow eggs — each cycle adds modules and improves the slot multiplier.' },
                       { id: 'slot-score-bonus', title: 'Slot Score Bonuses', body: 'Occupied Gene Vault or Incubator slots multiply score: ×100, ×200, ×400… per slot number.' },
                       { id: 'intro-vault', title: 'Gene Vault', body: '<b>Gene Vault</b> preserves eggs across prestiges. Slot 1 is free; more slots cost 1, 2, 4, 8… crystals.' },
-                      { id: 'intro-tools', title: 'Tools & Ship', body: 'Rent Hazards, Cursor Hazard, Walls, or the Orbital Ship for <b>1💎 / 5 min</b> from the tool bar below the map.' },
+                      { id: 'intro-tools', title: 'Tools & Ship', body: 'Rent Hazards, Cursor Hazard, Walls, or the Orbital Ship for <b><span class="crystal-cost-inline"><i class="fa-solid fa-gem crystal-pink"></i>1</span> / 5 min</b> from the tool bar below the map.' },
                       { id: 'intro-furnace', title: 'Furnace Power', body: 'Burn crystals in the <b>Furnace</b> for a temporary score multiplier equal to crystals × 100 while they burn.' },
-                      { id: 'ambient-music', title: 'Music & Speed', body: 'FlowForge ambient plays by default. Rent music for 1💎 to unlock <b>4× speed</b> and Prune / Replicate / Evolve modes.' },
+                      { id: 'ambient-music', title: 'Music & Speed', body: 'FlowForge ambient plays by default. Rent music for <span class="crystal-cost-inline"><i class="fa-solid fa-gem crystal-pink"></i>1</span> to unlock <b>4× speed</b> and Prune / Replicate / Evolve modes.' },
                       { id: 'intro-save', title: 'Save Your Progress', body: 'Use <b>Save / Load</b> in the top bar. Saves keep crystals, eggs, vault, incubator, and all permanent boosts.' }
                   ],
 
@@ -8523,7 +9425,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   ],
 
                   guideExcerptTips: [
-                      { id: 'gx-score-breakdown', title: 'Score Breakdown', body: 'Tap <b>Points</b> in the top bar to see exactly what feeds your score: passive survival, kills, multipliers, furnace burns, and more.' },
+                      { id: 'gx-score-breakdown', title: 'Score Breakdown', body: 'Tap the <b>sidebar score</b> to see exactly what feeds your score: passive survival, kills, multipliers, furnace burns, and more.' },
                       { id: 'gx-mult-additive', title: 'Additive Multipliers', body: 'Sidebar stats add together into <b>× MULT</b>: Population + Predators + Avg Modules + Tier I through X. Permanent crystal boosts multiply each stat separately.' },
                       { id: 'gx-slot-occupancy', title: 'Slot Occupancy Math', body: 'Gene Vault slot 1 = ×100 score, slot 2 = ×200, slot 3 = ×400… Incubator occupied slots use the same doubling pattern. They <b>multiply together</b> with everything else.' },
                       { id: 'gx-perm-boost-math', title: 'Boost Doubling Math', body: 'Permanent boost #1 is base power, #2 is 2×, #3 is 4×, #4 is 8×… Boost #10 is <b>512×</b> the first. Crystal costs follow the same doubling: 1, 2, 4, 8…' },
@@ -8562,14 +9464,14 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   ],
 
                   toolAndModeTips: [
-                      { id: 'tool-hazards', title: 'Hazard Fields Tool', body: 'Rent for 1💎 / 5 min. Spawns damaging red hazard fields across the map. Great for stress-testing Sensor builds and farming dodge adaptation.' },
+                      { id: 'tool-hazards', title: 'Hazard Fields Tool', body: 'Rent for <span class="crystal-cost-inline"><i class="fa-solid fa-gem crystal-pink"></i>1</span> / 5 min. Spawns damaging red hazard fields across the map. Great for stress-testing Sensor builds and farming dodge adaptation.' },
                       { id: 'tool-cursor', title: 'Cursor Hazard Tool', body: 'Your mouse becomes a damaging red particle. Paint death zones to cull weak lineages or shape population density.' },
                       { id: 'tool-walls', title: 'Modular Walls Tool', body: 'Place walls that block movement. Filter modes let only certain creatures pass — use to protect harvester pockets.' },
                       { id: 'tool-ship', title: 'Orbital Ship Tool', body: 'A ship orbits the map and fires bullets. Kills award score and build <b>combo streaks</b> for rapid consecutive hits.' },
                       { id: 'mode-prune', title: 'Prune Music Mode', body: 'Drought + purple infection + harsh vortex. High drain, low reproduction. Culls weak creatures — brutal but high-score potential.' },
                       { id: 'mode-replicate', title: 'Replicate Music Mode', body: 'Fertile growth surge: high food, high reproduction, gentle vortex. Population explosions and fast score gains.' },
                       { id: 'mode-evolve', title: 'Evolve Music Mode', body: 'Cycles through environment phases automatically. Tests all module types — great for breeding well-rounded eggs.' },
-                      { id: 'mode-ambient', title: 'FlowForge Ambient', body: 'When music modes are off, <b>FlowForge</b> ambient tracks play. Rent music for 1💎 to unlock modes + 4× sim speed.' },
+                      { id: 'mode-ambient', title: 'FlowForge Ambient', body: 'When music modes are off, <b>FlowForge</b> ambient tracks play. Rent music for <span class="crystal-cost-inline"><i class="fa-solid fa-gem crystal-pink"></i>1</span> to unlock modes + 4× sim speed.' },
                       { id: 'speed-rentals', title: 'Speed Rentals', body: '0.25× is free forever. 0.5×, 1×, 2×, and 4× cost crystals for 5-minute windows. Music rental includes 4× speed.' },
                       { id: 'tool-timers', title: 'Rental Timers', body: 'Tool and music timers keep counting while the sim is <b>paused</b>. Plan rentals before stepping away.' }
                   ],
@@ -8589,7 +9491,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                       { id: 'econ-dust', title: 'Aetherium Dust', body: '<b>Dust</b> is permanent meta currency from Prestige and Furnace conversions. It persists across all resets.' },
                       { id: 'econ-furnace', title: 'Furnace Burn', body: 'Sacrifice crystals to the Furnace for a live score multiplier of <b>crystals × 100</b>. All points earned during the burn are massively amplified.' },
                       { id: 'econ-prestige', title: 'Prestige Dust', body: 'Prestige converts your current run progress into dust. The preview number next to the Prestige button shows your payout.' },
-                      { id: 'econ-boost-invest', title: 'Where to Invest', body: 'Early game: cheap permanent boosts (1💎). Mid game: incubator/vault slots. Late game: tier multiplier boosts and furnace burns stack exponentially.' }
+                      { id: 'econ-boost-invest', title: 'Where to Invest', body: 'Early game: cheap permanent boosts (<span class="crystal-cost-inline"><i class="fa-solid fa-gem crystal-pink"></i>1</span>). Mid game: incubator/vault slots. Late game: tier multiplier boosts and furnace burns stack exponentially.' }
                   ],
 
                   tierGuideTips: [
@@ -8624,9 +9526,9 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                       { id: 'ctx-incubate', title: 'Incubate an Egg', body: 'You have eggs in inventory! Open the <b>Incubator</b> and start a cycle for modules and score bonuses.' },
                       { id: 'ctx-vault-store', title: 'Store in Gene Vault', body: 'Place a prized egg in the <b>Gene Vault</b> to preserve it across prestiges and earn occupancy score multipliers.' },
                       { id: 'ctx-first-boost', title: 'Spend Crystals on Boosts', body: 'Click a multiplier under <b>Current Stats</b> to buy permanent power. Boosts double in strength each time!' },
-                      { id: 'ctx-music-rental', title: 'Try a Music Mode', body: 'Rent music for 1💎 — unlock <b>4× speed</b> plus Prune, Replicate, or Evolve environments.' },
+                      { id: 'ctx-music-rental', title: 'Try a Music Mode', body: 'Rent music for <span class="crystal-cost-inline"><i class="fa-solid fa-gem crystal-pink"></i>1</span> — unlock <b>4× speed</b> plus Prune, Replicate, or Evolve environments.' },
                       { id: 'ctx-furnace', title: 'Ignite the Furnace', body: 'Burn crystals in the <b>Furnace</b> for a massive temporary score multiplier while they burn.' },
-                      { id: 'ctx-ship', title: 'Deploy the Ship', body: 'Rent the <b>Orbital Ship</b> for 1💎 and farm score with bullet kills and combo streaks.' }
+                      { id: 'ctx-ship', title: 'Deploy the Ship', body: 'Rent the <b>Orbital Ship</b> for <span class="crystal-cost-inline"><i class="fa-solid fa-gem crystal-pink"></i>1</span> and farm score with bullet kills and combo streaks.' }
                   ],
 
                   periodicTips: [
@@ -8648,7 +9550,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                       { id: 'ms-score-150', threshold: 150, title: 'Multiplier Check', body: 'Glance at <b>× MULT</b> in the sidebar. Higher population and module tiers make every point worth more.' },
                       { id: 'ms-score-250', threshold: 250, title: 'Growing Colony', body: 'More creatures and modules raise your stats and <b>× MULT</b>. Check the sidebar to see what drives your multiplier.' },
                       { id: 'ms-score-350', threshold: 350, title: 'Keep Watching', body: 'Score milestones unlock helpful tips as you climb. Let the sim run — passive income adds up fast with a healthy ecosystem.' },
-                      { id: 'ms-score-500', threshold: 500, title: 'Score Rising!', body: 'Tap <b>Points</b> in the top bar for a full breakdown of what contributes to your score.' },
+                      { id: 'ms-score-500', threshold: 500, title: 'Score Rising!', body: 'Tap the <b>sidebar score</b> for a full breakdown of what contributes to your score.' },
                       { id: 'ms-score-750', threshold: 750, title: 'Crystal Drops', body: 'Crystals appear from creature activity. Open the gem icon to check your balance — you will need them for boosts soon.' },
                       { id: 'ms-score-1k', threshold: 1000, title: '1,000 Points', body: 'You are earning momentum. Click a creature and explore the Inspector — extraction unlocks the egg meta loop.' },
                       { id: 'ms-score-2k', threshold: 2000, title: 'Extract to Egg', body: 'Click a creature, then <b>Extract to Egg</b> in the Inspector. Strong creatures become incubatable eggs.' },
@@ -8656,19 +9558,19 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                       { id: 'ms-score-5k', threshold: 5000, title: 'Try the Incubator', body: 'Open <b>Incubator</b> and start a cycle. Each completion adds modules and improves the slot multiplier.' },
                       { id: 'ms-score-8k', threshold: 8000, title: 'Boost a Stat', body: 'If you have crystals, tap <b>Population</b> or <b>Avg Modules</b> multipliers in the sidebar for permanent upgrades.' },
                       { id: 'ms-score-15k', threshold: 15000, title: 'Gene Vault Storage', body: 'Store your best eggs in the <b>Gene Vault</b> to keep bloodlines across prestiges. Occupied slots boost score massively.' },
-                      { id: 'ms-score-25k', threshold: 25000, title: 'Rent a Tool', body: 'Try the <b>Ship</b> or <b>Hazards</b> for 1💎. Tools shake up the ecosystem and can accelerate score gains.' },
+                      { id: 'ms-score-25k', threshold: 25000, title: 'Rent a Tool', body: 'Try the <b>Ship</b> or <b>Hazards</b> for <span class="crystal-cost-inline"><i class="fa-solid fa-gem crystal-pink"></i>1</span>. Tools shake up the ecosystem and can accelerate score gains.' },
                       { id: 'ms-score-50k', threshold: 50000, title: 'Stack Multipliers', body: 'Permanent boosts, occupied vault/incubator slots, and the Furnace all stack. Invest crystals where they compound longest.' },
                       { id: 'ms-score-100k', threshold: 100000, title: '100K Milestone', body: 'Serious score now. Tier multiplier boosts and module-rich eggs become especially valuable at this scale.' },
                       { id: 'ms-score-200k', threshold: 200000, title: 'Consider Prestige', body: 'Prestige converts your run into <b>Aetherium Dust</b> for meta upgrades. Gene Vault eggs survive the reset!' },
                       { id: 'ms-score-500k', threshold: 500000, title: 'Furnace Spike', body: 'Got spare crystals? The <b>Furnace</b> multiplies all score by crystals × 100 for a limited burn window.' },
-                      { id: 'ms-score-1m', threshold: 1000000, title: 'Music Modes', body: 'Rent music for 1💎 to run at <b>4× speed</b> with Prune, Replicate, or Evolve environment effects.' },
+                      { id: 'ms-score-1m', threshold: 1000000, title: 'Music Modes', body: 'Rent music for <span class="crystal-cost-inline"><i class="fa-solid fa-gem crystal-pink"></i>1</span> to run at <b>4× speed</b> with Prune, Replicate, or Evolve environment effects.' },
                       { id: 'ms-score-2m', threshold: 2000000, title: 'Deep Run', body: 'You are deep into a run. Auto-incubation and vault occupancy bonuses compound hard — keep slots filled.' }
                   ],
 
                   simMilestones: [
                       { id: 'ms-sim-20', seconds: 20, title: 'Sim Running', body: 'Creatures eat, reproduce, and compete in the green and blue zones. Let the ecosystem stabilize or stir it up with tools.' },
                       { id: 'ms-sim-60', seconds: 60, title: 'One Minute In', body: 'Check your <b>× MULT</b> and stats in the sidebar. If score feels slow, occupied incubator/vault slots help a lot.' },
-                      { id: 'ms-sim-180', seconds: 180, title: 'Three Minutes', body: 'By now you may have crystals. Permanent multiplier boosts are cheap at first (1💎, then 2, 4…) but grow enormously over time.' }
+                      { id: 'ms-sim-180', seconds: 180, title: 'Three Minutes', body: 'By now you may have crystals. Permanent multiplier boosts are cheap at first (<span class="crystal-cost-inline"><i class="fa-solid fa-gem crystal-pink"></i>1</span>, then 2, 4…) but grow enormously over time.' }
                   ],
 
                   applyTips() {
@@ -8707,13 +9609,13 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                           pool.push({ id: 'ctx-first-boost', title: 'Spend Crystals on Boosts', body: 'Click a multiplier under <b>Current Stats</b> to buy permanent power. Boosts double in strength each time!' });
                       }
                       if (aetheriumCrystals >= 1 && !isToolRentalActive('music') && simTime > 120) {
-                          pool.push({ id: 'ctx-music-rental', title: 'Try a Music Mode', body: 'Rent music for 1💎 — unlock <b>4× speed</b> plus Prune, Replicate, or Evolve environments.' });
+                          pool.push({ id: 'ctx-music-rental', title: 'Try a Music Mode', body: 'Rent music for <span class="crystal-cost-inline"><i class="fa-solid fa-gem crystal-pink"></i>1</span> — unlock <b>4× speed</b> plus Prune, Replicate, or Evolve environments.' });
                       }
                       if (burningCrystals <= 0 && aetheriumCrystals >= 5 && totalScore > 10000) {
                           pool.push({ id: 'ctx-furnace', title: 'Ignite the Furnace', body: 'Burn crystals in the <b>Furnace</b> for a massive temporary score multiplier while they burn.' });
                       }
                       if (totalScore > 30000 && !isToolRentalActive('ship')) {
-                          pool.push({ id: 'ctx-ship', title: 'Deploy the Ship', body: 'Rent the <b>Orbital Ship</b> for 1💎 and farm score with bullet kills and combo streaks.' });
+                          pool.push({ id: 'ctx-ship', title: 'Deploy the Ship', body: 'Rent the <b>Orbital Ship</b> for <span class="crystal-cost-inline"><i class="fa-solid fa-gem crystal-pink"></i>1</span> and farm score with bullet kills and combo streaks.' });
                       }
                       return pool.filter((t) => this.shouldShow(t.id));
                   },
@@ -8836,7 +9738,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
               }
 
               function setup() {
-                  console.info('[MiniSimmy] build=orbital-ship-v2-2026-06-17f tier=' + DeviceProfile.tier + ' ship=radial-orbit mobile=' + IS_MOBILE);
+                  console.info('[MiniSimmy] build=orbital-ship-v2-2026-06-18t tier=' + DeviceProfile.tier + ' ship=radial-orbit mobile=' + IS_MOBILE);
                   refreshMobileLayout();
                   window.addEventListener('resize', refreshMobileLayout);
                   window.addEventListener('orientationchange', () => setTimeout(refreshMobileLayout, 120));
@@ -8882,9 +9784,8 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   setupCheatSliders();
                   debugLog("setupCheatSliders done");
 
-                  const miniCanvas = document.getElementById('mini-chart');
-                  if (miniCanvas) miniChartCtx = miniCanvas.getContext('2d');
-                  debugLog("Mini chart context set");
+                  AnalyticsInspector.init();
+                  debugLog("Analytics inspector initialized");
 
                   evolutionHistory = [];
                   document.addEventListener('keydown', handleKeyPress);
@@ -8916,6 +9817,8 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                       setupSpaceshipControls();
                       setupAudioControls();
                       migratePermanentBoostCounts();
+                      mountCrystalUpgradeHints();
+                      updateDayNightBadge(true);
                       TutorialSystem.init();
                       setTimeout(() => TutorialSystem.ensureStarted(), 900);
                       updateMusicRentalUI();
@@ -9016,7 +9919,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                       try {
                           drawWorld();
                           updateMainStats();
-                          if (miniChartCtx) drawMiniChart();
+                          AnalyticsInspector.drawThumb();
                       } catch (e) {
                           console.warn("Paused draw error:", e);
                       }
@@ -9077,6 +9980,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                       if (isDay) greenZone.food = Math.min(greenZone.maxFood, greenZone.food + 150);
                       else blueZone.food = Math.min(blueZone.maxFood, blueZone.food + 150);
                       lastIsDay = isDay;
+                      updateDayNightBadge(isDay);
 
                       if (Math.random() < 0.55 * soundDensity) playAmbientPulse(isDay);
                   }
@@ -10338,16 +11242,6 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                       }
                   }
 
-                  fill(255, 255, 255, 190);
-                  textAlign(LEFT);
-                  textSize(12);
-                  textFont('Inter, system-ui');
-                  if (isDay) {
-                      text('DAY', 16, 24);
-                  } else {
-                      text('NIGHT', 16, 24);
-                  }
-
                   if (musicEnabled && !IS_MOBILE) {
                       fill(180, 255, 200, 210);
                       textSize(10);
@@ -10363,8 +11257,8 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                       );
                   }
 
-                  if (frameCount % DeviceProfile.chartInterval === 0 && typeof drawMiniChart === 'function' && miniChartCtx) {
-                      drawMiniChart();
+                  if (frameCount % DeviceProfile.chartInterval === 0) {
+                      AnalyticsInspector.tick();
                   }
 
                   ScoreEngine.tickPassive();
@@ -10425,6 +11319,8 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                       blueFood: [],
                       hr: []
                   };
+                  AnalyticsInspector.invalidate();
+                  AnalyticsInspector.drawThumb();
                   lastScoreSimTime = 0;
                   greenZone.food = 320;
                   blueZone.food = 320;
@@ -10477,7 +11373,8 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                       redHazards.push(new RedHazard());
                   }
 
-                  if (miniChartCtx) drawMiniChart();
+                  AnalyticsInspector.invalidate();
+                  AnalyticsInspector.drawThumb();
                   updateMainStats();
                   updateTierMultiplierDisplays();
               }
@@ -10490,6 +11387,15 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   envLabelElement.className = 'env-label hidden';
                   envLabelElement.style.color = '#34d399';
                   container.appendChild(envLabelElement);
+              }
+
+              function updateDayNightBadge(isDay) {
+                  const badge = document.getElementById('day-night-badge');
+                  if (!badge) return;
+                  badge.classList.toggle('is-day', isDay);
+                  badge.classList.toggle('is-night', !isDay);
+                  const textEl = badge.querySelector('.day-night-badge__text');
+                  if (textEl) textEl.textContent = isDay ? 'Day' : 'Night';
               }
 
               function updateEnvLabel(phase) {
@@ -10649,7 +11555,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                           timerEl.textContent = 'Music mode: 4× speed active';
                           timerEl.className = 'font-mono text-[9px] text-amber-300/80';
                       } else {
-                          timerEl.textContent = '0.25× free • 0.5×=1💎 1×=2💎 2×=4💎 (5 min each)';
+                          timerEl.innerHTML = `0.25× free • 0.5×=${crystalCostInline(1)} 1×=${crystalCostInline(2)} 2×=${crystalCostInline(4)}`;
                           timerEl.className = 'font-mono text-[9px] text-white/40';
                       }
                   }
@@ -11281,100 +12187,6 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   }
               }
 
-              function drawMiniChart() {
-                  if (!miniChartCtx || graphData.pop.length < 2) return;
-                  const ctx = miniChartCtx;
-                  ctx.clearRect(0, 0, 240, 70);
-
-                  const w = 240, h = 70;
-                  const padding = 6;
-                  const plotW = w - padding * 2;
-                  const plotH = h - padding * 2;
-
-                  const maxPop = Math.max(100, ...graphData.pop) * 1.1;
-                  const maxMod = Math.max(...graphData.modules, 1) * 1.15;
-                  const maxPred = Math.max(...graphData.predators, 1) * 1.15;
-                  const maxGreen = Math.max(...graphData.greenFood, 50) * 1.15;
-                  const maxBlue = Math.max(...graphData.blueFood, 50) * 1.15;
-
-                  ctx.strokeStyle = '#334155';
-                  ctx.lineWidth = 0.5;
-                  for (let i = 0; i <= 2; i++) {
-                      const y = padding + (i * plotH / 2);
-                      ctx.beginPath();
-                      ctx.moveTo(padding, y);
-                      ctx.lineTo(w - padding, y);
-                      ctx.stroke();
-                  }
-
-                  if (miniChartVisible.pop) {
-                      ctx.strokeStyle = CHART_COLORS.pop;
-                      ctx.lineWidth = 1.6;
-                      ctx.beginPath();
-                      for (let i = 0; i < graphData.pop.length; i++) {
-                          const x = padding + (i / (graphData.pop.length - 1)) * plotW;
-                          const y = h - padding - (graphData.pop[i] / maxPop) * plotH;
-                          if (i === 0) ctx.moveTo(x, y);
-                          else ctx.lineTo(x, y);
-                      }
-                      ctx.stroke();
-                  }
-
-                  if (miniChartVisible.modules) {
-                      ctx.strokeStyle = CHART_COLORS.modules;
-                      ctx.lineWidth = 1.2;
-                      ctx.beginPath();
-                      for (let i = 0; i < graphData.modules.length; i++) {
-                          const x = padding + (i / (graphData.modules.length - 1)) * plotW;
-                          const y = h - padding - (graphData.modules[i] / maxMod) * plotH;
-                          if (i === 0) ctx.moveTo(x, y);
-                          else ctx.lineTo(x, y);
-                      }
-                      ctx.stroke();
-                  }
-
-                  if (miniChartVisible.predators) {
-                      ctx.strokeStyle = CHART_COLORS.predators;
-                      ctx.lineWidth = 1.1;
-                      ctx.beginPath();
-                      for (let i = 0; i < graphData.predators.length; i++) {
-                          const x = padding + (i / (graphData.predators.length - 1)) * plotW;
-                          const y = h - padding - (graphData.predators[i] / maxPred) * plotH;
-                          if (i === 0) ctx.moveTo(x, y);
-                          else ctx.lineTo(x, y);
-                      }
-                      ctx.stroke();
-                  }
-
-                  // High Roller line temporarily removed from mini chart (still tracked in main UI)
-
-                  if (miniChartVisible.greenFood) {
-                      ctx.strokeStyle = CHART_COLORS.greenFood;
-                      ctx.lineWidth = 1;
-                      ctx.beginPath();
-                      for (let i = 0; i < graphData.greenFood.length; i++) {
-                          const x = padding + (i / (graphData.greenFood.length - 1)) * plotW;
-                          const y = h - padding - (graphData.greenFood[i] / maxGreen) * plotH;
-                          if (i === 0) ctx.moveTo(x, y);
-                          else ctx.lineTo(x, y);
-                      }
-                      ctx.stroke();
-                  }
-
-                  if (miniChartVisible.blueFood) {
-                      ctx.strokeStyle = CHART_COLORS.blueFood;
-                      ctx.lineWidth = 1;
-                      ctx.beginPath();
-                      for (let i = 0; i < graphData.blueFood.length; i++) {
-                          const x = padding + (i / (graphData.blueFood.length - 1)) * plotW;
-                          const y = h - padding - (graphData.blueFood[i] / maxBlue) * plotH;
-                          if (i === 0) ctx.moveTo(x, y);
-                          else ctx.lineTo(x, y);
-                      }
-                      ctx.stroke();
-                  }
-              }
-
               // ==================== PERMANENT MULTIPLIER UPGRADES ====================
               function getMultiplierUpgradeLabel(type, tier) {
                   if (type === 'population') return 'Population Multiplier';
@@ -11497,7 +12309,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   if (title) title.textContent = getMultiplierUpgradeLabel(type, tier);
                   const already = getPermBoostCount(type, tier);
                   const nextGain = getPermBoostGainForIndex(type, tier, already + 1);
-                  if (desc) desc.textContent = `Each boost doubles in power. Next boost: +${formatMultiplierRate(nextGain)}×. Cost doubles too (1💎, 2, 4…).`;
+                  if (desc) desc.innerHTML = `Each boost doubles in power. Next boost: +${formatMultiplierRate(nextGain)}×. Cost doubles too (${crystalCostWithLevel(1, already)}, 2, 4…).`;
                   if (slider) {
                       slider.min = '1';
                       slider.max = String(maxBoosts);
@@ -11538,7 +12350,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   const buyBtn = document.getElementById('mult-upgrade-buy-btn');
 
                   if (boostVal) boostVal.textContent = String(boosts);
-                  if (crystalVal) crystalVal.textContent = formatCrystals(crystalCost) + '💎';
+                  if (crystalVal) crystalVal.innerHTML = `${formatCrystals(crystalCost)} ${crystalGemIcon('text-[10px]')}`;
                   if (currentEl) currentEl.textContent = '×' + formatMultiplierRate(current);
                   if (gainEl) gainEl.textContent = '+' + formatMultiplierRate(gain) + (boosts > 1 ? ` (from +${formatMultiplierRate(nextSingle)}×)` : '');
                   if (newEl) newEl.textContent = '×' + formatMultiplierRate(current + gain);
@@ -11565,6 +12377,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                       permanentBoostBonuses[type] = (permanentBoostBonuses[type] || 0) + gain;
                   }
                   incrementPermBoostCount(type, tier, boosts);
+                  updateCrystalUpgradeLevelHints();
 
                   updateAetheriumUI();
                   updateMainStats();
@@ -11582,9 +12395,6 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   const snap = ScoreEngine.getMultiplierSnapshot();
                   const { pop, predators, avgModules, tierCounts } = snap.stats;
                   const avgModulesDisplay = pop > 0 ? avgModules.toFixed(1) : "0.0";
-
-                  const topScoreEl = DOMCache.topScore || document.getElementById('top-score');
-                  if (topScoreEl) topScoreEl.innerText = formatScore(totalScore);
 
                   const mainScoreEl = DOMCache.vegasScore || document.getElementById('vegas-score');
                   if (mainScoreEl) mainScoreEl.innerText = formatScore(totalScore);
@@ -11624,6 +12434,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   setMult('mult-pop', effRates.population, permanentBoostCounts.population);
                   setMult('mult-pred', effRates.predators, permanentBoostCounts.predators);
                   setMult('mult-avgmod', effRates.avgModules, permanentBoostCounts.avgModules);
+                  updateCrystalUpgradeLevelHints();
 
                   updateTierMultiplierDisplays(tierCounts);
 
@@ -11834,6 +12645,79 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
 
                   ctx.restore();
               }
+              const INSPECT_MODULE_LABELS = {
+                  harvester: 'Harvester',
+                  sensor: 'Sensor',
+                  mover: 'Mover',
+                  resistant: 'Resistant',
+                  explorer: 'Explorer',
+                  communicator: 'Comm'
+              };
+              const INSPECT_TIER_ROMAN = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
+
+              function buildInspectorModuleSummary(modules) {
+                  const byType = {};
+                  for (const m of modules) {
+                      if (!byType[m.type]) {
+                          byType[m.type] = { color: m.color, tiers: {}, weight: 0 };
+                      }
+                      const tier = m.tier || 1;
+                      byType[m.type].tiers[tier] = (byType[m.type].tiers[tier] || 0) + 1;
+                      byType[m.type].weight += tier;
+                  }
+                  return byType;
+              }
+
+              function renderInspectorModulesList(creature, container) {
+                  if (!container) return;
+                  const modules = creature.modules || [];
+                  container.innerHTML = '';
+
+                  if (!modules.length) {
+                      const empty = document.createElement('div');
+                      empty.className = 'inspect-mod-empty';
+                      empty.textContent = 'No modules';
+                      container.appendChild(empty);
+                      return;
+                  }
+
+                  const summary = buildInspectorModuleSummary(modules);
+                  const totalTiers = modules.reduce((sum, m) => sum + (m.tier || 1), 0);
+                  const header = document.createElement('div');
+                  header.className = 'inspect-mod-summary';
+                  header.textContent = `${modules.length} mod${modules.length === 1 ? '' : 's'} · ${totalTiers} tier${totalTiers === 1 ? '' : 's'}`;
+                  container.appendChild(header);
+
+                  const typeOrder = Object.keys(summary).sort((a, b) => summary[b].weight - summary[a].weight);
+                  for (const type of typeOrder) {
+                      const entry = summary[type];
+                      const row = document.createElement('div');
+                      row.className = 'inspect-mod-row';
+
+                      const head = document.createElement('div');
+                      head.className = 'inspect-mod-row-head';
+                      head.innerHTML = `
+                          <span class="inspect-mod-orb" style="background:${entry.color || '#fbbf24'}"></span>
+                          <span class="inspect-mod-name">${INSPECT_MODULE_LABELS[type] || type}</span>`;
+                      row.appendChild(head);
+
+                      const tiersWrap = document.createElement('div');
+                      tiersWrap.className = 'inspect-mod-tiers';
+                      const tierKeys = Object.keys(entry.tiers).map(Number).sort((a, b) => b - a);
+                      for (const tier of tierKeys) {
+                          const count = entry.tiers[tier];
+                          const pill = document.createElement('span');
+                          pill.className = 'inspect-mod-tier-pill';
+                          pill.style.borderColor = `${entry.color || '#fbbf24'}44`;
+                          pill.style.color = entry.color || '#fbbf24';
+                          pill.textContent = `${INSPECT_TIER_ROMAN[tier] || 'T' + tier}×${count}`;
+                          tiersWrap.appendChild(pill);
+                      }
+                      row.appendChild(tiersWrap);
+                      container.appendChild(row);
+                  }
+              }
+
               // ==================== Inspector Update (Clean + Neural Net) ====================
               function updateInspector() {
                   if (!selectedCreature) return;
@@ -11909,26 +12793,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   const modulesList = document.getElementById('inspect-modules-list');
                   if (modulesList && moduleSig !== lastInspectorModuleSig) {
                       lastInspectorModuleSig = moduleSig;
-                      modulesList.innerHTML = '';
-
-                      if (c.modules.length === 0) {
-                          const empty = document.createElement('div');
-                          empty.className = 'text-white/40 text-xs italic';
-                          empty.innerText = 'No modules yet';
-                          modulesList.appendChild(empty);
-                      } else {
-                          for (let m of c.modules) {
-                              const tier = m.tier || 1;
-                              const div = document.createElement('div');
-                              div.className = 'flex items-center gap-x-2 text-xs py-0.5';
-                              div.innerHTML = `
-                              <div class="w-2 h-2 rounded-full flex-shrink-0" style="background-color: ${m.color}"></div>
-                              <div class="flex-1 truncate">${m.type}</div>
-                              <div class="font-mono text-white/50 text-[10px]">T${tier}</div>
-                          `;
-                              modulesList.appendChild(div);
-                          }
-                      }
+                      renderInspectorModulesList(c, modulesList);
                   }
 
                   if (!IS_MOBILE && typeof drawNeuralNet === 'function') {
@@ -12970,6 +13835,52 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   }
               }
 
+              function getIncubatorOccupiedCount() {
+                  return incubatorSlots.filter((s, i) => isIncubatorSlotUnlocked(i + 1) && s.currentIncubation).length;
+              }
+
+              function buildIncubatorQuickAssignHTML(eggIndex) {
+                  let html = '<div class="flex flex-wrap items-center gap-1 mt-2" onclick="event.stopPropagation()">';
+                  html += '<span class="text-[9px] text-white/40 mr-0.5">Slot:</span>';
+                  for (let i = 0; i < MAX_INCUBATOR_SLOTS; i++) {
+                      const slotNumber = i + 1;
+                      const unlocked = isIncubatorSlotUnlocked(slotNumber);
+                      const occupied = !!incubatorSlots[i]?.currentIncubation;
+                      let cls = 'inc-quick-slot-btn ';
+                      let title = '';
+                      let disabled = true;
+                      if (!unlocked) {
+                          cls += 'is-locked';
+                          const cost = getDoublingSlotCost(slotNumber);
+                          title = `Locked — unlock for ${formatIncubatorSlotCost(cost)} crystals`;
+                      } else if (occupied) {
+                          cls += 'is-occupied';
+                          title = `Slot ${slotNumber} occupied`;
+                      } else {
+                          cls += 'is-ready';
+                          title = `Quick-assign to Slot ${slotNumber}`;
+                          disabled = false;
+                      }
+                      html += `<button type="button" class="${cls}" title="${title}" ${disabled ? 'disabled' : ''} data-inc-quick-slot="${i}" data-inc-quick-egg="${eggIndex}">${slotNumber}</button>`;
+                  }
+                  html += '</div>';
+                  return html;
+              }
+
+              function bindIncubatorQuickAssignButtons(container) {
+                  container.querySelectorAll('[data-inc-quick-slot]').forEach((btn) => {
+                      btn.onclick = (e) => {
+                          e.stopImmediatePropagation();
+                          if (btn.disabled) return;
+                          const slotIndex = parseInt(btn.dataset.incQuickSlot, 10);
+                          const eggIndex = parseInt(btn.dataset.incQuickEgg, 10);
+                          if (assignEggToSlot(slotIndex, eggIndex)) {
+                              showEggInventory({ aboveIncubator: incubatorModalOpen });
+                          }
+                      };
+                  });
+              }
+
               function showEggInventory(options = {}) {
                   const { aboveIncubator = incubatorModalOpen } = options;
                   const modal = prepareEggInventoryModal(aboveIncubator ? 1200 : 1100);
@@ -12983,10 +13894,15 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   const subtitleEl = modal.querySelector('h3')?.parentElement?.querySelector('p');
                   if (titleEl) titleEl.textContent = 'Egg Inventory';
                   if (subtitleEl) {
-                      subtitleEl.innerHTML = 'Click any egg to view its brain data. Max <span class="font-mono text-amber-400">10</span> eggs.';
+                      subtitleEl.innerHTML = aboveIncubator
+                          ? 'Tap a <span class="font-mono text-amber-400">slot number</span> on any egg to quick-assign it to an unlocked empty incubator slot. Locked slots are disabled.'
+                          : 'Click any egg to view its brain data. Tap slot numbers to quick-assign to the incubator. Max <span class="font-mono text-amber-400">10</span> eggs.';
                   }
 
                   list.innerHTML = '';
+
+                  const occupiedCount = getIncubatorOccupiedCount();
+                  const unlockedCount = incubatorSlots.filter((s, i) => isIncubatorSlotUnlocked(i + 1)).length;
 
                   // Header
                   const header = document.createElement('div');
@@ -12995,7 +13911,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   <div class="flex justify-between items-center">
                       <div>
                           <div class="text-xl font-semibold text-amber-400">Incubator</div>
-                          <div class="text-xs text-white/50">Slots used: ${incubatingEggs.length}/${MAX_INCUBATOR_SLOTS}</div>
+                          <div class="text-xs text-white/50">Occupied: ${occupiedCount} / ${unlockedCount} unlocked slots</div>
                       </div>
                       <div class="text-xs text-white/60">Available eggs: ${eggs.length}</div>
                   </div>
@@ -13077,23 +13993,26 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   } else {
                       eggs.forEach((egg, index) => {
                           const card = document.createElement('div');
-                          card.className = 'bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-4 mb-2 flex justify-between items-center cursor-pointer';
+                          card.className = 'bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-4 mb-2 cursor-pointer';
 
                           const canvasId = `egg-list-preview-${index}`;
 
                           card.innerHTML = `
-                          <div class="flex items-center gap-3">
-                              <canvas id="${canvasId}" data-preview-size="52"
-                                      class="creature-preview-canvas w-[52px] h-[52px] block flex-shrink-0 rounded-xl border border-white/10 bg-[#111113]"></canvas>
-                              <div>
-                                  <div class="font-semibold text-emerald-400">${egg.name}</div>
-                                  <div class="text-xs text-white/60">Gen ${egg.generation} • ${egg.modules.length} modules</div>
+                          <div class="flex justify-between items-start gap-3">
+                              <div class="flex items-center gap-3 min-w-0">
+                                  <canvas id="${canvasId}" data-preview-size="52"
+                                          class="creature-preview-canvas w-[52px] h-[52px] block flex-shrink-0 rounded-xl border border-white/10 bg-[#111113]"></canvas>
+                                  <div class="min-w-0">
+                                      <div class="font-semibold text-emerald-400">${egg.name}</div>
+                                      <div class="text-xs text-white/60">Gen ${egg.generation} • ${egg.modules.length} modules</div>
+                                  </div>
+                              </div>
+                              <div class="flex items-center gap-2 flex-shrink-0">
+                                  <button type="button" class="px-3 py-1.5 text-xs rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-medium">Auto Slot</button>
+                                  <button type="button" class="px-3 py-1.5 text-xs rounded-xl bg-red-500/80 hover:bg-red-500 text-white font-medium">Delete</button>
                               </div>
                           </div>
-                          <div class="flex items-center gap-2">
-                              <button class="px-4 py-1.5 text-xs rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-medium">Start Incubation</button>
-                              <button class="px-3 py-1.5 text-xs rounded-xl bg-red-500/80 hover:bg-red-500 text-white font-medium">Delete</button>
-                          </div>
+                          ${buildIncubatorQuickAssignHTML(index)}
                       `;
 
                           card.onclick = (e) => {
@@ -13114,10 +14033,11 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                               if (confirm(`Delete "${egg.name}" permanently?`)) {
                                   eggs.splice(index, 1);
                                   updateEggCountBadge();
-                                  showEggInventory();
+                                  showEggInventory({ aboveIncubator: incubatorModalOpen });
                               }
                           };
 
+                          bindIncubatorQuickAssignButtons(card);
                           list.appendChild(card);
 
                           // Draw preview
@@ -13150,25 +14070,16 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
               }
 
               function startIncubationOnEgg(eggIndex) {
-                  if (incubatingEggs.length >= MAX_INCUBATOR_SLOTS) {
-                      alert("Incubator is full (max 10 slots).");
+                  const emptyIndex = incubatorSlots.findIndex((s, i) =>
+                      isIncubatorSlotUnlocked(i + 1) && !s.currentIncubation
+                  );
+                  if (emptyIndex === -1) {
+                      alert('No unlocked empty incubator slots. Unlock more slots or free one up first.');
                       return;
                   }
-
-                  const egg = eggs[eggIndex];
-                  if (!egg) return;
-
-                  const incubationEntry = {
-                      id: nextIncubationId++,
-                      eggData: ensureEggDataName(JSON.parse(JSON.stringify(egg))),
-                      progress: 0,
-                      completed: false
-                  };
-
-                  incubatingEggs.push(incubationEntry);
-                  eggs.splice(eggIndex, 1);
-                  updateEggCountBadge();
-                  showEggInventory();
+                  if (assignEggToSlot(emptyIndex, eggIndex)) {
+                      showEggInventory({ aboveIncubator: incubatorModalOpen });
+                  }
               }
 
               function playIncubationCompleteSound() {
@@ -13571,7 +14482,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                       </div>
                       <div class="flex h-20 flex-col items-center justify-center rounded-xl border border-white/10 bg-black/30 text-center">
                           <i class="fa-solid fa-lock mb-1 text-xl text-amber-400"></i>
-                          <div class="text-xs text-white/70">Unlock for <span class="font-mono text-amber-400">${cost.toLocaleString()}</span> Crystals</div>
+                          <div class="text-xs text-white/70">Unlock for ${crystalCostInline(formatIncubatorSlotCost(cost))}</div>
                           <button type="button" data-vault-purchase
                                   class="mt-1.5 rounded-lg bg-amber-600 px-3 py-0.5 text-[10px] text-white hover:bg-amber-500">
                               Purchase
@@ -13826,52 +14737,79 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
               }
               // ==================== FURNACE TOP BAR + EXPONENTIAL POINTS ====================
 
+              function updateSidebarBonusStack(snap) {
+                  const stack = document.getElementById('sidebar-bonus-stack');
+                  const furnaceMultEl = document.getElementById('sidebar-furnace-mult');
+                  if (!snap) return;
+
+                  const fmtSlot = (n) => (n >= 1e6 ? formatMultiplierRate(n) : formatMultiplier(n));
+                  const isBurning = burningCrystals > 0 && furnaceEndTime > Date.now();
+
+                  if (furnaceMultEl) {
+                      if (isBurning && snap.furnaceMult > 1) {
+                          furnaceMultEl.innerHTML = `<i class="fa-solid fa-fire text-[8px]"></i>×${formatMultiplier(snap.furnaceMult)}`;
+                          furnaceMultEl.classList.add('is-visible');
+                          furnaceMultEl.removeAttribute('aria-hidden');
+                      } else {
+                          furnaceMultEl.textContent = '';
+                          furnaceMultEl.classList.remove('is-visible');
+                          furnaceMultEl.setAttribute('aria-hidden', 'true');
+                      }
+                  }
+
+                  if (!stack) return;
+                  const chips = [];
+
+                  if (snap.slotOccupancy?.geneVaultMult > 1) {
+                      chips.push(
+                          `<span class="sidebar-bonus-chip text-violet-400"><span class="chip-label">Vault</span>×${fmtSlot(snap.slotOccupancy.geneVaultMult)}</span>`
+                      );
+                  }
+
+                  if (snap.slotOccupancy?.incubatorMult > 1) {
+                      chips.push(
+                          `<span class="sidebar-bonus-chip text-amber-400"><span class="chip-label">Hatch</span>×${fmtSlot(snap.slotOccupancy.incubatorMult)}</span>`
+                      );
+                  }
+
+                  if (snap.slotOccupancyMult > 1 && snap.slotOccupancy?.geneVaultMult <= 1 && snap.slotOccupancy?.incubatorMult <= 1) {
+                      chips.push(
+                          `<span class="sidebar-bonus-chip text-emerald-300/80"><span class="chip-label">Slots</span>×${fmtSlot(snap.slotOccupancyMult)}</span>`
+                      );
+                  }
+
+                  stack.innerHTML = chips.join('');
+              }
+
               function updateTopFurnaceUI() {
-                  const timerEl = document.getElementById('top-furnace-timer');
-                  const bonusEl = document.getElementById('top-furnace-bonus');
-                  const pointsWrapper = document.getElementById('top-points-wrapper');
+                  const timerEl = document.getElementById('sidebar-furnace-timer');
+                  const furnaceBtn = document.getElementById('sidebar-furnace-btn');
+                  const scoreWrap = document.getElementById('sidebar-score-wrap');
 
                   const isBurning = burningCrystals > 0 && furnaceEndTime > Date.now();
-                  const mult = getBurningMultiplier();
+                  const snap = ScoreEngine.getMultiplierSnapshot();
 
-                  // Timer on the outside of Furnace button
                   if (timerEl) {
                       if (isBurning) {
                           const remaining = Math.max(0, Math.floor((furnaceEndTime - Date.now()) / 1000));
                           const min = Math.floor(remaining / 60);
                           const sec = remaining % 60;
-                          timerEl.innerText = `${min}:${sec.toString().padStart(2, '0')}`;
-                          timerEl.classList.remove('hidden');
-                          timerEl.classList.add('flex');
+                          timerEl.textContent = `${min}:${sec.toString().padStart(2, '0')}`;
+                          timerEl.classList.add('is-visible');
                       } else {
-                          timerEl.classList.add('hidden');
-                          timerEl.classList.remove('flex');
+                          timerEl.classList.remove('is-visible');
                       }
                   }
 
-                  // Current bonus between Furnace and Points
-                  if (bonusEl) {
-                      if (isBurning && mult > 1) {
-                          const displayMult = formatMultiplier(mult);
-                          bonusEl.innerText = `x${displayMult}`;
-                          bonusEl.classList.remove('hidden');
-                          bonusEl.classList.add('flex');
-                      } else {
-                          bonusEl.classList.add('hidden');
-                          bonusEl.classList.remove('flex');
-                      }
+                  if (furnaceBtn) {
+                      furnaceBtn.classList.toggle('is-burning', isBurning);
                   }
 
-                  // Glowing pulsing effect on Points when furnace is active
-                  if (pointsWrapper) {
-                      if (isBurning) {
-                          pointsWrapper.style.boxShadow = '0 0 18px #f59e0b, 0 0 32px #fb923c';
-                          pointsWrapper.style.animation = 'pulse-orange 1.6s infinite ease-in-out';
-                      } else {
-                          pointsWrapper.style.boxShadow = '';
-                          pointsWrapper.style.animation = '';
-                      }
+                  if (scoreWrap) {
+                      scoreWrap.classList.toggle('furnace-active', isBurning);
                   }
+
+                  updateSidebarBonusStack(snap);
               }
 
               function updatePrestigePreview() {
@@ -14020,7 +14958,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   const saveData = {
                       name: saveName,
                       timestamp: Date.now(),
-                      version: "2.3-incubator-slots",
+                      version: "2.4-incubator-upgrades",
 
                       // Currencies & Score
                       totalScore: totalScore,
@@ -14222,10 +15160,37 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
 
 
           </script>
-          <button type="button" id="tutorial-toggle-btn" class="tutorial-toggle-btn" onclick="TutorialSystem.toggleEnabled()" title="Show or hide tutorials and tooltips">
-              <i class="fa-solid fa-circle-question"></i>
-              <span id="tutorial-toggle-label">Tips ON</span>
-          </button>
+          <div id="game-bottom-dock">
+              <button type="button" id="tutorial-toggle-btn" class="tutorial-toggle-btn" onclick="TutorialSystem.toggleEnabled()" title="Show or hide tutorials and tooltips">
+                  <i class="fa-solid fa-circle-question"></i>
+                  <span id="tutorial-toggle-label">Tips ON</span>
+              </button>
+              <div id="bottom-audio-controls">
+                  <button type="button" id="audio-mute-btn" onclick="toggleAudioMute()"
+                          class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border border-white/20 bg-white/10 text-sm text-white transition-all hover:bg-white/20 active:scale-[0.95]"
+                          title="Mute all audio">
+                      <i id="audio-mute-icon" class="fa-solid fa-volume-high"></i>
+                  </button>
+                  <div class="flex items-center gap-x-1" title="Music volume">
+                      <i class="fa-solid fa-music text-[10px] text-emerald-400/80"></i>
+                      <input type="range" id="music-volume-slider" class="h-1 w-14 cursor-pointer accent-emerald-400"
+                             min="0" max="100" value="80" oninput="setMusicVolumeFromSlider(this.value)">
+                  </div>
+                  <div class="flex items-center gap-x-1" title="Sound effects volume">
+                      <i class="fa-solid fa-volume-low text-[10px] text-white/50"></i>
+                      <input type="range" id="sfx-volume-slider" class="h-1 w-14 cursor-pointer accent-white/60"
+                             min="0" max="100" value="65" oninput="setSfxVolumeFromSlider(this.value)">
+                  </div>
+                  <div class="flex items-center rounded-xl border border-white/10 bg-[#121218] p-0.5 text-xs">
+                      <button onclick="playUIClick(); adjustZoom(-0.2)" class="rounded-lg px-2 py-1 hover:bg-white/10" title="Zoom out">−</button>
+                      <span id="zoom-level" class="px-1.5 font-mono text-[10px] text-white/60">100%</span>
+                      <button onclick="playUIClick(); adjustZoom(0.2)" class="rounded-lg px-2 py-1 hover:bg-white/10" title="Zoom in">+</button>
+                  </div>
+                  <div class="desktop-only flex items-center gap-x-1 text-[10px] font-mono text-white/50" title="Frames per second">
+                      <span id="fps-counter">60</span><span>FPS</span>
+                  </div>
+              </div>
+          </div>
 </body>
 </html>
 <!-- ========== CHUNK 3 END ========== -->
