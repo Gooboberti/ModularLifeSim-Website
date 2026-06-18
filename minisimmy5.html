@@ -4,7 +4,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-18c" />
+    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-18f" />
     <title>MiniSimmy Orbital Ship v2</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2334d399'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%230a0a0f'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -188,6 +188,90 @@
 .speed-btn-locked {
     opacity: 0.45;
 }
+
+.tutorial-toggle-btn {
+    position: fixed;
+    bottom: 14px;
+    left: 14px;
+    z-index: 520;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border-radius: 999px;
+    border: 1px solid rgba(52, 211, 153, 0.45);
+    background: rgba(10, 10, 15, 0.92);
+    color: #6ee7b7;
+    font-size: 11px;
+    font-weight: 600;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(8px);
+    transition: all 0.15s ease;
+    touch-action: manipulation;
+}
+.tutorial-toggle-btn:hover { background: rgba(52, 211, 153, 0.15); }
+.tutorial-toggle-btn.off { opacity: 0.55; border-color: rgba(255,255,255,0.2); color: #94a3b8; }
+
+.more-info-btn {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,0.2);
+    background: rgba(255,255,255,0.08);
+    color: #93c5fd;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.12s ease;
+    vertical-align: middle;
+}
+.more-info-btn:hover { background: rgba(59, 130, 246, 0.25); border-color: rgba(147, 197, 253, 0.5); }
+
+.tutorial-hover-tip {
+    position: fixed;
+    z-index: 600;
+    max-width: 260px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(52, 211, 153, 0.35);
+    background: rgba(8, 12, 18, 0.96);
+    color: #e2e8f0;
+    font-size: 11px;
+    line-height: 1.45;
+    pointer-events: none;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+}
+
+.tutorial-popup-card {
+    position: fixed;
+    z-index: 610;
+    max-width: 320px;
+    padding: 14px 16px;
+    border-radius: 16px;
+    border: 1px solid rgba(52, 211, 153, 0.4);
+    background: linear-gradient(145deg, rgba(12,18,28,0.98), rgba(8,10,18,0.98));
+    box-shadow: 0 12px 40px rgba(0,0,0,0.55);
+    animation: fadeInScale 0.2s ease forwards;
+}
+.tutorial-popup-card h4 { font-size: 13px; font-weight: 600; color: #6ee7b7; margin-bottom: 6px; }
+.tutorial-popup-card p { font-size: 11px; color: #cbd5e1; line-height: 1.5; }
+
+.has-more-info-wrap { display: inline-flex; align-items: center; gap: 3px; }
+
+.perm-boost-pulse {
+    animation: permBoostPulse 1.1s ease;
+    color: #fbbf24 !important;
+    text-shadow: 0 0 12px rgba(251, 191, 36, 0.8);
+}
+@keyframes permBoostPulse {
+    0%, 100% { transform: scale(1); }
+    35% { transform: scale(1.18); }
+    65% { transform: scale(1.08); }
+}
+
+.perm-boost-maxed { color: #f472b6 !important; text-shadow: 0 0 8px rgba(244, 114, 182, 0.5); }
 
 /* Desktop: fixed 820px game column */
 .game-fixed-width {
@@ -1886,17 +1970,59 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
               let creatures = [];
               let eggs = [];
               const MAX_INCUBATOR_SLOTS = 10;
-              const INCUBATOR_SLOT_COSTS = {
-                  2: 50,
-                  3: 500,
-                  4: 5000,
-                  5: 50000,
-                  6: 500000,
-                  7: 5000000,
-                  8: 50000000,
-                  9: 500000000,
-                  10: 1000000000
-              };
+              function getDoublingSlotCost(slotNumber) {
+                  if (slotNumber <= 1) return 0;
+                  return Math.pow(2, slotNumber - 2);
+              }
+
+              const SLOT_OCCUPANCY_SCORE_MULT_BASE = 100;
+
+              function getSlotOccupancyScoreMultiplier(slotNumber) {
+                  return SLOT_OCCUPANCY_SCORE_MULT_BASE * Math.pow(2, slotNumber - 1);
+              }
+
+              function formatSlotScoreMultiplierLabel(slotNumber, active = false) {
+                  const mult = getSlotOccupancyScoreMultiplier(slotNumber);
+                  const label = mult >= 1e6 ? formatMultiplierRate(mult) : formatMultiplier(mult);
+                  return '×' + label + (active ? ' score' : ' when occupied');
+              }
+
+              function isIncubatorSlotOccupied(slotNumber) {
+                  if (!isIncubatorSlotUnlocked(slotNumber)) return false;
+                  const slot = incubatorSlots[slotNumber - 1];
+                  return !!(slot && slot.currentIncubation);
+              }
+
+              function isGeneVaultSlotOccupied(slotNumber) {
+                  return !!getGeneVaultEggData(slotNumber);
+              }
+
+              function computeSlotOccupancyMultipliers() {
+                  let geneVaultMult = 1;
+                  let incubatorMult = 1;
+                  let vaultOccupied = 0;
+                  let incubatorOccupied = 0;
+
+                  for (let n = 1; n <= 10; n++) {
+                      const mult = getSlotOccupancyScoreMultiplier(n);
+                      if (isGeneVaultSlotOccupied(n)) {
+                          geneVaultMult *= mult;
+                          vaultOccupied++;
+                      }
+                      if (isIncubatorSlotOccupied(n)) {
+                          incubatorMult *= mult;
+                          incubatorOccupied++;
+                      }
+                  }
+
+                  return {
+                      geneVaultMult,
+                      incubatorMult,
+                      total: geneVaultMult * incubatorMult,
+                      vaultOccupied,
+                      incubatorOccupied
+                  };
+              }
               const INCUBATOR_AUTOMATION_CRYSTAL_COST = 1;
               const INCUBATOR_AUTOMATION_DURATION_MS = 5 * 60 * 1000;
               const TOOL_RENTAL_CRYSTAL_COST = 1;
@@ -2385,6 +2511,12 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   avgModules: 0,
                   tiers: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0 }
               };
+              let permanentBoostCounts = {
+                  population: 0,
+                  predators: 0,
+                  avgModules: 0,
+                  tiers: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0 }
+              };
               let redHazardsUnlocked = false;
               let cursorHazardUnlocked = false;
               let toolRentals = {
@@ -2445,6 +2577,17 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
               pruneAudio.volume = musicVolume;
               replicateAudio.volume = musicVolume;
               evolveAudio.volume = musicVolume;
+
+              const AMBIENT_TRACKS = [
+                  'music/FlowForge.mp3',
+                  'music/FlowForge_2.mp3',
+                  'music/FlowForge_3.mp3'
+              ];
+              let ambientAudio = null;
+              let ambientTrackIndex = 0;
+              let ambientMusicReady = false;
+              let ambientAutostartBound = false;
+              const AMBIENT_VOLUME_MULT = 0.5;
 
               // ==================== REAL AUDIO ANALYSIS ====================
               let audioContext;
@@ -2606,21 +2749,15 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   predators: 0.09,
                   avgModules: 0.45
               };
-              const PERM_BOOST_GAIN = {
+              const PERM_BOOST_GAIN_BASE = {
                   population: 0.002,
                   predators: 0.003,
                   avgModules: 0.008,
                   tier: 0.001,
                   tier10: 0.01
               };
-              const PERM_BOOST_COST_MULT = {
-                  population: 0.5,
-                  predators: 0.75,
-                  avgModules: 1.25,
-                  tier: 1.0,
-                  tier10: 2.0
-              };
-              const PERM_BOOST_BASE_COST = 1e8;
+              const PERM_BOOST_GAIN_SCALE = 2;
+
 
               function getEffectiveTierMultiplier(tier) {
                   return (TIER_MULTIPLIERS_BASE[tier] || 0) + (permanentBoostBonuses.tiers[tier] || 0);
@@ -4679,12 +4816,52 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   }
               }
 
+              function ensureAmbientAudio() {
+                  if (!ambientAudio) {
+                      ambientAudio = new Audio(AMBIENT_TRACKS[ambientTrackIndex]);
+                      ambientAudio.preload = 'auto';
+                      ambientAudio.addEventListener('ended', () => {
+                          ambientTrackIndex = (ambientTrackIndex + 1) % AMBIENT_TRACKS.length;
+                          ambientAudio.src = AMBIENT_TRACKS[ambientTrackIndex];
+                          resumeAmbientMusic();
+                      });
+                  }
+              }
+
+              function applyAmbientVolume() {
+                  if (!ambientAudio) return;
+                  ambientAudio.volume = audioMuted ? 0 : musicVolume * AMBIENT_VOLUME_MULT;
+              }
+
+              function pauseAmbientMusic() {
+                  if (ambientAudio) ambientAudio.pause();
+              }
+
+              function resumeAmbientMusic() {
+                  if (musicEnabled || audioMuted) return;
+                  ensureAmbientAudio();
+                  applyAmbientVolume();
+                  ambientAudio.play().catch(() => {});
+                  ambientMusicReady = true;
+              }
+
+              function bindAmbientMusicAutostart() {
+                  if (ambientAutostartBound) return;
+                  ambientAutostartBound = true;
+                  const kick = () => {
+                      if (!musicEnabled && !audioMuted) resumeAmbientMusic();
+                  };
+                  document.addEventListener('click', kick, { passive: true });
+                  document.addEventListener('keydown', kick, { passive: true });
+              }
+
               function activateMusicMode(mode) {
                   if (!isToolRentalActive('music')) {
                       addFloatingText(width / 2, 72, 'Rent music modes: 1 Crystal / 5 min', '#f87171');
                       updateMusicRentalUI();
                       return;
                   }
+                  pauseAmbientMusic();
                   stopMusicMode(true);
                   musicEnabled = true;
                   currentMusicMode = mode;
@@ -4775,6 +4952,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   updateMusicRentalUI();
 
                   if (!silent) addFloatingText(width / 2, 70, "Music Mode Off", '#fbbf24');
+                  resumeAmbientMusic();
               }
 
               function exitMusicMode() {
@@ -4796,6 +4974,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   pruneAudio.volume = v;
                   replicateAudio.volume = v;
                   evolveAudio.volume = v;
+                  applyAmbientVolume();
               }
 
               function applySfxMasterGain() {
@@ -4826,6 +5005,8 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   applySfxMasterGain();
                   applySfxVolume();
                   applyMusicTrackVolume();
+                  if (audioMuted) pauseAmbientMusic();
+                  else if (!musicEnabled) resumeAmbientMusic();
                   const btn = document.getElementById('audio-mute-btn');
                   const icon = document.getElementById('audio-mute-icon');
                   if (btn) {
@@ -4867,6 +5048,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                       sfxSlider.oninput = (e) => setSfxVolumeFromSlider(e.target.value);
                   }
                   applyAudioMuteState();
+                  bindAmbientMusicAutostart();
               }
 
               window.setMusicVolumeFromSlider = setMusicVolumeFromSlider;
@@ -5004,11 +5186,16 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                       const stats = this.analyzePopulation();
                       const additiveMult = this.computeAdditiveMultiplier(stats);
                       const furnaceMult = (typeof getBurningMultiplier === 'function') ? getBurningMultiplier() : 1;
+                      const slotOcc = (typeof computeSlotOccupancyMultipliers === 'function')
+                          ? computeSlotOccupancyMultipliers()
+                          : { total: 1, geneVaultMult: 1, incubatorMult: 1, vaultOccupied: 0, incubatorOccupied: 0 };
 
                       this._cache = {
                           stats,
                           additiveMult,
                           furnaceMult,
+                          slotOccupancyMult: slotOcc.total,
+                          slotOccupancy: slotOcc,
                           survivalBand: this.getSurvivalBandMultiplier(stats.pop),
                           breakdown: this.computeBreakdown(stats)
                       };
@@ -5042,6 +5229,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                       const snap = this.getMultiplierSnapshot();
                       if (applyGlobalMult) amount *= snap.additiveMult;
                       if (applyFurnace) amount *= snap.furnaceMult;
+                      amount *= snap.slotOccupancyMult || 1;
                       return Math.floor(amount);
                   },
 
@@ -5116,7 +5304,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                       const pileBonus = this.calculatePileBonus();
                       const predBonusPerMinute = totalPredatorKills * 0.5;
                       const minuteRate = (12 + pileBonus + predBonusPerMinute) * snap.survivalBand;
-                      const points = Math.floor(minuteRate * deltaMinutes * snap.additiveMult * snap.furnaceMult);
+                      const points = Math.floor(minuteRate * deltaMinutes * snap.additiveMult * snap.furnaceMult * (snap.slotOccupancyMult || 1));
                       this.addPoints(points);
                   },
 
@@ -6670,7 +6858,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   const slotNumber = slotIndex + 1;
                   if (isIncubatorSlotUnlocked(slotNumber)) return;
 
-                  const cost = INCUBATOR_SLOT_COSTS[slotNumber];
+                  const cost = getDoublingSlotCost(slotNumber);
                   if (!cost) return;
 
                   if (aetheriumCrystals < cost) {
@@ -6733,7 +6921,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   }
 
                   if (incubatorModalOpen) {
-                      renderIncubatorSlotsLive();
+                      updateIncubatorSlotsLive();
                   }
 
                   return rewards;
@@ -7042,6 +7230,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   modal.classList.remove('hidden');
                   modal.classList.add('flex');
                   renderIncubatorSlots();
+                  setTimeout(() => TutorialSystem.applyTips(), 120);
 
                   const viewEggsBtn = document.getElementById('incubator-view-eggs-btn');
                   if (viewEggsBtn && !viewEggsBtn.dataset.bound) {
@@ -7147,7 +7336,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                       const unlocked = isIncubatorSlotUnlocked(slotNumber);
 
                       if (!unlocked) {
-                          const cost = INCUBATOR_SLOT_COSTS[slotNumber];
+                          const cost = getDoublingSlotCost(slotNumber);
                           const card = document.createElement('div');
                           card.dataset.incIndex = String(index);
                           card.className = 'rounded-2xl border border-amber-500/40 bg-[#0a0a0f] p-3 transition-all hover:border-amber-400/70';
@@ -7194,7 +7383,8 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                               ${automated ? '<span class="text-[9px] px-1.5 py-0.5 rounded bg-violet-500/30 text-violet-200 font-bold">AUTO</span>' : ''}
                           </div>
                           <div class="text-right">
-                              <div data-inc-mult-badge class="font-mono text-xs px-2 py-0.5 rounded bg-black/40 text-amber-400">${slot.multiplier.toFixed(3)}×</div>
+                              <div data-inc-score-mult class="font-mono text-[9px] px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300">${hasInc ? formatSlotScoreMultiplierLabel(slotNumber, true) : formatSlotScoreMultiplierLabel(slotNumber, false)}</div>
+                              <div data-inc-mult-badge class="font-mono text-xs px-2 py-0.5 rounded bg-black/40 text-amber-400 mt-0.5">${slot.multiplier.toFixed(3)}×</div>
                               ${lastBoost ? `<div data-inc-last-mult class="font-mono text-[9px] text-emerald-400 mt-0.5">+${lastBoost.multGain.toFixed(3)}× last cycle</div>` : '<div data-inc-last-mult class="font-mono text-[9px] text-transparent mt-0.5">—</div>'}
                           </div>
                       </div>
@@ -7260,8 +7450,9 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                           }
                       } else {
                           html += `
-                          <div class="h-12 flex items-center justify-center border border-white/10 rounded-xl bg-black/30 mb-2">
+                          <div class="h-12 flex flex-col items-center justify-center border border-white/10 rounded-xl bg-black/30 mb-2">
                               <div class="text-xs text-white/50">Empty Slot</div>
+                              <div class="font-mono text-[9px] text-white/35">${formatSlotScoreMultiplierLabel(slotNumber, false)}</div>
                           </div>
                           <button onclick="startIncubationInSlot(${index}); event.stopImmediatePropagation();"
                                   class="w-full py-1.5 text-xs rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-medium">
@@ -7751,6 +7942,230 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
               //CHUNK 3 of 3  —  RUNTIME LOOP + DRAW + HANDLERS
               //===============================================================================
 
+              // ==================== TUTORIAL & TOOLTIP SYSTEM ====================
+              const TutorialSystem = {
+                  enabled: true,
+                  dismissed: new Set(),
+                  hoverTip: null,
+                  popupQueue: [],
+
+                  load() {
+                      try {
+                          const en = localStorage.getItem('minisimmy_tutorials_enabled');
+                          if (en === '0') this.enabled = false;
+                          const dismissed = JSON.parse(localStorage.getItem('minisimmy_tutorials_dismissed') || '[]');
+                          this.dismissed = new Set(dismissed);
+                      } catch (e) { }
+                  },
+
+                  save() {
+                      localStorage.setItem('minisimmy_tutorials_enabled', this.enabled ? '1' : '0');
+                      localStorage.setItem('minisimmy_tutorials_dismissed', JSON.stringify([...this.dismissed]));
+                  },
+
+                  toggleEnabled() {
+                      playUIClick();
+                      this.enabled = !this.enabled;
+                      this.save();
+                      this.updateToggleBtn();
+                      if (!this.enabled) this.hideHoverTip();
+                      else this.runFirstVisitPopups();
+                  },
+
+                  updateToggleBtn() {
+                      const btn = document.getElementById('tutorial-toggle-btn');
+                      const label = document.getElementById('tutorial-toggle-label');
+                      if (btn) btn.classList.toggle('off', !this.enabled);
+                      if (label) label.textContent = this.enabled ? 'Tips ON' : 'Tips OFF';
+                  },
+
+                  shouldShow(id) {
+                      return this.enabled && !this.dismissed.has(id);
+                  },
+
+                  dismiss(id) {
+                      this.dismissed.add(id);
+                      this.save();
+                  },
+
+                  showInfoModal(title, body) {
+                      playUIClick();
+                      const modal = document.createElement('div');
+                      modal.className = 'dynamic-modal fixed inset-0 z-[620] flex items-center justify-center bg-black/75';
+                      modal.onclick = () => modal.remove();
+                      modal.innerHTML = `
+                          <div onclick="event.stopImmediatePropagation()" class="modal mx-4 w-full max-w-md rounded-3xl border border-sky-500/30 bg-[#121218] p-5">
+                              <div class="mb-3 flex items-center justify-between">
+                                  <h3 class="text-lg font-semibold text-sky-300"><i class="fa-solid fa-circle-info mr-2"></i>${title}</h3>
+                                  <button class="text-2xl leading-none text-white/60 hover:text-white" onclick="this.closest('.fixed').remove()">×</button>
+                              </div>
+                              <div class="text-sm leading-relaxed text-white/75">${body}</div>
+                          </div>`;
+                      document.body.appendChild(modal);
+                  },
+
+                  showPopup(id, title, body, anchorRect = null) {
+                      if (!this.shouldShow(id)) return;
+                      const card = document.createElement('div');
+                      card.className = 'tutorial-popup-card';
+                      card.dataset.tutorialId = id;
+                      card.innerHTML = `
+                          <h4>${title}</h4>
+                          <p>${body}</p>
+                          <div class="mt-3 flex items-center justify-between gap-2">
+                              <button type="button" class="tutorial-dismiss text-[10px] text-white/50 hover:text-white/80">Don't show again</button>
+                              <button type="button" class="tutorial-close rounded-lg bg-emerald-600 px-3 py-1 text-[11px] font-semibold text-white hover:bg-emerald-500">Got it</button>
+                          </div>`;
+                      document.body.appendChild(card);
+                      if (anchorRect) {
+                          card.style.left = Math.min(anchorRect.left, window.innerWidth - 340) + 'px';
+                          card.style.top = Math.min(anchorRect.bottom + 8, window.innerHeight - 160) + 'px';
+                      } else {
+                          card.style.left = '14px';
+                          card.style.bottom = '64px';
+                      }
+                      card.querySelector('.tutorial-close').onclick = () => card.remove();
+                      card.querySelector('.tutorial-dismiss').onclick = () => {
+                          this.dismiss(id);
+                          card.remove();
+                      };
+                  },
+
+                  attachHoverTip(el, text) {
+                      if (!el || el.dataset.tipBound) return;
+                      el.dataset.tipBound = '1';
+                      el.addEventListener('mouseenter', () => {
+                          if (!this.enabled) return;
+                          this.showHoverTip(el, text);
+                      });
+                      el.addEventListener('mouseleave', () => this.hideHoverTip());
+                      el.addEventListener('focus', () => {
+                          if (!this.enabled) return;
+                          this.showHoverTip(el, text);
+                      });
+                      el.addEventListener('blur', () => this.hideHoverTip());
+                  },
+
+                  showHoverTip(el, text) {
+                      this.hideHoverTip();
+                      const tip = document.createElement('div');
+                      tip.className = 'tutorial-hover-tip';
+                      tip.textContent = text;
+                      document.body.appendChild(tip);
+                      const r = el.getBoundingClientRect();
+                      tip.style.left = Math.min(r.left, window.innerWidth - 280) + 'px';
+                      tip.style.top = (r.bottom + 6) + 'px';
+                      this.hoverTip = tip;
+                  },
+
+                  hideHoverTip() {
+                      if (this.hoverTip) {
+                          this.hoverTip.remove();
+                          this.hoverTip = null;
+                      }
+                  },
+
+                  wrapMoreInfo(el, title, body) {
+                      if (!el || el.closest('.has-more-info-wrap') || el.classList.contains('more-info-btn')) return;
+                      const wrap = document.createElement('span');
+                      wrap.className = 'has-more-info-wrap';
+                      el.parentNode.insertBefore(wrap, el);
+                      wrap.appendChild(el);
+                      const btn = document.createElement('button');
+                      btn.type = 'button';
+                      btn.className = 'more-info-btn';
+                      btn.title = 'More info';
+                      btn.innerHTML = '<i class="fa-solid fa-circle-info"></i>';
+                      btn.onclick = (e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          this.showInfoModal(title, body);
+                      };
+                      wrap.appendChild(btn);
+                  },
+
+                  tips: [
+                      { sel: '#top-economy-btn', tip: 'Crystals & Dust — your prestige currencies. Tap to open inventory.', info: ['Economy', 'Crystals buy permanent upgrades, tool rentals, and slots. Dust comes from the Furnace and Prestige.'] },
+                      { sel: '#top-furnace-btn', tip: 'Burn crystals for a massive temporary score multiplier.', info: ['Furnace', 'Sacrifice crystals to ignite the furnace. While burning, all score gains multiply by crystals × 100.'] },
+                      { sel: '#top-points-wrapper', tip: 'High Roller Points — your score. Tap for a full breakdown.', info: ['Score', 'Points come from creature activity, kills, passive survival band income, and all active multipliers stacked together.'] },
+                      { sel: '#prestige-btn', tip: 'Prestige resets progress for permanent Dust.', info: ['Prestige', 'Convert your run into Aetherium Dust. Dust unlocks long-term meta upgrades in the main menu.'] },
+                      { sel: 'button[onclick*="showGeneVault"]', tip: 'Store eggs permanently. Occupied vault slots boost score!', info: ['Gene Vault', 'Place eggs in vault slots. Each occupied slot applies a score multiplier (×100, ×200, ×400…). Unlock more slots for doubling crystal costs.'] },
+                      { sel: 'button[onclick*="showIncubator"]', tip: 'Grow eggs over cycles. Occupied slots boost score too.', info: ['Incubator', 'Incubate eggs to gain modules and slot multipliers. Active incubation applies the same doubling score bonus as Gene Vault slots.'] },
+                      { sel: 'button[onclick*="showSaveManager"]', tip: 'Save and load your colony.', info: ['Save / Load', 'Manual saves store crystals, eggs, vault, incubator, and all permanent multiplier purchases.'] },
+                      { sel: '#pause-btn', tip: 'Pause or resume the simulation.', info: ['Pause', 'Freezes creature movement and score ticks. Music modes and rentals keep counting down.'] },
+                      { sel: '#speed-0.25', tip: 'Free slow speed — great for learning.', info: ['Speed 0.25×', 'Default free speed. Faster speeds cost crystals for 5-minute boosts.'] },
+                      { sel: '#speed-0.5', tip: '1💎 for 5 minutes at half speed boost.', info: ['Speed Boosts', '0.5× costs 1💎, 1× costs 2💎, 2× costs 4💎 — each for 5 minutes.'] },
+                      { sel: '#music-mode-prune', tip: 'Prune mode — drought + culling rhythm (rent to unlock).', info: ['Prune Music', 'Rent for 1💎/5min. Activates 4× sim speed, drought environment, and reactive audio-visual pruning.'] },
+                      { sel: '#music-mode-replicate', tip: 'Replicate mode — fertile growth beats.', info: ['Replicate Music', 'Boosts reproduction and food while music plays at 4× speed.'] },
+                      { sel: '#music-mode-evolve', tip: 'Evolve mode — cycling environments + module merges.', info: ['Evolve Music', 'Cycles Fertile/Normal/Drought, attracts creatures to floating modules, and enables 3-of-a-kind merges.'] },
+                      { sel: '#tool-purchase-music-bar', tip: '1💎 unlocks all music modes + 4× speed for 5 min.', info: ['Music Rental', 'While rented, pick Prune, Replicate, or Evolve. Ambient soundtrack plays when modes are off.'] },
+                      { sel: '#audio-mute-btn', tip: 'Mute all audio.', info: ['Audio', 'Mutes music modes, ambient FlowForge soundtrack, and sound effects.'] },
+                      { sel: '#music-volume-slider', tip: 'Music & ambient volume.', info: ['Music Volume', 'Controls music mode tracks and the ambient FlowForge playlist when modes are inactive.'] },
+                      { sel: '#quick-red-btn', tip: 'Hazard Fields — place damaging red zones.', info: ['Hazards', 'Rent for 1💎/5min. Toggle hazard fields that damage creatures caught inside.'] },
+                      { sel: '#quick-cursor-btn', tip: 'Cursor Hazard — paint danger with your mouse.', info: ['Cursor Hazard', 'Rent to place roaming hazard particles under your cursor.'] },
+                      { sel: '#quick-wall-btn', tip: 'Modular Walls — block movement.', info: ['Walls', 'Rent to place wall segments creatures cannot pass through.'] },
+                      { sel: '#quick-ship-btn', tip: 'Orbital Ship — orbit and fire at creatures.', info: ['Ship', 'Rent to pilot the ship on the map. Kills award score and build combo chains.'] },
+                      { sel: '#stat-pop', tip: 'Green population count.', info: ['Population', 'More creatures = bigger contribution to your additive score multiplier.'] },
+                      { sel: '#mult-pop', tip: 'Click to buy permanent Population multiplier boosts!', info: ['Population Multiplier', 'Spend crystals for permanent boosts. Each boost doubles in power (tiny at first, enormous over time). Cost doubles per purchase: 1, 2, 4…'] },
+                      { sel: '#mult-pred', tip: 'Click for permanent Predator multiplier boosts.', info: ['Predator Multiplier', 'Predators add heavily to score. Permanent boosts scale exponentially — invest early, dominate later.'] },
+                      { sel: '#mult-avgmod', tip: 'Click for permanent Avg Modules boosts.', info: ['Avg Modules Multiplier', 'Module-rich creatures supercharge score. Boosts compound: boost #10 is 512× stronger than boost #1.'] },
+                      { sel: '#score-multiplier', tip: 'Total additive score multiplier from all stats.', info: ['× MULT', 'Sum of Population×rate + Predators×rate + AvgModules×rate + tier counts×tier rates. Slot occupancy and furnace multiply on top.'] },
+                      { sel: '#vegas-score', tip: 'Your current High Roller score.', info: ['Score Display', 'Updates live as creatures live, die, eat, and as passive income ticks.'] },
+                      { sel: '.stat-upgrade-btn', tip: 'Tap any stat or tier to spend crystals on permanent power.', info: ['Permanent Upgrades', 'Crystal boosts never reset. Each purchase costs twice as much and grants twice the power of the previous boost.'] },
+                      { sel: '#inspector-panel', tip: 'Inspect selected creatures — extract to eggs here.', info: ['Inspector', 'Click a creature on the map. View modules, extract to an egg, or track the alpha.'] },
+                      { sel: '#ship-fire-btn', tip: 'Fire the orbital cannon (when ship is active).', info: ['Ship Fire', 'Hold or tap Fire while orbiting. Bullet kills build combo streaks for bonus score popups.'] }
+                  ],
+
+                  modalTips: [
+                      { sel: '#mult-upgrade-buy-btn', tip: 'Each boost doubles in power AND doubles in crystal cost.', info: ['Buying Boosts', 'Boost #1 adds a tiny amount. Boost #10 adds 512× more than boost #1. Stack many boosts for absurd score multipliers.'] },
+                      { sel: '#incubator-view-eggs-btn', tip: 'Pick an egg from inventory to incubate.', info: ['Egg Inventory', 'Extract creatures to eggs via the Inspector, then incubate them here for modules and slot bonuses.'] },
+                      { sel: '#gene-vault-slots-grid', tip: 'Each occupied slot multiplies score. Costs double per slot unlock.', info: ['Vault Slots', 'Slot 1 is free. Slot 2 = 1💎, slot 3 = 2💎, slot 4 = 4💎… Occupied slots give ×100, ×200, ×400 score multipliers.'] },
+                      { sel: '#incubator-slots-grid', tip: 'Start incubation to occupy a slot and earn score multipliers.', info: ['Incubator Slots', 'Same doubling unlock costs and occupancy score bonuses as Gene Vault. Auto-incubation cycles forever while rented.'] }
+                  ],
+
+                  firstPopups: [
+                      { id: 'welcome', title: 'Welcome to MiniSimmy!', body: 'Hover anything for tips. Use the <b>?</b> buttons for deep dives. Toggle tips with the button in the lower-left corner.' },
+                      { id: 'perm-boost-intro', title: 'Crystal Permanent Boosts', body: 'Click Population, Predators, Avg Modules, or any Tier multiplier to spend crystals. Boosts start small but <b>double in power</b> every purchase — late-game boosts are insanely powerful.' },
+                      { id: 'slot-score-bonus', title: 'Vault & Incubator Score Bonuses', body: 'Place eggs in Gene Vault slots or start incubation. Each occupied slot multiplies score (×100, ×200, ×400… per slot number).' },
+                      { id: 'ambient-music', title: 'Ambient Soundtrack', body: 'FlowForge plays automatically when music modes are off. Rent a music mode for 1💎 to unlock Prune, Replicate, or Evolve at 4× speed.' }
+                  ],
+
+                  applyTips() {
+                      [...this.tips, ...this.modalTips].forEach((t) => {
+                          document.querySelectorAll(t.sel).forEach((el) => {
+                              this.attachHoverTip(el, t.tip);
+                              if (t.info) this.wrapMoreInfo(el, t.info[0], t.info[1]);
+                          });
+                      });
+                      document.querySelectorAll('.stat-upgrade-btn').forEach((el) => {
+                          this.attachHoverTip(el, 'Spend crystals — each boost doubles in power forever.');
+                      });
+                      document.querySelectorAll('.tool-rental-card button[id^="tool-purchase"]').forEach((btn) => {
+                          this.wrapMoreInfo(btn, 'Tool Rental', 'Costs 1💎 for 5 minutes. Timer runs even when switching tools or pausing.');
+                      });
+                  },
+
+                  runFirstVisitPopups() {
+                      if (!this.enabled) return;
+                      let delay = 1200;
+                      this.firstPopups.forEach((p) => {
+                          if (!this.shouldShow(p.id)) return;
+                          setTimeout(() => this.showPopup(p.id, p.title, p.body), delay);
+                          delay += 4500;
+                      });
+                  },
+
+                  init() {
+                      this.load();
+                      this.updateToggleBtn();
+                      setTimeout(() => {
+                          this.applyTips();
+                          this.runFirstVisitPopups();
+                      }, 400);
+                  }
+              };
+              window.TutorialSystem = TutorialSystem;
+
               function setupCheatSliders() {
                   // Energy Drain
                   const drainSlider = document.getElementById('cheat-slider-drain');
@@ -7873,6 +8288,8 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
 
                       setupSpaceshipControls();
                       setupAudioControls();
+                      migratePermanentBoostCounts();
+                      TutorialSystem.init();
                       updateMusicRentalUI();
                       updateSpeedButtonStyles();
                       debugLog("setupSpaceshipControls called (delayed)");
@@ -10150,6 +10567,34 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                       <span class="font-mono text-amber-400">×${snap.survivalBand.toFixed(1)}</span>
                   </div>`;
 
+                  if (snap.slotOccupancy?.geneVaultMult > 1) {
+                      html += `
+                      <div class="flex justify-between items-center rounded-xl bg-violet-500/10 px-4 py-2.5">
+                          <div class="flex items-center gap-x-2">
+                              <i class="fa-solid fa-dna text-violet-400 w-4"></i>
+                              <span>Gene Vault (${snap.slotOccupancy.vaultOccupied} occupied)</span>
+                          </div>
+                          <div class="font-mono text-violet-400">×${snap.slotOccupancy.geneVaultMult >= 1e6 ? formatMultiplierRate(snap.slotOccupancy.geneVaultMult) : formatMultiplier(snap.slotOccupancy.geneVaultMult)}</div>
+                      </div>`;
+                  }
+                  if (snap.slotOccupancy?.incubatorMult > 1) {
+                      html += `
+                      <div class="flex justify-between items-center rounded-xl bg-amber-500/10 px-4 py-2.5">
+                          <div class="flex items-center gap-x-2">
+                              <i class="fa-solid fa-egg text-amber-400 w-4"></i>
+                              <span>Incubator (${snap.slotOccupancy.incubatorOccupied} occupied)</span>
+                          </div>
+                          <div class="font-mono text-amber-400">×${snap.slotOccupancy.incubatorMult >= 1e6 ? formatMultiplierRate(snap.slotOccupancy.incubatorMult) : formatMultiplier(snap.slotOccupancy.incubatorMult)}</div>
+                      </div>`;
+                  }
+                  if (snap.slotOccupancyMult > 1) {
+                      html += `
+                      <div class="flex justify-between items-center rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-2.5 font-semibold">
+                          <span>Slot Occupancy Total</span>
+                          <span class="font-mono text-emerald-400">×${snap.slotOccupancyMult >= 1e6 ? formatMultiplierRate(snap.slotOccupancyMult) : formatMultiplier(snap.slotOccupancyMult)}</span>
+                      </div>`;
+                  }
+
                   if (isBurning) {
                       html += `
                       <div class="flex justify-between items-center rounded-xl bg-orange-500/10 px-4 py-2.5">
@@ -10317,46 +10762,93 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   return rates[type] || 0;
               }
 
-              function getPermBoostGain(type, tier) {
-                  if (type === 'tier') return tier === 10 ? PERM_BOOST_GAIN.tier10 : PERM_BOOST_GAIN.tier;
-                  return PERM_BOOST_GAIN[type] || 0.001;
+              function getPermBoostGainBase(type, tier) {
+                  if (type === 'tier') return tier === 10 ? PERM_BOOST_GAIN_BASE.tier10 : PERM_BOOST_GAIN_BASE.tier;
+                  return PERM_BOOST_GAIN_BASE[type] || 0.001;
               }
 
-              function getPermBoostCostMult(type, tier) {
-                  if (type === 'tier') return tier === 10 ? PERM_BOOST_COST_MULT.tier10 : PERM_BOOST_COST_MULT.tier;
-                  return PERM_BOOST_COST_MULT[type] || 1;
+              function getPermBoostGainForIndex(type, tier, boostIndex) {
+                  return getPermBoostGainBase(type, tier) * Math.pow(PERM_BOOST_GAIN_SCALE, boostIndex - 1);
+              }
+
+              function getTotalPermBoostGain(type, tier, boostCount) {
+                  const already = getPermBoostCount(type, tier);
+                  let total = 0;
+                  for (let i = 1; i <= boostCount; i++) {
+                      total += getPermBoostGainForIndex(type, tier, already + i);
+                  }
+                  return total;
               }
 
               function getPermBoostCount(type, tier) {
-                  const gainPerBoost = getPermBoostGain(type, tier);
-                  const bonus = type === 'tier'
-                      ? (permanentBoostBonuses.tiers[tier] || 0)
-                      : (permanentBoostBonuses[type] || 0);
-                  return Math.round(bonus / gainPerBoost + 1e-9);
+                  if (type === 'tier') return permanentBoostCounts.tiers[tier] || 0;
+                  return permanentBoostCounts[type] || 0;
+              }
+
+              function incrementPermBoostCount(type, tier, boosts) {
+                  if (type === 'tier') {
+                      permanentBoostCounts.tiers[tier] = (permanentBoostCounts.tiers[tier] || 0) + boosts;
+                  } else {
+                      permanentBoostCounts[type] = (permanentBoostCounts[type] || 0) + boosts;
+                  }
+              }
+
+              function estimateBoostCountFromBonus(type, tier, targetBonus) {
+                  let count = 0;
+                  let sum = 0;
+                  while (sum < targetBonus - 1e-9 && count < 5000) {
+                      count++;
+                      sum += getPermBoostGainForIndex(type, tier, count);
+                  }
+                  return count;
+              }
+
+              function migratePermanentBoostCounts() {
+                  ['population', 'predators', 'avgModules'].forEach((t) => {
+                      if (!(permanentBoostCounts[t] > 0) && (permanentBoostBonuses[t] || 0) > 0) {
+                          permanentBoostCounts[t] = estimateBoostCountFromBonus(t, null, permanentBoostBonuses[t]);
+                      }
+                  });
+                  for (let tier = 1; tier <= 10; tier++) {
+                      if (!(permanentBoostCounts.tiers[tier] > 0) && (permanentBoostBonuses.tiers[tier] || 0) > 0) {
+                          permanentBoostCounts.tiers[tier] = estimateBoostCountFromBonus('tier', tier, permanentBoostBonuses.tiers[tier]);
+                      }
+                  }
+              }
+
+              function celebratePermanentBoost(gain, boostCount) {
+                  const label = gain >= 1 ? formatMultiplierRate(gain) : gain.toFixed(4);
+                  addFloatingText(width / 2, height * 0.28, `⬆ PERMANENT +${label}×`, '#fbbf24');
+                  addFloatingText(width / 2, height * 0.34, `${boostCount} boost${boostCount > 1 ? 's' : ''} applied!`, '#34d399');
+                  if (boostCount >= 5) addFloatingText(width / 2, height * 0.4, 'POWER SURGE!', '#f472b6');
+                  const multEl = document.getElementById('score-multiplier');
+                  if (multEl) {
+                      multEl.classList.remove('perm-boost-pulse');
+                      void multEl.offsetWidth;
+                      multEl.classList.add('perm-boost-pulse');
+                  }
               }
 
               function getPermBoostBaseCost(boostIndex) {
-                  return PERM_BOOST_BASE_COST * Math.pow(1000, Math.floor((boostIndex - 1) / 10));
+                  return Math.pow(2, boostIndex - 1);
               }
 
               function getPermBoostPurchaseCost(type, tier, boostCount) {
                   if (boostCount <= 0) return 0;
-                  const mult = getPermBoostCostMult(type, tier);
                   const already = getPermBoostCount(type, tier);
                   let total = 0;
                   for (let i = 1; i <= boostCount; i++) {
-                      total += getPermBoostBaseCost(already + i) * mult;
+                      total += getPermBoostBaseCost(already + i);
                   }
                   return total;
               }
 
               function getMaxAffordableBoosts(type, tier) {
                   const already = getPermBoostCount(type, tier);
-                  const mult = getPermBoostCostMult(type, tier);
                   let total = 0;
                   let count = 0;
                   while (count < 500) {
-                      const next = getPermBoostBaseCost(already + count + 1) * mult;
+                      const next = getPermBoostBaseCost(already + count + 1);
                       if (total + next > aetheriumCrystals) break;
                       total += next;
                       count++;
@@ -10375,7 +10867,9 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   const desc = document.getElementById('mult-upgrade-desc');
 
                   if (title) title.textContent = getMultiplierUpgradeLabel(type, tier);
-                  if (desc) desc.textContent = 'Permanent boost — each +10 costs 1000× more (10 boosts = 1B💎, 20 = 1T💎).';
+                  const already = getPermBoostCount(type, tier);
+                  const nextGain = getPermBoostGainForIndex(type, tier, already + 1);
+                  if (desc) desc.textContent = `Each boost doubles in power. Next boost: +${formatMultiplierRate(nextGain)}×. Cost doubles too (1💎, 2, 4…).`;
                   if (slider) {
                       slider.min = '1';
                       slider.max = String(maxBoosts);
@@ -10387,6 +10881,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   updateMultiplierUpgradePreview();
                   modal.classList.remove('hidden');
                   modal.classList.add('flex');
+                  setTimeout(() => TutorialSystem.applyTips(), 50);
               }
 
               function hideMultiplierUpgradeModal() {
@@ -10402,10 +10897,11 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   const slider = document.getElementById('mult-upgrade-slider');
                   const boosts = slider ? parseInt(slider.value, 10) || 1 : 1;
                   const { type, tier } = multUpgradeTarget;
-                  const gainPerBoost = getPermBoostGain(type, tier);
-                  const gain = gainPerBoost * boosts;
+                  const gain = getTotalPermBoostGain(type, tier, boosts);
                   const crystalCost = getPermBoostPurchaseCost(type, tier, boosts);
                   const current = getCurrentUpgradeRate(type, tier);
+                  const already = getPermBoostCount(type, tier);
+                  const nextSingle = getPermBoostGainForIndex(type, tier, already + 1);
                   const boostVal = document.getElementById('mult-upgrade-boost-val');
                   const crystalVal = document.getElementById('mult-upgrade-crystal-val');
                   const currentEl = document.getElementById('mult-upgrade-current');
@@ -10416,7 +10912,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   if (boostVal) boostVal.textContent = String(boosts);
                   if (crystalVal) crystalVal.textContent = formatCrystals(crystalCost) + '💎';
                   if (currentEl) currentEl.textContent = '×' + formatMultiplierRate(current);
-                  if (gainEl) gainEl.textContent = '+' + formatMultiplierRate(gain);
+                  if (gainEl) gainEl.textContent = '+' + formatMultiplierRate(gain) + (boosts > 1 ? ` (from +${formatMultiplierRate(nextSingle)}×)` : '');
                   if (newEl) newEl.textContent = '×' + formatMultiplierRate(current + gain);
                   if (buyBtn) {
                       buyBtn.textContent = `Spend ${formatCrystals(crystalCost)} Crystal${crystalCost === 1 ? '' : 's'}`;
@@ -10433,19 +10929,22 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   const crystalCost = getPermBoostPurchaseCost(type, tier, boosts);
                   if (aetheriumCrystals < crystalCost) return;
 
-                  const gain = getPermBoostGain(type, tier) * boosts;
+                  const gain = getTotalPermBoostGain(type, tier, boosts);
                   aetheriumCrystals -= crystalCost;
                   if (type === 'tier') {
                       permanentBoostBonuses.tiers[tier] = (permanentBoostBonuses.tiers[tier] || 0) + gain;
                   } else {
                       permanentBoostBonuses[type] = (permanentBoostBonuses[type] || 0) + gain;
                   }
+                  incrementPermBoostCount(type, tier, boosts);
 
                   updateAetheriumUI();
                   updateMainStats();
                   hideMultiplierUpgradeModal();
-                  addFloatingText(width / 2, 80, `+${formatMultiplierRate(gain)}× permanent boost`, '#34d399');
+                  celebratePermanentBoost(gain, boosts);
                   playTone(660, 'sine', 0.14, 0.45);
+                  if (gain >= 0.1) playTone(880, 'sine', 0.2, 0.35);
+                  if (gain >= 1) setTimeout(() => playTone(1100, 'triangle', 0.25, 0.4), 90);
               }
 
               // ==================== UPDATED MAIN STATS + MULTIPLIER SYSTEM ====================
@@ -10485,15 +10984,18 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                       multEl.style.fontSize = '22px';
                   }
 
-                  const setMult = (id, value) => {
+                  const setMult = (id, value, boostCount = 0) => {
                       const el = document.getElementById(id);
-                      if (el) el.innerText = '×' + formatMultiplierRate(value);
+                      if (!el) return;
+                      el.innerText = '×' + formatMultiplierRate(value);
+                      el.classList.toggle('perm-boost-maxed', boostCount >= 15);
+                      if (boostCount > 0) el.title = `${boostCount} permanent boost${boostCount > 1 ? 's' : ''} purchased`;
                   };
 
                   const effRates = getEffectiveMultiplierRates();
-                  setMult('mult-pop', effRates.population);
-                  setMult('mult-pred', effRates.predators);
-                  setMult('mult-avgmod', effRates.avgModules);
+                  setMult('mult-pop', effRates.population, permanentBoostCounts.population);
+                  setMult('mult-pred', effRates.predators, permanentBoostCounts.predators);
+                  setMult('mult-avgmod', effRates.avgModules, permanentBoostCounts.avgModules);
 
                   updateTierMultiplierDisplays(tierCounts);
 
@@ -10517,8 +11019,10 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                               el.innerText = '0';
                               el.style.color = '#64748b';
                           } else {
-                              el.innerText = '×' + formatMultiplierRate(rate) + (bonus > 0 ? '↑' : '');
-                              el.style.color = bonus > 0 ? '#6ee7b7' : '';
+                              const boostN = permanentBoostCounts.tiers[t] || 0;
+                              el.innerText = '×' + formatMultiplierRate(rate) + (bonus > 0 ? '↑' : '') + (boostN >= 10 ? '★' : '');
+                              el.style.color = bonus > 0 ? (boostN >= 15 ? '#f472b6' : '#6ee7b7') : '';
+                              el.classList.toggle('perm-boost-maxed', boostN >= 15);
                           }
                       }
                   }
@@ -12257,6 +12761,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   setTimeout(() => {
                       // updateGeneVaultIncubatingList();   // DISABLED - old incubation no longer shows in Gene Vault
                       renderAllGeneVaultSlots();
+                      TutorialSystem.applyTips();
                   }, 80);
               }
 
@@ -12281,17 +12786,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   if (container) container.innerHTML = '';
               }
 
-              const GENE_VAULT_SLOT_COSTS = {
-                  2: 50,
-                  3: 500,
-                  4: 5000,
-                  5: 50000,
-                  6: 500000,
-                  7: 5000000,
-                  8: 50000000,
-                  9: 500000000,
-                  10: 1000000000
-              };
+
 
               function isGeneVaultSlotUnlocked(slotNumber) {
                   if (slotNumber === 1) return true;
@@ -12332,7 +12827,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
 
               function purchaseGeneVaultSlot(slotNumber) {
                   playUIClick();
-                  const cost = GENE_VAULT_SLOT_COSTS[slotNumber];
+                  const cost = getDoublingSlotCost(slotNumber);
                   if (!cost) {
                       alert('This slot cannot be purchased yet.');
                       return;
@@ -12411,6 +12906,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                       info.innerHTML = `
                       <div class="font-semibold text-emerald-400 text-sm">${egg.name}</div>
                       <div class="text-[10px] text-white/60">Gen ${egg.generation} • ${totalModules} modules • ${egg.killCount || 0} kills</div>
+                      <div class="font-mono text-[10px] text-emerald-300 mt-1">${formatSlotScoreMultiplierLabel(slotNumber, true)}</div>
                       <div class="mt-2 flex gap-2">
                           <button type="button" data-vault-swap
                                   class="flex-1 rounded-lg bg-violet-600 px-2 py-1 text-[10px] font-medium text-white hover:bg-violet-500">
@@ -12428,6 +12924,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                       info.innerHTML = `
                       <div class="text-xs text-white/60">Empty</div>
                       <div class="text-[10px] text-white/40">Click to place egg</div>
+                      <div class="font-mono text-[10px] text-white/35 mt-1">${formatSlotScoreMultiplierLabel(slotNumber, false)}</div>
                   `;
                   }
 
@@ -12436,7 +12933,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
               }
 
               function buildGeneVaultLockedCardHTML(slotNumber) {
-                  const cost = GENE_VAULT_SLOT_COSTS[slotNumber];
+                  const cost = getDoublingSlotCost(slotNumber);
                   return `
                   <div id="vault-slot-card-${slotNumber}"
                        class="group cursor-pointer rounded-2xl border border-amber-500/40 bg-[#0a0a0f] p-4 transition-all hover:border-amber-400">
@@ -12918,6 +13415,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
 
                       toolRentals: JSON.parse(JSON.stringify(toolRentals || {})),
                       permanentBoostBonuses: JSON.parse(JSON.stringify(permanentBoostBonuses || {})),
+                      permanentBoostCounts: JSON.parse(JSON.stringify(permanentBoostCounts || {})),
                       speedBoost: JSON.parse(JSON.stringify(speedBoost || {}))
                   };
 
@@ -13040,6 +13538,13 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                           permanentBoostBonuses.tiers = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0 };
                       }
                   }
+                  if (save.permanentBoostCounts) {
+                      permanentBoostCounts = save.permanentBoostCounts;
+                      if (!permanentBoostCounts.tiers) {
+                          permanentBoostCounts.tiers = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0 };
+                      }
+                  }
+                  migratePermanentBoostCounts();
                   if (save.speedBoost) {
                       speedBoost = save.speedBoost;
                       if (speedBoost.endsAt <= Date.now()) timeScale = 0.25;
@@ -13089,6 +13594,10 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
 
 
           </script>
+          <button type="button" id="tutorial-toggle-btn" class="tutorial-toggle-btn" onclick="TutorialSystem.toggleEnabled()" title="Show or hide tutorials and tooltips">
+              <i class="fa-solid fa-circle-question"></i>
+              <span id="tutorial-toggle-label">Tips ON</span>
+          </button>
 </body>
 </html>
 <!-- ========== CHUNK 3 END ========== -->
