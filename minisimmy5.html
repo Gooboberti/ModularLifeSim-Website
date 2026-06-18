@@ -1,11 +1,11 @@
 <!doctype html>
-<!-- MiniSimmy mobile-opt build 2026-06-17c | Viewport touch pan/zoom + fixed spaceship coords -->
+<!-- MiniSimmy mobile-opt build 2026-06-17d | Wall filters + cursor hazard deploy + red beam glow -->
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="minisimmy-build" content="mobile-opt-2026-06-17c" />
-    <title>MiniSimmy2 (Mobile Opt v3)</title>
+    <meta name="minisimmy-build" content="mobile-opt-2026-06-17d" />
+    <title>MiniSimmy2 (Mobile Opt v4)</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2334d399'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%230a0a0f'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -1665,7 +1665,7 @@
                   },
 
                   shouldPanMap() {
-                      return !energyWallMode && !spaceshipActive && !isDrawingWall;
+                      return !energyWallMode && !spaceshipActive && !isDrawingWall && !cursorHazardPlacing;
                   },
 
                   bindInput(p5Canvas) {
@@ -1952,9 +1952,12 @@
               let redHazardsEnabled = false;
               let redHazardIntensity = 1;
               let cursorHazardActive = false;
+              let cursorHazardPlacing = false;
+              let cursorHazardFollow = false;
 
               let persistentHazard = { x: 0, y: 0, active: false };
               let placedHazards = [];
+              let _moduleThresholds = { high: 999, low: 0 };
               let beamCharge = 0;
               let maxPlacedHazards = 3;
 
@@ -4991,8 +4994,14 @@
                   }
                   const cursorBtn = document.getElementById('quick-cursor-btn');
                   if (cursorBtn) {
-                      cursorBtn.classList.toggle('bg-orange-500/30', cursorHazardActive && cursorHazardUnlocked);
-                      cursorBtn.classList.toggle('border-orange-400/50', cursorHazardActive && cursorHazardUnlocked);
+                      const cursorLit = cursorHazardUnlocked && (cursorHazardPlacing || cursorHazardFollow || placedHazards.length > 0);
+                      cursorBtn.classList.toggle('bg-orange-500/30', cursorLit);
+                      cursorBtn.classList.toggle('border-orange-400/50', cursorLit);
+                      if (cursorHazardPlacing || cursorHazardFollow) {
+                          cursorBtn.title = 'Tap to place hazards (' + placedHazards.length + '/' + maxPlacedHazards + '). Tap empty ground to finish.';
+                      } else if (placedHazards.length > 0) {
+                          cursorBtn.title = placedHazards.length + ' hazard field(s) deployed on map';
+                      }
                   }
               }
 
@@ -5713,7 +5722,7 @@
               }
 
               function setup() {
-                  console.info('[MiniSimmy] build=mobile-opt-2026-06-17c tier=' + DeviceProfile.tier + ' viewport=pan+zoom');
+                  console.info('[MiniSimmy] build=mobile-opt-2026-06-17d tier=' + DeviceProfile.tier + ' walls=filters hazards=deploy');
                   debugLog("Setup started");
 
                   let canvas = createCanvas(820, 580);
@@ -5923,6 +5932,7 @@
 
                   PerfScale.refresh();
                   SpatialGrid.rebuild();
+                  if (frameCount % 45 === 0) updateModuleThresholds();
 
                   envPhaseProgress += timeScale;
                   if (envPhaseProgress >= envCycleLength) {
@@ -6185,40 +6195,24 @@
                               let newLife = Math.max(140, length * 2.0);
 
                               // Left piece - becomes immune for 1 second
-                              energyWalls.push({
-                                  x1: w.x1,
-                                  y1: w.y1,
-                                  x2: mx,
-                                  y2: my,
+                              const splitBase = {
                                   life: newLife,
                                   maxLife: newLife,
                                   hitFlash: 0,
-                                  vx: w.vx - 1.2,
-                                  vy: w.vy - 1.2,
                                   originalLength: length * 0.5,
                                   immuneUntil: frameCount + 60,
                                   redHits: 0,
                                   empowered: false,
-                                  shakeTimer: 0
-                              });
-
-                              // Right piece - becomes immune for 1 second
-                              energyWalls.push({
-                                  x1: mx,
-                                  y1: my,
-                                  x2: w.x2,
-                                  y2: w.y2,
-                                  life: newLife,
-                                  maxLife: newLife,
-                                  hitFlash: 0,
-                                  vx: w.vx + 1.2,
-                                  vy: w.vy + 1.2,
-                                  originalLength: length * 0.5,
-                                  immuneUntil: frameCount + 60,
-                                  redHits: 0,
-                                  empowered: false,
-                                  shakeTimer: 0
-                              });
+                                  shakeTimer: 0,
+                                  wallType: w.wallType,
+                                  filterMode: w.filterMode,
+                                  filterSettings: w.filterSettings ? JSON.parse(JSON.stringify(w.filterSettings)) : null,
+                                  offensive: w.offensive,
+                                  vortexImmune: w.vortexImmune,
+                                  vortexVulnerableUntil: w.vortexVulnerableUntil,
+                              };
+                              energyWalls.push({ ...splitBase, x1: w.x1, y1: w.y1, x2: mx, y2: my, vx: w.vx - 1.2, vy: w.vy - 1.2 });
+                              energyWalls.push({ ...splitBase, x1: mx, y1: my, x2: w.x2, y2: w.y2, vx: w.vx + 1.2, vy: w.vy + 1.2 });
 
                               explosions.push(new Explosion(mx, my));
                               playWallBreakSound(0.6);
@@ -6247,84 +6241,7 @@
                           }
                       }
 
-                      // === v1.85: Solid + Filter walls deflect white/red particles when selected ===
-                      const isSolid = !w.filterMode || w.filterMode === "repel_all";
-                      const filterTypes = (w.filterSettings && w.filterSettings.types) || [];
-
-                      const deflectsWhite = isSolid || filterTypes.includes('white');
-                      const deflectsRed = isSolid || filterTypes.includes('red');
-
-                      if (deflectsWhite || deflectsRed) {
-                          // White particles - match red particle wall behavior (strong stop + bounce)
-                          if (deflectsWhite) {
-                              const isWhiteFilterWall = filterTypes.includes('white');
-
-                              for (let p of vortexParticles) {
-                                  let d = distToLineSegment(p.x, p.y, w.x1, w.y1, w.x2, w.y2);
-                                  if (d < 26) {
-                                      let mx = (w.x1 + w.x2) / 2;
-                                      let my = (w.y1 + w.y2) / 2;
-                                      let dx = p.x - mx;
-                                      let dy = p.y - my;
-                                      let len = sqrt(dx * dx + dy * dy) || 1;
-
-                                      if (isWhiteFilterWall) {
-                                          // Strong stop + bounce back (matching red filter behavior)
-                                          p.x += (dx / len) * 5.5;
-                                          p.y += (dy / len) * 5.5;
-
-                                          p.vx = -(p.vx || 0) * 0.9;
-                                          p.vy = -(p.vy || 0) * 0.9;
-
-                                          p.vx *= 0.3;
-                                          p.vy *= 0.3;
-                                      } else {
-                                          // Normal solid barrier behavior
-                                          p.x += (dx / len) * 2.4;
-                                          p.y += (dy / len) * 2.4;
-                                          p.vx = (p.vx || 0) * 0.45;
-                                          p.vy = (p.vy || 0) * 0.45;
-                                      }
-                                  }
-                              }
-                          }
-
-                          // Red particles - special strong behavior on red filter walls
-                          if (deflectsRed) {
-                              const isRedFilterWall = filterTypes.includes('red');
-
-                              for (let r of redHazards) {
-                                  let d = distToLineSegment(r.x, r.y, w.x1, w.y1, w.x2, w.y2);
-                                  if (d < 26) {
-                                      let mx = (w.x1 + w.x2) / 2;
-                                      let my = (w.y1 + w.y2) / 2;
-                                      let dx = r.x - mx;
-                                      let dy = r.y - my;
-                                      let len = sqrt(dx * dx + dy * dy) || 1;
-
-                                      if (isRedFilterWall) {
-                                          // Strong stop + bounce back (user request)
-                                          r.x += (dx / len) * 5.5;
-                                          r.y += (dy / len) * 5.5;
-
-                                          // Reverse velocity and heavily dampen
-                                          r.vx = -(r.vx || 0) * 0.9;
-                                          r.vy = -(r.vy || 0) * 0.9;
-
-                                          // Extra stop force
-                                          r.vx *= 0.3;
-                                          r.vy *= 0.3;
-                                      } else {
-                                          // Normal solid barrier behavior
-                                          r.x += (dx / len) * 3.0;
-                                          r.y += (dy / len) * 3.0;
-                                          r.vx = (r.vx || 0) * 0.4;
-                                          r.vy = (r.vy || 0) * 0.4;
-                                      }
-                                  }
-                              }
-                          }
-                      }
+                      applyParticleDeflectionForSegment(w.x1, w.y1, w.x2, w.y2, wallConfig(w));
 
                       // Vortex influence on walls (v1.72: immune by default, temporarily vulnerable after damage)
                       const isVulnerable = w.vortexVulnerableUntil && frameCount <= w.vortexVulnerableUntil;
@@ -6371,11 +6288,14 @@
                       const wallMidX = (w.x1 + w.x2) / 2;
                       const wallMidY = (w.y1 + w.y2) / 2;
 
-                      // Sweep vortex particles
-                      for (let j = vortexParticles.length - 1; j >= 0; j--) {
-                          let p = vortexParticles[j];
-                          if (dist(p.x, p.y, wallMidX, wallMidY) < sweepRadius) {
-                              vortexParticles.splice(j, 1);
+                      const sweepCfg = wallConfig(w);
+                      const sweepsWhite = sweepCfg.isSolid || sweepCfg.filterTypes.includes('white');
+                      if (sweepsWhite) {
+                          for (let j = vortexParticles.length - 1; j >= 0; j--) {
+                              let p = vortexParticles[j];
+                              if (dist(p.x, p.y, wallMidX, wallMidY) < sweepRadius) {
+                                  vortexParticles.splice(j, 1);
+                              }
                           }
                       }
 
@@ -6511,12 +6431,31 @@
                       }
                   }
 
-                  // Preview line while drawing
                   if (currentWallPreview) {
-                      stroke(167, 139, 250, 160);
-                      strokeWeight(5);
+                      const previewCfg = wallConfig(getPreviewWallConfig());
+                      applyParticleDeflectionForSegment(
+                          currentWallPreview.x1, currentWallPreview.y1,
+                          currentWallPreview.x2, currentWallPreview.y2,
+                          previewCfg
+                      );
+                      const pTypes = previewCfg.filterTypes;
+                      let pr = 167, pg = 139, pb = 250;
+                      if (previewCfg.isFilter) {
+                          if (pTypes.includes('red')) { pr = 249; pg = 115; pb = 22; }
+                          else if (pTypes.includes('white')) { pr = 245; pg = 245; pb = 255; }
+                          else if (pTypes.includes('predator')) { pr = 239; pg = 68; pb = 68; }
+                          else if (pTypes.includes('high_module')) { pr = 192; pg = 192; pb = 210; }
+                          else if (pTypes.includes('low_module')) { pr = 120; pg = 120; pb = 140; }
+                      }
+                      push();
+                      stroke(pr, pg, pb, 70);
+                      strokeWeight(10);
                       strokeCap(ROUND);
                       line(currentWallPreview.x1, currentWallPreview.y1, currentWallPreview.x2, currentWallPreview.y2);
+                      stroke(pr, pg, pb, 190);
+                      strokeWeight(5);
+                      line(currentWallPreview.x1, currentWallPreview.y1, currentWallPreview.x2, currentWallPreview.y2);
+                      pop();
                   }
 
                   for (let i = vortexParticles.length - 1; i >= 0; i--) {
@@ -6872,6 +6811,7 @@
                       for (let i = creatures.length - 1; i >= 0; i--) {
                           let c = creatures[i];
                           c.update(isDay, vortexDir, vortexStrength, timeScale, envMods);
+                          applyCreatureWallCollisions(c);
                           c.energy -= popPressure * timeScale;
                           debugCreatureUpdateCount++;
 
@@ -6979,7 +6919,10 @@
 
                   pop();
 
-                  if (cursorHazardActive) {
+                  updatePlacedHazardFields();
+                  renderPlacedHazardGraphics();
+
+                  if (cursorHazardFollow) {
                       const ptr = gamePointer();
                       const screen = Viewport.worldToScreen(ptr.x, ptr.y);
                       let mx = ptr.x;
@@ -6987,20 +6930,15 @@
 
                       push();
                       translate(screen.x, screen.y);
-
                       fill(239, 68, 68, 38);
                       noStroke();
                       circle(0, 0, 62);
-
                       fill(239, 68, 68, 215);
                       circle(0, 0, 35);
-
                       fill(255, 200, 200, 255);
                       circle(0, 0, 15);
-
                       fill(255, 255, 255, 175);
                       circle(-5, -5, 7);
-
                       pop();
 
                       const cursorHits = SpatialGrid.queryRadius(mx, my, 88);
@@ -7014,14 +6952,11 @@
                               let baseDamage = 4.5;
                               if (d < 25) baseDamage = 7.5;
                               if (d < 15) baseDamage = 11.0;
-                              let proximityBonus = map(d, 0, 38, 6.5, 0);
-                              let damage = baseDamage + proximityBonus + random(0.5, 2.0);
-
+                              let damage = baseDamage + map(d, 0, 38, 6.5, 0) + random(0.5, 2.0);
                               c.energy = max(0, c.energy - damage * timeScale);
                               c.damageFlash = max(c.damageFlash || 0, 38);
                               c.purpleFlash = max(c.purpleFlash || 0, 45);
                               playCursorDamageSound(c);
-
                               if (d > 2) {
                                   let len = d || 1;
                                   c.vx += (dx / len) * 2.6 * timeScale;
@@ -7036,188 +6971,25 @@
                           }
                       }
 
-                      if (frameCount % 3 === 0 && random() < 0.82) {
-                          pheromones.push({
-                              x: mx + random(-16, 16),
-                              y: my + random(-16, 16),
-                              life: 60,
-                              isGreen: false,
-                              isHazardWarning: true
-                          });
-                      }
-
-                      // Red Cursor Hazard wipes away honey trails it runs over (more aggressive)
-                      if (cursorHazardActive) {
-                          // Wipe static honey patches
-                          for (let i = staticFoodPatches.length - 1; i >= 0; i--) {
-                              let p = staticFoodPatches[i];
-                              if (dist(mx, my, p.x, p.y) < 45) {
-                                  staticFoodPatches.splice(i, 1);
-                              }
-                          }
-
-                          // Wipe moving honey blooms (larger radius to clear trails)
-                          for (let i = foodBlooms.length - 1; i >= 0; i--) {
-                              let b = foodBlooms[i];
-                              if (dist(mx, my, b.x, b.y) < 38) {
-                                  foodBlooms.splice(i, 1);
-                              }
-                          }
-
-                          // Wipe white vortex particles on contact
-                          for (let i = vortexParticles.length - 1; i >= 0; i--) {
-                              let p = vortexParticles[i];
-                              if (dist(mx, my, p.x, p.y) < 32) {
-                                  vortexParticles.splice(i, 1);
-                              }
-                          }
-
-                          // Hazard Cursor absorbs red particles on contact (with sound)
-                          for (let i = redHazards.length - 1; i >= 0; i--) {
-                              let r = redHazards[i];
-                              if (dist(mx, my, r.x, r.y) < 28) {
-                                  redHazards.splice(i, 1);
-                                  playAbsorbSound();
-                              }
+                      for (let i = staticFoodPatches.length - 1; i >= 0; i--) {
+                          if (dist(mx, my, staticFoodPatches[i].x, staticFoodPatches[i].y) < 45) {
+                              staticFoodPatches.splice(i, 1);
                           }
                       }
-
-                      // Persistent placed Hazard Cursor (long-term damage field you can leave on the map)
-                      if (persistentHazard.active) {
-                          for (let c of creatures) {
-                              let d = dist(persistentHazard.x, persistentHazard.y, c.x, c.y);
-                              if (d < 42) {
-                                  let damage = 2.8 + random(0.3, 1.2);
-                                  c.energy = max(0, c.energy - damage * timeScale);
-                                  c.damageFlash = max(c.damageFlash || 0, 35);
-                                  c.purpleFlash = max(c.purpleFlash || 0, 50);
-
-                                  // Gentle repel so creatures don't camp in it
-                                  if (d > 3) {
-                                      let dx = c.x - persistentHazard.x;
-                                      let dy = c.y - persistentHazard.y;
-                                      let len = sqrt(dx * dx + dy * dy) || 1;
-                                      c.vx += (dx / len) * 1.8 * timeScale;
-                                      c.vy += (dy / len) * 1.8 * timeScale;
-                                  }
-                              }
+                      for (let i = foodBlooms.length - 1; i >= 0; i--) {
+                          if (dist(mx, my, foodBlooms[i].x, foodBlooms[i].y) < 38) {
+                              foodBlooms.splice(i, 1);
                           }
-
-                          // Visual indicator for the placed hazard
-                          push();
-                          translate(persistentHazard.x, persistentHazard.y);
-                          fill(239, 68, 68, 45);
-                          noStroke();
-                          circle(0, 0, 58);
-                          fill(239, 68, 68, 180);
-                          circle(0, 0, 28);
-                          pop();
                       }
-
-                      // === ENERGY BEAM SYSTEM (connects placed hazard to cursor only) ===
-                      if (cursorHazardActive && placedHazards.length > 0) {
-                          let cx = mouseX;
-                          let cy = mouseY;
-
-                          // Draw BLUE energy beam ONLY between cursor and each placed hazard
-                          stroke(80, 180, 255, 220); // Blue beam
-                          strokeWeight(4);
-                          noFill();
-
-                          for (let h of placedHazards) {
-                              line(cx, cy, h.x, h.y);
-
-                              // Draw visible hazard orb at placed location
-                              push();
-                              translate(h.x, h.y);
-
-                              // Outer glow (red orb)
-                              fill(255, 80, 80, 70);
-                              circle(0, 0, 46);
-
-                              // Main red orb
-                              fill(239, 68, 68);
-                              circle(0, 0, 28);
-
-                              // Inner white core
-                              fill(255, 220, 220);
-                              circle(0, 0, 13);
-
-                              pop();
+                      for (let i = vortexParticles.length - 1; i >= 0; i--) {
+                          if (dist(mx, my, vortexParticles[i].x, vortexParticles[i].y) < 32) {
+                              vortexParticles.splice(i, 1);
                           }
-
-                          // Blue beam absorbs red particles (with traveling visual + sound + timer reset)
-                          for (let i = redHazards.length - 1; i >= 0; i--) {
-                              let r = redHazards[i];
-                              let hitBeam = false;
-
-                              for (let h of placedHazards) {
-                                  if (distToLineSegment(r.x, r.y, cx, cy, h.x, h.y) < 12) {
-                                      hitBeam = true;
-                                      break;
-                                  }
-                              }
-
-                              if (hitBeam) {
-                                  redHazards.splice(i, 1);
-
-                                  // Visual traveling down the beam toward cursor
-                                  for (let k = 0; k < 6; k++) {
-                                      let t = k / 5;
-                                      let px = lerp(r.x, cx, t);
-                                      let py = lerp(r.y, cy, t);
-                                      explosions.push(new Explosion(px, py));
-                                  }
-
-                                  playAbsorbSound();
-                                  beamCharge = min(beamCharge + 1, 5);
-
-                                  // Reset timer on all placed hazards
-                                  for (let h of placedHazards) {
-                                      h.timer = 420;
-                                      h.shakeTimer = 0;
-                                      h.exploding = false;
-                                  }
-                              }
-                          }
-
-                          // Creatures touching the blue beam get purple DoT
-                          for (let c of creatures) {
-                              for (let h of placedHazards) {
-                                  if (distToLineSegment(c.x, c.y, cx, cy, h.x, h.y) < 9) {
-                                      c.purpleFlash = max(c.purpleFlash || 0, 55);
-                                      c.energy = max(0, c.energy - 1.8 * timeScale);
-                                      // Gentle repel from beam
-                                      let dx = c.x - cx;
-                                      let dy = c.y - cy;
-                                      let len = sqrt(dx * dx + dy * dy) || 1;
-                                      c.vx += (dx / len) * 1.2 * timeScale;
-                                      c.vy += (dy / len) * 1.2 * timeScale;
-                                  }
-                              }
-                          }
-
-                          // Update timers and explosions for placed hazards
-                          for (let i = placedHazards.length - 1; i >= 0; i--) {
-                              let h = placedHazards[i];
-                              if (!h.exploding) {
-                                  h.timer--;
-                                  if (h.timer < 120) h.shakeTimer = max(h.shakeTimer || 0, 8);
-
-                                  if (h.timer <= 0) {
-                                      h.exploding = true;
-                                      // Explode: turn nearby creatures purple
-                                      const hazardBlast = SpatialGrid.queryRadius(h.x, h.y, 65);
-                                      for (let hi = 0; hi < hazardBlast.length; hi++) {
-                                          let c = hazardBlast[hi];
-                                          c.purpleFlash = max(c.purpleFlash || 0, 140);
-                                          c.energy = max(0, c.energy - 25);
-                                      }
-                                      explosions.push(new Explosion(h.x, h.y));
-                                      playExplosionSound();
-                                      placedHazards.splice(i, 1);
-                                  }
-                              }
+                      }
+                      for (let i = redHazards.length - 1; i >= 0; i--) {
+                          if (dist(mx, my, redHazards[i].x, redHazards[i].y) < 28) {
+                              redHazards.splice(i, 1);
+                              playAbsorbSound();
                           }
                       }
                   }
@@ -7738,16 +7510,18 @@
                           showCheatsModal();
                           return;
                       }
+                      return;
                   }
-                  cursorHazardActive = !cursorHazardActive;
+                  if (cursorHazardPlacing || cursorHazardFollow) {
+                      finishCursorHazardPlacement();
+                      return;
+                  }
+                  cursorHazardPlacing = true;
+                  cursorHazardFollow = true;
+                  cursorHazardActive = true;
                   const container = document.getElementById('canvas-container');
-                  if (cursorHazardActive) {
-                      container.classList.add('hazard-cursor');
-                      startCursorHum();
-                  } else {
-                      container.classList.remove('hazard-cursor');
-                      stopCursorHum();
-                  }
+                  if (container) container.classList.add('hazard-cursor');
+                  startCursorHum();
                   updateQuickButtons();
               }
 
@@ -8025,10 +7799,12 @@
               function buyCursorHazard() {
                   if (!ScoreEngine.spend(240)) return;
                   cursorHazardUnlocked = true;
+                  cursorHazardPlacing = true;
+                  cursorHazardFollow = true;
                   cursorHazardActive = true;
 
                   const container = document.getElementById('canvas-container');
-                  container.classList.add('hazard-cursor');
+                  if (container) container.classList.add('hazard-cursor');
                   startCursorHum();
 
                   addFloatingText(width / 2, 80, '-240', '#f87171');
@@ -8036,15 +7812,15 @@
               }
 
               function toggleCursorHazardFromStore() {
-                  cursorHazardActive = !cursorHazardActive;
-                  const container = document.getElementById('canvas-container');
-
-                  if (cursorHazardActive) {
-                      container.classList.add('hazard-cursor');
-                      startCursorHum();
+                  if (cursorHazardPlacing || cursorHazardFollow) {
+                      finishCursorHazardPlacement();
                   } else {
-                      container.classList.remove('hazard-cursor');
-                      stopCursorHum();
+                      cursorHazardPlacing = true;
+                      cursorHazardFollow = true;
+                      cursorHazardActive = true;
+                      const container = document.getElementById('canvas-container');
+                      if (container) container.classList.add('hazard-cursor');
+                      startCursorHum();
                   }
                   updateCheatsUI();
               }
@@ -8077,18 +7853,8 @@
               }
 
               function toggleCursorHazard() {
-                  // Legacy - now handled in store
                   if (!cursorHazardUnlocked) return;
-                  cursorHazardActive = !cursorHazardActive;
-                  const container = document.getElementById('canvas-container');
-
-                  if (cursorHazardActive) {
-                      container.classList.add('hazard-cursor');
-                      startCursorHum();
-                  } else {
-                      container.classList.remove('hazard-cursor');
-                      stopCursorHum();
-                  }
+                  toggleCursorHazardQuick();
               }
 
               function calculatePileBonus() {
@@ -8797,6 +8563,272 @@
                   return dist(px, py, projX, projY);
               }
 
+              function updateModuleThresholds() {
+                  if (creatures.length < 3) {
+                      _moduleThresholds = { high: 999, low: 0 };
+                      return;
+                  }
+                  const sorted = creatures.map(c => c.modules.length).sort((a, b) => a - b);
+                  _moduleThresholds.high = sorted[Math.floor(sorted.length * 0.9)] || 0;
+                  _moduleThresholds.low = sorted[Math.floor(sorted.length * 0.1)] || 0;
+              }
+
+              function wallConfig(w) {
+                  const isFilter = w.wallType === 'filter' || w.filterMode === 'custom_filter';
+                  const filterTypes = (w.filterSettings && w.filterSettings.types) || [];
+                  return { isFilter, isSolid: !isFilter, filterTypes };
+              }
+
+              function wallShouldAffectCreature(w, c) {
+                  const { isFilter, isSolid, filterTypes } = wallConfig(w);
+                  if (isSolid) {
+                      const mode = w.filterMode || 'repel_all';
+                      if (mode === 'repel_all') return true;
+                      if (mode === 'allow_harvesters') return c.getModuleCount('harvester') === 0;
+                      if (mode === 'allow_low_energy') return c.energy >= 35;
+                      if (mode === 'allow_predators') return !c.isPredator;
+                      return true;
+                  }
+                  const type = filterTypes[0];
+                  if (!type || type === 'white' || type === 'red') return false;
+                  if (type === 'predator') return c.isPredator;
+                  if (type === 'high_module') return c.modules.length >= _moduleThresholds.high;
+                  if (type === 'low_module') return c.modules.length <= _moduleThresholds.low;
+                  return false;
+              }
+
+              function bounceOffWallSegment(ent, x1, y1, x2, y2, strong) {
+                  const mx = (x1 + x2) / 2;
+                  const my = (y1 + y2) / 2;
+                  let dx = ent.x - mx;
+                  let dy = ent.y - my;
+                  let len = sqrt(dx * dx + dy * dy) || 1;
+                  const push = strong ? 5.5 : 2.4;
+                  ent.x += (dx / len) * push;
+                  ent.y += (dy / len) * push;
+                  if (ent.vx !== undefined) {
+                      if (strong) {
+                          ent.vx = -(ent.vx || 0) * 0.27;
+                          ent.vy = -(ent.vy || 0) * 0.27;
+                      } else {
+                          ent.vx = (ent.vx || 0) * 0.45;
+                          ent.vy = (ent.vy || 0) * 0.45;
+                      }
+                  }
+              }
+
+              function applyParticleDeflectionForSegment(x1, y1, x2, y2, cfg) {
+                  const { isSolid, filterTypes } = cfg;
+                  const deflectsWhite = isSolid || filterTypes.includes('white');
+                  const deflectsRed = isSolid || filterTypes.includes('red');
+                  const strongWhite = !isSolid && filterTypes.includes('white');
+                  const strongRed = !isSolid && filterTypes.includes('red');
+
+                  if (deflectsWhite) {
+                      for (let p of vortexParticles) {
+                          if (distToLineSegment(p.x, p.y, x1, y1, x2, y2) < 26) {
+                              bounceOffWallSegment(p, x1, y1, x2, y2, strongWhite);
+                          }
+                      }
+                  }
+                  if (deflectsRed) {
+                      for (let r of redHazards) {
+                          if (distToLineSegment(r.x, r.y, x1, y1, x2, y2) < 26) {
+                              bounceOffWallSegment(r, x1, y1, x2, y2, strongRed);
+                          }
+                      }
+                  }
+              }
+
+              function applyCreatureWallCollisions(c) {
+                  for (let w of energyWalls) {
+                      if (!wallShouldAffectCreature(w, c)) continue;
+                      const d = distToLineSegment(c.x, c.y, w.x1, w.y1, w.x2, w.y2);
+                      if (d < 14) {
+                          const mx = (w.x1 + w.x2) / 2;
+                          const my = (w.y1 + w.y2) / 2;
+                          let dx = c.x - mx;
+                          let dy = c.y - my;
+                          let len = sqrt(dx * dx + dy * dy) || 1;
+                          const push = w.wallType === 'filter' ? 2.4 : 3.2;
+                          c.vx += (dx / len) * push;
+                          c.vy += (dy / len) * push;
+                          if (w.offensive) {
+                              c.energy = max(0, c.energy - 0.55 * timeScale);
+                              w.hitFlash = max(w.hitFlash || 0, 10);
+                          }
+                      }
+                  }
+                  if (currentWallPreview && energyWallMode) {
+                      const previewCfg = getPreviewWallConfig();
+                      if (wallShouldAffectCreature({ wallType: previewCfg.wallType, filterMode: previewCfg.filterMode, filterSettings: previewCfg.filterSettings }, c)) {
+                          const d = distToLineSegment(c.x, c.y, currentWallPreview.x1, currentWallPreview.y1, currentWallPreview.x2, currentWallPreview.y2);
+                          if (d < 14) {
+                              bounceOffWallSegment(c, currentWallPreview.x1, currentWallPreview.y1, currentWallPreview.x2, currentWallPreview.y2, false);
+                          }
+                      }
+                  }
+              }
+
+              function getPreviewWallConfig() {
+                  const isFilter = currentWallFilterMode === 'custom_filter';
+                  return {
+                      wallType: isFilter ? 'filter' : 'solid',
+                      filterMode: currentWallFilterMode,
+                      filterSettings: isFilter && window.currentFilterWallSettings
+                          ? window.currentFilterWallSettings
+                          : null,
+                  };
+              }
+
+              function finishCursorHazardPlacement() {
+                  cursorHazardPlacing = false;
+                  cursorHazardFollow = false;
+                  cursorHazardActive = false;
+                  placedHazards.forEach(h => {
+                      h.timer = 999999;
+                      h.permanent = true;
+                      h.exploding = false;
+                  });
+                  const container = document.getElementById('canvas-container');
+                  if (container) container.classList.remove('hazard-cursor');
+                  stopCursorHum();
+                  updateQuickButtons();
+              }
+
+              function drawGlowingHazardBeam(wx1, wy1, wx2, wy2, pulse) {
+                  const s1 = Viewport.worldToScreen(wx1, wy1);
+                  const s2 = Viewport.worldToScreen(wx2, wy2);
+                  const glow = 0.55 + sin(frameCount * 0.14 + pulse) * 0.25;
+                  push();
+                  drawingContext.shadowBlur = 18;
+                  drawingContext.shadowColor = 'rgba(239,68,68,0.85)';
+                  stroke(255, 70, 70, 45 * glow);
+                  strokeWeight(14);
+                  line(s1.x, s1.y, s2.x, s2.y);
+                  drawingContext.shadowBlur = 10;
+                  stroke(239, 68, 68, 170 * glow);
+                  strokeWeight(6);
+                  line(s1.x, s1.y, s2.x, s2.y);
+                  stroke(255, 170, 170, 220);
+                  strokeWeight(2.2);
+                  line(s1.x, s1.y, s2.x, s2.y);
+                  drawingContext.shadowBlur = 0;
+                  pop();
+              }
+
+              function drawPlacedHazardOrb(wx, wy, scale) {
+                  const s = Viewport.worldToScreen(wx, wy);
+                  push();
+                  translate(s.x, s.y);
+                  const pulse = sin(frameCount * 0.1) * 0.12 + 1;
+                  drawingContext.shadowBlur = 16;
+                  drawingContext.shadowColor = 'rgba(239,68,68,0.9)';
+                  fill(239, 68, 68, 55);
+                  noStroke();
+                  circle(0, 0, 52 * scale * pulse);
+                  drawingContext.shadowBlur = 8;
+                  fill(239, 68, 68, 210);
+                  circle(0, 0, 30 * scale);
+                  fill(255, 210, 210, 240);
+                  circle(0, 0, 14 * scale);
+                  drawingContext.shadowBlur = 0;
+                  pop();
+              }
+
+              function updatePlacedHazardFields() {
+                  if (placedHazards.length === 0) return;
+
+                  for (let hi = 0; hi < placedHazards.length; hi++) {
+                      const h = placedHazards[hi];
+                      const hits = SpatialGrid.queryRadius(h.x, h.y, 42);
+                      for (let i = 0; i < hits.length; i++) {
+                          const c = hits[i];
+                          let d = dist(h.x, h.y, c.x, c.y);
+                          if (d < 42) {
+                              c.energy = max(0, c.energy - (2.6 + random(0.2, 1.0)) * timeScale);
+                              c.damageFlash = max(c.damageFlash || 0, 35);
+                              c.purpleFlash = max(c.purpleFlash || 0, 48);
+                              if (d > 3) {
+                                  let dx = c.x - h.x;
+                                  let dy = c.y - h.y;
+                                  let len = d || 1;
+                                  c.vx += (dx / len) * 1.6 * timeScale;
+                                  c.vy += (dy / len) * 1.6 * timeScale;
+                              }
+                          }
+                      }
+                  }
+
+                  for (let i = 0; i < placedHazards.length - 1; i++) {
+                      const a = placedHazards[i];
+                      const b = placedHazards[i + 1];
+                      for (let ri = redHazards.length - 1; ri >= 0; ri--) {
+                          const r = redHazards[ri];
+                          if (distToLineSegment(r.x, r.y, a.x, a.y, b.x, b.y) < 14) {
+                              redHazards.splice(ri, 1);
+                              playAbsorbSound();
+                          }
+                      }
+                      const beamHits = SpatialGrid.queryRadius((a.x + b.x) / 2, (a.y + b.y) / 2, dist(a.x, a.y, b.x, b.y) / 2 + 12);
+                      for (let bi = 0; bi < beamHits.length; bi++) {
+                          const c = beamHits[bi];
+                          if (distToLineSegment(c.x, c.y, a.x, a.y, b.x, b.y) < 11) {
+                              c.purpleFlash = max(c.purpleFlash || 0, 50);
+                              c.energy = max(0, c.energy - 1.4 * timeScale);
+                          }
+                      }
+                  }
+
+                  if (cursorHazardFollow && placedHazards.length > 0) {
+                      const ptr = gamePointer();
+                      const last = placedHazards[placedHazards.length - 1];
+                      for (let ri = redHazards.length - 1; ri >= 0; ri--) {
+                          const r = redHazards[ri];
+                          if (distToLineSegment(r.x, r.y, ptr.x, ptr.y, last.x, last.y) < 14) {
+                              redHazards.splice(ri, 1);
+                              playAbsorbSound();
+                          }
+                      }
+                  }
+
+                  for (let i = placedHazards.length - 1; i >= 0; i--) {
+                      const h = placedHazards[i];
+                      if (h.permanent || h.exploding) continue;
+                      h.timer--;
+                      if (h.timer < 120) h.shakeTimer = max(h.shakeTimer || 0, 8);
+                      if (h.timer <= 0) {
+                          const hazardBlast = SpatialGrid.queryRadius(h.x, h.y, 65);
+                          for (let hi = 0; hi < hazardBlast.length; hi++) {
+                              hazardBlast[hi].purpleFlash = max(hazardBlast[hi].purpleFlash || 0, 140);
+                              hazardBlast[hi].energy = max(0, hazardBlast[hi].energy - 25);
+                          }
+                          explosions.push(new Explosion(h.x, h.y));
+                          playExplosionSound();
+                          placedHazards.splice(i, 1);
+                      }
+                  }
+              }
+
+              function renderPlacedHazardGraphics() {
+                  if (placedHazards.length === 0) return;
+                  for (let i = 0; i < placedHazards.length - 1; i++) {
+                      drawGlowingHazardBeam(
+                          placedHazards[i].x, placedHazards[i].y,
+                          placedHazards[i + 1].x, placedHazards[i + 1].y,
+                          i
+                      );
+                  }
+                  if (cursorHazardFollow && placedHazards.length > 0) {
+                      const ptr = gamePointer();
+                      const last = placedHazards[placedHazards.length - 1];
+                      drawGlowingHazardBeam(ptr.x, ptr.y, last.x, last.y, placedHazards.length);
+                  }
+                  for (let h of placedHazards) {
+                      drawPlacedHazardOrb(h.x, h.y, 1);
+                  }
+              }
+
               function recordEvolutionStats() {
                   if (!graphData || creatures.length === 0) return;
                   if (creatures.length === 0) return;
@@ -8854,10 +8886,39 @@
 
               function handleMousePress() {
                   if (spaceshipActive) return;
-                  if (!PointerInput.consumeAction()) return;
 
                   const { x: px, y: py } = gamePointer();
                   const hitR = DeviceProfile.creatureHitRadius;
+
+                  if (cursorHazardPlacing) {
+                      let nearCreature = false;
+                      for (let c of creatures) {
+                          if (dist(px, py, c.x, c.y) < hitR + 5) {
+                              nearCreature = true;
+                              break;
+                          }
+                      }
+                      const canPlaceHere = !nearCreature
+                          && placedHazards.length < maxPlacedHazards
+                          && !placedHazards.some(h => dist(px, py, h.x, h.y) < 40);
+                      if (canPlaceHere) {
+                          placedHazards.push({
+                              x: px, y: py,
+                              timer: 999999,
+                              shakeTimer: 0,
+                              exploding: false,
+                              permanent: false,
+                          });
+                          if (placedHazards.length >= maxPlacedHazards) {
+                              finishCursorHazardPlacement();
+                          }
+                      } else if (placedHazards.length > 0 && !nearCreature) {
+                          finishCursorHazardPlacement();
+                      }
+                      return;
+                  }
+
+                  if (!PointerInput.consumeAction()) return;
 
                   for (let c of creatures) {
                       if (dist(px, py, c.x, c.y) < hitR) {
@@ -8886,35 +8947,6 @@
                       }
                   }
 
-                  if (cursorHazardActive) {
-                      let nearCreature = false;
-                      for (let c of creatures) {
-                          if (dist(px, py, c.x, c.y) < hitR + 5) {
-                              nearCreature = true;
-                              break;
-                          }
-                      }
-                      if (!nearCreature) {
-                          if (placedHazards.length < maxPlacedHazards) {
-                              placedHazards.push({
-                                  x: px, y: py,
-                                  timer: 99999,
-                                  shakeTimer: 0,
-                                  exploding: false
-                              });
-                              if (beamCharge > 0) beamCharge--;
-                          } else if (placedHazards.length > 0) {
-                              placedHazards.shift();
-                              placedHazards.push({
-                                  x: px, y: py,
-                                  timer: 99999,
-                                  shakeTimer: 0,
-                                  exploding: false
-                              });
-                              if (beamCharge > 0) beamCharge--;
-                          }
-                      }
-                  }
               }
 
               // === Energy Wall Drawing (click + drag) ===
@@ -8966,6 +8998,9 @@
                           const length = sqrt((px - wallStartX) ** 2 + (py - wallStartY) ** 2);
                           // v1.95 Clean creation
                           const isFilter = currentWallFilterMode === "custom_filter";
+                          const isOffensive = isFilter
+                              ? !!window.currentFilterWallSettings?.offensive
+                              : !!window.selectedOffensive;
                           energyWalls.push({
                               x1: wallStartX,
                               y1: wallStartY,
@@ -8980,12 +9015,11 @@
                               immuneUntil: frameCount + 30,
                               redHits: 0,
                               wallType: isFilter ? "filter" : "solid",
+                              filterMode: isFilter ? "custom_filter" : "repel_all",
                               filterSettings: isFilter && window.currentFilterWallSettings
                                   ? JSON.parse(JSON.stringify(window.currentFilterWallSettings))
                                   : null,
-                              offensive: isFilter && window.currentFilterWallSettings
-                                  ? !!window.currentFilterWallSettings.offensive
-                                  : false,
+                              offensive: isOffensive,
                               empowered: false,
                               shakeTimer: 0,
                               vortexImmune: true,
