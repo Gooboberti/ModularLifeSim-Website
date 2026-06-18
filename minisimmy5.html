@@ -2421,17 +2421,7 @@
 
                   // NEW: Final awarded score including ALL global bonuses + furnace multiplier
                   getFinalAwardedScore(killedByBullet = false) {
-                      let base = this.getPointValue(killedByBullet);
-
-                      // Apply global map multipliers (population, predators, avg modules, tier counts)
-                      let finalScore = base * (window.currentScoreMultiplier || 1);
-
-                      // Apply live Furnace multiplier if active
-                      if (typeof getBurningMultiplier === 'function') {
-                          finalScore *= getBurningMultiplier();
-                      }
-
-                      return Math.floor(finalScore);
+                      return ScoreEngine.computeAwardedAmount(this.getPointValue(killedByBullet));
                   }
 
                   // ==================== NEW: Lifespan Gain Method ====================
@@ -2720,7 +2710,7 @@
                       this.energy = 100;
                       this.killCount = (this.killCount || 0) + 1;
                       totalPredatorKills++;
-                      totalScore += 28;
+                      ScoreEngine.award(28);
                       this.currentThought = "Killed prey - Returning to normal";
                       // === NEW: Turn back into a normal creature after eating ===
                       this.isPredator = false;
@@ -3732,44 +3722,150 @@
                   }
               }
 
-              function calculateTotalMultiplier() {
-                  if (!creatures || creatures.length === 0) return 1;
+              // ==================== MASTER SCORING ENGINE ====================
+              // Single source of truth for multipliers, passive ticks, and instant awards.
+              // The sidebar additive system (pop/pred/modules/tiers) is authoritative.
+              const ScoreEngine = {
+                  _cache: null,
+                  _cacheFrame: -1,
 
-                  let pop = creatures.length;
-                  let predators = creatures.filter(c => c.isPredator).length;
+                  analyzePopulation() {
+                      const tierCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0 };
+                      let totalModules = 0;
+                      let predators = 0;
+                      const pop = creatures.length;
 
-                  let totalModules = 0;
-                  let tierCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0 };
-
-                  for (let c of creatures) {
-                      totalModules += c.modules.length;
-                      for (let m of c.modules) {
-                          const t = m.tier || 1;
-                          if (tierCounts[t] !== undefined) tierCounts[t]++;
+                      for (let c of creatures) {
+                          totalModules += c.modules.length;
+                          if (c.isPredator) predators++;
+                          for (let m of c.modules) {
+                              const t = m.tier || 1;
+                              if (tierCounts[t] !== undefined) tierCounts[t]++;
+                          }
                       }
+
+                      return {
+                          pop,
+                          predators,
+                          avgModules: pop > 0 ? totalModules / pop : 0,
+                          tierCounts,
+                          totalModules
+                      };
+                  },
+
+                  computeAdditiveMultiplier(stats) {
+                      let total = 0;
+                      total += stats.pop * MULTIPLIER_RATES.population;
+                      total += stats.predators * MULTIPLIER_RATES.predators;
+                      total += stats.avgModules * MULTIPLIER_RATES.avgModules;
+                      for (let t = 1; t <= 10; t++) {
+                          total += (stats.tierCounts[t] || 0) * (TIER_MULTIPLIERS[t] || 0);
+                      }
+                      return Math.max(0.5, total);
+                  },
+
+                  computeBreakdown(stats) {
+                      const tiers = {};
+                      for (let t = 1; t <= 10; t++) {
+                          tiers[t] = (stats.tierCounts[t] || 0) * (TIER_MULTIPLIERS[t] || 0);
+                      }
+                      return {
+                          population: stats.pop * MULTIPLIER_RATES.population,
+                          predators: stats.predators * MULTIPLIER_RATES.predators,
+                          avgModules: stats.avgModules * MULTIPLIER_RATES.avgModules,
+                          tiers
+                      };
+                  },
+
+                  getSurvivalBandMultiplier(pop) {
+                      if (pop < 10) return 5.0;
+                      if (pop < 30) return 3.5;
+                      if (pop < 50) return 2.6;
+                      if (pop < 80) return 2.0;
+                      if (pop < 100) return 1.6;
+                      if (pop < 150) return 1.3;
+                      return 1.0;
+                  },
+
+                  getMultiplierSnapshot() {
+                      if (this._cacheFrame === frameCount && this._cache) return this._cache;
+
+                      const stats = this.analyzePopulation();
+                      const additiveMult = this.computeAdditiveMultiplier(stats);
+                      const furnaceMult = (typeof getBurningMultiplier === 'function') ? getBurningMultiplier() : 1;
+
+                      this._cache = {
+                          stats,
+                          additiveMult,
+                          furnaceMult,
+                          survivalBand: this.getSurvivalBandMultiplier(stats.pop),
+                          breakdown: this.computeBreakdown(stats)
+                      };
+                      this._cacheFrame = frameCount;
+                      window.currentScoreMultiplier = additiveMult;
+                      return this._cache;
+                  },
+
+                  syncCurrency() {
+                      highRollerPoints = totalScore;
+                      window.highRollerPoints = totalScore;
+                  },
+
+                  addPoints(amount) {
+                      if (amount <= 0) return 0;
+                      totalScore += amount;
+                      this.syncCurrency();
+                      return amount;
+                  },
+
+                  spend(amount) {
+                      if (amount <= 0 || totalScore < amount) return false;
+                      totalScore -= amount;
+                      this.syncCurrency();
+                      return true;
+                  },
+
+                  computeAwardedAmount(baseAmount, options = {}) {
+                      const { applyGlobalMult = true, applyFurnace = true } = options;
+                      let amount = baseAmount;
+                      const snap = this.getMultiplierSnapshot();
+                      if (applyGlobalMult) amount *= snap.additiveMult;
+                      if (applyFurnace) amount *= snap.furnaceMult;
+                      return Math.floor(amount);
+                  },
+
+                  award(baseAmount, options = {}) {
+                      return this.addPoints(this.computeAwardedAmount(baseAmount, options));
+                  },
+
+                  tickPassive() {
+                      if (paused) return;
+
+                      const now = Date.now();
+                      if (now - lastScoreUpdate < 180) return;
+                      lastScoreUpdate = now;
+
+                      const deltaMinutes = (simTime - lastScoreSimTime) / 60;
+                      lastScoreSimTime = simTime;
+                      if (deltaMinutes <= 0) return;
+
+                      const snap = this.getMultiplierSnapshot();
+                      const pileBonus = calculatePileBonus();
+                      const predBonusPerMinute = totalPredatorKills * 0.5;
+                      const minuteRate = (12 + pileBonus + predBonusPerMinute) * snap.survivalBand;
+                      const points = Math.floor(minuteRate * deltaMinutes * snap.additiveMult * snap.furnaceMult);
+                      this.addPoints(points);
+                  },
+
+                  format(num) {
+                      if (num >= 10000000) return num.toExponential(2).replace('+', '');
+                      if (num >= 1000000) return (num / 1000000).toFixed(2) + 'M';
+                      return Math.floor(num).toLocaleString();
                   }
+              };
 
-                  const avgModules = totalModules / pop;
-
-                  // Calculate additive contributions
-                  let total = 0;
-
-                  // Population contribution
-                  total += pop * MULTIPLIER_RATES.population;
-
-                  // Predators contribution
-                  total += predators * MULTIPLIER_RATES.predators;
-
-                  // Avg Modules contribution
-                  total += avgModules * MULTIPLIER_RATES.avgModules;
-
-                  // Tier contributions (using your existing TIER_MULTIPLIERS)
-                  for (let t = 1; t <= 10; t++) {
-                      const rate = TIER_MULTIPLIERS[t] || 0;
-                      total += (tierCounts[t] || 0) * rate;
-                  }
-
-                  return Math.max(0.5, total);
+              function formatScore(num) {
+                  return ScoreEngine.format(num);
               }
 
               function createPredatorFromGeneVaultOrRandom() {
@@ -3939,19 +4035,6 @@
                   drawLayer(hiddenCount, midX, 'H', Array(hiddenCount).fill(0.5));
                   drawLayer(outputCount, rightX, 'O', brainOutputs, true);
               }
-              function formatScore(num) {
-                  if (num >= 10000000) {
-                      // Exponential notation starts at 10 million (e+7)
-                      return num.toExponential(2).replace('+', '');
-                  }
-                  else if (num >= 1000000) {
-                      return (num / 1000000).toFixed(2) + 'M';
-                  }
-                  else {
-                      return Math.floor(num).toLocaleString();
-                  }
-              }
-
               function updateEvolveEnvironmentalCycle() {
                   if (currentMusicMode !== 'evolve') return;
                   evolveEnvTimer++;
@@ -4202,7 +4285,7 @@
 
               function getBurningMultiplier() {
                   if (burningCrystals > 0 && furnaceEndTime > Date.now()) {
-                      return 100;
+                      return burningCrystals * 100;
                   }
                   return 1;
               }
@@ -4456,8 +4539,7 @@
               }
 
               function buyRedHazards() {
-                  if (redHazardsUnlocked || totalScore < 180) return;
-                  totalScore -= 180;
+                  if (redHazardsUnlocked || !ScoreEngine.spend(180)) return;
                   redHazardsUnlocked = true;
                   redHazardsEnabled = true;
                   if (redHazards.length < 6) {
@@ -4588,11 +4670,10 @@
                       alert(`Your Egg Inventory is full (${MAX_EGGS} max).`);
                       return;
                   }
-                  if (totalScore < 250000) {
+                  if (!ScoreEngine.spend(250000)) {
                       alert("You need 250,000 High Roller Points.");
                       return;
                   }
-                  totalScore -= 250000;
                   updateMainStats();
                   updateEggCountBadge();
                   addFloatingText(creature.x, creature.y - 30, "-250,000", '#fbbf24');
@@ -4984,15 +5065,8 @@
                   if (!slot || !slot.currentIncubation) return;
 
                   const egg = slot.currentIncubation.eggData;
-                  let finalScore = getEggScore(egg);
-                  finalScore *= getCurrentGlobalScoreMultiplier();
-                  finalScore *= slot.multiplier;
-
-                  const furnaceMult = getCurrentFurnaceMultiplier();
-                  if (furnaceMult > 1) finalScore *= furnaceMult;
-
-                  finalScore = Math.floor(finalScore);
-                  highRollerPoints = (highRollerPoints || 0) + finalScore;
+                  const baseScore = getEggScore(egg) * slot.multiplier;
+                  const finalScore = ScoreEngine.award(baseScore);
 
                   addFloatingText(width / 2, 85, `+${finalScore} Score`, '#fbbf24');
                   slot.currentIncubation = null;
@@ -5011,21 +5085,6 @@
                   slot.currentIncubation = null;
                   hideIncubationCompleteModal();
                   renderIncubatorSlots();
-              }
-
-              function getCurrentGlobalScoreMultiplier() {
-                  let m = 1.0;
-                  if (creatures.length > 100) m *= 1.12;
-                  if (creatures.filter(c => c.isPredator).length > 25) m *= 0.95;
-                  return m;
-              }
-
-              function getCurrentFurnaceMultiplier() {
-                  if (typeof burningCrystals !== 'undefined' && burningCrystals > 0 &&
-                      typeof furnaceEndTime !== 'undefined' && Date.now() < furnaceEndTime) {
-                      return (typeof getBurningMultiplier === 'function') ? getBurningMultiplier() : 1.5;
-                  }
-                  return 1;
               }
 
               function calculateIncubatorMultiplierGain(eggData) {
@@ -5218,7 +5277,7 @@
                   }
                   debugLog("Creatures created");
 
-                  updateScoreMultipliers();
+                  ScoreEngine.getMultiplierSnapshot();
                   debugLog("Score multipliers updated");
 
                   for (let i = 0; i < 110; i++) {
@@ -7033,6 +7092,7 @@
                   deselectCreature();
                   totalScore = 0;
                   totalPredatorKills = 0;
+                  ScoreEngine.syncCurrency();
 
                   const scoreEl = document.getElementById('vegas-score');
                   if (scoreEl) scoreEl.innerText = '0';
@@ -7201,7 +7261,7 @@
 
               function setTimeScale(scale) {
                   if (scale === 8) return;
-                  if (!unlockedSpeeds[scale]) return;
+                  if ((scale === 2 || scale === 4) && !unlockedSpeeds[scale]) return;
                   timeScale = scale;
                   document.querySelectorAll('[id^="speed-"]').forEach(el => {
                       el.classList.remove('active', 'bg-emerald-500', 'text-[#0a0a0f]');
@@ -7526,8 +7586,7 @@
               }
 
               function buyCursorHazard() {
-                  if (totalScore < 240) return;
-                  totalScore -= 240;
+                  if (!ScoreEngine.spend(240)) return;
                   cursorHazardUnlocked = true;
                   cursorHazardActive = true;
 
@@ -7559,9 +7618,7 @@
                   else if (speed === 4) cost = 280;
                   else if (speed === 8) cost = 520;
 
-                  if (totalScore < cost || unlockedSpeeds[speed]) return;
-
-                  totalScore -= cost;
+                  if (unlockedSpeeds[speed] || !ScoreEngine.spend(cost)) return;
                   unlockedSpeeds[speed] = true;
 
                   // Auto-enable the speed
@@ -7621,53 +7678,7 @@
               }
 
               function updateVegasScore() {
-                  if (paused) return;
-
-                  const now = Date.now();
-                  if (now - lastScoreUpdate < 180) return;
-                  lastScoreUpdate = now;
-
-                  const deltaMinutes = (simTime - lastScoreSimTime) / 60;
-                  lastScoreSimTime = simTime;
-                  if (deltaMinutes <= 0) return;
-
-                  let multiplier = 1.0;
-                  const pop = creatures.length;
-
-                  if (pop < 10) multiplier = 5.0;
-                  else if (pop < 30) multiplier = 3.5;
-                  else if (pop < 50) multiplier = 2.6;
-                  else if (pop < 80) multiplier = 2.0;
-                  else if (pop < 100) multiplier = 1.6;
-                  else if (pop < 150) multiplier = 1.3;
-
-                  const pileBonus = calculatePileBonus();
-                  const predBonusPerMinute = totalPredatorKills * 0.5;
-                  const minuteRate = (12 + pileBonus + predBonusPerMinute) * multiplier;
-
-                  const popPredModuleMults = getScoreMultipliers();
-                  const furnaceMult = getBurningMultiplier();
-
-                  const pointsThisTick = Math.floor(
-                      minuteRate * deltaMinutes * furnaceMult * popPredModuleMults.total
-                  );
-
-                  if (pointsThisTick > 0) {
-                      totalScore += pointsThisTick;
-                  }
-
-                  // Update UI
-                  const scoreEl = document.getElementById('vegas-score');
-                  if (scoreEl) scoreEl.innerText = totalScore.toLocaleString();
-
-                  const multEl = document.getElementById('vegas-multiplier');
-                  if (multEl) multEl.innerText = multiplier.toFixed(1) + '×';
-
-                  const pileEl = document.getElementById('pile-bonus');
-                  if (pileEl) pileEl.innerText = '+' + pileBonus;
-
-                  const killsEl = document.getElementById('pred-kills');
-                  if (killsEl) killsEl.innerText = totalPredatorKills;
+                  ScoreEngine.tickPassive();
               }
 
               // ==================== SCORE BREAKDOWN MODAL ====================
@@ -7676,9 +7687,9 @@
                   modal.className = 'fixed inset-0 z-[200] flex items-center justify-center bg-black/80';
                   modal.onclick = () => modal.remove();
 
-                  const mults = getScoreMultipliers();
+                  const snap = ScoreEngine.getMultiplierSnapshot();
+                  const bd = snap.breakdown;
                   const isBurning = burningCrystals > 0 && furnaceEndTime > Date.now();
-                  const furnaceMult = getBurningMultiplier();
 
                   let html = `
                   <div onclick="event.stopImmediatePropagation()"
@@ -7690,13 +7701,12 @@
                                   <i class="fa-solid fa-chart-line text-emerald-400"></i>
                                   <span>Score Breakdown</span>
                               </h3>
-                              <div class="text-xs text-white/50 mt-0.5">Live multipliers & bonuses</div>
+                              <div class="text-xs text-white/50 mt-0.5">Additive multipliers (matches sidebar)</div>
                           </div>
                           <button onclick="this.closest('.fixed').remove()"
                                   class="text-3xl leading-none text-white/60 hover:text-white">&times;</button>
                       </div>
 
-                      <!-- Current Total -->
                       <div class="mb-5 rounded-2xl border border-emerald-500/30 bg-[#0a0a0f] p-4">
                           <div class="text-xs text-white/50">CURRENT HIGH ROLLER POINTS</div>
                           <div class="font-mono text-4xl font-bold text-emerald-400 tabular-nums">
@@ -7705,50 +7715,36 @@
                       </div>
 
                       <div class="space-y-3 text-sm">
-              `;
-
-                  // Population Multiplier
-                  html += `
                   <div class="flex justify-between items-center rounded-xl bg-white/5 px-4 py-2.5">
                       <div class="flex items-center gap-x-2">
                           <i class="fa-solid fa-users text-emerald-400 w-4"></i>
-                          <span>Population</span>
+                          <span>Population (${snap.stats.pop})</span>
                       </div>
-                      <div class="font-mono text-emerald-400">×${mults.population.toFixed(2)}</div>
+                      <div class="font-mono text-emerald-400">+${bd.population.toFixed(2)}</div>
                   </div>
-              `;
-
-                  // Predator Multiplier
-                  html += `
                   <div class="flex justify-between items-center rounded-xl bg-white/5 px-4 py-2.5">
                       <div class="flex items-center gap-x-2">
                           <i class="fa-solid fa-skull text-red-400 w-4"></i>
-                          <span>Predators</span>
+                          <span>Predators (${snap.stats.predators})</span>
                       </div>
-                      <div class="font-mono text-red-400">×${mults.predators.toFixed(2)}</div>
+                      <div class="font-mono text-red-400">+${bd.predators.toFixed(2)}</div>
                   </div>
-              `;
-
-                  // Avg Modules Multiplier
-                  html += `
                   <div class="flex justify-between items-center rounded-xl bg-white/5 px-4 py-2.5">
                       <div class="flex items-center gap-x-2">
                           <i class="fa-solid fa-microchip text-violet-400 w-4"></i>
-                          <span>Avg Modules</span>
+                          <span>Avg Modules (${snap.stats.avgModules.toFixed(1)})</span>
                       </div>
-                      <div class="font-mono text-violet-400">×${mults.avgModules.toFixed(2)}</div>
+                      <div class="font-mono text-violet-400">+${bd.avgModules.toFixed(2)}</div>
                   </div>
-              `;
-
-                  // Combined Multiplier
-                  html += `
                   <div class="flex justify-between items-center rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 font-semibold">
-                      <span>Combined Multiplier</span>
-                      <span class="font-mono text-emerald-400">×${mults.total.toFixed(2)}</span>
+                      <span>Total × Mult</span>
+                      <span class="font-mono text-emerald-400">×${snap.additiveMult.toFixed(2)}</span>
                   </div>
-              `;
+                  <div class="flex justify-between items-center rounded-xl bg-white/5 px-4 py-2.5">
+                      <span>Survival Band (passive only)</span>
+                      <span class="font-mono text-amber-400">×${snap.survivalBand.toFixed(1)}</span>
+                  </div>`;
 
-                  // Furnace Bonus
                   if (isBurning) {
                       html += `
                       <div class="flex justify-between items-center rounded-xl bg-orange-500/10 px-4 py-2.5">
@@ -7756,9 +7752,8 @@
                               <i class="fa-solid fa-fire text-orange-400 w-4"></i>
                               <span>Furnace Bonus</span>
                           </div>
-                          <div class="font-mono text-orange-400">×${furnaceMult}</div>
-                      </div>
-                  `;
+                          <div class="font-mono text-orange-400">×${snap.furnaceMult.toLocaleString()}</div>
+                      </div>`;
                   }
 
                   html += `</div></div>`;
@@ -7766,57 +7761,8 @@
                   document.body.appendChild(modal);
               }
 
-              // ==================== CENTRAL SCORING FUNCTION ====================
               function addScore(amount) {
-                  if (amount <= 0) return;
-
-                  const mults = getScoreMultipliers();
-                  const finalAmount = amount * mults.total;
-
-                  totalScore += finalAmount;
-
-                  // Optional: show floating text with multiplier (you can remove this if you want)
-                  // addFloatingText(width/2, 60, `+${Math.floor(finalAmount)}`, '#34d399');
-              }
-
-              // ==================== POPULATION / PREDATORS / MODULES → SCORE MULTIPLIERS ====================
-              function getScoreMultipliers() {
-                  const pop = creatures.length;
-                  let predCount = 0;
-                  for (let c of creatures) {
-                      if (c.isPredator) predCount++;
-                  }
-
-                  // Calculate average modules
-                  let avgModules = 0;
-                  if (pop > 0) {
-                      let totalModules = 0;
-                      for (let c of creatures) {
-                          totalModules += c.modules.length;
-                      }
-                      avgModules = totalModules / pop;
-                  }
-
-                  // === Population Multiplier ===
-                  // More creatures = more points generated (soft cap)
-                  const popMult = 1 + Math.min(pop / 90, 1.6);
-
-                  // === Predator Multiplier ===
-                  // More predators = higher risk/reward multiplier
-                  const predMult = 1 + Math.min(predCount / 10, 1.0);
-
-                  // === Average Modules Multiplier ===
-                  // Higher average module count = stronger multiplier
-                  const moduleMult = 1 + Math.min((avgModules - 1.2) * 0.18, 2.5);
-
-                  const totalMult = popMult * predMult * moduleMult;
-
-                  return {
-                      population: popMult,
-                      predators: predMult,
-                      avgModules: moduleMult,
-                      total: totalMult
-                  };
+                  ScoreEngine.award(amount);
               }
 
               function updateGraphData() {
@@ -7959,88 +7905,39 @@
               function updateMainStats() {
                   if (!greenZone || !blueZone) return;
 
-                  let totalModules = 0;
-                  let predators = 0;
-                  let tierCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0 };
+                  const snap = ScoreEngine.getMultiplierSnapshot();
+                  const { pop, predators, avgModules, tierCounts } = snap.stats;
+                  const avgModulesDisplay = pop > 0 ? avgModules.toFixed(1) : "0.0";
 
-                  for (let c of creatures) {
-                      totalModules += c.modules.length;
-                      if (c.isPredator) predators++;
-                      for (let m of c.modules) {
-                          const t = m.tier || 1;
-                          if (tierCounts[t] !== undefined) tierCounts[t]++;
-                      }
-                  }
-
-                  const avgModules = creatures.length > 0
-                      ? (totalModules / creatures.length).toFixed(1)
-                      : "0.0";
-
-                  // === Score Display ===
                   const topScoreEl = document.getElementById('top-score');
                   if (topScoreEl) topScoreEl.innerText = formatScore(totalScore);
 
                   const mainScoreEl = document.getElementById('vegas-score');
                   if (mainScoreEl) mainScoreEl.innerText = formatScore(totalScore);
 
-                  // ==================== UPDATE MAIN STATS (Stacked Layout) ====================
                   const popEl = document.getElementById('stat-pop');
                   const predEl = document.getElementById('stat-pred');
                   const modEl = document.getElementById('stat-modules');
 
-                  if (popEl) popEl.innerText = creatures.length;
+                  if (popEl) popEl.innerText = pop;
                   if (predEl) predEl.innerText = predators;
-                  if (modEl) modEl.innerText = avgModules;
+                  if (modEl) modEl.innerText = avgModulesDisplay;
 
-                  // Tier counts
-                  if (document.getElementById('stat-tier1')) document.getElementById('stat-tier1').innerText = tierCounts[1];
-                  if (document.getElementById('stat-tier2')) document.getElementById('stat-tier2').innerText = tierCounts[2];
-                  if (document.getElementById('stat-tier3')) document.getElementById('stat-tier3').innerText = tierCounts[3];
-                  if (document.getElementById('stat-tier4')) document.getElementById('stat-tier4').innerText = tierCounts[4];
-                  if (document.getElementById('stat-tier5')) document.getElementById('stat-tier5').innerText = tierCounts[5];
-                  if (document.getElementById('stat-tier6')) document.getElementById('stat-tier6').innerText = tierCounts[6];
-                  if (document.getElementById('stat-tier7')) document.getElementById('stat-tier7').innerText = tierCounts[7];
-                  if (document.getElementById('stat-tier8')) document.getElementById('stat-tier8').innerText = tierCounts[8];
-                  if (document.getElementById('stat-tier9')) document.getElementById('stat-tier9').innerText = tierCounts[9];
-                  if (document.getElementById('stat-tier10')) document.getElementById('stat-tier10').innerText = tierCounts[10];
+                  for (let t = 1; t <= 10; t++) {
+                      const el = document.getElementById('stat-tier' + t);
+                      if (el) el.innerText = tierCounts[t];
+                  }
 
-                  // Update top bar (timer, bonus, glow)
                   if (typeof updateTopFurnaceUI === 'function') {
                       updateTopFurnaceUI();
                   }
 
-                  // ==================== NEW FIXED-RATE ADDITIVE MULTIPLIER SYSTEM ====================
-                  const pop = creatures.length;
-                  const predatorCount = predators;
-                  const avgMod = parseFloat(avgModules);
-
-                  // Calculate total additive multiplier
-                  let totalMult = 0;
-
-                  // Population contribution
-                  totalMult += pop * MULTIPLIER_RATES.population;
-
-                  // Predators contribution
-                  totalMult += predatorCount * MULTIPLIER_RATES.predators;
-
-                  // Avg Modules contribution
-                  totalMult += avgMod * MULTIPLIER_RATES.avgModules;
-
-                  // Tier contributions (using central TIER_MULTIPLIERS)
-                  for (let t = 1; t <= 10; t++) {
-                      totalMult += (tierCounts[t] || 0) * (TIER_MULTIPLIERS[t] || 0);
-                  }
-
-                  totalMult = Math.max(0.5, totalMult);
-
-                  // Main multiplier display
                   const multEl = document.getElementById('score-multiplier');
                   if (multEl) {
-                      multEl.innerText = totalMult.toFixed(2);
+                      multEl.innerText = snap.additiveMult.toFixed(2);
                       multEl.style.fontSize = '22px';
                   }
 
-                  // ==================== SMALL FIXED MULTIPLIERS (Below the big numbers) ====================
                   const setMult = (id, value) => {
                       const el = document.getElementById(id);
                       if (el) el.innerText = '×' + value.toFixed(2);
@@ -8050,9 +7947,6 @@
                   setMult('mult-pred', MULTIPLIER_RATES.predators);
                   setMult('mult-avgmod', MULTIPLIER_RATES.avgModules);
 
-                  window.currentScoreMultiplier = totalMult;
-
-                  // Update tier contribution displays
                   updateTierMultiplierDisplays(tierCounts);
               }
 
@@ -8321,97 +8215,6 @@
                       }
                   }
               }
-              // =====================================================
-              // SCORE MULTIPLIER SYSTEM (Updated with smart formatting)
-              // =====================================================
-              function updateScoreMultipliers() {
-                  if (!creatures || creatures.length === 0) return;
-
-                  // === Calculate base values ===
-                  const pop = creatures.length;
-                  const predatorCount = creatures.filter(c => c.isPredator).length;
-                  const totalModules = creatures.reduce((sum, c) => sum + c.modules.length, 0);
-                  const avgModules = totalModules / pop;
-
-                  // Count modules per tier
-                  const tierCounts = Array(11).fill(0);
-                  for (let c of creatures) {
-                      for (let m of c.modules) {
-                          const tier = m.tier || 1;
-                          if (tier >= 1 && tier <= 10) tierCounts[tier]++;
-                      }
-                  }
-
-                  // === Define Multipliers ===
-                  const popMult = 1 + Math.min(pop / 180, 1.8);
-                  const predMult = 1 + Math.min(predatorCount / 45, 1.6);
-                  const avgModMult = 1 + (avgModules * 0.38);
-
-                  let tierMult = 1;
-                  tierMult *= 1 + (tierCounts[1] * 0.0015);
-                  tierMult *= 1 + (tierCounts[2] * 0.0022);
-                  tierMult *= 1 + (tierCounts[3] * 0.0030);
-                  tierMult *= 1 + (tierCounts[4] * 0.0040);
-                  tierMult *= 1 + (tierCounts[5] * 0.0055);
-                  tierMult *= 1 + (tierCounts[6] * 0.0075);
-                  tierMult *= 1 + (tierCounts[7] * 0.010);
-                  tierMult *= 1 + (tierCounts[8] * 0.014);
-                  tierMult *= 1 + (tierCounts[9] * 0.019);
-                  tierMult *= 1 + (tierCounts[10] * 0.032);
-
-                  // Final total multiplier
-                  let totalMult = popMult * predMult * avgModMult * tierMult;
-                  totalMult = Math.max(0.6, Math.min(totalMult, 12));
-
-                  // === Update UI ===
-                  const scoreEl = document.getElementById('vegas-score');
-                  const multEl = document.getElementById('score-multiplier');
-
-                  // Smart score formatting (exponential earlier to prevent overlap)
-                  if (scoreEl) {
-                      let displayScore;
-                      if (totalScore >= 10000000) {
-                          displayScore = totalScore.toExponential(2).replace('+', '');
-                      } else if (totalScore >= 1000000) {
-                          displayScore = (totalScore / 1000000).toFixed(2) + 'M';
-                      } else {
-                          displayScore = Math.floor(totalScore).toLocaleString();
-                      }
-                      scoreEl.innerText = displayScore;
-                  }
-
-                  if (multEl) multEl.innerText = totalMult.toFixed(2);
-
-                  // Update individual multipliers
-                  const setMult = (id, value) => {
-                      const el = document.getElementById(id);
-                      if (el) el.innerText = '×' + value.toFixed(2);
-                  };
-
-                  setMult('mult-pop', popMult);
-                  setMult('mult-pred', predMult);
-                  setMult('mult-avgmod', avgModMult);
-
-                  for (let t = 1; t <= 10; t++) {
-                      let tierMultValue;
-                      if (t === 1) tierMultValue = 1 + (tierCounts[1] * 0.0015);
-                      else if (t === 2) tierMultValue = 1 + (tierCounts[2] * 0.0022);
-                      else if (t === 3) tierMultValue = 1 + (tierCounts[3] * 0.0030);
-                      else if (t === 4) tierMultValue = 1 + (tierCounts[4] * 0.0040);
-                      else if (t === 5) tierMultValue = 1 + (tierCounts[5] * 0.0055);
-                      else if (t === 6) tierMultValue = 1 + (tierCounts[6] * 0.0075);
-                      else if (t === 7) tierMultValue = 1 + (tierCounts[7] * 0.010);
-                      else if (t === 8) tierMultValue = 1 + (tierCounts[8] * 0.014);
-                      else if (t === 9) tierMultValue = 1 + (tierCounts[9] * 0.019);
-                      else tierMultValue = 1 + (tierCounts[10] * 0.032);
-
-                      const el = document.getElementById('mult-tier' + t);
-                      if (el) el.innerText = '×' + tierMultValue.toFixed(2);
-                  }
-
-                  window.currentScoreMultiplier = totalMult;
-              }
-
               function spawnCreatureFromVortexCenter(x, y, vortexDir, vortexStrength) {
                   let newCreature = new Creature(x, y);
                   newCreature.modules = [];
@@ -8713,8 +8516,7 @@
                       const lengthCost = Math.floor(length * 0.9);
                       const totalCost = baseCost + lengthCost;
 
-                      if (totalScore >= totalCost) {
-                          totalScore -= totalCost;
+                      if (ScoreEngine.spend(totalCost)) {
                           addFloatingText(wallStartX, wallStartY - 15, `-${totalCost}`, '#c026ff');
 
                           const length = sqrt((mouseX - wallStartX) ** 2 + (mouseY - wallStartY) ** 2);
@@ -9949,6 +9751,7 @@
                   // Reset the simulation
                   resetSim();
                   totalScore = 0;
+                  ScoreEngine.syncCurrency();
 
                   updateMainStats();
                   updateAetheriumUI();
@@ -9956,13 +9759,6 @@
                   updatePrestigePreview();
 
                   addFloatingText(width / 2, height / 2 - 20, `+${dustGained.toFixed(2)} Dust`, '#fbbf24');
-              }
-
-              function formatScore(n) {
-                  if (n >= 100000000) {
-                      return n.toExponential(2);
-                  }
-                  return Math.floor(n).toLocaleString();
               }
 
               function injectPulseAnimationStyle() {
@@ -10116,10 +9912,10 @@
                   if (!confirm(`Load "${save.name}"?\nThis will replace your inventories, vault, incubator slots, and currencies.\nCreatures on the map will NOT be affected.`)) return;
 
                   // === Restore currencies ===
-                  totalScore = save.totalScore || 0;
+                  totalScore = save.totalScore ?? save.highRollerPoints ?? 0;
                   aetheriumCrystals = save.aetheriumCrystals || 0;
                   aetheriumDust = save.aetheriumDust || 0;
-                  highRollerPoints = save.highRollerPoints || 0;
+                  ScoreEngine.syncCurrency();
 
                   // === Restore Gene Vault ===
                   if (save.geneVaultSlots) geneVaultSlots = save.geneVaultSlots;
