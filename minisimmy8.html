@@ -4,8 +4,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="minisimmy-build" content="mobile-opt-2026-06-17k" />
-    <title>MiniSimmy2 (Mobile Opt v4)</title>
+    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-17e" />
+    <title>MiniSimmy Orbital Ship v2</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2334d399'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%230a0a0f'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -36,7 +36,7 @@
                               <div class="text-xs text-white/60">Red particles spawn and deal damage</div>
                           </div>
                           <label class="relative inline-flex items-center cursor-pointer">
-                              <input type="checkbox" id="red-hazards-toggle" class="sr-only peer" ${redHazardsEnabled ? "checked" : ""} onchange="redHazardsEnabled = this.checked">
+                              <input type="checkbox" id="red-hazards-toggle" class="sr-only peer" ${redHazardsEnabled ? "checked" : ""} onchange="redHazardsEnabled = this.checked; if (!this.checked) redHazards = []; else if (redHazards.length < 6) { for (let i = redHazards.length; i < 6; i++) redHazards.push(new RedHazard()); } updateQuickButtons();">
                               <div class="w-11 h-6 bg-white/20 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-500"></div>
                           </label>
                       </div>
@@ -143,6 +143,28 @@
     cursor: grab;
 }
 
+#ship-map-controls {
+    z-index: 20;
+    pointer-events: none;
+    background: linear-gradient(to top, rgba(10, 10, 15, 0.82) 0%, rgba(10, 10, 15, 0.35) 55%, transparent 100%);
+}
+
+.ship-map-btn {
+    pointer-events: auto;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    transition: transform 0.1s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.ship-map-btn:active {
+    transform: scale(0.94);
+}
+
+.ship-map-btn.is-held {
+    box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.55), 0 0 18px rgba(34, 211, 238, 0.35);
+}
+
 @media (max-width: 860px) {
     #canvas-container {
         width: 100% !important;
@@ -239,7 +261,7 @@
                           <!-- Prestige Preview + Button -->
                           <div class="flex min-w-[210px] items-center gap-x-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-1.5 text-xs">
                               <span class="whitespace-nowrap text-white/50">Prestige for</span>
-                              <span id="prestige-dust-preview" class="min-w-[52px] text-right font-mono font-semibold text-amber-400">0 mg</span>
+                              <span id="prestige-dust-preview" class="min-w-[88px] text-right font-mono text-[11px] font-semibold text-amber-400">0 mg</span>
 
                               <button onclick="playUIClick(); prestige()" id="prestige-btn"
                                       class="ml-auto flex items-center gap-x-1.5 rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 px-3.5 py-1 text-xs font-semibold text-white hover:from-violet-600 hover:to-fuchsia-600 active:scale-[0.985]">
@@ -326,39 +348,82 @@
                       </div>
                   </div>
                   <!-- Environmental label injected by JS -->
+
+                  <!-- Ship controls overlay (map area only, hidden until ship active) -->
+                  <div id="ship-map-controls" class="absolute inset-x-0 bottom-0 hidden px-3 pb-3 pt-12 sm:px-4 sm:pb-4">
+                      <div class="flex items-end justify-between gap-3">
+                          <div class="flex gap-2">
+                              <button type="button" id="ship-orbit-left-btn" aria-label="Orbit left"
+                                      class="ship-map-btn flex h-11 w-11 items-center justify-center rounded-2xl border border-cyan-400/35 bg-slate-900/85 text-cyan-300 shadow-lg backdrop-blur-sm hover:bg-cyan-500/20 sm:h-12 sm:w-12">
+                                  <i class="fa-solid fa-rotate-left text-base sm:text-lg"></i>
+                              </button>
+                              <button type="button" id="ship-orbit-right-btn" aria-label="Orbit right"
+                                      class="ship-map-btn flex h-11 w-11 items-center justify-center rounded-2xl border border-cyan-400/35 bg-slate-900/85 text-cyan-300 shadow-lg backdrop-blur-sm hover:bg-cyan-500/20 sm:h-12 sm:w-12">
+                                  <i class="fa-solid fa-rotate-right text-base sm:text-lg"></i>
+                              </button>
+                          </div>
+                          <button type="button" id="ship-fire-btn" aria-label="Fire"
+                                  class="ship-map-btn flex h-12 min-w-[5.5rem] items-center justify-center gap-x-2 rounded-2xl border border-rose-400/45 bg-gradient-to-b from-rose-500/90 to-rose-700/90 px-4 text-sm font-bold text-white shadow-lg shadow-rose-900/40 hover:from-rose-400 hover:to-rose-600 sm:h-[3.25rem] sm:min-w-[6.5rem] sm:px-5 sm:text-base">
+                              <i class="fa-solid fa-crosshairs"></i>
+                              <span>Fire</span>
+                          </button>
+                      </div>
+                  </div>
               </div>
 
 
               <div class="mx-auto mt-1 w-[820px] text-center text-[10px] text-white/40">
-                  Space = Pause • +/- = Speed • Click creature to inspect
+                  Ship: on-map orbit + fire • Space / ←/→ • Click creature to inspect
               </div>
 
               <!-- Quick Tool Toggles -->
               <div class="mx-auto mt-3 flex w-[820px] items-center justify-between">
 
-                  <!-- LEFT: Music Button -->
-                  <div class="flex items-center gap-x-3">
+                  <!-- LEFT: Mute + Volume + Music -->
+                  <div class="flex items-center gap-x-2">
+                      <button type="button" id="audio-mute-btn" onclick="toggleAudioMute()"
+                              class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border border-white/20 bg-white/10 text-base text-white transition-all hover:bg-white/20 active:scale-[0.95]"
+                              title="Mute all audio">
+                          <i id="audio-mute-icon" class="fa-solid fa-volume-high"></i>
+                      </button>
+                      <div class="flex items-center gap-x-1" title="Music volume">
+                          <i class="fa-solid fa-music text-[10px] text-emerald-400/80"></i>
+                          <input type="range" id="music-volume-slider" class="h-1 w-14 cursor-pointer accent-emerald-400"
+                                 min="0" max="100" value="80" oninput="setMusicVolumeFromSlider(this.value)">
+                      </div>
+                      <div class="flex items-center gap-x-1" title="Sound effects volume">
+                          <i class="fa-solid fa-volume-low text-[10px] text-white/50"></i>
+                          <input type="range" id="sfx-volume-slider" class="h-1 w-14 cursor-pointer accent-white/60"
+                                 min="0" max="100" value="65" oninput="setSfxVolumeFromSlider(this.value)">
+                      </div>
                       <button onclick="playUIClick(); showMusicModal()"
                               class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border border-emerald-400/50 bg-emerald-500/90 text-base text-white transition-transform hover:bg-emerald-500 active:scale-[0.95]"
-                              title="Music & Reactivity">
-                          <i class="fa-solid fa-music"></i>
+                              title="Music modes (1 Crystal / 5 min)">
+                          <i class="fa-solid fa-compact-disc"></i>
                       </button>
                   </div>
 
                   <!-- CENTER: Main Tools -->
                   <div class="flex flex-wrap justify-center gap-3">
-                      <button onclick="playUIClick(); if (typeof showRedHazardsMenu === 'function') showRedHazardsMenu(); else toggleRedHazardsQuick();"
-                              id="quick-red-btn"
-                              class="flex items-center gap-x-2 rounded-2xl border border-white/10 bg-white/10 px-5 py-2 text-sm font-medium transition-transform hover:bg-white/20 active:scale-[0.985]">
-                          <i class="fa-solid fa-bomb text-red-400"></i>
-                          <span>Hazard Fields</span>
-                      </button>
+                      <div class="tool-rental-card flex min-w-[104px] flex-col items-stretch gap-1 rounded-2xl border border-white/10 bg-[#0a0a0f]/80 px-2 py-1.5">
+                          <button type="button" onclick="handleHazardFieldsToolClick()" id="quick-red-btn"
+                                  class="flex items-center justify-center gap-x-1.5 rounded-xl px-2.5 py-1.5 text-sm font-medium transition-all hover:bg-white/10 active:scale-[0.98]">
+                              <i class="fa-solid fa-bomb text-red-400"></i>
+                              <span class="hidden text-white/80 sm:inline">Hazards</span>
+                          </button>
+                          <div id="tool-timer-hazard" class="min-h-[12px] text-center font-mono text-[9px] leading-none text-white/40"></div>
+                          <div class="flex gap-1">
+                              <button type="button" onclick="purchaseToolRental('hazard')" id="tool-purchase-hazard"
+                                      class="flex-1 rounded-lg bg-red-600/90 px-1 py-1 text-[9px] font-semibold text-white hover:bg-red-500">1💎 5m</button>
+                              <button type="button" onclick="cancelToolRental('hazard')" id="tool-cancel-hazard"
+                                      class="flex-1 rounded-lg bg-white/10 px-1 py-1 text-[9px] font-medium text-white/70 hover:bg-white/20">Cancel</button>
+                          </div>
+                      </div>
                       <div class="tool-rental-card flex min-w-[104px] flex-col items-stretch gap-1 rounded-2xl border border-white/10 bg-[#0a0a0f]/80 px-2 py-1.5">
                           <button type="button" onclick="handleCursorHazardToolClick()" id="quick-cursor-btn"
-                                  class="relative flex items-center justify-center gap-x-1.5 rounded-xl px-2.5 py-1.5 text-sm font-medium transition-all hover:bg-white/10 active:scale-[0.98]">
+                                  class="flex items-center justify-center gap-x-1.5 rounded-xl px-2.5 py-1.5 text-sm font-medium transition-all hover:bg-white/10 active:scale-[0.98]">
                               <i class="fa-solid fa-hand-pointer text-orange-400"></i>
                               <span class="hidden text-white/80 sm:inline">Cursor</span>
-                              <span id="tool-tier-cursor" class="absolute -right-0.5 -top-1 hidden min-w-[16px] rounded-full bg-orange-500 px-1 text-center text-[9px] font-bold text-white">0</span>
                           </button>
                           <div id="tool-timer-cursor" class="min-h-[12px] text-center font-mono text-[9px] leading-none text-white/40"></div>
                           <div class="flex gap-1">
@@ -370,10 +435,9 @@
                       </div>
                       <div class="tool-rental-card flex min-w-[104px] flex-col items-stretch gap-1 rounded-2xl border border-white/10 bg-[#0a0a0f]/80 px-2 py-1.5">
                           <button type="button" onclick="handleEnergyWallButtonClick()" id="quick-wall-btn"
-                                  class="relative flex items-center justify-center gap-x-1.5 rounded-xl px-2.5 py-1.5 text-sm font-medium transition-all hover:bg-white/10 active:scale-[0.98]">
+                                  class="flex items-center justify-center gap-x-1.5 rounded-xl px-2.5 py-1.5 text-sm font-medium transition-all hover:bg-white/10 active:scale-[0.98]">
                               <i class="fa-solid fa-shield-alt text-violet-400"></i>
                               <span class="hidden text-white/80 sm:inline">Wall</span>
-                              <span id="tool-tier-wall" class="absolute -right-0.5 -top-1 hidden min-w-[16px] rounded-full bg-violet-500 px-1 text-center text-[9px] font-bold text-white">0</span>
                           </button>
                           <div id="tool-timer-wall" class="min-h-[12px] text-center font-mono text-[9px] leading-none text-white/40"></div>
                           <div class="flex gap-1">
@@ -385,10 +449,9 @@
                       </div>
                       <div class="tool-rental-card flex min-w-[104px] flex-col items-stretch gap-1 rounded-2xl border border-white/10 bg-[#0a0a0f]/80 px-2 py-1.5">
                           <button type="button" onclick="handleSpaceshipToolClick()" id="quick-ship-btn"
-                                  class="relative flex items-center justify-center gap-x-1.5 rounded-xl px-2.5 py-1.5 text-sm font-medium transition-all hover:bg-white/10 active:scale-[0.98]">
+                                  class="flex items-center justify-center gap-x-1.5 rounded-xl px-2.5 py-1.5 text-sm font-medium transition-all hover:bg-white/10 active:scale-[0.98]">
                               <i class="fa-solid fa-rocket text-emerald-400"></i>
                               <span class="hidden text-white/80 sm:inline">Ship</span>
-                              <span id="tool-tier-ship" class="absolute -right-0.5 -top-1 hidden min-w-[16px] rounded-full bg-emerald-500 px-1 text-center text-[9px] font-bold text-white">0</span>
                           </button>
                           <div id="tool-timer-ship" class="min-h-[12px] text-center font-mono text-[9px] leading-none text-white/40"></div>
                           <div class="flex gap-1">
@@ -541,7 +604,10 @@
                                       class="creature-preview-canvas block h-[82px] w-[82px] max-h-[82px] max-w-[82px] rounded-xl"></canvas>
                           </div>
                           <div class="min-w-0 flex-1">
-                              <div id="inspect-name" class="text-[15px] font-semibold text-emerald-400 leading-tight"></div>
+                              <div id="inspect-title-block" class="min-h-[3.75rem]">
+                                  <div id="inspect-name" class="text-[15px] font-semibold text-emerald-400 leading-snug line-clamp-2 break-words"></div>
+                                  <div id="inspect-alpha-badge" class="mt-0.5 h-4 text-[10px] font-bold leading-4 text-yellow-400/90"></div>
+                              </div>
 
                               <div class="mt-0.5 flex gap-x-3 text-xs">
                                   <div><span class="text-white/50">Gen:</span> <span id="inspect-gen" class="font-mono"></span></div>
@@ -759,6 +825,22 @@
                       </h3>
                       <button onclick="playUIClick(); hideMusicModal()" class="text-3xl text-white/60 hover:text-white">&times;</button>
                   </div>
+                  <div class="mb-4 rounded-2xl border border-emerald-500/25 bg-emerald-500/10 p-3">
+                      <div class="flex items-center justify-between gap-2">
+                          <div>
+                              <div class="text-xs font-semibold text-emerald-300">Music Mode Rental</div>
+                              <div id="music-rental-timer" class="mt-0.5 font-mono text-[11px] text-white/50">Not active — 1 Crystal / 5 min</div>
+                          </div>
+                          <div class="flex gap-1.5">
+                              <button type="button" onclick="purchaseToolRental('music')" id="tool-purchase-music"
+                                      class="rounded-lg bg-emerald-600/90 px-2.5 py-1 text-[10px] font-semibold text-white hover:bg-emerald-500">1💎 5m</button>
+                              <button type="button" onclick="cancelToolRental('music')" id="tool-cancel-music"
+                                      class="rounded-lg bg-white/10 px-2.5 py-1 text-[10px] font-medium text-white/70 hover:bg-white/20">Cancel</button>
+                          </div>
+                      </div>
+                      <div class="mt-2 text-[10px] text-white/45">Timer keeps running while you switch modes or turn music mode off.</div>
+                  </div>
+
                   <div class="text-sm text-white/60 mb-4">
                       Choose a mode. Each track dramatically changes how the world behaves.
                   </div>
@@ -796,12 +878,12 @@
                       </button>
                   </div>
 
-                  <div class="mt-6 flex justify-between items-center">
-                      <button onclick="playUIClick(); stopMusicMode()"
-                              class="px-5 py-2 rounded-2xl bg-white/10 hover:bg-white/20 text-sm">
-                          Stop Music
+                  <div class="mt-6 flex justify-between items-center gap-3">
+                      <button onclick="playUIClick(); exitMusicMode()"
+                              class="rounded-2xl border border-white/15 bg-white/10 px-5 py-2.5 text-sm font-medium hover:bg-white/20">
+                          <i class="fa-solid fa-power-off mr-1.5 text-white/60"></i>Music Mode Off
                       </button>
-                      <div class="text-xs text-white/50">Track resets when stopped</div>
+                      <div class="text-right text-[10px] leading-snug text-white/45">Exits Prune / Replicate / Evolve effects.<br>Not the same as mute — rental timer still runs.</div>
                   </div>
               </div>
           </div>
@@ -1724,9 +1806,10 @@
 
                       el.addEventListener('mousemove', (e) => {
                           this.syncFromClient(e.clientX, e.clientY);
-                          if (spaceshipActive && this._shipDragging && e.buttons > 0) {
-                              const canvas = this.clientToCanvas(e.clientX, e.clientY);
-                              shipX = constrain(canvas.x, 30, width - 30);
+                          if (spaceshipActive && this._shipDragging && e.buttons > 0 && this._lastClient) {
+                              const dx = e.clientX - this._lastClient.x;
+                              if (Math.abs(dx) > 0.4) rotateShipOrbit(dx * SHIP_ORBIT_ROTATE_DRAG);
+                              this._lastClient = { x: e.clientX, y: e.clientY };
                           }
                       });
 
@@ -1739,8 +1822,6 @@
 
                           if (spaceshipActive) {
                               clearLongPress();
-                              const canvas = this.clientToCanvas(e.clientX, e.clientY);
-                              shipX = constrain(canvas.x, 30, width - 30);
                               this._shipDragging = true;
                               this._touchMode = 'ship';
                               if (e.pointerType === 'mouse') return;
@@ -1771,8 +1852,7 @@
 
                           if (spaceshipActive && this._shipDragging && e.buttons > 0) {
                               this._touchMode = 'ship';
-                              const canvas = this.clientToCanvas(e.clientX, e.clientY);
-                              shipX = constrain(canvas.x, 30, width - 30);
+                              if (Math.abs(dx) > 0.4) rotateShipOrbit(dx * SHIP_ORBIT_ROTATE_DRAG);
                               e.preventDefault();
                               return;
                           }
@@ -1944,9 +2024,11 @@
               let redHazardsUnlocked = false;
               let cursorHazardUnlocked = false;
               let toolRentals = {
-                  cursor: { endsAt: 0, tier: 0 },
-                  wall: { endsAt: 0, tier: 0 },
-                  ship: { endsAt: 0, tier: 0 }
+                  cursor: { endsAt: 0 },
+                  wall: { endsAt: 0 },
+                  ship: { endsAt: 0 },
+                  hazard: { endsAt: 0 },
+                  music: { endsAt: 0 }
               };
               let cursorHazardDragIndex = -1;
               let freeMode = false;
@@ -1976,12 +2058,15 @@
               // --- Audio Variables ---
               let masterVolume = 0.12;
               let effectsVolume = 0.65;
+              let musicVolume = 0.8;
+              let audioMuted = false;
               let ambientVolume = 1.6;
               let pitchShift = 0.98;
               let soundDensity = 1.55;
               let defaultWaveform = 'triangle';
               let audioCtx;
               let masterGain;
+              let sfxGain;
               let compressor;
               let activeVoices = 0;
               const MAX_VOICES = 26;
@@ -2000,6 +2085,9 @@
               pruneAudio.loop = true;
               replicateAudio.loop = true;
               evolveAudio.loop = true;
+              pruneAudio.volume = musicVolume;
+              replicateAudio.volume = musicVolume;
+              evolveAudio.volume = musicVolume;
 
               // ==================== REAL AUDIO ANALYSIS ====================
               let audioContext;
@@ -2126,9 +2214,17 @@
               // =====================================================
               // SPACESHIP (Space Invaders style power-up)
               // =====================================================
+              const SHIP_CAMERA_ZOOM = 0.78;
+              const SHIP_ORBIT_ROTATE_KEY = 0.028;
+              const SHIP_ORBIT_ROTATE_DRAG = 0.0055;
+              const SHIP_ORBIT_ROTATE_HOLD = 0.034;
               let spaceshipActive = false;
+              let shipOrbitHoldDir = 0;
+              let shipMapControlsBound = false;
               let shipX = 400;
               let shipY = 0;
+              let shipOrbitAngle = -Math.PI / 2;
+              let shipZoomSaved = 1.0;
               let bullets = [];
               let lastShotTime = 0;
               let showMobileControls = false;
@@ -3741,18 +3837,26 @@
                   }
               }
               // --- Core Audio Engine ---
+              function getSfxOutputNode() {
+                  getAudioContext();
+                  return sfxGain || masterGain;
+              }
+
               function getAudioContext() {
                   if (!audioCtx) {
                       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                       masterGain = audioCtx.createGain();
+                      sfxGain = audioCtx.createGain();
                       compressor = audioCtx.createDynamicsCompressor();
                       compressor.threshold.value = -18;
                       compressor.knee.value = 8;
                       compressor.ratio.value = 12;
                       compressor.attack.value = 0.003;
                       compressor.release.value = 0.25;
-                      masterGain.gain.value = masterVolume;
+                      sfxGain.connect(masterGain);
                       masterGain.connect(compressor);
+                      applySfxMasterGain();
+                      applySfxVolume();
                       compressor.connect(audioCtx.destination);
                   }
                   if (audioCtx.state === 'suspended') audioCtx.resume();
@@ -3772,9 +3876,9 @@
                   cursorHumGain.gain.value = 0;
                   cursorHumOsc.connect(cursorHumFilter);
                   cursorHumFilter.connect(cursorHumGain);
-                  cursorHumGain.connect(masterGain);
+                  cursorHumGain.connect(getSfxOutputNode());
                   cursorHumOsc.start();
-                  const targetVol = 0.015 * effectsVolume;
+                  const targetVol = audioMuted ? 0 : 0.015;
                   cursorHumGain.gain.linearRampToValueAtTime(targetVol, ctx.currentTime + 0.8);
               }
 
@@ -3818,7 +3922,7 @@
                   filter.type = 'lowpass';
                   filter.frequency.value = 2100;
 
-                  let finalVol = finalVolume * effectsVolume * 1.12;
+                  let finalVol = finalVolume * 1.12;
 
                   if (activeVoices > 16) {
                       const excess = activeVoices - 16;
@@ -3831,7 +3935,7 @@
 
                   osc.connect(filter);
                   filter.connect(gain);
-                  gain.connect(masterGain);
+                  gain.connect(getSfxOutputNode());
                   osc.start();
 
                   setTimeout(() => {
@@ -3909,11 +4013,11 @@
                   osc1.frequency.value = 85;
                   filter1.type = 'lowpass';
                   filter1.frequency.value = 420;
-                  gain1.gain.value = 0.16 * effectsVolume;
+                  gain1.gain.value = 0.16;
                   gain1.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.65);
                   osc1.connect(filter1);
                   filter1.connect(gain1);
-                  gain1.connect(masterGain);
+                  gain1.connect(getSfxOutputNode());
                   osc1.start();
                   setTimeout(() => { try { osc1.stop(); } catch (e) { } }, 720);
                   // Noise crack + mid tone
@@ -3934,12 +4038,12 @@
                       noiseFilter.type = 'bandpass';
                       noiseFilter.frequency.value = 1200;
                       noiseFilter.Q.value = 1.8;
-                      noiseGain.gain.value = 0.08 * effectsVolume;
+                      noiseGain.gain.value = 0.08;
                       noiseGain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.45);
                       osc2.connect(noiseFilter);
                       noise.connect(noiseFilter);
                       noiseFilter.connect(noiseGain);
-                      noiseGain.connect(masterGain);
+                      noiseGain.connect(getSfxOutputNode());
                       osc2.start();
                       noise.start();
                       setTimeout(() => {
@@ -3966,11 +4070,11 @@
                   noiseFilter.type = 'bandpass';
                   noiseFilter.frequency.value = 2650 + sizeMult * 350;
                   noiseFilter.Q.value = 4.2;
-                  noiseGain.gain.value = 0.26 * effectsVolume * Math.min(sizeMult, 1.7);
+                  noiseGain.gain.value = 0.26 * Math.min(sizeMult, 1.7);
                   noiseGain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.48);
                   noise.connect(noiseFilter);
                   noiseFilter.connect(noiseGain);
-                  noiseGain.connect(masterGain);
+                  noiseGain.connect(getSfxOutputNode());
                   noise.start();
                   setTimeout(() => {
                       try { noise.stop(); } catch (e) { }
@@ -3984,11 +4088,11 @@
                   osc.frequency.value = 1720 + sizeMult * 280;
                   filter.type = 'highpass';
                   filter.frequency.value = 1350;
-                  gain.gain.value = 0.19 * effectsVolume;
+                  gain.gain.value = 0.19;
                   gain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.28);
                   osc.connect(filter);
                   filter.connect(gain);
-                  gain.connect(masterGain);
+                  gain.connect(getSfxOutputNode());
                   osc.start();
                   setTimeout(() => {
                       try { osc.stop(); } catch (e) { }
@@ -4006,11 +4110,11 @@
                   osc.frequency.value = 920;
                   filter.type = 'lowpass';
                   filter.frequency.value = 2200;
-                  gain.gain.value = 0.22 * effectsVolume;
+                  gain.gain.value = 0.22;
                   gain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.16);
                   osc.connect(filter);
                   filter.connect(gain);
-                  gain.connect(masterGain);
+                  gain.connect(getSfxOutputNode());
                   osc.start();
                   setTimeout(() => {
                       try { osc.stop(); } catch (e) { }
@@ -4029,11 +4133,11 @@
                   filter.type = 'bandpass';
                   filter.frequency.value = 1100;
                   filter.Q.value = 2.5;
-                  gain.gain.value = 0.18 * effectsVolume;
+                  gain.gain.value = 0.18;
                   gain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.22);
                   osc.connect(filter);
                   filter.connect(gain);
-                  gain.connect(masterGain);
+                  gain.connect(getSfxOutputNode());
                   osc.start();
                   setTimeout(() => {
                       try { osc.stop(); } catch (e) { }
@@ -4051,11 +4155,11 @@
                   osc.frequency.value = 420;
                   filter.type = 'lowpass';
                   filter.frequency.value = 900;
-                  gain.gain.value = 0.16 * effectsVolume;
+                  gain.gain.value = 0.16;
                   gain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.35);
                   osc.connect(filter);
                   filter.connect(gain);
-                  gain.connect(masterGain);
+                  gain.connect(getSfxOutputNode());
                   osc.start();
                   setTimeout(() => {
                       try { osc.stop(); } catch (e) { }
@@ -4138,6 +4242,7 @@
                       return;
                   }
                   if (modal.parentElement !== document.body) document.body.appendChild(modal);
+                  updateMusicRentalUI();
                   modal.classList.remove('hidden');
                   modal.classList.add('flex');
                   modal.style.display = 'flex';
@@ -4154,6 +4259,11 @@
               }
 
               function activateMusicMode(mode) {
+                  if (!isToolRentalActive('music')) {
+                      addFloatingText(width / 2, 72, 'Rent music modes: 1 Crystal / 5 min', '#f87171');
+                      updateMusicRentalUI();
+                      return;
+                  }
                   stopMusicMode();
                   musicEnabled = true;
                   currentMusicMode = mode;
@@ -4237,7 +4347,116 @@
                   redHazardIntensity = originalRedHazardIntensity || 1;
                   evolveEnvTimer = 0;
 
-                  addFloatingText(width / 2, 70, "Music Stopped", '#f87171');
+                  addFloatingText(width / 2, 70, "Music Mode Off", '#fbbf24');
+              }
+
+              function exitMusicMode() {
+                  stopMusicMode();
+              }
+
+              function applyMusicTrackVolume() {
+                  const v = audioMuted ? 0 : musicVolume;
+                  pruneAudio.volume = v;
+                  replicateAudio.volume = v;
+                  evolveAudio.volume = v;
+              }
+
+              function applySfxMasterGain() {
+                  if (masterGain) masterGain.gain.value = audioMuted ? 0 : masterVolume;
+              }
+
+              function applySfxVolume() {
+                  if (sfxGain) {
+                      sfxGain.gain.value = audioMuted ? 0 : effectsVolume;
+                  }
+                  if (cursorHumGain && cursorHumOsc) {
+                      const ctx = getAudioContext();
+                      const targetVol = audioMuted ? 0 : 0.015;
+                      try {
+                          cursorHumGain.gain.cancelScheduledValues(ctx.currentTime);
+                          cursorHumGain.gain.linearRampToValueAtTime(targetVol, ctx.currentTime + 0.06);
+                      } catch (e) { }
+                  }
+              }
+
+              function toggleAudioMute() {
+                  playUIClick();
+                  audioMuted = !audioMuted;
+                  applyAudioMuteState();
+              }
+
+              function applyAudioMuteState() {
+                  applySfxMasterGain();
+                  applySfxVolume();
+                  applyMusicTrackVolume();
+                  const btn = document.getElementById('audio-mute-btn');
+                  const icon = document.getElementById('audio-mute-icon');
+                  if (btn) {
+                      btn.classList.toggle('border-rose-400/50', audioMuted);
+                      btn.classList.toggle('bg-rose-500/25', audioMuted);
+                  }
+                  if (icon) {
+                      icon.className = audioMuted
+                          ? 'fa-solid fa-volume-xmark text-rose-300'
+                          : 'fa-solid fa-volume-high';
+                  }
+              }
+
+              function clamp01(value) {
+                  const n = parseFloat(value);
+                  if (!isFinite(n)) return 0;
+                  return Math.max(0, Math.min(1, n));
+              }
+
+              function setMusicVolumeFromSlider(value) {
+                  musicVolume = clamp01(value / 100);
+                  applyMusicTrackVolume();
+              }
+
+              function setSfxVolumeFromSlider(value) {
+                  effectsVolume = clamp01(value / 100);
+                  applySfxVolume();
+              }
+
+              function setupAudioControls() {
+                  const musicSlider = document.getElementById('music-volume-slider');
+                  const sfxSlider = document.getElementById('sfx-volume-slider');
+                  if (musicSlider) {
+                      musicSlider.value = String(Math.round(musicVolume * 100));
+                      musicSlider.oninput = (e) => setMusicVolumeFromSlider(e.target.value);
+                  }
+                  if (sfxSlider) {
+                      sfxSlider.value = String(Math.round(effectsVolume * 100));
+                      sfxSlider.oninput = (e) => setSfxVolumeFromSlider(e.target.value);
+                  }
+                  applyAudioMuteState();
+              }
+
+              window.setMusicVolumeFromSlider = setMusicVolumeFromSlider;
+              window.setSfxVolumeFromSlider = setSfxVolumeFromSlider;
+              window.toggleAudioMute = toggleAudioMute;
+
+              function updateMusicRentalUI() {
+                  const timerEl = document.getElementById('music-rental-timer');
+                  const purchaseBtn = document.getElementById('tool-purchase-music');
+                  const cancelBtn = document.getElementById('tool-cancel-music');
+                  const active = isToolRentalActive('music');
+                  if (timerEl) {
+                      timerEl.textContent = active
+                          ? formatAutomationTime(getToolRentalRemainingMs('music')) + ' remaining'
+                          : 'Not active — 1 Crystal / 5 min';
+                      timerEl.className = active
+                          ? 'mt-0.5 font-mono text-[11px] text-emerald-300'
+                          : 'mt-0.5 font-mono text-[11px] text-white/50';
+                  }
+                  if (purchaseBtn) {
+                      purchaseBtn.disabled = aetheriumCrystals < TOOL_RENTAL_CRYSTAL_COST;
+                      purchaseBtn.classList.toggle('opacity-40', aetheriumCrystals < TOOL_RENTAL_CRYSTAL_COST);
+                  }
+                  if (cancelBtn) {
+                      cancelBtn.disabled = !active;
+                      cancelBtn.classList.toggle('opacity-40', !active);
+                  }
               }
 
               // ==================== HELPER FUNCTIONS ====================
@@ -4841,12 +5060,24 @@
               }
 
               function formatDust(mg) {
-                  if (mg >= 1000000000) return (mg / 1000000000).toFixed(2) + " t";
-                  else if (mg >= 1000000) return (mg / 1000000).toFixed(2) + " kg";
-                  else if (mg >= 1000) return (mg / 1000).toFixed(2) + " g";
-                  else if (mg >= 1) return mg.toFixed(2) + " mg";
-                  else if (mg > 0) return (mg * 1000).toFixed(1) + " µg";
-                  else return "0 mg";
+                  if (!isFinite(mg) || mg === 0) return '0 mg';
+
+                  const abs = Math.abs(mg);
+                  const sign = mg < 0 ? '-' : '';
+                  let value, unit;
+
+                  if (abs >= 1e9) { value = abs / 1e9; unit = 't'; }
+                  else if (abs >= 1e6) { value = abs / 1e6; unit = 'kg'; }
+                  else if (abs >= 1e3) { value = abs / 1e3; unit = 'g'; }
+                  else if (abs >= 1) { value = abs; unit = 'mg'; }
+                  else { value = abs * 1e3; unit = 'µg'; }
+
+                  if (abs >= 1e6 || value >= 1e4) {
+                      return sign + value.toExponential(2).replace('+', '') + ' ' + unit;
+                  }
+                  if (value >= 100) return sign + value.toFixed(1) + ' ' + unit;
+                  if (value >= 1) return sign + value.toFixed(2) + ' ' + unit;
+                  return sign + value.toFixed(1) + ' ' + unit;
               }
 
               function formatLargeNumber(n) {
@@ -4891,20 +5122,105 @@
                   }, 1000);
               }
 
+              function getShipOrbitCenter() {
+                  return { x: width / 2, y: height / 2 };
+              }
+
+              function getShipOrbitRadius() {
+                  return min(width, height) * 0.44;
+              }
+
+              function updateShipPositionFromOrbit() {
+                  const center = getShipOrbitCenter();
+                  const radius = getShipOrbitRadius();
+                  shipX = center.x + cos(shipOrbitAngle) * radius;
+                  shipY = center.y + sin(shipOrbitAngle) * radius;
+              }
+
+              function getShipInwardAngle() {
+                  const center = getShipOrbitCenter();
+                  return atan2(center.y - shipY, center.x - shipX);
+              }
+
+              function rotateShipOrbit(deltaRadians) {
+                  if (!deltaRadians) return;
+                  shipOrbitAngle += deltaRadians;
+                  updateShipPositionFromOrbit();
+              }
+
+              function applySpaceshipCameraZoom() {
+                  shipZoomSaved = zoomLevel;
+                  Viewport.setZoom(SHIP_CAMERA_ZOOM, width / 2, height / 2);
+              }
+
+              function restoreSpaceshipCameraZoom() {
+                  Viewport.setZoom(shipZoomSaved || 1, width / 2, height / 2);
+              }
+
               function setupSpaceshipControls() {
                   if (spaceshipControlsBound) return;
                   spaceshipControlsBound = true;
                   document.addEventListener('keydown', function (e) {
                       if (!spaceshipActive) return;
 
-                      if (e.key === 'ArrowLeft') shipX -= 18;
-                      if (e.key === 'ArrowRight') shipX += 18;
+                      if (e.key === 'ArrowLeft') rotateShipOrbit(-SHIP_ORBIT_ROTATE_KEY);
+                      if (e.key === 'ArrowRight') rotateShipOrbit(SHIP_ORBIT_ROTATE_KEY);
                       if (e.key === ' ' || e.key === 'Spacebar') {
                           e.preventDefault();
                           shootFromShip();
                       }
-                      shipX = constrain(shipX, 30, width - 30);
                   });
+                  setupShipMapControls();
+              }
+
+              function bindShipOrbitButton(btn, direction) {
+                  if (!btn) return;
+                  const start = (e) => {
+                      if (!spaceshipActive) return;
+                      e.preventDefault();
+                      e.stopPropagation();
+                      shipOrbitHoldDir = direction;
+                      btn.classList.add('is-held');
+                      playUIClick();
+                  };
+                  const stop = (e) => {
+                      if (e) e.stopPropagation();
+                      if (shipOrbitHoldDir === direction) shipOrbitHoldDir = 0;
+                      btn.classList.remove('is-held');
+                  };
+                  btn.addEventListener('pointerdown', start);
+                  btn.addEventListener('pointerup', stop);
+                  btn.addEventListener('pointerleave', stop);
+                  btn.addEventListener('pointercancel', stop);
+              }
+
+              function setupShipMapControls() {
+                  if (shipMapControlsBound) return;
+                  shipMapControlsBound = true;
+
+                  bindShipOrbitButton(document.getElementById('ship-orbit-left-btn'), -1);
+                  bindShipOrbitButton(document.getElementById('ship-orbit-right-btn'), 1);
+
+                  const fireBtn = document.getElementById('ship-fire-btn');
+                  if (fireBtn) {
+                      fireBtn.addEventListener('pointerdown', (e) => {
+                          if (!spaceshipActive) return;
+                          e.preventDefault();
+                          e.stopPropagation();
+                          playUIClick();
+                          shootFromShip();
+                      });
+                  }
+              }
+
+              function updateShipMapControls() {
+                  const panel = document.getElementById('ship-map-controls');
+                  if (!panel) return;
+                  panel.classList.toggle('hidden', !spaceshipActive);
+                  if (!spaceshipActive) {
+                      shipOrbitHoldDir = 0;
+                      panel.querySelectorAll('.ship-map-btn.is-held').forEach(btn => btn.classList.remove('is-held'));
+                  }
               }
 
               // ==================== FURNACE + DUST/CRYSTAL CONVERSION (RESTORED) ====================
@@ -5074,12 +5390,12 @@
 
                   const redBtn = document.getElementById('buy-red-btn');
                   if (redBtn) {
-                      if (redHazardsUnlocked) {
-                          redBtn.textContent = redHazardsEnabled ? 'Enabled' : 'Disabled';
-                          redBtn.disabled = true;
+                      if (isToolRentalActive('hazard')) {
+                          redBtn.textContent = redHazardsEnabled ? 'Rented • On' : 'Rented • Off';
+                          redBtn.disabled = false;
                       } else {
-                          redBtn.textContent = 'Enable';
-                          redBtn.disabled = totalScore < 180;
+                          redBtn.textContent = 'Rent 1💎';
+                          redBtn.disabled = aetheriumCrystals < TOOL_RENTAL_CRYSTAL_COST;
                       }
                   }
 
@@ -5096,10 +5412,9 @@
               }
 
               function normalizeToolRentals() {
-                  for (const key of ['cursor', 'wall', 'ship']) {
-                      if (!toolRentals[key]) toolRentals[key] = { endsAt: 0, tier: 0 };
+                  for (const key of ['cursor', 'wall', 'ship', 'hazard', 'music']) {
+                      if (!toolRentals[key]) toolRentals[key] = { endsAt: 0 };
                       toolRentals[key].endsAt = toolRentals[key].endsAt || 0;
-                      toolRentals[key].tier = toolRentals[key].tier || 0;
                   }
               }
               normalizeToolRentals();
@@ -5119,12 +5434,23 @@
                       if (cursorHazardPlacing || cursorHazardFollow) finishCursorHazardPlacement();
                       cursorHazardActive = false;
                       cursorHazardDragIndex = -1;
+                  } else if (toolId === 'hazard') {
+                      redHazardsEnabled = false;
+                      redHazards = [];
                   } else if (toolId === 'wall') {
                       setEnergyWallMode(false);
+                      energyWalls = [];
+                      isDrawingWall = false;
+                      currentWallPreview = null;
                   } else if (toolId === 'ship') {
                       spaceshipActive = false;
+                      shipOrbitHoldDir = 0;
                       bullets = [];
+                      restoreSpaceshipCameraZoom();
                       updateSpaceshipButtonStyle();
+                      updateShipMapControls();
+                  } else if (toolId === 'music') {
+                      stopMusicMode();
                   }
               }
 
@@ -5140,15 +5466,15 @@
 
                   const rental = toolRentals[toolId];
                   const now = Date.now();
-                  if (rental.endsAt > now) rental.endsAt += TOOL_RENTAL_DURATION_MS;
-                  else rental.endsAt = now + TOOL_RENTAL_DURATION_MS;
-                  rental.tier += 1;
+                  const wasActive = rental.endsAt > now;
+                  rental.endsAt = now + TOOL_RENTAL_DURATION_MS;
 
                   playTone(520, 'sine', 0.12, 0.45);
                   setTimeout(() => playTone(780, 'sine', 0.1, 0.35), 80);
-                  addFloatingText(width / 2, 72, '+5 min tool rental', '#34d399');
+                  addFloatingText(width / 2, 72, wasActive ? 'Rental topped off to 5 min' : '5 min rental active', '#34d399');
                   updateToolRentalUI();
                   updateQuickButtons();
+                  updateMusicRentalUI();
               }
 
               function cancelToolRental(toolId) {
@@ -5174,12 +5500,13 @@
                   addFloatingText(width / 2, 88, '+500g dust refunded', '#fbbf24');
                   updateToolRentalUI();
                   updateQuickButtons();
+                  updateMusicRentalUI();
               }
 
               function tickToolRentals() {
                   normalizeToolRentals();
                   const now = Date.now();
-                  for (const toolId of ['cursor', 'wall', 'ship']) {
+                  for (const toolId of ['cursor', 'wall', 'ship', 'hazard', 'music']) {
                       const rental = toolRentals[toolId];
                       if (rental.endsAt > 0 && rental.endsAt <= now) {
                           rental.endsAt = 0;
@@ -5195,29 +5522,13 @@
 
               function updateToolRentalUI() {
                   normalizeToolRentals();
-                  const toolMeta = {
-                      cursor: { color: 'orange', activeRing: 'ring-orange-300/50', activeBg: 'bg-orange-500/25' },
-                      wall: { color: 'violet', activeRing: 'ring-violet-300/50', activeBg: 'bg-violet-500/25' },
-                      ship: { color: 'emerald', activeRing: 'ring-emerald-300/50', activeBg: 'bg-emerald-500/25' }
-                  };
 
-                  for (const toolId of ['cursor', 'wall', 'ship']) {
+                  for (const toolId of ['cursor', 'wall', 'ship', 'hazard']) {
                       const active = isToolRentalActive(toolId);
-                      const rental = toolRentals[toolId];
-                      const tierEl = document.getElementById('tool-tier-' + toolId);
                       const timerEl = document.getElementById('tool-timer-' + toolId);
                       const purchaseBtn = document.getElementById('tool-purchase-' + toolId);
                       const cancelBtn = document.getElementById('tool-cancel-' + toolId);
-                      const meta = toolMeta[toolId];
 
-                      if (tierEl) {
-                          if (rental.tier > 0) {
-                              tierEl.textContent = String(rental.tier);
-                              tierEl.classList.remove('hidden');
-                          } else {
-                              tierEl.classList.add('hidden');
-                          }
-                      }
                       if (timerEl) {
                           timerEl.textContent = active
                               ? formatAutomationTime(getToolRentalRemainingMs(toolId)) + ' left'
@@ -5234,14 +5545,38 @@
                   }
                   updateEnergyWallButtonStyle();
                   updateSpaceshipButtonStyle();
+                  updateHazardFieldsButtonStyle();
+                  updateMusicRentalUI();
+              }
+
+              function updateHazardFieldsButtonStyle() {
+                  const btn = document.getElementById('quick-red-btn');
+                  if (!btn) return;
+                  const rented = isToolRentalActive('hazard');
+                  btn.classList.toggle('ring-1', rented);
+                  btn.classList.toggle('ring-red-300/50', rented);
+                  btn.classList.toggle('bg-red-500/25', redHazardsEnabled && rented);
+                  if (redHazardsEnabled && rented) {
+                      btn.title = 'Hazard fields active — click to adjust';
+                  } else if (rented) {
+                      btn.title = 'Open hazard field settings';
+                  } else {
+                      btn.title = 'Rent Hazard Fields: 1 Crystal / 5 min';
+                  }
+              }
+
+              function handleHazardFieldsToolClick() {
+                  playUIClick();
+                  if (!isToolRentalActive('hazard')) {
+                      addFloatingText(width / 2, 72, 'Rent Hazard Fields: 1 Crystal / 5 min', '#f87171');
+                      return;
+                  }
+                  if (typeof showRedHazardsMenu === 'function') showRedHazardsMenu();
+                  else toggleRedHazardsQuick();
               }
 
               function updateQuickButtons() {
-                  const redBtn = document.getElementById('quick-red-btn');
-                  if (redBtn) {
-                      redBtn.classList.toggle('bg-red-500/30', redHazardsEnabled && redHazardsUnlocked);
-                      redBtn.classList.toggle('border-red-400/50', redHazardsEnabled && redHazardsUnlocked);
-                  }
+                  updateHazardFieldsButtonStyle();
                   const cursorBtn = document.getElementById('quick-cursor-btn');
                   if (cursorBtn) {
                       const cursorLit = isToolRentalActive('cursor') && (cursorHazardPlacing || cursorHazardFollow || placedHazards.length > 0);
@@ -5262,16 +5597,17 @@
               }
 
               function buyRedHazards() {
-                  if (redHazardsUnlocked || !ScoreEngine.spend(180)) return;
-                  redHazardsUnlocked = true;
+                  if (isToolRentalActive('hazard')) {
+                      toggleRedHazardsFromStore();
+                      return;
+                  }
+                  purchaseToolRental('hazard');
                   redHazardsEnabled = true;
                   if (redHazards.length < 6) {
                       for (let i = 0; i < 6; i++) redHazards.push(new RedHazard());
                   }
-                  addFloatingText(width / 2, 80, '-180', '#f87171');
                   updateCheatsUI();
                   updateQuickButtons();
-                  updateMainStats();
               }
 
               // ==================== END FURNACE + CONVERSION ====================
@@ -5406,7 +5742,6 @@
 
               function getExtractEggBlockReason(creature) {
                   if (!creature) return 'No creature selected';
-                  if (creature.isPredator) return 'Predators cannot be extracted';
                   if (eggs.length >= MAX_EGGS) return `Egg inventory full (${MAX_EGGS}/${MAX_EGGS})`;
                   if (totalScore < EXTRACT_EGG_COST) return `Need ${formatScore(EXTRACT_EGG_COST)} points`;
                   return null;
@@ -5432,9 +5767,6 @@
                   if (!creature) {
                       hint.textContent = 'Select a creature to extract';
                       hint.className = 'mt-1 text-center text-[10px] leading-snug text-white/45';
-                  } else if (creature.isPredator) {
-                      hint.textContent = 'Predators cannot be preserved as eggs';
-                      hint.className = 'mt-1 text-center text-[10px] leading-snug text-red-400/90';
                   } else if (eggs.length >= MAX_EGGS) {
                       hint.textContent = 'Free up egg inventory space first';
                       hint.className = 'mt-1 text-center text-[10px] leading-snug text-amber-300/90';
@@ -5488,6 +5820,8 @@
                       killCount: creature.killCount || 0,
                       childrenCount: creature.childrenCount || 0,
                       traits: JSON.parse(JSON.stringify(creature.traits || {})),
+                      isPredator: !!creature.isPredator,
+                      socialPredator: !!creature.socialPredator,
                       brain: brainData
                   };
                   eggs.push(eggData);
@@ -5521,6 +5855,10 @@
                   if (eggData.name) creature.name = eggData.name;
                   if (eggData.killCount) creature.killCount = eggData.killCount;
                   if (eggData.childrenCount) creature.childrenCount = eggData.childrenCount;
+                  if (eggData.isPredator) {
+                      creature.isPredator = true;
+                      creature.socialPredator = !!eggData.socialPredator;
+                  }
                   creature.currentThought = "Released from Incubator";
 
                   if (eggData.brain && creature.brain) {
@@ -6545,7 +6883,7 @@
               }
 
               function setup() {
-                  console.info('[MiniSimmy] build=mobile-opt-2026-06-17k tier=' + DeviceProfile.tier + ' tool-rentals=crystal');
+                  console.info('[MiniSimmy] build=orbital-ship-v2-2026-06-17e tier=' + DeviceProfile.tier + ' ship=radial-orbit');
                   updateToolRentalUI();
                   updateQuickButtons();
                   debugLog("Setup started");
@@ -6621,6 +6959,7 @@
                       debugLog("injectPulseAnimationStyle called (delayed)");
 
                       setupSpaceshipControls();
+                      setupAudioControls();
                       debugLog("setupSpaceshipControls called (delayed)");
 
                       debugLog("Before auto-select (delayed)");
@@ -7828,65 +8167,80 @@
 
                   // ==================== SPACESHIP + BULLETS ====================
                   if (spaceshipActive) {
-                      // Draw improved spaceship
+                      if (keyIsDown(LEFT_ARROW)) rotateShipOrbit(-0.022 * timeScale);
+                      if (keyIsDown(RIGHT_ARROW)) rotateShipOrbit(0.022 * timeScale);
+                      if (shipOrbitHoldDir !== 0) rotateShipOrbit(shipOrbitHoldDir * SHIP_ORBIT_ROTATE_HOLD * timeScale);
+
+                      const orbitCenter = getShipOrbitCenter();
+                      const orbitRadius = getShipOrbitRadius();
+                      noFill();
+                      stroke(34, 211, 238, 38);
+                      strokeWeight(1.2);
+                      ellipse(orbitCenter.x, orbitCenter.y, orbitRadius * 2);
+
+                      const inward = getShipInwardAngle();
                       push();
                       translate(shipX, shipY);
+                      rotate(inward + HALF_PI);
 
-                      // Main body - sleeker fighter
-                      fill(52, 211, 153);
-                      noStroke();
+                      // Soft hull glow
+                      noFill();
+                      stroke(34, 211, 238, 55);
+                      strokeWeight(2.2);
+                      ellipse(0, 1, 20, 24);
+
+                      // Compact stealth hull
+                      fill(30, 41, 59);
+                      stroke(6, 182, 212, 190);
+                      strokeWeight(1);
                       beginShape();
-                      vertex(0, -26);     // nose tip
-                      vertex(-13, -6);
-                      vertex(-18, 10);
-                      vertex(-9, 17);
-                      vertex(9, 17);
-                      vertex(18, 10);
-                      vertex(13, -6);
+                      vertex(0, -16);
+                      vertex(-3.5, -11);
+                      vertex(-6.5, 1);
+                      vertex(-4.5, 8);
+                      vertex(0, 10);
+                      vertex(4.5, 8);
+                      vertex(6.5, 1);
+                      vertex(3.5, -11);
                       endShape(CLOSE);
 
-                      // Darker body shading
-                      fill(16, 185, 129);
-                      beginShape();
-                      vertex(0, -26);
-                      vertex(-13, -6);
-                      vertex(-9, 17);
-                      vertex(9, 17);
-                      vertex(13, -6);
-                      endShape(CLOSE);
+                      // Delta wing fins
+                      noStroke();
+                      fill(14, 116, 144, 230);
+                      triangle(-6.5, 2, -12, 9, -4.5, 8);
+                      triangle(6.5, 2, 12, 9, 4.5, 8);
 
-                      // Cockpit
-                      fill(15, 23, 42);
-                      ellipse(0, -8, 10, 8);
-                      fill(103, 232, 249, 200);
-                      ellipse(0, -8, 6, 5);
-
-                      // Wings
-                      fill(16, 185, 129);
-                      triangle(-18, 10, -9, 17, -24, 14);
-                      triangle(18, 10, 9, 17, 24, 14);
-
-                      // Wing edge highlights
-                      stroke(52, 211, 153);
-                      strokeWeight(1.5);
-                      line(-18, 10, -24, 14);
-                      line(18, 10, 24, 14);
+                      // Center spine highlight
+                      stroke(34, 211, 238, 120);
+                      strokeWeight(1.2);
+                      line(0, -15, 0, 8);
                       noStroke();
 
-                      // Engine glow (outer)
-                      fill(52, 211, 153, 120);
-                      ellipse(-8, 15, 10, 7);
-                      ellipse(8, 15, 10, 7);
+                      // Cockpit visor
+                      fill(8, 47, 73, 220);
+                      ellipse(0, -5.5, 4.8, 5.5);
+                      fill(103, 232, 249, 235);
+                      ellipse(0, -6.5, 2.2, 2.8);
 
-                      // Engine glow (inner bright)
-                      fill(167, 243, 208, 220);
-                      ellipse(-8, 15, 5, 4);
-                      ellipse(8, 15, 5, 4);
+                      // Wing tip beacons
+                      fill(250, 204, 21, 210);
+                      ellipse(-12, 9, 2, 2);
+                      ellipse(12, 9, 2, 2);
 
-                      // Engine core
+                      // Twin plasma engines
+                      fill(34, 211, 238, 95);
+                      ellipse(-3.5, 9.5, 4.5, 3.5);
+                      ellipse(3.5, 9.5, 4.5, 3.5);
+                      fill(186, 230, 253, 245);
+                      ellipse(-3.5, 9.5, 2, 1.6);
+                      ellipse(3.5, 9.5, 2, 1.6);
                       fill(255);
-                      ellipse(-8, 15, 2.5, 2);
-                      ellipse(8, 15, 2.5, 2);
+                      ellipse(-3.5, 9.5, 0.9, 0.7);
+                      ellipse(3.5, 9.5, 0.9, 0.7);
+
+                      // Engine exhaust trail
+                      fill(34, 211, 238, 45);
+                      ellipse(0, 13, 5, 7);
 
                       pop();
 
@@ -7898,16 +8252,22 @@
                           b.x += b.vx;
                           b.y += b.vy;
 
-                          // Improved machine gun bullet - glowing energy bolt
+                          const bulletAng = atan2(b.vy, b.vx);
+                          push();
+                          translate(b.x, b.y);
+                          rotate(bulletAng + HALF_PI);
                           fill(180, 255, 220, 200);
-                          ellipse(b.x, b.y, 5, 5);
+                          ellipse(0, 0, 5, 5);
                           fill(255, 255, 255);
-                          rect(b.x - 1.2, b.y - 8, 2.4, 16);
+                          rect(-1.2, -8, 2.4, 16);
                           fill(150, 255, 200, 180);
-                          ellipse(b.x, b.y - 10, 3, 3);
+                          ellipse(0, -10, 3, 3);
+                          pop();
 
-                          // Remove if off screen
-                          if (b.y < -20) {
+                          const center = getShipOrbitCenter();
+                          if (dist(b.x, b.y, center.x, center.y) < 20
+                              || b.x < -30 || b.x > width + 30
+                              || b.y < -30 || b.y > height + 30) {
                               bullets.splice(i, 1);
                               continue;
                           }
@@ -8247,8 +8607,11 @@
               }
 
               function handleKeyPress(e) {
-                  if (e.key === ' ') { e.preventDefault(); togglePause(); }
-                  if (e.key === '+') setTimeScale(Math.min(4, timeScale * 2));
+                  if (e.key === ' ') {
+                      e.preventDefault();
+                      return;
+                  }
+                  if (e.key === '+' || e.key === '=') setTimeScale(Math.min(4, timeScale * 2));
                   if (e.key === '-') setTimeScale(Math.max(0.25, timeScale / 2));
               }
 
@@ -8316,18 +8679,15 @@
 
               // Quick bottom bar toggles
               function toggleRedHazardsQuick() {
-                  if (!redHazardsUnlocked) {
-                      if (totalScore >= 180) {
-                          buyRedHazards();
-                      } else {
-                          showCheatsModal();
-                          return;
-                      }
+                  if (!isToolRentalActive('hazard')) {
+                      addFloatingText(width / 2, 72, 'Rent Hazard Fields: 1 Crystal / 5 min', '#f87171');
+                      return;
                   }
                   redHazardsEnabled = !redHazardsEnabled;
                   if (redHazardsEnabled && redHazards.length < 6) {
                       for (let i = 0; i < 6; i++) redHazards.push(new RedHazard());
                   }
+                  if (!redHazardsEnabled) redHazards = [];
                   updateQuickButtons();
               }
 
@@ -8381,12 +8741,13 @@
                   btn.classList.toggle('ring-emerald-300/50', spaceshipActive || rented);
                   btn.classList.toggle('bg-emerald-500/25', spaceshipActive);
                   if (spaceshipActive) {
-                      btn.title = 'Spaceship active — click to land';
+                      btn.title = 'Orbiting — use on-map controls, ←/→, or drag • Space to fire • click to land';
                   } else if (rented) {
-                      btn.title = 'Launch spaceship (rental active)';
+                      btn.title = 'Launch orbital spaceship (rental active)';
                   } else {
                       btn.title = 'Rent Spaceship: 1 Crystal / 5 min';
                   }
+                  updateShipMapControls();
               }
 
               function setEnergyWallMode(enabled) {
@@ -8605,12 +8966,14 @@
                   spaceshipActive = !spaceshipActive;
 
                   if (spaceshipActive) {
-                      shipX = width / 2;
-                      shipY = height - 45;
+                      shipOrbitAngle = -HALF_PI;
+                      updateShipPositionFromOrbit();
                       bullets = [];
                       setEnergyWallMode(false);
+                      applySpaceshipCameraZoom();
                   } else {
                       bullets = [];
+                      restoreSpaceshipCameraZoom();
                   }
                   updateSpaceshipButtonStyle();
                   updateQuickButtons();
@@ -8674,15 +9037,19 @@
               }
 
               function toggleRedHazardsFromStore() {
+                  if (!isToolRentalActive('hazard')) return;
                   redHazardsEnabled = !redHazardsEnabled;
 
                   if (redHazardsEnabled && redHazards.length < 6) {
                       for (let i = 0; i < 4; i++) {
                           redHazards.push(new RedHazard());
                       }
+                  } else if (!redHazardsEnabled) {
+                      redHazards = [];
                   }
 
                   updateCheatsUI();
+                  updateQuickButtons();
               }
 
               function buyCursorHazard() {
@@ -8725,13 +9092,7 @@
               }
 
               function toggleRedHazards() {
-                  // Legacy - now handled in store
-                  if (!redHazardsUnlocked) return;
-                  redHazardsEnabled = !redHazardsEnabled;
-
-                  if (redHazardsEnabled && redHazards.length < 6) {
-                      for (let i = 0; i < 4; i++) redHazards.push(new RedHazard());
-                  }
+                  toggleRedHazardsQuick();
               }
 
               function toggleCursorHazard() {
@@ -9055,9 +9416,11 @@
                   // Show placeholder instead of hiding
                   const nameEl = document.getElementById('inspect-name');
                   if (nameEl) {
-                      nameEl.innerHTML = `<span class="text-white/50">No creature selected</span>`;
+                      nameEl.textContent = 'No creature selected';
                       nameEl.style.color = '#64748b';
                   }
+                  const alphaBadgeEl = document.getElementById('inspect-alpha-badge');
+                  if (alphaBadgeEl) alphaBadgeEl.textContent = '';
 
                   // Clear preview canvas
                   const preview = document.getElementById('inspect-creature-preview');
@@ -9220,10 +9583,6 @@
                           drawCreaturePreview(c, previewCanvas, { fit: false, scale: 0.68 });
                       }
                   }
-
-                  // Name + Alpha badge
-                  const nameEl = document.getElementById('inspect-name');
-                  if (nameEl) nameEl.innerText = c.name;
 
                   if (typeof updateInspectorAlphaBadge === 'function') {
                       updateInspectorAlphaBadge(c);
@@ -9439,17 +9798,19 @@
 
               function updateInspectorAlphaBadge(c) {
                   const nameEl = document.getElementById('inspect-name');
+                  const badgeEl = document.getElementById('inspect-alpha-badge');
                   if (!nameEl) return;
 
                   const currentAlpha = getCurrentAlpha();
                   const isAlpha = currentAlpha && currentAlpha === c;
 
+                  nameEl.textContent = c.name;
                   if (isAlpha) {
-                      nameEl.style.color = '#facc15'; // Yellow
-                      nameEl.innerHTML = `${c.name} <span class="text-yellow-400 text-xs font-bold ml-1">★ CURRENT ALPHA</span>`;
+                      nameEl.style.color = '#facc15';
+                      if (badgeEl) badgeEl.textContent = '★ CURRENT ALPHA';
                   } else {
-                      nameEl.style.color = '#34d399'; // Default emerald
-                      nameEl.innerHTML = c.name;
+                      nameEl.style.color = '#34d399';
+                      if (badgeEl) badgeEl.textContent = '';
                   }
               }
               // Distance from point to line segment (for Energy Wall collision)
@@ -10269,8 +10630,15 @@
                   if (now - lastShotTime < 130) return;
 
                   lastShotTime = now;
-                  bullets.push({ x: shipX - 7, y: shipY - 12, vx: 0, vy: -12 });
-                  bullets.push({ x: shipX + 7, y: shipY - 12, vx: 0, vy: -12 });
+                  const inward = getShipInwardAngle();
+                  const speed = 14;
+                  const vx = cos(inward) * speed;
+                  const vy = sin(inward) * speed;
+                  const perpX = -sin(inward);
+                  const perpY = cos(inward);
+
+                  bullets.push({ x: shipX + perpX * 4.5, y: shipY + perpY * 4.5, vx, vy });
+                  bullets.push({ x: shipX - perpX * 4.5, y: shipY - perpY * 4.5, vx, vy });
 
                   playShipShootSound();
               }
@@ -10618,6 +10986,10 @@
                   newCreature.name = eggData.name;
                   newCreature.killCount = eggData.killCount || 0;
                   newCreature.childrenCount = eggData.childrenCount || 0;
+                  if (eggData.isPredator) {
+                      newCreature.isPredator = true;
+                      newCreature.socialPredator = !!eggData.socialPredator;
+                  }
                   newCreature.currentThought = isEarly ? "Released early from Incubator" : "Released from Incubator";
 
                   if (eggData.brain && newCreature.brain) {
@@ -11231,7 +11603,7 @@
                   updateFurnaceUI();
                   updatePrestigePreview();
 
-                  addFloatingText(width / 2, height / 2 - 20, `+${dustGained.toFixed(2)} Dust`, '#fbbf24');
+                  addFloatingText(width / 2, height / 2 - 20, `+${formatDust(dustGained)}`, '#fbbf24');
               }
 
               function injectPulseAnimationStyle() {
