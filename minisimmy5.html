@@ -1,11 +1,11 @@
 <!doctype html>
-<!-- MiniSimmy mobile-opt build 2026-06-17b | DeviceProfile + SpatialGrid + pop-aware LOD/throttling -->
+<!-- MiniSimmy mobile-opt build 2026-06-17c | Viewport touch pan/zoom + fixed spaceship coords -->
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="minisimmy-build" content="mobile-opt-2026-06-17b" />
-    <title>MiniSimmy2 (Mobile Opt v2)</title>
+    <meta name="minisimmy-build" content="mobile-opt-2026-06-17c" />
+    <title>MiniSimmy2 (Mobile Opt v3)</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2334d399'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%230a0a0f'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -137,6 +137,10 @@
     touch-action: none;
     -webkit-tap-highlight-color: transparent;
     user-select: none;
+}
+
+#canvas-container.viewport-grabbing canvas {
+    cursor: grab;
 }
 
 @media (max-width: 860px) {
@@ -1558,21 +1562,263 @@
               const UI_UPDATE_INTERVAL = DeviceProfile.uiInterval;
               const INSPECTOR_UPDATE_INTERVAL = DeviceProfile.inspectorInterval;
 
-              const PointerInput = {
-                  x: 0, y: 0, lastActionAt: 0,
-                  setFromClient(clientX, clientY) {
-                      const el = document.querySelector('#canvas-container canvas');
+              const Viewport = {
+                  panX: 0,
+                  panY: 0,
+                  minZoom: 0.4,
+                  maxZoom: 2.5,
+                  _pinchDist: 0,
+                  _pinchZoom: 1,
+                  _touchMode: null,
+                  _touchStart: null,
+                  _lastClient: null,
+                  _longPressTimer: null,
+
+                  getCanvas() {
+                      return document.querySelector('#canvas-container canvas');
+                  },
+
+                  clientToCanvas(clientX, clientY) {
+                      const el = this.getCanvas();
                       if (!el || typeof width === 'undefined') {
-                          this.x = clientX;
-                          this.y = clientY;
-                          return;
+                          return { x: clientX, y: clientY };
                       }
                       const rect = el.getBoundingClientRect();
-                      this.x = (clientX - rect.left) * (width / rect.width);
-                      this.y = (clientY - rect.top) * (height / rect.height);
+                      return {
+                          x: (clientX - rect.left) * (width / rect.width),
+                          y: (clientY - rect.top) * (height / rect.height),
+                      };
+                  },
+
+                  screenToWorld(screenX, screenY) {
+                      return {
+                          x: (screenX - width / 2 - this.panX) / zoomLevel + width / 2,
+                          y: (screenY - height / 2 - this.panY) / zoomLevel + height / 2,
+                      };
+                  },
+
+                  worldToScreen(worldX, worldY) {
+                      return {
+                          x: (worldX - width / 2) * zoomLevel + width / 2 + this.panX,
+                          y: (worldY - height / 2) * zoomLevel + height / 2 + this.panY,
+                      };
+                  },
+
+                  syncFromClient(clientX, clientY) {
+                      const canvas = this.clientToCanvas(clientX, clientY);
+                      const world = this.screenToWorld(canvas.x, canvas.y);
+                      PointerInput.canvasX = canvas.x;
+                      PointerInput.canvasY = canvas.y;
+                      PointerInput.x = world.x;
+                      PointerInput.y = world.y;
+                      return world;
+                  },
+
+                  applyTransform() {
+                      translate(this.panX, this.panY);
+                      translate(width / 2, height / 2);
+                      scale(zoomLevel);
+                      translate(-width / 2, -height / 2);
+                  },
+
+                  updateZoomLabel() {
+                      const zoomEl = document.getElementById('zoom-level') || DOMCache.zoomLevel;
+                      if (zoomEl) zoomEl.innerText = Math.round(zoomLevel * 100) + '%';
+                  },
+
+                  setZoom(newZoom, anchorScreenX, anchorScreenY) {
+                      const prev = zoomLevel;
+                      zoomLevel = constrain(newZoom, this.minZoom, this.maxZoom);
+                      if (anchorScreenX != null && anchorScreenY != null && prev !== zoomLevel) {
+                          const world = {
+                              x: (anchorScreenX - width / 2 - this.panX) / prev + width / 2,
+                              y: (anchorScreenY - height / 2 - this.panY) / prev + height / 2,
+                          };
+                          const after = this.worldToScreen(world.x, world.y);
+                          this.panX += anchorScreenX - after.x;
+                          this.panY += anchorScreenY - after.y;
+                      }
+                      viewPanX = this.panX;
+                      viewPanY = this.panY;
+                      this.updateZoomLabel();
+                  },
+
+                  reset() {
+                      this.panX = 0;
+                      this.panY = 0;
+                      viewPanX = 0;
+                      viewPanY = 0;
+                      zoomLevel = 1;
+                      this.updateZoomLabel();
+                  },
+
+                  touchDistance(touches) {
+                      const dx = touches[0].clientX - touches[1].clientX;
+                      const dy = touches[0].clientY - touches[1].clientY;
+                      return Math.hypot(dx, dy);
+                      },
+
+                  touchMidCanvas(touches) {
+                      const mx = (touches[0].clientX + touches[1].clientX) / 2;
+                      const my = (touches[0].clientY + touches[1].clientY) / 2;
+                      return this.clientToCanvas(mx, my);
+                  },
+
+                  shouldPanMap() {
+                      return !energyWallMode && !spaceshipActive && !isDrawingWall;
+                  },
+
+                  bindInput(p5Canvas) {
+                      const el = p5Canvas?.elt || this.getCanvas();
+                      const container = document.getElementById('canvas-container');
+                      if (!el) return;
+
+                      const clearLongPress = () => {
+                          if (this._longPressTimer) clearTimeout(this._longPressTimer);
+                          this._longPressTimer = null;
+                      };
+
+                      el.addEventListener('wheel', (e) => {
+                          e.preventDefault();
+                          const canvas = this.clientToCanvas(e.clientX, e.clientY);
+                          const delta = e.deltaY > 0 ? -0.08 : 0.08;
+                          this.setZoom(zoomLevel + delta, canvas.x, canvas.y);
+                      }, { passive: false });
+
+                      el.addEventListener('mousemove', (e) => {
+                          this.syncFromClient(e.clientX, e.clientY);
+                          if (spaceshipActive && this._shipDragging && e.buttons > 0) {
+                              const canvas = this.clientToCanvas(e.clientX, e.clientY);
+                              shipX = constrain(canvas.x, 30, width - 30);
+                          }
+                      });
+
+                      el.addEventListener('pointerdown', (e) => {
+                          this.syncFromClient(e.clientX, e.clientY);
+                          this._touchStart = { x: e.clientX, y: e.clientY, t: performance.now() };
+                          this._lastClient = { x: e.clientX, y: e.clientY };
+                          this._touchMode = null;
+                          this._shipDragging = false;
+
+                          if (spaceshipActive) {
+                              clearLongPress();
+                              const canvas = this.clientToCanvas(e.clientX, e.clientY);
+                              shipX = constrain(canvas.x, 30, width - 30);
+                              this._shipDragging = true;
+                              this._touchMode = 'ship';
+                              if (e.pointerType === 'mouse') return;
+                              return;
+                          }
+
+                          if (e.pointerType === 'touch') {
+                              clearLongPress();
+                              const cx = e.clientX;
+                              const cy = e.clientY;
+                              this._longPressTimer = setTimeout(() => {
+                                  this.syncFromClient(cx, cy);
+                                  const { x, y } = gamePointer();
+                                  if (!tryRemovePlacedHazardAt(x, y)) tryCycleWallFilterAt(x, y);
+                              }, 600);
+                          }
+                      }, { passive: true });
+
+                      el.addEventListener('pointermove', (e) => {
+                          this.syncFromClient(e.clientX, e.clientY);
+                          if (!this._touchStart || !this._lastClient) return;
+
+                          const dx = e.clientX - this._lastClient.x;
+                          const dy = e.clientY - this._lastClient.y;
+                          const totalMove = Math.hypot(e.clientX - this._touchStart.x, e.clientY - this._touchStart.y);
+
+                          if (totalMove > 12) clearLongPress();
+
+                          if (spaceshipActive && this._shipDragging && e.buttons > 0) {
+                              this._touchMode = 'ship';
+                              const canvas = this.clientToCanvas(e.clientX, e.clientY);
+                              shipX = constrain(canvas.x, 30, width - 30);
+                              e.preventDefault();
+                              return;
+                          }
+
+                          if (energyWallMode && isDrawingWall) {
+                              e.preventDefault();
+                              return;
+                          }
+
+                          if (this.shouldPanMap() && e.pointerType === 'touch' && e.buttons > 0) {
+                              if (!this._touchMode && totalMove > 10) this._touchMode = 'pan';
+                              if (this._touchMode === 'pan') {
+                                  this.panX += dx * (width / el.getBoundingClientRect().width);
+                                  this.panY += dy * (height / el.getBoundingClientRect().height);
+                                  viewPanX = this.panX;
+                                  viewPanY = this.panY;
+                                  if (container) container.classList.add('viewport-grabbing');
+                                  e.preventDefault();
+                              }
+                          }
+
+                          this._lastClient = { x: e.clientX, y: e.clientY };
+                      }, { passive: false });
+
+                      const endPointer = (e) => {
+                          if (spaceshipActive && this._touchStart && e) {
+                              const move = Math.hypot(e.clientX - this._touchStart.x, e.clientY - this._touchStart.y);
+                              if (move < 14) shootFromShip();
+                          }
+                          clearLongPress();
+                          if (container) container.classList.remove('viewport-grabbing');
+                          this._touchStart = null;
+                          this._lastClient = null;
+                          this._touchMode = null;
+                          this._shipDragging = false;
+                      };
+                      el.addEventListener('pointerup', endPointer);
+                      el.addEventListener('pointercancel', endPointer);
+
+                      el.addEventListener('touchstart', (e) => {
+                          if (e.touches.length === 2) {
+                              clearLongPress();
+                              this._pinchDist = this.touchDistance(e.touches);
+                              this._pinchZoom = zoomLevel;
+                              const mid = this.touchMidCanvas(e.touches);
+                              this._pinchAnchor = mid;
+                              this._touchMode = 'pinch';
+                          }
+                      }, { passive: true });
+
+                      el.addEventListener('touchmove', (e) => {
+                          if (e.touches.length === 2 && this._touchMode === 'pinch') {
+                              e.preventDefault();
+                              const dist = this.touchDistance(e.touches);
+                              if (this._pinchDist > 0) {
+                                  const mid = this.touchMidCanvas(e.touches);
+                                  this.setZoom(this._pinchZoom * (dist / this._pinchDist), mid.x, mid.y);
+                              }
+                          } else if (e.touches.length === 2) {
+                              e.preventDefault();
+                              this._touchMode = 'pinch';
+                              this._pinchDist = this.touchDistance(e.touches);
+                              this._pinchZoom = zoomLevel;
+                          }
+                      }, { passive: false });
+
+                      el.addEventListener('touchend', (e) => {
+                          if (e.touches.length < 2) {
+                              this._pinchDist = 0;
+                              if (this._touchMode === 'pinch') this._touchMode = null;
+                          }
+                      }, { passive: true });
+                  },
+              };
+
+              const PointerInput = {
+                  x: 0, y: 0, canvasX: 0, canvasY: 0, lastActionAt: 0,
+                  setFromClient(clientX, clientY) {
+                      Viewport.syncFromClient(clientX, clientY);
                   },
                   consumeAction() {
                       const now = performance.now();
+                      if (DeviceProfile.isTouch && Viewport._touchMode === 'pan') return false;
                       if (DeviceProfile.isTouch && now - this.lastActionAt < 380) return false;
                       this.lastActionAt = now;
                       return true;
@@ -1582,16 +1828,26 @@
               const DOMCache = {};
 
               function gamePointer() {
-                  const el = document.querySelector('#canvas-container canvas');
-                  if (!el || typeof mouseX === 'undefined') {
+                  if (typeof mouseX !== 'undefined' && !isNaN(mouseX) && !DeviceProfile.isTouch) {
+                      return Viewport.screenToWorld(mouseX, mouseY);
+                  }
+                  if (PointerInput.x || PointerInput.y || DeviceProfile.isTouch) {
                       return { x: PointerInput.x, y: PointerInput.y };
                   }
-                  const rect = el.getBoundingClientRect();
-                  const scaled = Math.abs(rect.width - width) > 2;
-                  if (scaled || DeviceProfile.isTouch) {
-                      return { x: PointerInput.x || mouseX, y: PointerInput.y || mouseY };
+                  if (typeof mouseX !== 'undefined' && !isNaN(mouseX)) {
+                      return Viewport.screenToWorld(mouseX, mouseY);
                   }
-                  return { x: mouseX, y: mouseY };
+                  return { x: PointerInput.x, y: PointerInput.y };
+              }
+
+              function canvasPointer() {
+                  if (PointerInput.canvasX) {
+                      return { x: PointerInput.canvasX, y: PointerInput.canvasY };
+                  }
+                  if (typeof mouseX !== 'undefined' && !isNaN(mouseX)) {
+                      return { x: mouseX, y: mouseY };
+                  }
+                  return Viewport.clientToCanvas(0, 0);
               }
 
               function cacheMainDOM() {
@@ -1798,6 +2054,8 @@
               let paused = false;
               let simTime = 0;
               let zoomLevel = 1.0;
+              let viewPanX = 0;
+              let viewPanY = 0;
 
               let currentSlotForCompletion = null;
 
@@ -4535,26 +4793,6 @@
                       }
                       shipX = constrain(shipX, 30, width - 30);
                   });
-
-                  let mouseControlActive = false;
-
-                  document.addEventListener('click', function (e) {
-                      if (!spaceshipActive) return;
-
-                      const rect = document.querySelector('canvas').getBoundingClientRect();
-                      if (e.clientX > rect.left && e.clientX < rect.right && e.clientY > rect.top && e.clientY < rect.bottom) {
-                          mouseControlActive = true;
-                          shootFromShip();
-                      }
-                  });
-
-                  document.addEventListener('mousemove', function (e) {
-                      if (!spaceshipActive || !mouseControlActive) return;
-
-                      const rect = document.querySelector('canvas').getBoundingClientRect();
-                      shipX = e.clientX - rect.left;
-                      shipX = constrain(shipX, 30, width - 30);
-                  });
               }
 
               // ==================== FURNACE + DUST/CRYSTAL CONVERSION (RESTORED) ====================
@@ -5475,7 +5713,7 @@
               }
 
               function setup() {
-                  console.info('[MiniSimmy] build=mobile-opt-2026-06-17b tier=' + DeviceProfile.tier + ' mobile=' + DeviceProfile.isMobile + ' spatial=on');
+                  console.info('[MiniSimmy] build=mobile-opt-2026-06-17c tier=' + DeviceProfile.tier + ' viewport=pan+zoom');
                   debugLog("Setup started");
 
                   let canvas = createCanvas(820, 580);
@@ -5485,7 +5723,7 @@
 
                   canvas.parent('canvas-container');
                   canvas.mousePressed(handleMousePress);
-                  setupCanvasPointerInput(canvas);
+                  Viewport.bindInput(canvas);
                   debugLog("Canvas parented");
 
                   centerX = width / 2;
@@ -5762,9 +6000,7 @@
                   circle(centerX - 4, centerY - 4, 8);
 
                   push();
-                  translate(width / 2, height / 2);
-                  scale(zoomLevel);
-                  translate(-width / 2, -height / 2);
+                  Viewport.applyTransform();
 
                   const pulseG = sin(frameCount * 0.11) * 0.05 + 1;
                   const pulseB = sin(frameCount * 0.1 + 1.1) * 0.05 + 1;
@@ -6745,11 +6981,12 @@
 
                   if (cursorHazardActive) {
                       const ptr = gamePointer();
+                      const screen = Viewport.worldToScreen(ptr.x, ptr.y);
                       let mx = ptr.x;
                       let my = ptr.y;
 
                       push();
-                      translate(mx, my);
+                      translate(screen.x, screen.y);
 
                       fill(239, 68, 68, 38);
                       noStroke();
@@ -7273,10 +7510,7 @@
                   paused = false;
                   timeScale = 1;
                   simTime = 0;
-                  zoomLevel = 1.0;
-
-                  const zoomEl = document.getElementById('zoom-level');
-                  if (zoomEl) zoomEl.innerText = '100%';
+                  Viewport.reset();
 
                   const timeEl = document.getElementById('sim-time');
                   if (timeEl) timeEl.innerText = '00:00';
@@ -7476,8 +7710,7 @@
               }
 
               function adjustZoom(delta) {
-                  zoomLevel = constrain(zoomLevel + delta, 0.4, 2.0);
-                  document.getElementById('zoom-level').innerText = Math.round(zoomLevel * 100) + '%';
+                  Viewport.setZoom(zoomLevel + delta, width / 2, height / 2);
               }
 
               // Quick bottom bar toggles
@@ -8619,43 +8852,8 @@
                   return false;
               }
 
-              function setupCanvasPointerInput(p5Canvas) {
-                  const el = p5Canvas?.elt || document.querySelector('#canvas-container canvas');
-                  if (!el) return;
-
-                  let longPressTimer = null;
-                  const clearLongPress = () => {
-                      if (longPressTimer) clearTimeout(longPressTimer);
-                      longPressTimer = null;
-                  };
-                  const syncPointer = (e) => {
-                      if (e.clientX != null) PointerInput.setFromClient(e.clientX, e.clientY);
-                  };
-
-                  el.addEventListener('pointerdown', (e) => {
-                      syncPointer(e);
-                      if (DeviceProfile.isTouch && e.pointerType === 'touch') {
-                          clearLongPress();
-                          const cx = e.clientX;
-                          const cy = e.clientY;
-                          longPressTimer = setTimeout(() => {
-                              PointerInput.setFromClient(cx, cy);
-                              const { x, y } = gamePointer();
-                              if (!tryRemovePlacedHazardAt(x, y)) tryCycleWallFilterAt(x, y);
-                          }, 600);
-                      }
-                  }, { passive: true });
-
-                  el.addEventListener('pointermove', (e) => {
-                      syncPointer(e);
-                      if (energyWallMode && isDrawingWall && e.pointerType === 'touch') e.preventDefault();
-                  }, { passive: false });
-
-                  el.addEventListener('pointerup', clearLongPress);
-                  el.addEventListener('pointercancel', clearLongPress);
-              }
-
               function handleMousePress() {
+                  if (spaceshipActive) return;
                   if (!PointerInput.consumeAction()) return;
 
                   const { x: px, y: py } = gamePointer();
