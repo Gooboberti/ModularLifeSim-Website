@@ -4,7 +4,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-19g" />
+    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-19h" />
     <title>MiniSimmy Orbital Ship v2</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2334d399'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%230a0a0f'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -2356,7 +2356,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                               <i class="fa-solid fa-dna text-violet-400"></i>
                               <span>Gene Vault</span>
                           </h3>
-                          <p class="mt-1 text-xs leading-snug text-white/50">Store eggs across prestiges. Score mult = egg value only — upgrade slots with <span class="crystal-cost-inline"><i class="fa-solid fa-gem crystal-pink"></i></span> to boost it further. Unlock slots (<span class="crystal-cost-inline"><i class="fa-solid fa-gem crystal-pink"></i>1</span>→<span class="crystal-cost-inline"><i class="fa-solid fa-gem crystal-pink"></i>256</span>).</p>
+                          <p class="mt-1 text-xs leading-snug text-white/50">Store eggs across prestiges. Score mult = egg value only — upgrade slots with <span class="crystal-cost-inline"><i class="fa-solid fa-gem crystal-pink"></i></span> to boost it further. Unlock slots (<span class="crystal-cost-inline"><i class="fa-solid fa-gem crystal-pink"></i>500K</span>→<span class="crystal-cost-inline"><i class="fa-solid fa-gem crystal-pink"></i>10B</span>).</p>
                       </div>
                       <div id="gene-vault-footer-btn" class="flex shrink-0 items-center gap-2">
                           <button type="button" id="gene-vault-view-eggs-btn"
@@ -2395,7 +2395,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                               <i class="fa-solid fa-egg text-amber-400"></i>
                               <span>Incubator</span>
                           </h3>
-                          <p class="mt-1 text-xs leading-snug text-white/50">Upgrade eggs per slot → higher sell value &amp; score boost when occupied. Cycles grow modules, sell bonus, score mult, and rare module gain. Unlock (<span class="crystal-cost-inline"><i class="fa-solid fa-gem crystal-pink"></i>1</span>→<span class="crystal-cost-inline"><i class="fa-solid fa-gem crystal-pink"></i>256</span>), upgrade slots, automate <span class="crystal-cost-inline"><i class="fa-solid fa-gem crystal-pink"></i>1</span>/5m.</p>
+                          <p class="mt-1 text-xs leading-snug text-white/50">Upgrade eggs per slot → higher sell value &amp; score boost when occupied. Cycles grow modules, sell bonus, score mult, and rare module gain. Unlock (<span class="crystal-cost-inline"><i class="fa-solid fa-gem crystal-pink"></i>500K</span>→<span class="crystal-cost-inline"><i class="fa-solid fa-gem crystal-pink"></i>10B</span>), upgrade slots, automate <span class="crystal-cost-inline"><i class="fa-solid fa-gem crystal-pink"></i>1</span>/5m.</p>
                       </div>
                       <div id="incubator-footer-btn" class="flex shrink-0 items-center gap-2">
                           <button type="button" id="incubator-view-eggs-btn"
@@ -2838,9 +2838,21 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
               let creatures = [];
               let eggs = [];
               const MAX_INCUBATOR_SLOTS = 10;
+              const SLOT_UNLOCK_COSTS = {
+                  1: 0,
+                  2: 500_000,
+                  3: 1_000_000,
+                  4: 10_000_000,
+                  5: 50_000_000,
+                  6: 100_000_000,
+                  7: 250_000_000,
+                  8: 1_000_000_000,
+                  9: 5_000_000_000,
+                  10: 10_000_000_000
+              };
+
               function getDoublingSlotCost(slotNumber) {
-                  if (slotNumber <= 1) return 0;
-                  return Math.pow(2, slotNumber - 2);
+                  return SLOT_UNLOCK_COSTS[slotNumber] || 0;
               }
 
               function getIncubatorSlotUpgradeCost(upgradeLevel) {
@@ -7192,28 +7204,35 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
                   const groups = {};
                   for (let i = 0; i < moduleParticles.length; i++) {
                       const p = moduleParticles[i];
-                      if (!p.isFloating || p.collected) continue;
+                      if (!p || !p.isFloating || p.collected) continue;
                       const key = p.getMergeKey();
                       if (!groups[key]) groups[key] = [];
-                      groups[key].push(i);
+                      groups[key].push(p);
                   }
                   for (const key in groups) {
-                      const indices = groups[key];
-                      if (indices.length < 3) continue;
-                      const sample = moduleParticles[indices[0]];
+                      const particles = groups[key].filter((p) =>
+                          p && !p.collected && p.isFloating && moduleParticles.includes(p)
+                      );
+                      if (particles.length < 3) continue;
+                      const sample = particles[0];
                       if ((sample.tier || 1) >= 10) continue;
 
-                      let cx = 0, cy = 0;
-                      const mergeSet = indices.slice(0, 3);
-                      for (const idx of mergeSet) {
-                          cx += moduleParticles[idx].x;
-                          cy += moduleParticles[idx].y;
+                      const mergeSet = particles.slice(0, 3);
+                      let cx = 0;
+                      let cy = 0;
+                      for (const p of mergeSet) {
+                          if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
+                          cx += p.x;
+                          cy += p.y;
                       }
-                      cx /= 3; cy /= 3;
+                      cx /= mergeSet.length;
+                      cy /= mergeSet.length;
                       const nextTier = Math.min(10, (sample.tier || 1) + 1);
 
-                      mergeSet.sort((a, b) => b - a);
-                      for (const idx of mergeSet) moduleParticles.splice(idx, 1);
+                      for (const p of mergeSet) {
+                          const idx = moduleParticles.indexOf(p);
+                          if (idx >= 0) moduleParticles.splice(idx, 1);
+                      }
 
                       const merged = new ModuleParticle(true, {
                           type: sample.type,
@@ -7580,6 +7599,10 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
 
                   for (let i = moduleParticles.length - 1; i >= 0; i--) {
                       let mp = moduleParticles[i];
+                      if (!mp || typeof mp.getMergeKey !== 'function') {
+                          moduleParticles.splice(i, 1);
+                          continue;
+                      }
                       const key = mp.getMergeKey();
                       if (mergeCounts[key] >= 2) mp.mergeGlow = max(mp.mergeGlow, 0.55);
 
@@ -8831,8 +8854,9 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
               }
 
               function formatIncubatorSlotCost(cost) {
-                  if (cost >= 1e9) return (cost / 1e9).toFixed(0) + 'B';
-                  if (cost >= 1e6) return (cost / 1e6).toFixed(0) + 'M';
+                  if (cost >= 1e9) return (cost / 1e9).toFixed(cost % 1e9 === 0 ? 0 : 1) + 'B';
+                  if (cost >= 1e6) return (cost / 1e6).toFixed(cost % 1e6 === 0 ? 0 : 1) + 'M';
+                  if (cost >= 1e3) return (cost / 1e3).toFixed(cost % 1e3 === 0 ? 0 : 1) + 'K';
                   return cost.toLocaleString();
               }
 
@@ -10866,7 +10890,7 @@ body.is-mobile.mobile-landscape #game-tool-bar .tool-rental-card {
               }
 
               function setup() {
-                  console.info('[MiniSimmy] build=orbital-ship-v2-2026-06-19g tier=' + DeviceProfile.tier + ' ship=radial-orbit mobile=' + IS_MOBILE);
+                  console.info('[MiniSimmy] build=orbital-ship-v2-2026-06-19h tier=' + DeviceProfile.tier + ' ship=radial-orbit mobile=' + IS_MOBILE);
                   refreshMobileLayout();
                   window.addEventListener('resize', refreshMobileLayout);
                   window.addEventListener('orientationchange', () => setTimeout(refreshMobileLayout, 120));
