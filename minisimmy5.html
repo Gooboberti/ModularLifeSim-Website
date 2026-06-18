@@ -1,10 +1,10 @@
 <!doctype html>
-<!-- MiniSimmy mobile-opt build 2026-06-17e | ScoreEngine unification + createCreatureFromEgg -->
+<!-- MiniSimmy mobile-opt build 2026-06-17f | Incubator automation + zoom fix -->
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="minisimmy-build" content="mobile-opt-2026-06-17e" />
+    <meta name="minisimmy-build" content="mobile-opt-2026-06-17f" />
     <title>MiniSimmy2 (Mobile Opt v4)</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2334d399'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%230a0a0f'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -508,7 +508,7 @@
                       <div class="flex items-start gap-3">
                           <div class="flex-shrink-0">
                               <canvas id="inspect-creature-preview" width="82" height="82"
-                                      class="rounded-xl border border-white/10 bg-[#111113]"></canvas>
+                                      class="creature-preview-canvas w-[82px] h-[82px] block rounded-xl border border-white/10 bg-[#111113]"></canvas>
                           </div>
                           <div class="min-w-0 flex-1">
                               <div id="inspect-name" class="text-[15px] font-semibold text-emerald-400 leading-tight"></div>
@@ -1183,7 +1183,7 @@
                               <i class="fa-solid fa-egg text-amber-400"></i>
                               <span>Incubator</span>
                           </h3>
-                          <p class="mt-1 text-sm text-white/50">Incubate eggs to permanently increase each slot's multiplier • Higher quality eggs give bigger gains</p>
+                          <p class="mt-1 text-sm text-white/50">Incubate eggs to boost slot multipliers • Spend 1 Crystal to automate a slot for 5 minutes</p>
                       </div>
                       <button onclick="playUIClick(); hideIncubator()" class="text-3xl leading-none text-white/60 hover:text-white">×</button>
                   </div>
@@ -1193,7 +1193,7 @@
                   </div>
 
                   <div class="mt-6 text-center text-xs text-white/50">
-                      Each successful incubation permanently increases the slot's multiplier. Sell finished eggs for burst score income.
+                      Automation (1 Crystal / 5 min): auto-completes cycles, adds modules to the egg, and permanently improves the slot.
                   </div>
               </div>
           </div>
@@ -1217,13 +1217,17 @@
                       <!-- Populated by JavaScript -->
                   </div>
 
-                  <div class="mt-6 flex gap-3">
+                  <div class="mt-6 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                      <button onclick="cycleIncubatedEggAgain()"
+                              class="px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-medium">
+                          Cycle Again
+                      </button>
                       <button onclick="sellIncubatedEgg()"
-                              class="flex-1 px-4 py-2.5 rounded-2xl bg-amber-600 hover:bg-amber-500 text-white font-medium">
+                              class="px-4 py-2.5 rounded-2xl bg-amber-600 hover:bg-amber-500 text-white font-medium">
                           Sell for Score
                       </button>
                       <button onclick="returnIncubatedEggToInventory()"
-                              class="flex-1 px-4 py-2.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-medium">
+                              class="px-4 py-2.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-medium">
                           Return to Inventory
                       </button>
                   </div>
@@ -1467,8 +1471,11 @@
               let creatures = [];
               let eggs = [];
               const MAX_INCUBATOR_SLOTS = 10;
+              const INCUBATOR_AUTOMATION_CRYSTAL_COST = 1;
+              const INCUBATOR_AUTOMATION_DURATION_MS = 5 * 60 * 1000;
               let incubatingEggs = []; // { id, eggData, progress (0-100), completed }
               let incubatorSlots = [];
+              let incubatorModalOpen = false;
               let nextIncubationId = 1;
               const MAX_EGGS = 10; // Max eggs player can hold
               let predators = [];
@@ -1678,13 +1685,6 @@
                           this._longPressTimer = null;
                       };
 
-                      el.addEventListener('wheel', (e) => {
-                          e.preventDefault();
-                          const canvas = this.clientToCanvas(e.clientX, e.clientY);
-                          const delta = e.deltaY > 0 ? -0.08 : 0.08;
-                          this.setZoom(zoomLevel + delta, canvas.x, canvas.y);
-                      }, { passive: false });
-
                       el.addEventListener('mousemove', (e) => {
                           this.syncFromClient(e.clientX, e.clientY);
                           if (spaceshipActive && this._shipDragging && e.buttons > 0) {
@@ -1775,39 +1775,6 @@
                       el.addEventListener('pointerup', endPointer);
                       el.addEventListener('pointercancel', endPointer);
 
-                      el.addEventListener('touchstart', (e) => {
-                          if (e.touches.length === 2) {
-                              clearLongPress();
-                              this._pinchDist = this.touchDistance(e.touches);
-                              this._pinchZoom = zoomLevel;
-                              const mid = this.touchMidCanvas(e.touches);
-                              this._pinchAnchor = mid;
-                              this._touchMode = 'pinch';
-                          }
-                      }, { passive: true });
-
-                      el.addEventListener('touchmove', (e) => {
-                          if (e.touches.length === 2 && this._touchMode === 'pinch') {
-                              e.preventDefault();
-                              const dist = this.touchDistance(e.touches);
-                              if (this._pinchDist > 0) {
-                                  const mid = this.touchMidCanvas(e.touches);
-                                  this.setZoom(this._pinchZoom * (dist / this._pinchDist), mid.x, mid.y);
-                              }
-                          } else if (e.touches.length === 2) {
-                              e.preventDefault();
-                              this._touchMode = 'pinch';
-                              this._pinchDist = this.touchDistance(e.touches);
-                              this._pinchZoom = zoomLevel;
-                          }
-                      }, { passive: false });
-
-                      el.addEventListener('touchend', (e) => {
-                          if (e.touches.length < 2) {
-                              this._pinchDist = 0;
-                              if (this._touchMode === 'pinch') this._touchMode = null;
-                          }
-                      }, { passive: true });
                   },
               };
 
@@ -1923,7 +1890,8 @@
                   _brainInterval: 5,
                   refresh() {
                       const n = creatures.length;
-                      this._lod = n < 70 ? 0 : n < 120 ? 1 : 2;
+                      // LOD 0 = full detail, 1 = reduced modules/glow, 2 = simplified but always visible
+                      this._lod = n < 90 ? 0 : n < 170 ? 1 : 2;
                       this._brainInterval = n < 60 ? 5 : n < 100 ? 8 : n < 150 ? 12 : 16;
                       this._graphInterval = n < 80 ? 24 : n < 140 ? 42 : 60;
                       this._popPressure = Math.max(0, (n - 11) * 0.005);
@@ -3502,48 +3470,46 @@
                       return this._colorCacheVal;
                   }
 
-                  show(lod = PerfScale.lod) {
-                      if (lod >= 2 && selectedCreature !== this) {
-                          push();
-                          translate(this.x, this.y);
-                          noStroke();
-                          fill(this.isPredator ? '#ef4444' : '#facc15', 210);
-                          circle(0, 0, 5 + this.modules.length * 0.07);
-                          pop();
-                          return;
+                  _getCoreRgb() {
+                      const isSocial = this.socialPredator === true;
+                      if (this.isPredator) {
+                          return isSocial ? [245, 158, 11] : [239, 68, 68];
                       }
+                      switch (this.specialization) {
+                          case 'harvester': return [52, 211, 153];
+                          case 'sensor': return [56, 189, 248];
+                          case 'mover': return [167, 139, 250];
+                          case 'resistant': return [244, 114, 182];
+                          case 'explorer': return [251, 191, 36];
+                          case 'communicator': return [192, 132, 252];
+                          default: return [250, 204, 21];
+                      }
+                  }
+
+                  show(lod = PerfScale.lod) {
+                      const forceFull = selectedCreature === this;
+                      const detailLod = forceFull ? 0 : lod;
 
                       push();
                       translate(this.x, this.y);
-                      let s = 7 + this.modules.length * 0.16;
+
+                      const modCount = this.modules.length;
+                      let s = 7 + modCount * 0.16;
+                      if (detailLod >= 2) {
+                          s = max(9, 6.5 + min(modCount, 10) * 0.45);
+                      }
+
                       if (selectedCreature === this) {
+                          noFill();
                           stroke(255, 255, 255, 170);
                           strokeWeight(2.2);
                           circle(0, 0, s + 6);
                       }
+
                       const isSocial = this.socialPredator === true;
-                      const ageProgress = this.ageProgress ?? (this.age / this.maxAge);
-                      // === Predator Visuals ===
-                      let coreColor;
-                      let moduleColorOverride = null;
-                      if (this.isPredator) {
-                          if (isSocial) {
-                              coreColor = '#f59e0b';
-                          } else {
-                              coreColor = '#ef4444';
-                              moduleColorOverride = '#b91c1c';
-                          }
-                      } else {
-                          coreColor = '#facc15';
-                          if (this.specialization === 'harvester') coreColor = '#34d399';
-                          if (this.specialization === 'sensor') coreColor = '#38bdf8';
-                          if (this.specialization === 'mover') coreColor = '#a78bfa';
-                          if (this.specialization === 'resistant') coreColor = '#f472b6';
-                          if (this.specialization === 'explorer') coreColor = '#fbbf24';
-                          if (this.specialization === 'communicator') coreColor = '#c084fc';
-                      }
-                      // Glow for predators
-                      if (this.isPredator) {
+                      const [cr, cg, cb] = this._getCoreRgb();
+
+                      if (this.isPredator && detailLod < 2) {
                           noStroke();
                           if (isSocial) {
                               fill(249, 115, 22, 42);
@@ -3554,26 +3520,64 @@
                               fill(239, 68, 68, 40);
                               circle(0, 0, s * 1.75);
                           }
+                      } else if (this.isPredator && detailLod >= 2) {
+                          noStroke();
+                          fill(239, 68, 68, 30);
+                          circle(0, 0, s * 1.45);
                       }
-                      fill(this._getAgedColorCached(coreColor));
-                      stroke(this.isPredator ? (isSocial ? '#fed7aa' : '#fecaca') : '#fef08c');
-                      strokeWeight(this.isPredator ? 1.6 : 1);
+
+                      fill(cr, cg, cb, 235);
+                      if (this.isPredator) {
+                          if (isSocial) stroke(254, 215, 170);
+                          else stroke(254, 202, 202);
+                          strokeWeight(detailLod >= 2 ? 1.3 : 1.6);
+                      } else {
+                          stroke(254, 240, 138, detailLod >= 2 ? 170 : 220);
+                          strokeWeight(detailLod >= 2 ? 1.1 : 1);
+                      }
                       circle(0, 0, s);
-                      if (this.honey > 2.5 && lod < 2) {
-                          fill('#f59e0b');
+
+                      if (detailLod >= 2) {
+                          noFill();
+                          stroke(255, 255, 255, 90);
+                          strokeWeight(0.7);
+                          circle(0, 0, s + 1.2);
+                      }
+
+                      if (this.honey > 2.5 && detailLod === 0) {
+                          noStroke();
+                          fill(245, 158, 11, 230);
                           circle(2.5, -2.5, 2.3 + min(this.honey * 0.07, 5.5));
                       }
-                      const modLimit = lod >= 1 ? Math.min(3, this.modules.length) : this.modules.length;
+
+                      let modLimit = modCount;
+                      if (detailLod === 1) modLimit = min(5, modCount);
+                      else if (detailLod >= 2) modLimit = min(2, modCount);
+
+                      const moduleColorOverride = (this.isPredator && !isSocial) ? [185, 28, 28] : null;
+                      noStroke();
                       for (let mi = 0; mi < modLimit; mi++) {
                           const m = this.modules[mi];
-                          const finalColor = moduleColorOverride
-                              ? moduleColorOverride
-                              : this._getAgedColorCached(m.color);
-                          fill(finalColor);
+                          if (moduleColorOverride) {
+                              fill(moduleColorOverride[0], moduleColorOverride[1], moduleColorOverride[2], 220);
+                          } else if (m.color && m.color.startsWith('#') && m.color.length >= 7) {
+                              const hex = m.color.slice(1);
+                              fill(
+                                  parseInt(hex.slice(0, 2), 16),
+                                  parseInt(hex.slice(2, 4), 16),
+                                  parseInt(hex.slice(4, 6), 16),
+                                  220
+                              );
+                          } else {
+                              fill(cr, cg, cb, 200);
+                          }
                           const tier = m.tier || 1;
-                          const size = 3.2 + (tier - 1) * 0.6;
-                          circle(m.offsetX, m.offsetY, size);
+                          const size = detailLod >= 2
+                              ? 2.8 + (tier - 1) * 0.35
+                              : 3.2 + (tier - 1) * 0.6;
+                          circle(m.offsetX || 0, m.offsetY || 0, size);
                       }
+
                       pop();
                   }
               }
@@ -5171,7 +5175,7 @@
                           </div>
                           <button class="px-4 py-1.5 text-sm rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-medium">Extract</button>
                       `;
-                          div.onclick = () => extractCreatureToEgg(creature);
+                          div.onclick = () => extractCreatureToEgg(creature, { refreshExtractModal: true });
                           listContainer.appendChild(div);
                       });
                   }
@@ -5187,14 +5191,22 @@
                   }
               }
 
-              function extractCreatureToEgg(creature) {
+              function extractCreatureToEgg(creature, options = {}) {
+                  const { refreshExtractModal = false } = options;
+
+                  if (!creature) return false;
+                  if (creature.isPredator) {
+                      addFloatingText(creature.x, creature.y - 30, "Predators cannot be extracted", '#f87171');
+                      playTone(220, 'sawtooth', 0.25, 0.6);
+                      return false;
+                  }
                   if (eggs.length >= MAX_EGGS) {
                       alert(`Your Egg Inventory is full (${MAX_EGGS} max).`);
-                      return;
+                      return false;
                   }
                   if (!ScoreEngine.spend(250000)) {
                       alert("You need 250,000 High Roller Points.");
-                      return;
+                      return false;
                   }
                   updateMainStats();
                   updateEggCountBadge();
@@ -5227,7 +5239,10 @@
                   if (selectedCreature === creature) {
                       deselectCreature();
                   }
-                  showExtractEggModal();
+                  if (refreshExtractModal) {
+                      showExtractEggModal();
+                  }
+                  return true;
               }
 
               function createCreatureFromEgg(eggData) {
@@ -5284,11 +5299,155 @@
 
                   // Clear the slot
                   slot.currentIncubation = null;
+                  ensureSlotAutomation(slot).endsAt = 0;
                   renderIncubatorSlots();
                   updateMainStats();
               }
 
               // ==================== INCUBATOR SYSTEM ====================
+              function createDefaultSlotAutomation() {
+                  return {
+                      endsAt: 0,
+                      lifetimeMultGained: 0,
+                      session: {
+                          cyclesCompleted: 0,
+                          modulesAdded: 0,
+                          scoreGained: 0,
+                          slotMultGained: 0
+                      }
+                  };
+              }
+
+              function ensureSlotAutomation(slot) {
+                  if (!slot) return null;
+                  if (!slot.automation) slot.automation = createDefaultSlotAutomation();
+                  if (!slot.automation.session) {
+                      slot.automation.session = { cyclesCompleted: 0, modulesAdded: 0, scoreGained: 0, slotMultGained: 0 };
+                  }
+                  return slot.automation;
+              }
+
+              function normalizeIncubatorSlots() {
+                  incubatorSlots.forEach(slot => {
+                      ensureSlotAutomation(slot);
+                  });
+              }
+
+              function isSlotAutomated(slot) {
+                  ensureSlotAutomation(slot);
+                  return slot.automation.endsAt > Date.now() && !!slot.currentIncubation;
+              }
+
+              function getAutomationRemainingMs(slot) {
+                  if (!isSlotAutomated(slot)) return 0;
+                  return Math.max(0, slot.automation.endsAt - Date.now());
+              }
+
+              function formatAutomationTime(ms) {
+                  const totalSec = Math.ceil(ms / 1000);
+                  const min = Math.floor(totalSec / 60);
+                  const sec = totalSec % 60;
+                  return `${min}:${sec.toString().padStart(2, '0')}`;
+              }
+
+              function addAutomationModulesToEgg(eggData, count) {
+                  if (!eggData) return 0;
+                  if (!eggData.modules) eggData.modules = [];
+                  const types = ['harvester', 'sensor', 'mover', 'resistant', 'explorer', 'communicator'];
+                  const colors = {
+                      harvester: '#34d399', sensor: '#38bdf8', mover: '#a78bfa',
+                      resistant: '#f472b6', explorer: '#fbbf24', communicator: '#c084fc'
+                  };
+                  for (let i = 0; i < count; i++) {
+                      const type = random(types);
+                      const ang = random(TWO_PI);
+                      const di = random(5, 9);
+                      eggData.modules.push({
+                          type,
+                          color: colors[type],
+                          offsetX: cos(ang) * di,
+                          offsetY: sin(ang) * di,
+                          tier: 1
+                      });
+                  }
+                  return count;
+              }
+
+              function completeAutomatedIncubationCycle(slot) {
+                  const inc = slot.currentIncubation;
+                  if (!inc || !inc.eggData) return;
+
+                  const egg = inc.eggData;
+                  const scoreBefore = getEggScore(egg);
+                  const multGain = calculateIncubatorMultiplierGain(egg);
+
+                  slot.multiplier = Math.min(3.0, slot.multiplier + multGain);
+                  slot.totalIncubations++;
+
+                  const moduleCount = Math.floor(random(1, 4));
+                  addAutomationModulesToEgg(egg, moduleCount);
+
+                  const scoreAfter = getEggScore(egg);
+                  const scoreDelta = Math.max(0, scoreAfter - scoreBefore);
+                  const auto = ensureSlotAutomation(slot);
+
+                  auto.session.cyclesCompleted++;
+                  auto.session.modulesAdded += moduleCount;
+                  auto.session.scoreGained += scoreDelta;
+                  auto.session.slotMultGained += multGain;
+                  auto.lifetimeMultGained += multGain;
+
+                  inc.progress = 0;
+                  inc.completed = false;
+                  inc.readyToClaim = false;
+              }
+
+              function tickIncubatorAutomation() {
+                  const now = Date.now();
+                  incubatorSlots.forEach(slot => {
+                      const auto = ensureSlotAutomation(slot);
+                      if (auto.endsAt > 0 && auto.endsAt <= now) {
+                          auto.endsAt = 0;
+                      }
+                  });
+              }
+
+              function startIncubatorAutomation(slotIndex) {
+                  const slot = incubatorSlots[slotIndex];
+                  if (!slot || !slot.currentIncubation) {
+                      alert('Place an egg in this slot before enabling automation.');
+                      return;
+                  }
+                  if (aetheriumCrystals < INCUBATOR_AUTOMATION_CRYSTAL_COST) {
+                      alert('You need 1 Aetherium Crystal to automate this slot.');
+                      return;
+                  }
+
+                  aetheriumCrystals -= INCUBATOR_AUTOMATION_CRYSTAL_COST;
+                  updateAetheriumUI();
+
+                  const auto = ensureSlotAutomation(slot);
+                  const now = Date.now();
+                  const extending = auto.endsAt > now;
+
+                  if (!extending) {
+                      auto.session = {
+                          cyclesCompleted: 0,
+                          modulesAdded: 0,
+                          scoreGained: 0,
+                          slotMultGained: 0
+                      };
+                      auto.endsAt = now + INCUBATOR_AUTOMATION_DURATION_MS;
+                  } else {
+                      auto.endsAt += INCUBATOR_AUTOMATION_DURATION_MS;
+                  }
+
+                  playTone(520, 'sine', 0.14, 0.45);
+                  setTimeout(() => playTone(780, 'sine', 0.12, 0.35), 90);
+                  addFloatingText(width / 2, 72, extending ? '+5 min Auto' : 'Slot Automated', '#a78bfa');
+                  renderIncubatorSlots();
+              }
+
               function initializeIncubatorSlots() {
                   if (!incubatorSlots || incubatorSlots.length === 0) {
                       incubatorSlots = [];
@@ -5297,9 +5456,12 @@
                               id: i,
                               multiplier: 1.0,
                               totalIncubations: 0,
-                              currentIncubation: null
+                              currentIncubation: null,
+                              automation: createDefaultSlotAutomation()
                           });
                       }
+                  } else {
+                      normalizeIncubatorSlots();
                   }
               }
               initializeIncubatorSlots();
@@ -5308,6 +5470,7 @@
                   const modal = document.getElementById('incubator-modal');
                   if (!modal) return;
 
+                  incubatorModalOpen = true;
                   modal.classList.remove('hidden');
                   modal.classList.add('flex');
                   renderIncubatorSlots();
@@ -5332,11 +5495,74 @@
               }
 
               function hideIncubator() {
+                  incubatorModalOpen = false;
                   const modal = document.getElementById('incubator-modal');
                   if (modal) {
                       modal.classList.remove('flex');
                       modal.classList.add('hidden');
                   }
+              }
+
+              function renderIncubatorAutomationPanel(slot, index) {
+                  const auto = ensureSlotAutomation(slot);
+                  const active = isSlotAutomated(slot);
+                  const remaining = active ? getAutomationRemainingMs(slot) : 0;
+                  const hasSession = auto.session.cyclesCompleted > 0 || auto.session.modulesAdded > 0 || auto.session.scoreGained > 0;
+                  const canAutomate = !!slot.currentIncubation && aetheriumCrystals >= INCUBATOR_AUTOMATION_CRYSTAL_COST;
+
+                  let html = `<div class="mt-2 rounded-xl border ${active ? 'border-violet-500/50 bg-violet-500/10' : 'border-white/10 bg-black/25'} p-2 text-[10px]">`;
+
+                  if (active) {
+                      html += `
+                          <div class="flex items-center justify-between gap-2 mb-1">
+                              <span class="font-semibold text-violet-300 uppercase tracking-wide">
+                                  <i class="fa-solid fa-robot mr-1"></i>Automated
+                              </span>
+                              <span data-inc-auto-timer class="font-mono text-violet-200">${formatAutomationTime(remaining)} left</span>
+                          </div>`;
+                  } else if (auto.endsAt > 0 && remaining === 0) {
+                      html += `<div class="text-white/50 mb-1">Automation ended — egg kept with bonuses</div>`;
+                  }
+
+                  if (auto.lifetimeMultGained > 0) {
+                      html += `<div class="text-emerald-300/90">Permanent slot bonus: <span class="font-mono">+${auto.lifetimeMultGained.toFixed(3)}×</span></div>`;
+                  }
+
+                  if (hasSession) {
+                      html += `<div class="text-white/70 mt-1 leading-relaxed">
+                          Session: <span data-inc-session-cycles class="font-mono text-amber-300">${auto.session.cyclesCompleted}</span> cycles •
+                          <span data-inc-session-modules class="font-mono text-sky-300">+${auto.session.modulesAdded}</span> modules •
+                          <span data-inc-session-score class="font-mono text-amber-300">+${auto.session.scoreGained}</span> egg score
+                      </div>`;
+                  }
+
+                  if (slot.currentIncubation) {
+                      const eggScore = getEggScore(slot.currentIncubation.eggData);
+                      html += `<div class="text-white/45 mt-1">Egg score now: <span data-inc-egg-score class="font-mono text-amber-400/90">${eggScore}</span></div>`;
+                  }
+
+                  if (!active) {
+                      html += `
+                          <button onclick="startIncubatorAutomation(${index}); event.stopImmediatePropagation();"
+                                  class="w-full mt-2 py-1.5 text-[11px] rounded-lg font-medium transition-colors ${canAutomate
+                                      ? 'bg-violet-600 hover:bg-violet-500 text-white'
+                                      : 'bg-white/5 text-white/35 cursor-not-allowed'}"
+                                  ${canAutomate ? '' : 'disabled'}>
+                              Automate 5 min (1 Crystal)
+                          </button>`;
+                  } else {
+                      html += `
+                          <button onclick="startIncubatorAutomation(${index}); event.stopImmediatePropagation();"
+                                  class="w-full mt-2 py-1.5 text-[11px] rounded-lg font-medium ${aetheriumCrystals >= INCUBATOR_AUTOMATION_CRYSTAL_COST
+                                      ? 'bg-violet-600/80 hover:bg-violet-500 text-white'
+                                      : 'bg-white/5 text-white/35 cursor-not-allowed'}"
+                                  ${aetheriumCrystals >= INCUBATOR_AUTOMATION_CRYSTAL_COST ? '' : 'disabled'}>
+                              Extend +5 min (1 Crystal)
+                          </button>`;
+                  }
+
+                  html += `</div>`;
+                  return html;
               }
 
               function renderIncubatorSlots() {
@@ -5347,16 +5573,27 @@
                   incubatorSlots.forEach((slot, index) => {
                       const hasInc = slot.currentIncubation !== null;
                       const progress = hasInc ? Math.floor(slot.currentIncubation.progress) : 0;
-                      const isReady = hasInc && slot.currentIncubation.readyToClaim === true;
+                      const automated = isSlotAutomated(slot);
+                      const isReady = hasInc && slot.currentIncubation.readyToClaim === true && !automated;
 
                       const card = document.createElement('div');
-                      card.className = `rounded-2xl border p-3 transition-all ${hasInc
-                          ? 'border-amber-500/50 bg-[#0f0a05]'
-                          : 'border-amber-500/20 bg-[#0a0a0f]'}`;
+                      card.dataset.incSlot = String(slot.id);
+                      if (hasInc && slot.currentIncubation?.eggData) {
+                          const egg = slot.currentIncubation.eggData;
+                          card.dataset.eggSig = (egg.modules?.length || 0) + ':' + (egg.modules?.map(m => `${m.type}-${m.tier || 1}`).join(',') || '');
+                      }
+                      card.className = `rounded-2xl border p-3 transition-all ${automated
+                          ? 'border-violet-500/45 bg-[#0c0818] ring-1 ring-violet-500/20'
+                          : hasInc
+                              ? 'border-amber-500/50 bg-[#0f0a05]'
+                              : 'border-amber-500/20 bg-[#0a0a0f]'}`;
 
                       let html = `
                       <div class="flex justify-between items-center mb-1.5">
-                          <div class="text-sm font-semibold text-amber-400">Slot ${slot.id}</div>
+                          <div class="text-sm font-semibold text-amber-400 flex items-center gap-1.5">
+                              Slot ${slot.id}
+                              ${automated ? '<span class="text-[9px] px-1.5 py-0.5 rounded bg-violet-500/30 text-violet-200 font-bold">AUTO</span>' : ''}
+                          </div>
                           <div class="font-mono text-xs px-2 py-0.5 rounded bg-black/40 text-amber-400">${slot.multiplier.toFixed(2)}×</div>
                       </div>
                   `;
@@ -5364,24 +5601,28 @@
                       if (hasInc) {
                           const egg = slot.currentIncubation.eggData;
                           const canvasId = `incubator-slot-preview-${slot.id}`;
+                          const barColor = automated ? 'bg-violet-500' : (isReady ? 'bg-emerald-500' : 'bg-amber-500');
 
                           html += `
                           <div class="flex gap-3 mb-2">
                               <canvas id="${canvasId}" width="48" height="48"
-                                      class="rounded-xl border border-white/10 bg-[#111113] flex-shrink-0"></canvas>
+                                      class="creature-preview-canvas w-12 h-12 block flex-shrink-0 rounded-xl border border-white/10 bg-[#111113]"></canvas>
 
                               <div class="flex-1 min-w-0">
                                   <div class="text-xs text-white/80 mb-0.5">
-                                      Incubating: <span class="text-emerald-400 font-medium">${egg.name}</span>
+                                      ${automated ? 'Auto-incubating' : 'Incubating'}: <span class="text-emerald-400 font-medium">${egg.name}</span>
                                   </div>
+                                  <div class="text-[10px] text-white/45">${egg.modules?.length || 0} modules</div>
 
                                   <div class="w-full bg-white/10 h-2 rounded-full overflow-hidden mt-1">
-                                      <div class="${isReady ? 'bg-emerald-500' : 'bg-amber-500'} h-2 transition-all" style="width: ${progress}%"></div>
+                                      <div data-inc-progress-bar class="${barColor} h-2 transition-all" style="width: ${progress}%"></div>
                                   </div>
-                                  <div class="text-[10px] text-right text-white/50 mt-0.5">${progress}%</div>
+                                  <div data-inc-progress-pct class="text-[10px] text-right text-white/50 mt-0.5">${progress}%</div>
                               </div>
                           </div>
                       `;
+
+                          html += renderIncubatorAutomationPanel(slot, index);
 
                           if (isReady) {
                               html += `
@@ -5397,10 +5638,10 @@
                                   </button>
                               </div>
                           `;
-                          } else {
+                          } else if (!automated) {
                               html += `
                               <button onclick="cancelIncubationInSlot(${index}); event.stopImmediatePropagation();"
-                                      class="w-full py-1 text-xs rounded-xl bg-red-500/90 hover:bg-red-500 text-white font-medium">
+                                      class="w-full py-1 text-xs rounded-xl bg-red-500/90 hover:bg-red-500 text-white font-medium mt-1">
                                   Cancel
                               </button>
                           `;
@@ -5428,6 +5669,55 @@
                               }
                           }, 10);
                       }
+                  });
+              }
+
+              function updateIncubatorSlotsLive() {
+                  const grid = document.getElementById('incubator-slots-grid');
+                  if (!grid) return;
+
+                  incubatorSlots.forEach(slot => {
+                      const card = grid.querySelector(`[data-inc-slot="${slot.id}"]`);
+                      if (!card) return;
+
+                      const inc = slot.currentIncubation;
+                      if (inc) {
+                          const progress = Math.floor(inc.progress);
+                          const bar = card.querySelector('[data-inc-progress-bar]');
+                          const pct = card.querySelector('[data-inc-progress-pct]');
+                          if (bar) bar.style.width = progress + '%';
+                          if (pct) pct.textContent = progress + '%';
+
+                          const egg = inc.eggData;
+                          if (egg) {
+                              const sig = (egg.modules?.length || 0) + ':' + (egg.modules?.map(m => `${m.type}-${m.tier || 1}`).join(',') || '');
+                              if (card.dataset.eggSig !== sig) {
+                                  card.dataset.eggSig = sig;
+                                  const canvas = card.querySelector('canvas.creature-preview-canvas');
+                                  if (canvas) drawCreaturePreview(egg, canvas);
+                              }
+                          }
+                      }
+
+                      const auto = ensureSlotAutomation(slot);
+                      const timer = card.querySelector('[data-inc-auto-timer]');
+                      if (timer) {
+                          if (isSlotAutomated(slot)) {
+                              timer.textContent = formatAutomationTime(getAutomationRemainingMs(slot)) + ' left';
+                          }
+                      }
+
+                      const eggScoreEl = card.querySelector('[data-inc-egg-score]');
+                      if (eggScoreEl && inc?.eggData) {
+                          eggScoreEl.textContent = getEggScore(inc.eggData);
+                      }
+
+                      const cyclesEl = card.querySelector('[data-inc-session-cycles]');
+                      const modulesEl = card.querySelector('[data-inc-session-modules]');
+                      const scoreEl = card.querySelector('[data-inc-session-score]');
+                      if (cyclesEl) cyclesEl.textContent = auto.session.cyclesCompleted;
+                      if (modulesEl) modulesEl.textContent = '+' + auto.session.modulesAdded;
+                      if (scoreEl) scoreEl.textContent = '+' + auto.session.scoreGained;
                   });
               }
 
@@ -5465,7 +5755,7 @@
 
                       row.innerHTML = `
                       <canvas id="${canvasId}" width="46" height="46"
-                              class="rounded-xl border border-white/10 bg-[#111113] flex-shrink-0"></canvas>
+                              class="creature-preview-canvas w-[46px] h-[46px] block flex-shrink-0 rounded-xl border border-white/10 bg-[#111113]"></canvas>
                       <div class="flex-1 min-w-0">
                           <div class="text-emerald-400 font-medium">${egg.name}</div>
                           <div class="text-xs text-white/60">Gen ${egg.generation} • ${egg.modules?.length || 0} mods • Score ${getEggScore(egg)}</div>
@@ -5513,15 +5803,19 @@
                   const slot = incubatorSlots[slotIndex];
                   if (!slot || !slot.currentIncubation) return;
 
-                  if (confirm("Cancel incubation? Egg returns to inventory.")) {
+                  const autoMsg = isSlotAutomated(slot) ? '\nThis will also stop automation on this slot.' : '';
+                  if (confirm(`Cancel incubation? Egg returns to inventory.${autoMsg}`)) {
                       eggs.push(JSON.parse(JSON.stringify(slot.currentIncubation.eggData)));
                       updateEggCountBadge();
                       slot.currentIncubation = null;
+                      ensureSlotAutomation(slot).endsAt = 0;
                       renderIncubatorSlots();
                   }
               }
 
               function updateIncubatorSlotsProgress(timeScale = 1) {
+                  tickIncubatorAutomation();
+
                   incubatorSlots.forEach(slot => {
                       if (slot.currentIncubation) {
                           const inc = slot.currentIncubation;
@@ -5535,8 +5829,12 @@
                           inc.progress = Math.min(100, inc.progress + gain);
 
                           if (inc.progress >= 100 && !inc.completed) {
-                              inc.completed = true;
-                              inc.readyToClaim = true;
+                              if (isSlotAutomated(slot)) {
+                                  completeAutomatedIncubationCycle(slot);
+                              } else {
+                                  inc.completed = true;
+                                  inc.readyToClaim = true;
+                              }
                           }
                       }
                   });
@@ -5624,6 +5922,7 @@
 
                   addFloatingText(width / 2, 85, `+${finalScore} Score`, '#fbbf24');
                   slot.currentIncubation = null;
+                  ensureSlotAutomation(slot).endsAt = 0;
                   hideIncubationCompleteModal();
                   renderIncubatorSlots();
                   updateMainStats();
@@ -5637,8 +5936,33 @@
                   eggs.push(JSON.parse(JSON.stringify(slot.currentIncubation.eggData)));
                   updateEggCountBadge();
                   slot.currentIncubation = null;
+                  ensureSlotAutomation(slot).endsAt = 0;
                   hideIncubationCompleteModal();
                   renderIncubatorSlots();
+              }
+
+              function cycleIncubatedEggAgain() {
+                  if (currentSlotForCompletion === null) return;
+                  const slot = incubatorSlots[currentSlotForCompletion];
+                  if (!slot || !slot.currentIncubation) return;
+
+                  const inc = slot.currentIncubation;
+                  inc.progress = 0;
+                  inc.completed = false;
+                  inc.readyToClaim = false;
+
+                  hideIncubationCompleteModal();
+
+                  const incubatorModal = document.getElementById('incubator-modal');
+                  const incubatorWasOpen = incubatorModal && incubatorModal.classList.contains('flex');
+                  if (!incubatorWasOpen) {
+                      showIncubator();
+                  } else {
+                      renderIncubatorSlots();
+                  }
+
+                  addFloatingText(width / 2, 80, 'Egg cycling again in slot', '#34d399');
+                  playTone(520, 'sine', 0.12, 0.4);
               }
 
               function calculateIncubatorMultiplierGain(eggData) {
@@ -5708,7 +6032,7 @@
 
                           div.innerHTML = `
                           <canvas id="${canvasId}" width="46" height="46"
-                                  class="rounded-xl border border-white/10 bg-[#111113] flex-shrink-0"></canvas>
+                                  class="creature-preview-canvas w-[46px] h-[46px] block flex-shrink-0 rounded-xl border border-white/10 bg-[#111113]"></canvas>
                           <div class="flex-1 min-w-0">
                               <div class="font-semibold text-emerald-400">${creature.name}</div>
                                                   <div class="text-xs text-white/60">
@@ -5726,11 +6050,9 @@
                           const extractBtn = div.querySelector('.extract-btn');
                           extractBtn.onclick = (e) => {
                               e.stopImmediatePropagation();
-                              extractCreatureToEgg(creature);
-                              setTimeout(() => {
-                                  hideTopCreaturesModal();
+                              if (extractCreatureToEgg(creature)) {
                                   showTopCreaturesModal();
-                              }, 100);
+                              }
                           };
 
                           const inspectBtn = div.querySelector('.inspect-btn');
@@ -5809,7 +6131,7 @@
               }
 
               function setup() {
-                  console.info('[MiniSimmy] build=mobile-opt-2026-06-17e tier=' + DeviceProfile.tier + ' score=ScoreEngine walls=filters hazards=deploy');
+                  console.info('[MiniSimmy] build=mobile-opt-2026-06-17f tier=' + DeviceProfile.tier + ' incubator=automation zoom=buttons-only');
                   debugLog("Setup started");
 
                   let canvas = createCanvas(820, 580);
@@ -5989,6 +6311,9 @@
 
                   updateIncubatorSlotsProgress(timeScale);
 
+                  if (incubatorModalOpen && frameCount % 30 === 0) {
+                      updateIncubatorSlotsLive();
+                  }
 
                   // === Incubation Progress Tick ===
                   if (!paused && incubatingEggs.length > 0) {
@@ -8279,16 +8604,37 @@
                   if (energyBar) energyBar.style.width = '0%';
               }
 
+              function prepareCreaturePreviewCanvas(canvas, logicalSize = 48) {
+                  const size = logicalSize || 48;
+                  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+                  const targetW = Math.round(size * dpr);
+                  const targetH = Math.round(size * dpr);
+
+                  if (canvas.width !== targetW || canvas.height !== targetH) {
+                      canvas.width = targetW;
+                      canvas.height = targetH;
+                  }
+                  canvas.style.width = size + 'px';
+                  canvas.style.height = size + 'px';
+
+                  const ctx = canvas.getContext('2d');
+                  ctx.setTransform(1, 0, 0, 1, 0, 0);
+                  ctx.clearRect(0, 0, canvas.width, canvas.height);
+                  ctx.scale(dpr, dpr);
+                  return { ctx, size };
+              }
+
               function drawCreaturePreview(data, canvas) {
                   if (!canvas || !data) return;
-                  const ctx = canvas.getContext('2d');
-                  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                  const attrSize = parseInt(canvas.getAttribute('width'), 10);
+                  const logicalSize = attrSize || parseInt(canvas.style.width, 10) || 48;
+                  const { ctx, size } = prepareCreaturePreviewCanvas(canvas, logicalSize);
 
                   const isSocial = data.socialPredator === true;
                   const isPred = data.isPredator === true;
                   const isInfected = (data.purpleFlash && data.purpleFlash > 0) || data.infected === true;
 
-                  // Background color
                   let bgColor = '#1f2937';
                   if (isInfected) bgColor = '#581c87';
                   else if (isSocial) bgColor = '#9a3412';
@@ -8296,20 +8642,40 @@
 
                   ctx.fillStyle = bgColor;
                   ctx.beginPath();
-                  ctx.roundRect(2, 2, canvas.width - 4, canvas.height - 4, 10);
+                  if (typeof ctx.roundRect === 'function') {
+                      ctx.roundRect(2, 2, size - 4, size - 4, 10);
+                  } else {
+                      ctx.rect(2, 2, size - 4, size - 4);
+                  }
                   ctx.fill();
                   ctx.strokeStyle = (isPred || isSocial || isInfected) ? '#ffffff33' : '#ffffff22';
                   ctx.lineWidth = 1.5;
                   ctx.stroke();
 
-                  const cx = canvas.width / 2;
-                  const cy = canvas.height / 2;
-
                   const moduleCount = data.modules?.length || 0;
-
-                  // Core size (smaller = more compact creature)
+                  const spreadScale = 2.45;
                   const baseSize = 9.5 + Math.min(moduleCount * 0.22, 5.5);
-                  // Core color
+
+                  let maxExtent = baseSize + 2;
+                  if (data.modules && moduleCount > 0) {
+                      for (let m of data.modules) {
+                          const tier = m.tier || 1;
+                          const modSize = 5.8 + (tier - 1) * 1.25;
+                          const mx = Math.abs((m.offsetX || 0) * spreadScale);
+                          const my = Math.abs((m.offsetY || 0) * spreadScale);
+                          maxExtent = Math.max(maxExtent, mx + modSize, my + modSize);
+                      }
+                  }
+
+                  const padding = 5;
+                  const fitScale = Math.min((size * 0.5 - padding) / maxExtent, 1);
+                  const cx = size / 2;
+                  const cy = size / 2;
+
+                  ctx.save();
+                  ctx.translate(cx, cy);
+                  ctx.scale(fitScale, fitScale);
+
                   let coreColor = '#facc15';
                   if (isSocial) coreColor = '#f59e0b';
                   else if (isPred) coreColor = '#ef4444';
@@ -8320,39 +8686,36 @@
                   else if (data.specialization === 'explorer') coreColor = '#fbbf24';
                   else if (data.specialization === 'communicator') coreColor = '#c084fc';
 
-                  // Draw core
                   ctx.fillStyle = coreColor;
                   ctx.strokeStyle = isPred ? '#fecaca' : '#fef08c';
                   ctx.lineWidth = isPred ? 2 : 1.6;
                   ctx.beginPath();
-                  ctx.arc(cx, cy, baseSize, 0, Math.PI * 2);
+                  ctx.arc(0, 0, baseSize, 0, Math.PI * 2);
                   ctx.fill();
                   ctx.stroke();
 
-                  // Honey
                   if (data.honey > 2.5) {
                       ctx.fillStyle = '#f59e0b';
                       ctx.beginPath();
-                      ctx.arc(cx + 3, cy - 3, 3 + Math.min(data.honey * 0.1, 6), 0, Math.PI * 2);
+                      ctx.arc(3, -3, 3 + Math.min(data.honey * 0.1, 6), 0, Math.PI * 2);
                       ctx.fill();
                   }
 
-                  // Modules - larger and more visible
                   if (data.modules && moduleCount > 0) {
-                      const spreadScale = 2.45;
-
                       for (let m of data.modules) {
                           const tier = m.tier || 1;
-                          const size = 5.8 + (tier - 1) * 1.25;     // bigger modules
-                          const mx = cx + (m.offsetX || 0) * spreadScale;
-                          const my = cy + (m.offsetY || 0) * spreadScale;
+                          const modSize = 5.8 + (tier - 1) * 1.25;
+                          const mx = (m.offsetX || 0) * spreadScale;
+                          const my = (m.offsetY || 0) * spreadScale;
 
                           ctx.fillStyle = m.color || '#fbbf24';
                           ctx.beginPath();
-                          ctx.arc(mx, my, size, 0, Math.PI * 2);
+                          ctx.arc(mx, my, modSize, 0, Math.PI * 2);
                           ctx.fill();
                       }
                   }
+
+                  ctx.restore();
               }
               // ==================== Inspector Update (Clean + Neural Net) ====================
               function updateInspector() {
@@ -9473,7 +9836,7 @@
                           card.innerHTML = `
                           <div class="flex items-center gap-3">
                               <canvas id="${canvasId}" width="52" height="52"
-                                      class="rounded-xl border border-white/10 bg-[#111113] flex-shrink-0"></canvas>
+                                      class="creature-preview-canvas w-[52px] h-[52px] block flex-shrink-0 rounded-xl border border-white/10 bg-[#111113]"></canvas>
                               <div>
                                   <div class="font-semibold text-emerald-400">${egg.name}</div>
                                   <div class="text-xs text-white/60">Gen ${egg.generation} • ${egg.modules.length} modules</div>
@@ -9934,7 +10297,7 @@
                           card.innerHTML = `
                           <div class="flex items-center gap-3">
                               <canvas id="${canvasId}" width="52" height="52"
-                                      class="rounded-xl border border-white/10 bg-[#111113] flex-shrink-0"></canvas>
+                                      class="creature-preview-canvas w-[52px] h-[52px] block flex-shrink-0 rounded-xl border border-white/10 bg-[#111113]"></canvas>
                               <div class="flex-1 min-w-0">
                                   <div class="font-semibold text-emerald-400">${egg.name}</div>
                                   <div class="text-xs text-white/60">Gen ${egg.generation} • ${egg.modules.length} modules</div>
@@ -10002,7 +10365,7 @@
                           <div class="flex justify-between items-center">
                               <div class="flex items-center gap-3">
                                   <canvas id="${canvasId}" width="48" height="48"
-                                          class="rounded-xl border border-white/10 bg-[#111113]"></canvas>
+                                          class="creature-preview-canvas w-12 h-12 block flex-shrink-0 rounded-xl border border-white/10 bg-[#111113]"></canvas>
                                   <div>
                                       <div class="font-semibold text-emerald-400">${egg.name}</div>
                                       <div class="text-xs text-white/60">Gen ${egg.generation} • ${egg.modules.length} modules</div>
@@ -10452,6 +10815,7 @@
                   // === Restore Incubator Slot Bonuses ===
                   if (save.incubatorSlots && save.incubatorSlots.length === MAX_INCUBATOR_SLOTS) {
                       incubatorSlots = save.incubatorSlots;
+                      normalizeIncubatorSlots();
                   } else {
                       initializeIncubatorSlots();
                   }
@@ -10489,14 +10853,6 @@
                       alert("No creature selected.");
                       return;
                   }
-
-                  // Block predators from being extracted
-                  if (selectedCreature.isPredator) {
-                      addFloatingText(selectedCreature.x, selectedCreature.y - 30, "Predators cannot be extracted", '#f87171');
-                      playTone(220, 'sawtooth', 0.25, 0.6);
-                      return;
-                  }
-
                   extractCreatureToEgg(selectedCreature);
               }
 
