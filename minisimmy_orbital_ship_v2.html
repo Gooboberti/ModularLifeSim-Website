@@ -164,6 +164,38 @@
             text-align: center;
             padding: 6px 2px;
         }
+        .inspect-jf-harvest {
+            margin-top: 4px;
+            padding-top: 4px;
+            border-top: 1px solid rgba(103,232,249,0.14);
+        }
+        .inspect-jf-harvest-head {
+            font-size: 8px;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: rgba(103,232,249,0.72);
+            margin-bottom: 3px;
+        }
+        .inspect-jf-harvest-ready {
+            font-size: 9px;
+            font-weight: 700;
+            color: #a5f3fc;
+            margin-bottom: 4px;
+            font-variant-numeric: tabular-nums;
+        }
+        .inspect-jf-harvest-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 4px;
+            font-size: 8px;
+            padding: 2px 0;
+            color: rgba(255,255,255,0.7);
+            font-variant-numeric: tabular-nums;
+        }
+        .inspect-jf-harvest-row.is-ready { color: #86efac; }
+        .inspect-jf-harvest-row.is-short { color: rgba(251,146,60,0.9); }
         .inspect-lace-panel {
             border-radius: 12px;
             border: 1px solid rgba(167,139,250,0.18);
@@ -7936,7 +7968,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'orbital-ship-v2-2026-06-20-jellyfish-size-pop';
+              const MINISIMMY_BUILD = 'orbital-ship-v2-2026-06-20-jellyfish-blueprint-pop';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -8117,6 +8149,13 @@ body.is-map-fullscreen #map-fullscreen-btn {
               const SCOOP_JELLYFISH_SIZE_0_BODY_SCALE = 0.76;
               const SCOOP_JELLYFISH_CONSUME_POP = 10;
               const SCOOP_JELLYFISH_POP_MAX_SPAWNS = 24;
+              const SCOOP_JELLYFISH_LOOSE_DECAY_MS = 7200;
+              const SCOOP_JELLYFISH_LOOSE_CLUSTER_RADIUS = 58;
+              const SCOOP_JELLYFISH_LOOSE_SPAWN_MIN = 3;
+              const SCOOP_JELLYFISH_AUTO_SILVER_CHANCE = 0.14;
+              const SCOOP_JELLYFISH_AUTO_GOLD_CHANCE = 0.05;
+              const SCOOP_JELLYFISH_MANUAL_SILVER_CHANCE = 0.04;
+              const SCOOP_JELLYFISH_MANUAL_GOLD_CHANCE = 0.01;
 
               const SCOOP_INCUBATOR_CORE_PERKS = {
                   harvester: { leakMult: 1.38, spawnEnergy: 58, foodLure: 1.45, label: 'Feast lure brood' },
@@ -10125,7 +10164,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                               ? `Prune doctrine: touch many, highlight the frailest, vent drift from the probe to clear dead weight.`
                               : 'Prune doctrine: the tendril must touch before I judge — one candidate is not yet a cull list.',
                           scoop_incubate: `Ending scoop — ${options.extra || 'several'} brain-kin hatch from the module broth; they wear what I ate but think with my neural map.`,
-                          scoop_jellyfish_pop: `Bell burst — ${options.extra || 'several'} size-0 brood peel off; each carries one eaten module and my brain, not the squid shell.`,
+                          scoop_jellyfish_pop: `Bell burst — ${options.extra || 'several'} size-0 clones peel off when the harvested package matches my body; overflow mods drift free with my brain if they merge in time.`,
                           scoop_leak: `Module essence leaking from the bubble — lure spree pulls the shoal closer so pruning stays easy.`
                       };
                       return lines[topic] || '';
@@ -24572,6 +24611,167 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   if (creature._jellyfishConsumeCount == null) creature._jellyfishConsumeCount = 0;
               }
 
+              function jellyfishModuleKey(mod) {
+                  if (!mod) return 'communicator:1';
+                  return `${normalizeModuleTypeKey(mod.type)}:${mod.tier || 1}`;
+              }
+
+              function getJellyfishCloneBlueprint(creature) {
+                  const counts = {};
+                  const bodyMods = (creature?.modules || []).filter((m) => !m.isCore);
+                  if (!bodyMods.length) {
+                      const core = getCreatureCoreType(creature) || 'communicator';
+                      const key = `${core}:1`;
+                      return {
+                          counts: { [key]: 1 },
+                          entries: [{ key, type: core, tier: 1, need: 1, color: MODULE_AMMO_COLORS[core] || '#a78bfa' }],
+                          totalPerClone: 1
+                      };
+                  }
+                  for (const m of bodyMods) {
+                      const key = jellyfishModuleKey(m);
+                      counts[key] = (counts[key] || 0) + 1;
+                  }
+                  const entries = Object.entries(counts).map(([key, need]) => {
+                      const sep = key.lastIndexOf(':');
+                      const type = key.slice(0, sep);
+                      const tier = parseInt(key.slice(sep + 1), 10) || 1;
+                      return {
+                          key, type, tier, need,
+                          color: MODULE_AMMO_COLORS[type] || MODULE_TYPE_COLORS[type] || '#a78bfa'
+                      };
+                  }).sort((a, b) => b.need - a.need);
+                  const totalPerClone = entries.reduce((sum, e) => sum + e.need, 0);
+                  return { counts, entries, totalPerClone };
+              }
+
+              function countJellyfishBagModules(bag) {
+                  const counts = {};
+                  for (const m of bag || []) {
+                      const key = jellyfishModuleKey(m);
+                      counts[key] = (counts[key] || 0) + 1;
+                  }
+                  return counts;
+              }
+
+              function getJellyfishCloneCraftState(creature) {
+                  const blueprint = getJellyfishCloneBlueprint(creature);
+                  const bag = creature?._scoopModuleBag || [];
+                  const have = countJellyfishBagModules(bag);
+                  let cloneCount = blueprint.entries.length ? Infinity : 0;
+                  const tally = blueprint.entries.map((entry) => {
+                      const haveN = have[entry.key] || 0;
+                      const packs = Math.floor(haveN / entry.need);
+                      cloneCount = min(cloneCount, packs);
+                      return {
+                          ...entry,
+                          have: haveN,
+                          packs,
+                          short: max(0, entry.need - (haveN % entry.need || entry.need))
+                      };
+                  });
+                  if (!isFinite(cloneCount) || cloneCount < 0) cloneCount = 0;
+                  cloneCount = min(cloneCount, SCOOP_JELLYFISH_POP_MAX_SPAWNS);
+                  const feedsLeft = max(0, SCOOP_JELLYFISH_CONSUME_POP - (creature?._jellyfishConsumeCount || 0));
+                  const overflowMods = max(0, bag.length - cloneCount * blueprint.totalPerClone);
+                  return { blueprint, tally, cloneCount, totalBag: bag.length, feedsLeft, overflowMods };
+              }
+
+              function allocateModulesForJellyfishClones(bag, blueprint, cloneCount) {
+                  const remaining = [...(bag || [])];
+                  const clonePackages = [];
+                  for (let c = 0; c < cloneCount; c++) {
+                      const pkg = [];
+                      for (const entry of blueprint.entries) {
+                          for (let n = 0; n < entry.need; n++) {
+                              const idx = remaining.findIndex((m) => jellyfishModuleKey(m) === entry.key);
+                              if (idx >= 0) pkg.push(remaining.splice(idx, 1)[0]);
+                          }
+                      }
+                      if (pkg.length) clonePackages.push(pkg);
+                  }
+                  return { clonePackages, remainder: remaining };
+              }
+
+              function rollJellyfishPopLegendaries(mods, opts = {}) {
+                  const silverChance = opts.autoPop ? SCOOP_JELLYFISH_AUTO_SILVER_CHANCE : SCOOP_JELLYFISH_MANUAL_SILVER_CHANCE;
+                  const goldChance = opts.autoPop ? SCOOP_JELLYFISH_AUTO_GOLD_CHANCE : SCOOP_JELLYFISH_MANUAL_GOLD_CHANCE;
+                  return (mods || []).map((m) => {
+                      const copy = ModuleIdentitySystem.copyModuleWithLayout(m);
+                      copy.isCore = false;
+                      if (m._scoopSpecialSheen === 'gold' || m._scoopSpecialSheen === 'silver') {
+                          markScoopModuleSpecial(copy);
+                          return copy;
+                      }
+                      const roll = random();
+                      if (roll < goldChance) {
+                          copy.tier = max(copy.tier || 1, 5);
+                          if (random() < 0.28) copy.prestigeCore = true;
+                          markScoopModuleSpecial(copy);
+                      } else if (roll < goldChance + silverChance) {
+                          copy.tier = max(copy.tier || 1, 3);
+                          if (copy._wasCore) copy._wasCore = true;
+                          markScoopModuleSpecial(copy);
+                      }
+                      return copy;
+                  });
+              }
+
+              function maybeVaultJellyfishPopLegendaries(parent, mods) {
+                  const kept = [];
+                  for (const m of mods || []) {
+                      const sheen = m._scoopSpecialSheen;
+                      if (sheen !== 'gold' && sheen !== 'silver') {
+                          kept.push(m);
+                          continue;
+                      }
+                      if (eggs.length >= MAX_EGGS || findFirstEmptyGeneVaultSlotIndex() < 0) {
+                          kept.push(m);
+                          continue;
+                      }
+                      let brainData = null;
+                      if (parent?.brain) {
+                          brainData = {
+                              weightsIH: JSON.parse(JSON.stringify(parent.brain.weightsIH)),
+                              weightsHO: JSON.parse(JSON.stringify(parent.brain.weightsHO)),
+                              biasH: [...parent.brain.biasH],
+                              biasO: [...parent.brain.biasO],
+                              connectionStrengthIH: JSON.parse(JSON.stringify(parent.brain.connectionStrengthIH || [])),
+                              connectionStrengthHO: JSON.parse(JSON.stringify(parent.brain.connectionStrengthHO || []))
+                          };
+                      }
+                      const modCopy = ModuleIdentitySystem.copyModuleWithLayout(m);
+                      modCopy.isCore = false;
+                      if (m._scoopSpecialSheen) modCopy._scoopSpecialSheen = m._scoopSpecialSheen;
+                      const egg = ensureEggDataName({
+                          name: `${parent.name || 'Bell'} · ${sheen} ${INSPECT_MODULE_LABELS[modCopy.type] || modCopy.type}`,
+                          generation: parent.generation || 1,
+                          modules: [modCopy],
+                          brain: brainData,
+                          originAeonNumber: parent.originAeonNumber ?? parent.birthAeonNumber ?? currentAeonNumber
+                      });
+                      eggs.push(egg);
+                      const eggIdx = eggs.length - 1;
+                      if (autoSlotEggAtIndex(eggIdx, 'vault')) {
+                          updateEggCountBadge();
+                          addFloatingText(parent.x, parent.y - 58, `Vaulted ${sheen} ${INSPECT_MODULE_LABELS[modCopy.type] || modCopy.type}`, sheen === 'gold' ? '#fcd34d' : '#e2e8f0');
+                          continue;
+                      }
+                      eggs.pop();
+                      kept.push(m);
+                  }
+                  return kept;
+              }
+
+              function buildJellyfishLooseBrainInherit(parent) {
+                  if (!parent?.brain) return null;
+                  return {
+                      brain: parent.brain.copy(),
+                      parentName: parent.name,
+                      generation: parent.generation || 1
+                  };
+              }
+
               function getScoopGeometryScale(creature) {
                   const tier = max(creature._scoopLatticeTier || 0, creature._scoopGenome?.tier || 0);
                   const sizeMult = getJellyfishSize(creature) === 0
@@ -25204,14 +25404,15 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   if (hunter._scoopActive && isJellyfishScoopCreature(hunter)) {
                       ensureJellyfishSizeState(hunter);
                       hunter._jellyfishConsumeCount++;
+                      const craft = getJellyfishCloneCraftState(hunter);
                       const left = SCOOP_JELLYFISH_CONSUME_POP - hunter._jellyfishConsumeCount;
                       const modN = getScoopModuleCount(hunter);
                       hunter.currentThought = left > 0
-                          ? `Jellyfish size ${getJellyfishSize(hunter)} — ${left} feeds until pop (${modN} mods for brood)`
-                          : `Bell full — popping into ${modN} size-0 brood…`;
+                          ? `Jellyfish size ${getJellyfishSize(hunter)} — ${left} feeds until bonus pop · ${craft.cloneCount} clone${craft.cloneCount === 1 ? '' : 's'} ready (${modN} harvested)`
+                          : `Bell full — bonus pop with legendary odds…`;
                       updateInspectorScoopBar(hunter);
                       if (hunter._jellyfishConsumeCount >= SCOOP_JELLYFISH_CONSUME_POP) {
-                          popJellyfishScoop(hunter);
+                          popJellyfishScoop(hunter, { autoPop: true });
                       }
                   }
                   return true;
@@ -26328,11 +26529,13 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   }
               }
 
-              function spawnLooseScoopModuleParticles(parent, mods) {
+              function spawnLooseScoopModuleParticles(parent, mods, brainInherit = null) {
                   let spawned = 0;
+                  const inherit = brainInherit || buildJellyfishLooseBrainInherit(parent);
+                  const decayAt = Date.now() + SCOOP_JELLYFISH_LOOSE_DECAY_MS;
                   for (const m of mods) {
                       if (moduleParticles.length >= 140) break;
-                      moduleParticles.push(new ModuleParticle(true, {
+                      const mp = new ModuleParticle(true, {
                           type: moduleTypeForParticle(m.type),
                           tier: m.tier || 1,
                           color: m.color || MODULE_AMMO_COLORS[m.type] || '#a78bfa',
@@ -26341,7 +26544,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           vx: random(-2.8, 2.8),
                           vy: random(-2.8, 2.8),
                           orbitGraceUntil: Date.now() + 900
-                      }));
+                      });
+                      mp._scoopLooseDecayAt = decayAt;
+                      mp._scoopBrainInherit = inherit;
+                      if (m._scoopSpecialSheen) mp._scoopSpecialSheen = m._scoopSpecialSheen;
+                      moduleParticles.push(mp);
                       spawned++;
                   }
                   if (spawned > 0) triggerModuleFeedFrenzy(parent.x, parent.y);
@@ -26371,31 +26578,29 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   spawn._jellyfishBodyScale = SCOOP_JELLYFISH_SIZE_0_BODY_SCALE;
               }
 
-              function popJellyfishScoop(parent) {
+              function popJellyfishScoop(parent, opts = {}) {
                   if (!parent || creatures.indexOf(parent) < 0) return 0;
-                  const mods = [...(parent._scoopModuleBag || [])];
                   const parentSize = getJellyfishSize(parent);
                   const wasManual = manualControlCreature === parent;
                   const perk = getScoopIncubatorPerk(parent);
-                  let pools = mods.map((m) => [m]);
-                  if (!pools.length) {
-                      const core = getCreatureCoreType(parent) || 'communicator';
-                      pools = [[{
-                          type: core,
-                          tier: 1,
-                          color: MODULE_AMMO_COLORS[core] || '#a78bfa'
-                      }]];
+                  const craft = getJellyfishCloneCraftState(parent);
+                  let bag = [...(parent._scoopModuleBag || [])];
+                  if (opts.autoPop) {
+                      bag = rollJellyfishPopLegendaries(bag, { autoPop: true });
+                      bag = maybeVaultJellyfishPopLegendaries(parent, bag);
+                  } else if (opts.manual) {
+                      bag = rollJellyfishPopLegendaries(bag, { autoPop: false });
                   }
-                  let overflow = [];
-                  if (pools.length > SCOOP_JELLYFISH_POP_MAX_SPAWNS) {
-                      overflow = pools.splice(SCOOP_JELLYFISH_POP_MAX_SPAWNS).flat();
-                  }
+                  const { clonePackages, remainder } = allocateModulesForJellyfishClones(
+                      bag, craft.blueprint, craft.cloneCount
+                  );
+                  const brainInherit = buildJellyfishLooseBrainInherit(parent);
                   const hatched = [];
-                  const scatter = 36 + pools.length * 2.5;
+                  const scatter = 36 + clonePackages.length * 2.8;
                   const px = parent.x;
                   const py = parent.y;
-                  for (let i = 0; i < pools.length; i++) {
-                      const pool = pools[i];
+                  for (let i = 0; i < clonePackages.length; i++) {
+                      const pool = clonePackages[i];
                       const spawnMods = buildScoopIncubatorSpawnModules(pool);
                       const sx = constrain(px + random(-scatter, scatter), 24, width - 24);
                       const sy = constrain(py + random(-scatter, scatter), 24, height - 24);
@@ -26406,7 +26611,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       ModuleIdentitySystem.normalizeLayout(spawn);
                       ModuleIdentitySystem.updateCore(spawn);
                       spawn.updateSpecialization();
-                      maybeAddScoopHybridModule(spawn, mods, perk);
+                      maybeAddScoopHybridModule(spawn, bag, perk);
                       if (spawn.modules.length !== spawnMods.length) {
                           ModuleIdentitySystem.normalizeLayout(spawn);
                           spawn.updateSpecialization();
@@ -26415,25 +26620,28 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       applyJellyfishSize0ToSpawn(spawn);
                       spawn._jellyfishPopFromSize = parentSize;
                       spawn.currentThought = parentSize === 1
-                          ? `Size-0 brood — popped from parent's bell (${pool.length} mod body)`
-                          : `Size-0 copy — bell burst (${pool.length} mod body)`;
+                          ? `Size-0 clone — full blueprint match (${pool.length} mods) + parent brain`
+                          : `Size-0 clone — bell burst (${pool.length}-mod body, parent brain)`;
                       spawn.calculatePointValue();
                       applyNewbornReproCooldown(spawn);
                       creatures.push(spawn);
                       registerCreatureOffspring(parent, spawn);
                       hatched.push(spawn);
                   }
-                  const looseN = spawnLooseScoopModuleParticles(parent, overflow);
+                  const looseN = spawnLooseScoopModuleParticles(parent, remainder, brainInherit);
+                  const popLabel = opts.autoPop ? 'BONUS POP' : 'POP';
                   playTone(165, 'sine', 0.3, 0.58);
                   setTimeout(() => playTone(330, 'triangle', 0.22, 0.48), 80);
                   setTimeout(() => playTone(520, 'sine', 0.16, 0.38), 160);
                   explosions.push(new Explosion(px, py));
-                  addFloatingText(px, py - 34, `POP ×${hatched.length} size-0`, '#67e8f9');
+                  addFloatingText(px, py - 34, `${popLabel} ×${hatched.length} clone${hatched.length === 1 ? '' : 's'}`, '#67e8f9');
                   if (looseN > 0) {
                       addFloatingText(px, py - 48, `+${looseN} loose mods`, '#c4b5fd');
                   }
-                  maybeSpeakScoopInnerVoice(parent, 'scoop_jellyfish_pop',
-                      `${hatched.length} size-0 from ${mods.length} mods`);
+                  const voiceExtra = hatched.length
+                      ? `${hatched.length} blueprint clone${hatched.length === 1 ? '' : 's'}${looseN ? `, ${looseN} loose` : ''}`
+                      : `${looseN || 0} loose mods only`;
+                  maybeSpeakScoopInnerVoice(parent, 'scoop_jellyfish_pop', voiceExtra);
                   releaseManualScoop(parent, { skipHatch: true, jellyfishPop: true });
                   const pIdx = creatures.indexOf(parent);
                   if (pIdx >= 0) creatures.splice(pIdx, 1);
@@ -26714,6 +26922,12 @@ body.is-map-fullscreen #map-fullscreen-btn {
               function toggleManualScoop(creature = manualControlCreature) {
                   if (!creature || manualControlCreature !== creature) return;
                   if (creature._scoopActive) {
+                      if (isJellyfishScoopCreature(creature) && getScoopModuleCount(creature) > 0) {
+                          popJellyfishScoop(creature, { manual: true });
+                          creature._scoopUsingLattice = false;
+                          creature._scoopStolenLinks = [];
+                          return;
+                      }
                       const willHatch = getScoopModuleCount(creature) >= SCOOP_INCUBATOR_MIN_MODULES;
                       releaseManualScoop(creature);
                       creature._scoopUsingLattice = false;
@@ -26783,11 +26997,12 @@ body.is-map-fullscreen #map-fullscreen-btn {
                               ? ' · [Space] fire modules'
                               : ' · [Space] probe muzzle';
                           const jelly = isJellyfishScoopCreature(creature);
+                          const craft = jelly ? getJellyfishCloneCraftState(creature) : null;
                           const consumeLeft = jelly
                               ? max(0, SCOOP_JELLYFISH_CONSUME_POP - (creature._jellyfishConsumeCount || 0))
                               : null;
-                          const jellyNote = jelly
-                              ? ` · size ${getJellyfishSize(creature)} · ${consumeLeft} feeds→pop · ${mods} mod brood`
+                          const jellyNote = jelly && craft
+                              ? ` · size ${getJellyfishSize(creature)} · ${consumeLeft} feeds→bonus pop · ${craft.cloneCount} clone${craft.cloneCount === 1 ? '' : 's'} ready · ${mods} harvested`
                               : '';
                           const incNote = !jelly && mods >= SCOOP_INCUBATOR_MIN_MODULES
                               ? ` · [0] hatch ${max(1, floor(mods / SCOOP_INCUBATOR_MODULES_PER_SPAWN))} kin`
@@ -26801,6 +27016,44 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       }
                   }
                   refreshScoopStyleSelector(creature);
+                  renderInspectorJellyfishHarvest(creature);
+              }
+
+              function renderInspectorJellyfishHarvest(creature = selectedCreature) {
+                  const panel = document.getElementById('inspect-modules-list');
+                  if (!panel) return;
+                  panel.querySelectorAll('.inspect-jf-harvest').forEach((el) => el.remove());
+                  if (!creature || manualControlCreature !== creature || !creature._scoopActive
+                      || !isJellyfishScoopCreature(creature)) return;
+                  const craft = getJellyfishCloneCraftState(creature);
+                  const wrap = document.createElement('div');
+                  wrap.className = 'inspect-jf-harvest';
+                  const head = document.createElement('div');
+                  head.className = 'inspect-jf-harvest-head';
+                  head.textContent = 'Clone blueprint harvest';
+                  wrap.appendChild(head);
+                  const ready = document.createElement('div');
+                  ready.className = 'inspect-jf-harvest-ready';
+                  ready.textContent = craft.cloneCount > 0
+                      ? `×${craft.cloneCount} clone${craft.cloneCount === 1 ? '' : 's'} at pop · ${craft.feedsLeft} feeds→bonus`
+                      : `Need full package · ${craft.feedsLeft} feeds→bonus pop`;
+                  wrap.appendChild(ready);
+                  for (const row of craft.tally) {
+                      const line = document.createElement('div');
+                      const complete = row.have >= row.need;
+                      line.className = 'inspect-jf-harvest-row' + (complete ? ' is-ready' : ' is-short');
+                      const label = INSPECT_MODULE_LABELS[row.type] || row.type;
+                      const tierLabel = INSPECT_TIER_ROMAN[row.tier] || `T${row.tier}`;
+                      line.textContent = `${label} ${tierLabel} · ${row.have}/${row.need}`;
+                      wrap.appendChild(line);
+                  }
+                  if (craft.overflowMods > 0) {
+                      const overflow = document.createElement('div');
+                      overflow.className = 'inspect-jf-harvest-row';
+                      overflow.textContent = `+${craft.overflowMods} overflow → loose mods`;
+                      wrap.appendChild(overflow);
+                  }
+                  panel.appendChild(wrap);
               }
 
               function tryImprintScoopSeed(creature, seed) {
@@ -29194,7 +29447,94 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   redBeams = redBeams.filter(b => b.life > 0);
               }
 
+              function tickScoopLooseModuleDecay() {
+                  const now = Date.now();
+                  for (let i = moduleParticles.length - 1; i >= 0; i--) {
+                      const mp = moduleParticles[i];
+                      if (!mp?._scoopLooseDecayAt || mp.collected) continue;
+                      if (now < mp._scoopLooseDecayAt) continue;
+                      const vp = new VortexParticle(false);
+                      vp.x = mp.x;
+                      vp.y = mp.y;
+                      vp.isSpecial = false;
+                      vp.specialType = 'white';
+                      if (vortexParticles.indexOf(vp) < 0) vortexParticles.push(vp);
+                      moduleParticles.splice(i, 1);
+                  }
+              }
+
+              function trySpawnCreatureFromScoopLooseModules() {
+                  const loose = [];
+                  for (let i = 0; i < moduleParticles.length; i++) {
+                      const p = moduleParticles[i];
+                      if (p?.isFloating && !p.collected && p._scoopBrainInherit) loose.push({ p, i });
+                  }
+                  if (loose.length < SCOOP_JELLYFISH_LOOSE_SPAWN_MIN) return;
+                  const used = new Set();
+                  for (let a = 0; a < loose.length; a++) {
+                      if (used.has(a)) continue;
+                      const cluster = [loose[a]];
+                      const clusterIdx = new Set([a]);
+                      for (let b = a + 1; b < loose.length; b++) {
+                          if (used.has(b)) continue;
+                          const dx = loose[a].p.x - loose[b].p.x;
+                          const dy = loose[a].p.y - loose[b].p.y;
+                          if (dx * dx + dy * dy <= SCOOP_JELLYFISH_LOOSE_CLUSTER_RADIUS * SCOOP_JELLYFISH_LOOSE_CLUSTER_RADIUS) {
+                              cluster.push(loose[b]);
+                              clusterIdx.add(b);
+                          }
+                      }
+                      if (cluster.length < SCOOP_JELLYFISH_LOOSE_SPAWN_MIN) continue;
+                      const mods = cluster.map((c) => ({
+                          type: normalizeModuleTypeKey(c.p.type),
+                          tier: c.p.tier || 1,
+                          color: c.p.color || MODULE_AMMO_COLORS[normalizeModuleTypeKey(c.p.type)] || '#a78bfa'
+                      }));
+                      const counts = {};
+                      for (const m of mods) counts[m.type] = (counts[m.type] || 0) + (m.tier || 1);
+                      const dominant = Object.entries(counts).sort((x, y) => y[1] - x[1])[0]?.[0] || 'communicator';
+                      let cx = 0;
+                      let cy = 0;
+                      for (const c of cluster) { cx += c.p.x; cy += c.p.y; }
+                      cx /= cluster.length;
+                      cy /= cluster.length;
+                      const inherit = cluster[0].p._scoopBrainInherit;
+                      const spawn = new Creature(
+                          constrain(cx + random(-12, 12), 24, width - 24),
+                          constrain(cy + random(-12, 12), 24, height - 24),
+                          mods,
+                          (inherit?.generation || 1) + 1,
+                          null
+                      );
+                      spawn.originAeonNumber = currentAeonNumber;
+                      if (inherit?.brain) {
+                          inheritJellyfishPopBrain(spawn, {
+                              brain: inherit.brain,
+                              name: inherit.parentName || 'Bell',
+                              generation: inherit.generation || 1,
+                              _lineageMemory: []
+                          });
+                      }
+                      ModuleIdentitySystem.normalizeLayout(spawn);
+                      ModuleIdentitySystem.updateCore(spawn);
+                      spawn.updateSpecialization();
+                      applyJellyfishSize0ToSpawn(spawn);
+                      spawn.currentThought = `Loose mods fused — ${dominant} body, parent brain`;
+                      spawn.calculatePointValue();
+                      applyNewbornReproCooldown(spawn);
+                      creatures.push(spawn);
+                      addFloatingText(spawn.x, spawn.y - 24, 'LOOSE FUSION', '#c4b5fd');
+                      for (const c of cluster) {
+                          const idx = moduleParticles.indexOf(c.p);
+                          if (idx >= 0) moduleParticles.splice(idx, 1);
+                      }
+                      clusterIdx.forEach((idx) => used.add(idx));
+                  }
+              }
+
               function tryMergeFloatingModules(vortexDir, vortexStrength) {
+                  tickScoopLooseModuleDecay();
+                  if (frameCount % 30 === 0) trySpawnCreatureFromScoopLooseModules();
                   if (moduleParticles.length < 3) return;
                   const groups = {};
                   for (let i = 0; i < moduleParticles.length; i++) {
@@ -29704,11 +30044,26 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           tier: mp.tier || 1,
                           color: mp.color || '#fbbf24'
                       };
+                      if (mp._scoopSpecialSheen) newMod._scoopSpecialSheen = mp._scoopSpecialSheen;
                       creature.modules.push(newMod);
                       ModuleIdentitySystem.assignModulePosition(creature, newMod, { outer: true });
                       creature.updateSpecialization();
                       addFloatingText(creature.x, creature.y - 22, `+${mp.type} T${mp.tier || 1}`, mp.color || '#fbbf24');
                       playAbsorbSound();
+                      if (mp._scoopBrainInherit?.brain && !creature._jellyfishPopKin && !creature._scoopBrainKin) {
+                          creature._scoopLooseAbsorbCount = (creature._scoopLooseAbsorbCount || 0) + 1;
+                          if (creature._scoopLooseAbsorbCount >= 2) {
+                              inheritJellyfishPopBrain(creature, {
+                                  brain: mp._scoopBrainInherit.brain,
+                                  name: mp._scoopBrainInherit.parentName || 'Bell',
+                                  generation: mp._scoopBrainInherit.generation || creature.generation,
+                                  _lineageMemory: []
+                              });
+                              creature._scoopLooseAbsorbCount = 0;
+                              creature.currentThought = 'Parent brain imprinted from loose scoop mods';
+                              addFloatingText(creature.x, creature.y - 36, 'BRAIN KIN', '#67e8f9');
+                          }
+                      }
                   }
                   mp.collected = true;
                   if (!manual) {
@@ -35891,7 +36246,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   if (!selectedCreature) return;
                   const c = selectedCreature;
                   const dom = InspectorDOM.get();
-                  const moduleSig = c.modules.length + ':' + c.modules.map(m => `${m.type}-${m.tier || 1}:${m.layoutSlot ?? ''}`).join(',');
+                  const scoopHarvestSig = (c._scoopActive && manualControlCreature === c && isJellyfishScoopCreature(c))
+                      ? `:${getScoopModuleCount(c)}:${c._jellyfishConsumeCount || 0}:${getJellyfishCloneCraftState(c).cloneCount}`
+                      : '';
+                  const moduleSig = c.modules.length + ':' + c.modules.map(m => `${m.type}-${m.tier || 1}:${m.layoutSlot ?? ''}`).join(',') + scoopHarvestSig;
 
                   const previewCanvas = dom.preview;
                   if (previewCanvas) {
@@ -35963,6 +36321,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       const modulesList = dom.modulesList;
                       lastInspectorModuleSig = moduleSig;
                       renderInspectorModulesList(c, modulesList);
+                      renderInspectorJellyfishHarvest(c);
                   }
 
                   if (!IS_MOBILE && typeof drawNeuralNet === 'function') {
@@ -42962,6 +43321,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       updateScoopModuleBullets();
                       if (scoopSeedParticles.length) tickScoopSeedParticles();
                       if (scoopLureParticles.length) tickScoopLureParticles();
+                      if (moduleParticles.some((p) => p?._scoopLooseDecayAt)) tickScoopLooseModuleDecay();
                       ModuleIdentitySystem.propagateColonyNetwork();
                       ModuleIdentitySystem.drawResonanceLinks(PerfScale.lod);
                       ModuleIdentitySystem.drawMacroClusterHints(PerfScale.lod);
