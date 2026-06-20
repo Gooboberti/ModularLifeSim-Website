@@ -4,7 +4,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-jelly-rubberband" />
+    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-jelly-parasite" />
     <title>MiniSimmy Orbital Ship v2</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2334d399'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%230a0a0f'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -8006,7 +8006,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'orbital-ship-v2-2026-06-20-jelly-rubberband';
+              const MINISIMMY_BUILD = 'orbital-ship-v2-2026-06-20-jelly-parasite';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -8233,6 +8233,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
               const SCOOP_LACE_TENDRIL_LATCH_STAGGER_FRAMES = 48;
               const SCOOP_LACE_RUBBER_BAND_K = 0.034;
               const SCOOP_LACE_RUBBER_BAND_STICK = 0.34;
+              const SCOOP_LACE_PARASITE_CLOSE_DIST = 112;
+              const SCOOP_LACE_PARASITE_FEED_MULT = 1.48;
+              const SCOOP_LACE_MERGE_RIPPLE_PUSH = 0.17;
+              const SCOOP_LACE_MERGE_RIPPLE_PULL = 0.14;
               const SCOOP_LACE_LATTICE_CRYSTAL_GROW = 0.006;
               const SCOOP_LACE_FISSURE_DEPTH_RATE = 0.014;
               const SCOOP_LACE_ROOT_MIN_LATCH = 1;
@@ -24805,6 +24809,160 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   return (links || []).filter((l) => l.phase === 'latched' || l.phase === 'fissure').length;
               }
 
+              function getLaceColonyAnchorPoint(creature) {
+                  return creature._laceNetworkAudit?.centroid
+                      || creature._lacePrimaryLatch?.targetPt
+                      || creature._laceLeechSeekTarget
+                      || null;
+              }
+
+              function isJellyfishLaceParasiteMode(creature, geo) {
+                  if (!isJellyfishLaceGardener(creature)) return false;
+                  const latchedN = countLatchedTendrils(creature._laceTendrilLinks);
+                  if (latchedN < 1) return false;
+                  const anchor = getLaceColonyAnchorPoint(creature);
+                  if (!anchor) return false;
+                  const d = dist(creature.x, creature.y, anchor.x, anchor.y);
+                  return d <= SCOOP_LACE_PARASITE_CLOSE_DIST;
+              }
+
+              function allLaceTendrilsMerged(creature) {
+                  const links = creature._laceTendrilLinks || [];
+                  if (!links.length) return false;
+                  return links.every((l) => l.phase === 'latched' || l.phase === 'fissure');
+              }
+
+              function tickJellyfishParasiteBubbleGuard(creature, geo) {
+                  if (!isJellyfishLaceParasiteMode(creature, geo)) return;
+                  const colony = creature._laceTumorColony;
+                  for (const prey of [...(creature._scoopBubbleOccupants || [])]) {
+                      if (colony?.has(prey) || isLaceGardenerColonyKin(creature, prey)) continue;
+                      releaseScoopBubbleOccupant(creature, prey);
+                      repelCreatureFromScoopBubble(prey, creature, geo, 9.5);
+                  }
+                  const scan = SpatialGrid.cells
+                      ? SpatialGrid.queryRadius(geo.bubbleX, geo.bubbleY, geo.bubbleR + CREATURE_BODY_RADIUS * 0.75, creature)
+                      : creatures;
+                  for (const c of scan) {
+                      if (c === creature || isManualControlImmune(c)) continue;
+                      if (!isCreatureInsideScoopBubble(c, creature, geo)) continue;
+                      if (colony?.has(c) || isLaceGardenerColonyKin(creature, c)) continue;
+                      repelCreatureFromScoopBubble(c, creature, geo, 10);
+                      c._scoopInBubble = null;
+                      if (c._scoopBeingDragged === creature) c._scoopBeingDragged = null;
+                  }
+              }
+
+              function tickLaceParasiteColonyFeed(tumor, colony, geo) {
+                  const members = [...(colony || [])].filter((m) => m && m !== tumor && creatures.indexOf(m) >= 0);
+                  if (!members.length) return;
+                  const latchedN = countLatchedTendrils(tumor._laceTendrilLinks);
+                  const feedMult = SCOOP_LACE_PARASITE_FEED_MULT * (1 + latchedN * 0.09
+                      + (tumor._laceLatticeCrystal || 0) * 0.22);
+
+                  for (const m of members) {
+                      const maxE = ModuleIdentitySystem.getMaxEnergy(m);
+                      const missing = max(0, maxE - (m.energy || 0));
+                      if (missing > 0.5) {
+                          const gain = min(missing, 0.42 * feedMult * timeScale);
+                          m.energy = min(maxE, m.energy + gain);
+                          m._laceParasiteFeedFlash = min(28, (m._laceParasiteFeedFlash || 0) + gain * 1.6);
+                      }
+                  }
+
+                  const links = ModuleIdentitySystem.refreshResonanceLinkCache();
+                  for (const link of links) {
+                      if (!colony.has(link.a) || !colony.has(link.b)) continue;
+                      if (link.a === tumor || link.b === tumor) continue;
+                      const a = link.a;
+                      const b = link.b;
+                      const diff = (a.energy || 0) - (b.energy || 0);
+                      if (abs(diff) > 5) {
+                          const xfer = diff * 0.014 * feedMult * timeScale;
+                          a.energy = constrain(a.energy - xfer, 0, ModuleIdentitySystem.getMaxEnergy(a));
+                          b.energy = constrain(b.energy + xfer, 0, ModuleIdentitySystem.getMaxEnergy(b));
+                      }
+                      const st = ModuleIdentitySystem.ensureLinkState(a, b);
+                      st.feedGlow = max(st.feedGlow || 0, 10 + feedMult * 7);
+                      st.pullBoost = max(st.pullBoost || 0, 0.06 + feedMult * 0.04);
+                  }
+                  tumor.energy = min(100, tumor.energy + 0.05 * latchedN * timeScale);
+              }
+
+              function propagateLaceGardenMergeRipple(tumor, colony, geo, intensity) {
+                  const members = [...(colony || [])].filter((m) => m && m !== tumor && creatures.indexOf(m) >= 0);
+                  if (!members.length) return;
+                  const links = ModuleIdentitySystem.refreshResonanceLinkCache();
+                  const adj = ModuleIdentitySystem.buildLinkAdjacency(links);
+                  const sourceCore = getCreatureCoreType(tumor) || 'communicator';
+
+                  for (const m of members) {
+                      const jd = dist(m.x, m.y, tumor.x, tumor.y);
+                      if (jd < SCOOP_LACE_GARDEN_GATHER_RING_MIN) {
+                          const dx = m.x - tumor.x;
+                          const dy = m.y - tumor.y;
+                          const len = sqrt(dx * dx + dy * dy) || 1;
+                          const push = intensity * SCOOP_LACE_MERGE_RIPPLE_PUSH;
+                          m.vx += (dx / len) * push;
+                          m.vy += (dy / len) * push;
+                          m._laceMergePushFlash = min(36, (m._laceMergePushFlash || 0) + 18);
+                      }
+                  }
+
+                  const seeds = members.slice(0, min(4, members.length));
+                  for (const seed of seeds) {
+                      ModuleIdentitySystem.propagateSoulOrbTightening(seed, seed, adj, intensity * 0.9, sourceCore);
+                  }
+
+                  for (let i = 0; i < members.length; i++) {
+                      const m = members[i];
+                      const slot = assignLaceGardenSlot(m, i, members.length, tumor, geo);
+                      const dx = slot.x - m.x;
+                      const dy = slot.y - m.y;
+                      const d = sqrt(dx * dx + dy * dy) || 1;
+                      m._colonyDeepUrge = max(m._colonyDeepUrge || 0, 44 + intensity * 28);
+                      m._colonyDeepTarget = { dx, dy, linked: members.length };
+                      m._laceMergeRippleGlow = min(72, (m._laceMergeRippleGlow || 0) + 24 + intensity * 12);
+                      if (d > CREATURE_IDEAL_DIST * 0.35) {
+                          const pull = intensity * SCOOP_LACE_MERGE_RIPPLE_PULL;
+                          m.vx += (dx / d) * pull;
+                          m.vy += (dy / d) * pull;
+                      }
+                  }
+              }
+
+              function fireLaceGardenMergeRipple(tumor, colony, geo) {
+                  propagateLaceGardenMergeRipple(tumor, colony, geo, 1.2);
+                  tumor._laceMergeRipple = 96;
+                  tumor._laceMergeRippleAge = 0;
+                  tumor._laceGardenOptimize = min(1, (tumor._laceGardenOptimize || 0) + 0.22);
+                  playTone(210, 'sine', 0.24, 0.44);
+                  playTone(330, 'triangle', 0.2, 0.36);
+                  playTone(480, 'sine', 0.14, 0.22);
+                  addFloatingText(tumor.x, tumor.y - 30, 'COLONY MERGE RIPPLE', '#6ee7b7');
+                  maybeSpeakScoopInnerVoice(tumor, 'scoop_lace_leech',
+                      'all tendrils merged — energy ripple gathers the host colony tighter');
+              }
+
+              function tickLaceGardenMergeRipple(tumor, colony, geo) {
+                  if ((tumor._laceMergeRipple || 0) <= 0) return;
+                  tumor._laceMergeRipple = max(0, tumor._laceMergeRipple - timeScale);
+                  tumor._laceMergeRippleAge = (tumor._laceMergeRippleAge || 0) + timeScale;
+                  const pulse = 0.38 + (tumor._laceGardenOptimize || 0) * 0.55;
+                  if (frameCount % 16 === (tumor._symSlot || 0) % 16) {
+                      propagateLaceGardenMergeRipple(tumor, colony, geo, pulse * 0.48);
+                  }
+                  for (const m of colony || []) {
+                      if (!m || m === tumor) continue;
+                      if ((m._laceMergeRippleGlow || 0) > 0) {
+                          m._laceMergeRippleGlow = max(0, m._laceMergeRippleGlow - timeScale * 0.85);
+                      }
+                      if ((m._laceMergePushFlash || 0) > 0) {
+                          m._laceMergePushFlash = max(0, m._laceMergePushFlash - timeScale * 1.1);
+                      }
+                  }
+              }
+
               function getLaceSeekTendrilIndex(creature, links) {
                   if ((creature._laceLatchCooldown || 0) > 0) return -1;
                   for (let i = 0; i < links.length; i++) {
@@ -25077,6 +25235,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   if (!members.length) return;
                   const optimize = tumor._laceGardenOptimize || 0;
                   const linked = tumor._laceTumorColony?.size || members.length;
+                  const mergeBoost = tumor._laceAllTendrilsMerged ? 1.75 : 1;
 
                   for (let i = 0; i < members.length; i++) {
                       const m = members[i];
@@ -25085,7 +25244,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       const dy = slot.y - m.y;
                       const d = sqrt(dx * dx + dy * dy) || 1;
                       if (d > 2.5) {
-                          m._colonyDeepUrge = max(m._colonyDeepUrge || 0, 22 + optimize * 18);
+                          m._colonyDeepUrge = max(m._colonyDeepUrge || 0, (22 + optimize * 18) * mergeBoost);
                           m._colonyDeepTarget = { dx, dy, linked };
                       }
                       const jd = dist(m.x, m.y, tumor.x, tumor.y);
@@ -25174,7 +25333,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
               }
 
               function tickLaceGardenOrchestration(tumor, colony, geo) {
-                  if (!tumor || tumor._laceLeechPhase !== 'rooted') return;
+                  if (!tumor) return;
+                  const rooted = tumor._laceLeechPhase === 'rooted';
+                  const merged = allLaceTendrilsMerged(tumor) && isJellyfishLaceParasiteMode(tumor, geo);
+                  if (!rooted && !merged) return;
                   const metrics = measureLaceGardenMetrics(tumor, colony, geo);
                   tumor._laceGardenMetrics = metrics;
                   tumor._laceGardenOptimize = lerp(tumor._laceGardenOptimize || 0, metrics.total, 0.06);
@@ -25184,7 +25346,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   tickLaceGardenFlowTune(tumor, colony);
                   tickLaceFlowerGridHarmony(tumor, colony);
 
-                  if (!tumor._laceGardenLocked) {
+                  if (!tumor._laceGardenLocked && rooted) {
                       if (metrics.total >= SCOOP_LACE_GARDEN_LOCK_THRESHOLD) {
                           tumor._laceGardenLockFrames = (tumor._laceGardenLockFrames || 0) + timeScale;
                       } else {
@@ -26243,6 +26405,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   creature._laceLatchCooldown = 0;
                   creature._laceBandTension = 0;
                   creature._laceBandStuck = 0;
+                  creature._laceParasiteMode = false;
+                  creature._laceAllTendrilsMerged = false;
+                  creature._laceMergeRipple = 0;
+                  creature._laceMergeRippleAge = 0;
               }
 
               function tickScoopLaceLeech(creature, geo) {
@@ -26300,6 +26466,32 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       }
                   } else if (isJellyfishLaceGardener(creature)) {
                       creature._laceLeechPhase = 'seek';
+                  }
+
+                  const parasiteMode = isJellyfishLaceParasiteMode(creature, geo);
+                  creature._laceParasiteMode = parasiteMode;
+                  if (parasiteMode) {
+                      if (!creature._laceLeechAnchor && creature._lacePrimaryLatch?.targetLace) {
+                          creature._laceLeechAnchor = creature._lacePrimaryLatch.targetLace;
+                      }
+                      const parasiteColony = creature._laceTumorColony || refreshTumorColonySet(creature);
+                      tickLaceParasiteColonyFeed(creature, parasiteColony, geo);
+                  }
+
+                  const mergedAll = allLaceTendrilsMerged(creature);
+                  if (mergedAll && !creature._laceAllTendrilsMerged) {
+                      creature._laceAllTendrilsMerged = true;
+                      const mergeColony = creature._laceTumorColony || refreshTumorColonySet(creature);
+                      fireLaceGardenMergeRipple(creature, mergeColony, geo);
+                  } else if (!mergedAll) {
+                      creature._laceAllTendrilsMerged = false;
+                  }
+                  if (mergedAll && parasiteMode) {
+                      const mergeColony = creature._laceTumorColony || refreshTumorColonySet(creature);
+                      tickLaceGardenMergeRipple(creature, mergeColony, geo);
+                      if (creature._laceLeechPhase !== 'rooted') {
+                          tickLaceGardenOrchestration(creature, mergeColony, geo);
+                      }
                   }
 
                   creature._laceTendrilSearchActive = true;
@@ -26385,7 +26577,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       latticeCrystal: creature._laceLatticeCrystal || 0,
                       gardenLocked: !!creature._laceGardenLocked,
                       gardenOptimize: creature._laceGardenOptimize || 0,
-                      gardenMetrics: creature._laceGardenMetrics || null
+                      gardenMetrics: creature._laceGardenMetrics || null,
+                      parasiteMode: !!creature._laceParasiteMode,
+                      allTendrilsMerged: !!creature._laceAllTendrilsMerged,
+                      mergeRipple: creature._laceMergeRipple || 0
                   };
               }
 
@@ -27059,6 +27254,13 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
               function registerScoopBubbleOccupant(hunter, prey, geo) {
                   if (!isScoopableFeastCreature(hunter, prey)) return false;
+                  if (isJellyfishLaceParasiteMode(hunter, geo)) {
+                      const colony = hunter._laceTumorColony;
+                      if (!colony?.has(prey) && !isLaceGardenerColonyKin(hunter, prey)) {
+                          repelCreatureFromScoopBubble(prey, hunter, geo, 9);
+                          return false;
+                      }
+                  }
                   if (!isScoopBubblePullTarget(hunter, prey)) return false;
                   hunter._scoopBubbleOccupants = hunter._scoopBubbleOccupants || [];
                   if (hunter._scoopBubbleOccupants.includes(prey)) return false;
@@ -27140,6 +27342,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
               }
 
               function syncScoopBubbleOccupants(hunter, geo) {
+                  if (isJellyfishLaceParasiteMode(hunter, geo)) {
+                      tickJellyfishParasiteBubbleGuard(hunter, geo);
+                  }
                   hunter._scoopBubbleOccupants = (hunter._scoopBubbleOccupants || []).filter((c) => {
                       if (!c || creatures.indexOf(c) < 0) return false;
                       if ((c.energy || 0) <= 0) {
@@ -27158,6 +27363,13 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   for (const c of scan) {
                       if (!isScoopableFeastCreature(hunter, c)) continue;
                       if (!isCreatureInsideScoopBubble(c, hunter, geo)) continue;
+                      if (isJellyfishLaceParasiteMode(hunter, geo)) {
+                          const colony = hunter._laceTumorColony;
+                          if (!colony?.has(c) && !isLaceGardenerColonyKin(hunter, c)) {
+                              repelCreatureFromScoopBubble(c, hunter, geo, 8.5);
+                              continue;
+                          }
+                      }
                       if (!canAutoJoinScoopBubble(hunter, c)) continue;
                       if (hunter._scoopBubbleOccupants.includes(c)) continue;
                       if (hunter._scoopBubbleOccupants.length >= MANUAL_SCOOP_MAX_CREATURES) {
@@ -27175,6 +27387,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
               function tickScoopBubbleFocus(hunter, geo) {
                   if (!hunter?._scoopActive) return;
                   syncScoopBubbleOccupants(hunter, geo);
+                  if (isJellyfishLaceParasiteMode(hunter, geo)) {
+                      hunter._scoopBubbleFocus = null;
+                      return;
+                  }
                   const occupants = hunter._scoopBubbleOccupants || [];
                   if (!occupants.length) {
                       hunter._scoopBubbleFocus = null;
@@ -27243,6 +27459,15 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   const dy = by - entity.y;
                   const d = sqrt(dx * dx + dy * dy) || 1;
                   const touchR = br * (isCreature ? 0.96 : 0.9);
+                  if (isCreature && isJellyfishLaceParasiteMode(hunter, geo)) {
+                      const colony = hunter._laceTumorColony;
+                      if (!colony?.has(entity) && !isLaceGardenerColonyKin(hunter, entity)) {
+                          if (d <= touchR || isCreatureInsideScoopBubble(entity, hunter, geo)) {
+                              repelCreatureFromScoopBubble(entity, hunter, geo, 9.5);
+                          }
+                          return false;
+                      }
+                  }
                   if (d <= touchR) {
                       return isCreature
                           ? registerScoopBubbleOccupant(hunter, entity, geo)
@@ -27407,6 +27632,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
               function absorbScoopCreature(hunter, prey, geo) {
                   if (!hunter || !prey || creatures.indexOf(prey) < 0) return false;
+                  if (isJellyfishLaceParasiteMode(hunter, geo)) return false;
                   if (!canScoopMoreCreatures(hunter)) return false;
                   if (!hunter._scoopModuleBag) hunter._scoopModuleBag = [];
                   const loose = digestPreyIntoLooseModules(hunter, prey);
@@ -27814,10 +28040,12 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       if (dashStyle === 'sap-surge' && tent.fork) ext *= 0.62 + spring.stretch * 0.55;
                       const laceReach = !!tent._laceReaching;
                       const laceVine = !!tent._laceVineSearch;
+                      const bandFluid = isJelly && (creature._laceBandTension || 0) > 2;
                       const whip = (spring.recoil || 0) * 0.65 + (spring.propel || 0) * 0.4;
-                      const idleMix = tent.targetX == null
+                      let idleMix = tent.targetX == null
                           ? constrain(1 - whip * 1.35 - (spring.propel || 0) * 1.8, 0, 1)
                           : (laceReach ? (laceVine ? 0.78 : (isJelly ? 0.62 : 0.48)) : 0);
+                      if (bandFluid && laceReach) idleMix = max(idleMix, laceVine ? 0.72 : 0.58);
                       const idleSway = sin(frameCount * 0.055 + tent.phase) * (5 + spd * 1.2) * idleMix * gs;
                       const idleDrift = cos(frameCount * 0.038 + tent.phase * 1.25) * 4.5 * idleMix * gs;
                       const idleBreath = sin(frameCount * 0.042 + tent.phase * 0.65) * 0.08 * idleMix;
@@ -27825,9 +28053,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           * (geo.rigid ? 3 : (6 + spd * 1.8 + spring.wave * 5) * gs);
                       const restX = tent.baseX + cos(tent.ang + idleBreath) * ext + cos(tent.phase) * wobble;
                       const restY = tent.baseY + sin(tent.ang + idleBreath) * ext + sin(tent.phase * 1.1) * wobble;
-                      const laceLerp = laceReach
+                      let laceLerp = laceReach
                           ? (laceVine ? 0.3 : (isJelly ? 0.22 : 0.52))
                           : (isJelly ? 0.38 : 0.48);
+                      if (bandFluid && laceReach && !laceVine) laceLerp = min(laceLerp, 0.2);
                       let tipX = tent.targetX != null
                           ? laceReach
                               ? lerp(restX, tent.targetX, laceLerp)
@@ -27843,6 +28072,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           const vineDrift = cos(frameCount * 0.05 + tent.phase * 0.8) * 6 * gs;
                           tipX += cos(tent.ang + HALF_PI) * vineSway + cos(geo.facing + tent.phase * 0.15) * vineDrift;
                           tipY += sin(tent.ang + HALF_PI) * vineSway + sin(geo.facing + tent.phase * 0.15) * vineDrift;
+                      }
+                      if (bandFluid && laceReach) {
+                          const bandSway = sin(frameCount * 0.11 + tent.phase) * (11 + (creature._laceBandTension || 0) * 0.42) * gs;
+                          tipX += cos(tent.ang + HALF_PI) * bandSway;
+                          tipY += sin(tent.ang + HALF_PI) * bandSway;
                       }
                       if (idleMix > 0.05 && tent.targetX == null) {
                           tipX += cos(tent.ang + HALF_PI) * idleSway + cos(geo.facing + tent.phase * 0.2) * idleDrift;
@@ -28485,9 +28719,19 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           creature.currentThought = creature._laceGardenLocked
                               ? `Flower lattice LOCKED — ${colonyN} kin aligned · ${broodN}/${popCap} brood in bell`
                               : `Orchestrating ${colonyN} kin (${opt}% optimized) — gathering, rotating cores, tuning flow · ${broodN} brood queued`;
+                      } else if (creature._laceParasiteMode) {
+                          const latched = countLatchedTendrils(creature._laceTendrilLinks);
+                          const colonyN = creature._laceTumorColony?.size || 0;
+                          if (creature._laceAllTendrilsMerged) {
+                              const opt = Math.round((creature._laceGardenOptimize || 0) * 100);
+                              creature.currentThought = creature._laceMergeRipple > 0
+                                  ? `MERGE RIPPLE — ${colonyN} kin tightening around the lattice (${opt}% aligned)`
+                                  : `All tendrils merged — parasite feeds the host, bubble no longer hunts prey`;
+                          } else {
+                              creature.currentThought = `Parasite latched (${latched} tendrils) — bubble digestion off, feeding ${colonyN} kin`;
+                          }
                       } else if (creature._laceLeechPhase === 'seek' || creature._laceLeechPhase === 'reach') {
-                          const latched = (creature._laceTendrilLinks || [])
-                              .filter((l) => l.phase === 'latched' || l.phase === 'fissure').length;
+                          const latched = countLatchedTendrils(creature._laceTendrilLinks);
                           const feelN = creature._laceLeechFeelers?.length || 0;
                           creature.currentThought = latched
                               ? `${latched}/${feelN} tendrils latched — drifting into the network`
@@ -29340,6 +29584,26 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   const rooted = leech?.phase === 'rooted' && connected;
                   const aligning = rooted && !gardenLocked;
                   const optimize = leech?.gardenOptimize || creature._laceGardenOptimize || 0;
+                  const mergeRipple = leech?.mergeRipple || creature._laceMergeRipple || 0;
+
+                  if (mergeRipple > 0) {
+                      const age = creature._laceMergeRippleAge || 0;
+                      const t = 1 - mergeRipple / 96;
+                      const audit = creature._laceNetworkAudit;
+                      const cx = lerp(creature.x, audit?.centroid?.x ?? creature.x, 0.42);
+                      const cy = lerp(creature.y, audit?.centroid?.y ?? creature.y, 0.42);
+                      for (let ring = 0; ring < 4; ring++) {
+                          const r = CREATURE_BODY_RADIUS * (2.4 + t * 5.2 + ring * 2.1 + sin(age * 0.08 + ring) * 0.6);
+                          const alpha = 42 * (1 - t * 0.75) * (1 - ring * 0.22);
+                          noFill();
+                          stroke(110, 231, 183, alpha);
+                          strokeWeight(1.35 - ring * 0.22);
+                          circle(cx, cy, r * 2);
+                          stroke(52, 211, 153, alpha * 0.55);
+                          strokeWeight(0.65);
+                          circle(cx, cy, r * 1.55);
+                      }
+                  }
 
                   if (aligning && optimize > 0.08) {
                       const audit = creature._laceNetworkAudit;
@@ -29510,6 +29774,15 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   const leech = geo.laceLeech;
                   const bulb = creature._laceLeechBulb || 0;
                   const bulbMult = 1 + bulb * 0.36;
+
+                  if (leech?.parasiteMode) {
+                      const ripple = leech.mergeRipple || 0;
+                      const br = geo.bubbleR || CREATURE_BODY_RADIUS * 2.6;
+                      noFill();
+                      stroke(110, 231, 183, 28 + ripple * 0.35);
+                      strokeWeight(0.55);
+                      ellipse(creature.x, creature.y, br * 1.85, br * 1.85);
+                  }
 
                   drawLaceTumorVisuals(creature, geo, leech, bulb);
 
