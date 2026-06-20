@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- MiniSimmy build 2026-06-20-streamlined-scoop | See CODEBASE_INDEX in script + minisimmy_orbital_ship_v2-guide-2026.html -->
+<!-- MiniSimmy build 2026-06-20-root-siphon-dash | See CODEBASE_INDEX in script + minisimmy_orbital_ship_v2-guide-2026.html -->
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -1489,6 +1489,20 @@ body.is-map-fullscreen .inspect-auto-lineage-btn {
     line-height: 1.35;
     color: rgba(125, 211, 252, 0.55);
     text-align: center;
+}
+.inspect-scoop-meter {
+    width: 100%;
+    height: 4px;
+    margin-top: 0.35rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+}
+.inspect-scoop-meter-fill {
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #34d399, #38bdf8, #a78bfa);
+    transition: width 0.2s ease;
 }
 .inspect-center-view-btn {
     display: flex;
@@ -6181,6 +6195,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           <span class="inspect-hotkey-legend__key">5</span><span>Select Alpha</span>
                           <span class="inspect-hotkey-legend__key">6</span><span>Clear selection</span>
                           <span class="inspect-hotkey-legend__key">7</span><span>Cycle all creatures — strongest first</span>
+                          <span class="inspect-hotkey-legend__key">0</span><span>Scoop — belly tendrils grab white drift (lattice unlock)</span>
+                          <span class="inspect-hotkey-legend__key">F</span><span>Dash — spring burst while scoop is deployed</span>
                           <span class="inspect-hotkey-legend__key">V</span><span>Inner voice — announcer narrates this creature's perspective</span>
                       </div>
                       <div class="inspect-hotkey-legend__note">Keys 1–4 and V need a selected creature. Key 7 walks the full roster by rank.</div>
@@ -6244,12 +6260,13 @@ body.is-map-fullscreen #map-fullscreen-btn {
                                   <div id="inspect-manual-hint" class="text-center text-[10px] leading-snug text-sky-300/55">Drag on the creature to grab, or click elsewhere to pull it like a string.</div>
                                   <div id="inspect-powerup-bar" class="inspect-powerup-bar is-hidden">
                                       <button type="button" id="inspect-scoop-btn" class="inspect-powerup-btn is-scoop"
-                                              onclick="playUIClick(); toggleManualScoop()" title="Belly scoop — tentacles grab white drift [0]">
+                                              onclick="playUIClick(); toggleManualScoop()" title="Belly scoop — tendrils grab drift [0] · dash [F] while active">
                                           <i class="fa-solid fa-otter text-[9px]"></i>
                                           <span>Scoop</span>
                                           <span class="opacity-60">[0]</span>
                                       </button>
                                       <span id="inspect-scoop-hint" class="inspect-powerup-hint">Take control to unlock belly scoop.</span>
+                                      <div id="inspect-scoop-meter" class="inspect-scoop-meter is-hidden"><div id="inspect-scoop-meter-fill" class="inspect-scoop-meter-fill" style="width:0%"></div></div>
                                   </div>
                                   <button id="inspect-extract-btn" onclick="confirmExtractToEgg()"
                                           class="flex w-full items-center justify-center gap-x-1.5 rounded-xl bg-amber-500/90 px-3 py-1.5 text-xs font-semibold text-white transition-all hover:bg-amber-500 active:scale-[0.985]">
@@ -7894,7 +7911,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'orbital-ship-v2-2026-06-20-streamlined-scoop';
+              const MINISIMMY_BUILD = 'orbital-ship-v2-2026-06-20-root-siphon-dash';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -8040,20 +8057,26 @@ body.is-map-fullscreen #map-fullscreen-btn {
               const MANUAL_SCOOP_SCAN_BUDGET = 48;
               const MANUAL_SCOOP_REACH = 78;
               const MANUAL_SCOOP_MAX_SEEDS = 24;
+              const SCOOP_LATTICE_METER_MAX = 100;
+              const SCOOP_LATTICE_UNLOCK = 35;
+              const SCOOP_LATTICE_TIER2 = 65;
+              const SCOOP_LATTICE_TIER3 = 100;
+              const SCOOP_DASH_DURATION = 20;
+              const SCOOP_DASH_COOLDOWN = 22;
 
               const SCOOP_LACE_PROFILES = {
-                  harvester: { tendrilStyle: 'trail', flex: 0.88, rigid: false, count: 5, spread: 0.52 },
-                  sensor: { tendrilStyle: 'radial', flex: 0.92, rigid: false, count: 7, spread: 1.15 },
-                  mover: { tendrilStyle: 'side', flex: 0.78, rigid: false, count: 4, spread: 0.68 },
-                  communicator: { tendrilStyle: 'trail', flex: 0.95, rigid: false, count: 8, spread: 0.48 },
-                  explorer: { tendrilStyle: 'front', flex: 0.48, rigid: true, count: 3, spread: 0.32 },
-                  resistant: { tendrilStyle: 'ring', flex: 0.22, rigid: true, count: 6, spread: 1.0 },
-                  sunweaver: { tendrilStyle: 'trail', flex: 0.9, rigid: false, count: 6, spread: 0.58 },
-                  'gloam-choir': { tendrilStyle: 'radial', flex: 0.85, rigid: false, count: 7, spread: 1.05 },
-                  bloomkeeper: { tendrilStyle: 'side', flex: 0.72, rigid: false, count: 5, spread: 0.62 },
-                  'storm-warden': { tendrilStyle: 'ring', flex: 0.35, rigid: true, count: 6, spread: 0.88 },
-                  'vortex-runner': { tendrilStyle: 'front', flex: 0.65, rigid: false, count: 4, spread: 0.4 },
-                  balanced: { tendrilStyle: 'trail', flex: 0.74, rigid: false, count: 5, spread: 0.55 }
+                  harvester: { tendrilStyle: 'root-siphon', dashStyle: 'sap-surge', flex: 0.86, rigid: false, count: 7, spread: 0.92 },
+                  sensor: { tendrilStyle: 'radial', dashStyle: 'sonar-snap', flex: 0.92, rigid: false, count: 7, spread: 1.15 },
+                  mover: { tendrilStyle: 'side', dashStyle: 'coil-spring', flex: 0.78, rigid: false, count: 4, spread: 0.68 },
+                  communicator: { tendrilStyle: 'jellyfish', dashStyle: 'bell-pulse', flex: 0.95, rigid: false, count: 8, spread: 0.48 },
+                  explorer: { tendrilStyle: 'front', dashStyle: 'spear-lunge', flex: 0.48, rigid: true, count: 3, spread: 0.32 },
+                  resistant: { tendrilStyle: 'ring', dashStyle: 'shell-shock', flex: 0.22, rigid: true, count: 6, spread: 1.0 },
+                  sunweaver: { tendrilStyle: 'bloom', dashStyle: 'pollen-burst', flex: 0.88, rigid: false, count: 6, spread: 0.65 },
+                  'gloam-choir': { tendrilStyle: 'radial', dashStyle: 'sonar-snap', flex: 0.85, rigid: false, count: 7, spread: 1.05 },
+                  bloomkeeper: { tendrilStyle: 'bloom', dashStyle: 'pollen-burst', flex: 0.8, rigid: false, count: 7, spread: 0.72 },
+                  'storm-warden': { tendrilStyle: 'ring', dashStyle: 'shell-shock', flex: 0.35, rigid: true, count: 6, spread: 0.88 },
+                  'vortex-runner': { tendrilStyle: 'front', dashStyle: 'spear-lunge', flex: 0.65, rigid: false, count: 4, spread: 0.4 },
+                  balanced: { tendrilStyle: 'jellyfish', dashStyle: 'bell-pulse', flex: 0.74, rigid: false, count: 5, spread: 0.55 }
               };
 
               function isManualControlImmune(creature) {
@@ -15591,6 +15614,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   if (handleFullscreenCreatureHotkey(key)) return false;
                   if (key === '0' && manualControlCreature) {
                       toggleManualScoop(manualControlCreature);
+                      return false;
+                  }
+                  if ((key === 'f' || key === 'F') && manualControlCreature?._scoopActive) {
+                      triggerScoopDash(manualControlCreature);
                       return false;
                   }
                   if (key === 'Escape' && energyWallMode) {
@@ -23989,7 +24016,17 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       prestigeCount: creature._coreModule?.prestigeLevel || 0,
                       birthAeonNumber: creature.birthAeonNumber,
                       birthAeonName: creature.birthAeonName,
-                      originAeonNumber: creature.originAeonNumber ?? creature.birthAeonNumber
+                      originAeonNumber: creature.originAeonNumber ?? creature.birthAeonNumber,
+                      scoopGenome: canCreatureUseScoop(creature) ? {
+                          unlocked: true,
+                          tier: max(creature._scoopLatticeTier || 0, getScoopLatticeTierFromMeter(creature._scoopLatticeMeter || 0)),
+                          imprint: creature._scoopLatticeImprint
+                              ? JSON.parse(JSON.stringify(creature._scoopLatticeImprint)) : null,
+                          laceProfile: JSON.parse(JSON.stringify(getScoopLaceProfile(creature))),
+                          profileCore: getCreatureCoreType(creature),
+                          moduleType: getScoopImprintModuleType(creature),
+                          meter: creature._scoopLatticeMeter || 0
+                      } : null
                   });
               }
 
@@ -24097,6 +24134,18 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   if (eggData.birthAeonName) creature.birthAeonName = eggData.birthAeonName;
                   applyCoreModuleToCreature(creature, eggData);
                   if (eggData.symSlot != null) creature._symSlot = eggData.symSlot;
+                  if (eggData.scoopGenome?.unlocked) {
+                      creature._scoopGenome = JSON.parse(JSON.stringify(eggData.scoopGenome));
+                      creature._scoopLatticeTier = max(creature._scoopLatticeTier || 0, eggData.scoopGenome.tier || 1);
+                      creature._scoopLatticeMeter = max(creature._scoopLatticeMeter || 0, eggData.scoopGenome.meter || SCOOP_LATTICE_UNLOCK);
+                      if (eggData.scoopGenome.imprint) {
+                          creature._scoopLatticeImprint = JSON.parse(JSON.stringify(eggData.scoopGenome.imprint));
+                      }
+                      if (!creature._scoopGenome.laceProfile) {
+                          const core = eggData.scoopGenome.profileCore || getCreatureCoreType(creature);
+                          creature._scoopGenome.laceProfile = SCOOP_LACE_PROFILES[core] || SCOOP_LACE_PROFILES.balanced;
+                      }
+                  }
                   if (eggData.moduleLayout?.length) {
                       ModuleIdentitySystem.restoreLayout(creature, eggData.moduleLayout);
                   } else {
@@ -24122,10 +24171,202 @@ body.is-map-fullscreen #map-fullscreen-btn {
               }
 
               function getScoopLaceProfile(creature) {
+                  if (creature?._scoopGenome?.laceProfile) return creature._scoopGenome.laceProfile;
                   const core = getCreatureCoreType(creature);
                   const arch = ModuleIdentitySystem.getArchetype?.(creature);
                   if (arch && SCOOP_LACE_PROFILES[arch.id]) return SCOOP_LACE_PROFILES[arch.id];
                   return SCOOP_LACE_PROFILES[core] || SCOOP_LACE_PROFILES.balanced;
+              }
+
+              function getScoopLatticeTierFromMeter(meter) {
+                  if (meter >= SCOOP_LATTICE_TIER3) return 3;
+                  if (meter >= SCOOP_LATTICE_TIER2) return 2;
+                  if (meter >= SCOOP_LATTICE_UNLOCK) return 1;
+                  return 0;
+              }
+
+              function tickCreatureScoopLatticeMeter(creature, ts = 1) {
+                  if (!creature || creature.isPredator) return;
+                  if ((creature._networkSize || 1) < 2 && (creature._symbiosisLevel || 0) < 1) return;
+                  const popFactor = min(1.4, 0.75 + (creature._networkSize || 1) * 0.04);
+                  const comp = creature._complementarityComfort || creature._alignmentComfort || 0;
+                  const gain = (0.045 + (creature._symbiosisLevel || 0) * 0.028 + comp * 0.05) * popFactor * ts;
+                  creature._scoopLatticeMeter = min(SCOOP_LATTICE_METER_MAX, (creature._scoopLatticeMeter || 0) + gain);
+                  const tier = getScoopLatticeTierFromMeter(creature._scoopLatticeMeter);
+                  creature._scoopLatticeTier = max(creature._scoopLatticeTier || 0, tier);
+              }
+
+              function canCreatureUseScoop(creature) {
+                  if (!creature) return false;
+                  if (creature._scoopGenome?.unlocked) return true;
+                  return getScoopLatticeTierFromMeter(creature._scoopLatticeMeter || 0) >= 1
+                      || (creature._scoopLatticeTier || 0) >= 1;
+              }
+
+              function getScoopEffectiveStats(creature) {
+                  const tier = max(creature._scoopLatticeTier || 0, creature._scoopGenome?.tier || 0);
+                  const mult = creature._scoopPowerMult || creature._scoopGenome?.imprint?.powerMult
+                      || (0.7 + tier * 0.18);
+                  return {
+                      reach: MANUAL_SCOOP_REACH * (0.92 + mult * 0.22 + tier * 0.06),
+                      maxBag: min(14, MANUAL_SCOOP_MAX_BAG + Math.floor(tier * 1.2 + mult * 1.5)),
+                      dashPower: 2.4 + mult * 1.55 + tier * 0.35,
+                      flexMult: 0.85 + mult * 0.2,
+                      tier,
+                      mult
+                  };
+              }
+
+              function stealLatticeForScoop(creature) {
+                  const inColony = (creature._symbiosisLevel || 0) >= 1 && (creature._networkSize || 1) >= 2;
+                  creature._scoopStolenLinks = [];
+                  if (!inColony) {
+                      creature._scoopUsingLattice = false;
+                      const imp = creature._scoopLatticeImprint || creature._scoopGenome?.imprint;
+                      creature._scoopPowerMult = imp?.powerMult || (0.68 + (creature._scoopLatticeTier || 1) * 0.14);
+                      return;
+                  }
+                  const links = ModuleIdentitySystem._linkCache?.length
+                      ? ModuleIdentitySystem._linkCache
+                      : ModuleIdentitySystem.refreshResonanceLinkCache();
+                  const stolen = [];
+                  let laceMemory = 0;
+                  for (const link of links) {
+                      if (link.a !== creature && link.b !== creature) continue;
+                      const other = link.a === creature ? link.b : link.a;
+                      if (!other || creatures.indexOf(other) < 0) continue;
+                      const st = ModuleIdentitySystem._linkFeedState[link.key];
+                      if (st) {
+                          laceMemory += (st.feedGlow || 0) * 0.04 + (st.pullBoost || 0) * 0.35;
+                          st.feedGlow = max(0, (st.feedGlow || 0) * 0.28);
+                          st.pullBoost *= 0.32;
+                          st.laceTension = min(1.2, (st.laceTension || 0) + 0.32);
+                          st.stressFlash = max(st.stressFlash || 0, 16);
+                          st.soulAbsorbGlow = max(st.soulAbsorbGlow || 0, 8);
+                      }
+                      if (!other.isPredator && !isManualControlImmune(other)) {
+                          const drain = 0.9 + (creature._scoopLatticeTier || 1) * 0.35 + laceMemory * 0.01;
+                          other.energy = max(0, other.energy - drain);
+                          other._networkBurden = (other._networkBurden || 0) + 0.1;
+                          other._colonyLinkPulse = max(other._colonyLinkPulse || 0, 10);
+                      }
+                      stolen.push({
+                          key: link.key,
+                          ox: other.x, oy: other.y,
+                          tx: creature.x, ty: creature.y,
+                          pulse: 24 + (st?.feedGlow || 0) * 0.2
+                      });
+                  }
+                  creature._scoopStolenLinks = stolen;
+                  creature._scoopUsingLattice = stolen.length > 0;
+                  const colonyPower = (creature._networkSize || 1) + (creature._symbiosisLevel || 0) * 2.2
+                      + stolen.length * 1.4 + laceMemory * 0.02;
+                  creature._scoopPowerMult = 0.88 + min(1.35, colonyPower * 0.07)
+                      + (creature._scoopLatticeTier || 0) * 0.11;
+                  creature._scoopLatticeImprint = {
+                      tier: creature._scoopLatticeTier || 1,
+                      colonySize: creature._networkSize || 1,
+                      symLevel: creature._symbiosisLevel || 0,
+                      stolenLinks: stolen.length,
+                      powerMult: creature._scoopPowerMult,
+                      laceMemory,
+                      composition: getScoopImprintModuleType(creature)
+                  };
+              }
+
+              function getScoopDashAnimT(creature) {
+                  if (!creature || !(creature._scoopDashPhase > 0)) return 0;
+                  return 1 - creature._scoopDashPhase / SCOOP_DASH_DURATION;
+              }
+
+              function getScoopDashSpring(creature) {
+                  const t = getScoopDashAnimT(creature);
+                  const style = creature._scoopDashStyle || getScoopLaceProfile(creature).dashStyle;
+                  if (t <= 0) return { squash: 1, stretch: 1, burst: 0, wave: 0 };
+                  if (style === 'bell-pulse') {
+                      const squash = t < 0.35 ? 1 - t * 1.1 : 0.62 + (t - 0.35) * 1.55;
+                      return { squash, stretch: 2 - squash, burst: t > 0.4 ? (t - 0.4) * 1.6 : 0, wave: sin(t * PI) };
+                  }
+                  if (style === 'pollen-burst') {
+                      const curl = t < 0.4 ? 1 - t * 1.8 : (t - 0.4) * 2.2;
+                      return { squash: 0.75 + curl * 0.35, stretch: 1 + curl * 0.9, burst: curl, wave: sin(t * TWO_PI * 2) * curl };
+                  }
+                  if (style === 'sonar-snap') {
+                      return { squash: 1 + sin(t * PI) * 0.25, stretch: 1 + t * 0.8, burst: t * t, wave: (1 - t) * 1.4 };
+                  }
+                  if (style === 'coil-spring') {
+                      const coil = t < 0.45 ? 1 - t * 1.4 : (t - 0.45) * 2.4;
+                      return { squash: 1.15 - coil * 0.35, stretch: 0.85 + coil, burst: coil, wave: sin(t * PI * 3) * 0.4 };
+                  }
+                  if (style === 'spear-lunge') {
+                      const fold = t < 0.3 ? 1 - t * 2.2 : (t - 0.3) * 2.1;
+                      return { squash: 1.2 - fold * 0.4, stretch: 0.7 + fold * 1.1, burst: fold, wave: 0 };
+                  }
+                  if (style === 'shell-shock') {
+                      return { squash: 0.88 + sin(t * PI) * 0.2, stretch: 1 + t * 0.5, burst: t * 1.3, wave: (1 - t) * 0.9 };
+                  }
+                  if (style === 'sap-surge') {
+                      const gather = t < 0.28 ? 1 - t * 2.8 : 0;
+                      const swell = t >= 0.28 && t < 0.5 ? (t - 0.28) * 4.2 : 0;
+                      const surge = t >= 0.5 ? (t - 0.5) * 2.35 : 0;
+                      return {
+                          squash: 1.08 - gather * 0.42 + swell * 0.12 - surge * 0.18,
+                          stretch: 0.72 + gather * 0.18 + swell * 0.42 + surge * 1.05,
+                          burst: swell * 0.55 + surge,
+                          wave: sin(t * PI * 2.2) * (swell + surge * 0.45),
+                          sap: swell + surge * 1.15
+                      };
+                  }
+                  return { squash: 1, stretch: 1, burst: t, wave: sin(t * PI) };
+              }
+
+              function triggerScoopDash(creature) {
+                  if (!creature || !creature._scoopActive) return;
+                  if ((creature._scoopDashCooldown || 0) > 0) return;
+                  const stats = getScoopEffectiveStats(creature);
+                  const profile = getScoopLaceProfile(creature);
+                  creature._scoopDashStyle = profile.dashStyle;
+                  creature._scoopDashPhase = SCOOP_DASH_DURATION;
+                  creature._scoopDashCooldown = SCOOP_DASH_COOLDOWN;
+                  const geo = creature._scoopGeo || buildManualScoopGeometry(creature);
+                  let dx = manualControlState.x - creature.x;
+                  let dy = manualControlState.y - creature.y;
+                  const d = sqrt(dx * dx + dy * dy) || 1;
+                  if (d < 14) {
+                      dx = cos(geo.facing);
+                      dy = sin(geo.facing);
+                  } else {
+                      dx /= d;
+                      dy /= d;
+                  }
+                  const impulse = stats.dashPower * 1.28;
+                  creature.vx += dx * impulse;
+                  creature.vy += dy * impulse;
+                  capCreatureVelocity(creature, getCreatureMaxSpeed(creature, timeScale) * 2.1);
+                  creature._scoopDashRipple = 14;
+                  playTone(180 + stats.tier * 22, 'sine', 0.1, 0.42);
+                  addFloatingText(creature.x, creature.y - 18, 'Dash [F]', '#7dd3fc');
+              }
+
+              function tickScoopDashAnimation(creature) {
+                  if ((creature._scoopDashCooldown || 0) > 0) creature._scoopDashCooldown--;
+                  if ((creature._scoopDashPhase || 0) > 0) {
+                      creature._scoopDashPhase--;
+                      const spring = getScoopDashSpring(creature);
+                      const geo = creature._scoopGeo;
+                      if (geo && spring.burst > 0.2) {
+                          creature.vx += cos(geo.facing) * spring.burst * 0.06 * timeScale;
+                          creature.vy += sin(geo.facing) * spring.burst * 0.06 * timeScale;
+                      }
+                  }
+                  if ((creature._scoopDashRipple || 0) > 0) creature._scoopDashRipple--;
+                  if (creature._scoopStolenLinks?.length) {
+                      for (const sl of creature._scoopStolenLinks) {
+                          sl.tx = creature.x;
+                          sl.ty = creature.y;
+                          sl.pulse = max(0, (sl.pulse || 0) - 0.35);
+                      }
+                  }
               }
 
               function getScoopImprintModuleType(creature) {
@@ -24156,18 +24397,29 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
               function buildManualScoopGeometry(creature) {
                   const profile = getScoopLaceProfile(creature);
+                  const stats = getScoopEffectiveStats(creature);
+                  const spring = getScoopDashSpring(creature);
                   const spd = sqrt(creature.vx * creature.vx + creature.vy * creature.vy);
                   const facing = spd > 0.12 ? atan2(creature.vy, creature.vx)
                       : (creature.wrigglePhase || 0) * 0.35;
-                  const bellyR = CREATURE_BODY_RADIUS * 0.42;
-                  const bellyX = creature.x - cos(facing) * CREATURE_BODY_RADIUS * 0.08 + cos(facing + HALF_PI) * 1.5;
-                  const bellyY = creature.y - sin(facing) * CREATURE_BODY_RADIUS * 0.08 + sin(facing + HALF_PI) * 1.5;
+                  const bellyR = CREATURE_BODY_RADIUS * 0.42 * spring.squash;
+                  const bellyX = creature.x - cos(facing) * CREATURE_BODY_RADIUS * 0.06 * spring.stretch
+                      + cos(facing + HALF_PI) * 1.5;
+                  const bellyY = creature.y - sin(facing) * CREATURE_BODY_RADIUS * 0.06 * spring.stretch
+                      + sin(facing + HALF_PI) * 1.5;
                   const tentacles = [];
                   const n = profile.count;
+                  const reach = stats.reach;
                   for (let i = 0; i < n; i++) {
                       let ang;
-                      if (profile.tendrilStyle === 'trail') {
+                      if (profile.tendrilStyle === 'jellyfish') {
                           ang = facing + PI + (i - (n - 1) * 0.5) * profile.spread * 0.38;
+                      } else if (profile.tendrilStyle === 'root-siphon') {
+                          const side = i % 2 === 0 ? -1 : 1;
+                          ang = facing + PI * 0.62 + side * HALF_PI * 0.38
+                              + (i - (n - 1) * 0.5) * profile.spread * 0.34;
+                      } else if (profile.tendrilStyle === 'bloom') {
+                          ang = facing - profile.spread * 0.55 + (i / max(1, n - 1)) * profile.spread * 1.1;
                       } else if (profile.tendrilStyle === 'front') {
                           ang = facing + (i - (n - 1) * 0.5) * profile.spread * 0.42;
                       } else if (profile.tendrilStyle === 'side') {
@@ -24178,23 +24430,36 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           ang = (i / n) * TWO_PI * profile.spread + facing * 0.25;
                       }
                       const baseR = CREATURE_BODY_RADIUS * (0.72 + (i % 3) * 0.06);
+                      const curl = profile.tendrilStyle === 'bloom'
+                          ? sin(frameCount * 0.07 + i * 0.9) * 0.22 + spring.burst * 0.35
+                          : profile.tendrilStyle === 'root-siphon'
+                              ? sin(frameCount * 0.06 + i * 1.1) * 0.28 - spring.sap * 0.22
+                              : 0;
                       tentacles.push({
-                          baseX: creature.x + cos(ang) * baseR * 0.55,
-                          baseY: creature.y + sin(ang) * baseR * 0.55,
-                          ang,
-                          len: MANUAL_SCOOP_REACH * (0.55 + (i % 4) * 0.08),
+                          baseX: creature.x + cos(ang) * baseR * (profile.tendrilStyle === 'root-siphon' ? 0.42 : 0.55),
+                          baseY: creature.y + sin(ang) * baseR * (profile.tendrilStyle === 'root-siphon' ? 0.42 : 0.55),
+                          ang: ang + curl,
+                          len: reach * (0.55 + (i % 4) * 0.08) * stats.flexMult
+                              * (profile.tendrilStyle === 'root-siphon' ? 0.92 + spring.stretch * 0.12 : 1),
                           phase: (creature._symSlot || 0) * 0.7 + i * 1.37,
                           targetX: null,
-                          targetY: null
+                          targetY: null,
+                          petal: profile.tendrilStyle === 'bloom',
+                          fork: profile.tendrilStyle === 'root-siphon'
                       });
                   }
-                  return { bellyX, bellyY, bellyR, facing, profile, tentacles, flex: profile.flex, rigid: profile.rigid };
+                  return {
+                      bellyX, bellyY, bellyR, facing, profile, tentacles,
+                      flex: profile.flex * stats.flexMult, rigid: profile.rigid,
+                      stats, spring, usingLattice: !!creature._scoopUsingLattice
+                  };
               }
 
               function captureScoopParticle(creature, p, geo) {
                   if (!creature || !p || p._scooped) return false;
                   if (!creature._scoopBag) creature._scoopBag = [];
-                  if (creature._scoopBag.length >= MANUAL_SCOOP_MAX_BAG) return false;
+                  const maxBag = geo?.stats?.maxBag || MANUAL_SCOOP_MAX_BAG;
+                  if (creature._scoopBag.length >= maxBag) return false;
                   p._scooped = true;
                   p._scoopOwner = creature;
                   p._scoopSwirl = random(TWO_PI);
@@ -24231,9 +24496,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
               function updateManualScoop(creature) {
                   if (!creature || !creature._scoopActive) return;
+                  tickScoopDashAnimation(creature);
                   const geo = buildManualScoopGeometry(creature);
                   creature._scoopGeo = geo;
-                  const reach2 = MANUAL_SCOOP_REACH * MANUAL_SCOOP_REACH;
+                  const reach2 = geo.stats.reach * geo.stats.reach;
                   const bag = creature._scoopBag || [];
                   let scanCursor = creature._scoopScanCursor || 0;
                   let scanned = 0;
@@ -24255,7 +24521,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   const tentacles = geo.tentacles;
                   for (let ti = 0; ti < tentacles.length; ti++) tentacles[ti].targetX = tentacles[ti].targetY = null;
 
-                  const assignN = min(candidates.length, tentacles.length, MANUAL_SCOOP_MAX_BAG - bag.length);
+                  const assignN = min(candidates.length, tentacles.length, geo.stats.maxBag - bag.length);
                   for (let i = 0; i < assignN; i++) {
                       const cand = candidates[i].p;
                       const tent = tentacles[i];
@@ -24268,7 +24534,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       tickScoopBellyParticle(bag[i], geo, i, creature);
                   }
 
-                  if (bag.length >= MANUAL_SCOOP_MAX_BAG && frameCount % 90 === 0) {
+                  if (bag.length >= geo.stats.maxBag && frameCount % 90 === 0) {
                       creature.currentThought = 'Belly full — release to imprint seeds';
                   }
               }
@@ -24325,6 +24591,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   }
                   creature._scoopActive = false;
                   creature._scoopGeo = null;
+                  creature._scoopUsingLattice = false;
+                  creature._scoopStolenLinks = [];
                   updateInspectorScoopBar(creature);
               }
 
@@ -24332,13 +24600,23 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   if (!creature || manualControlCreature !== creature) return;
                   if (creature._scoopActive) {
                       releaseManualScoop(creature, true);
+                      creature._scoopUsingLattice = false;
+                      creature._scoopStolenLinks = [];
                       creature.currentThought = 'Belly opens — seeds drift outward';
                       return;
                   }
+                  if (!canCreatureUseScoop(creature)) {
+                      addFloatingText(creature.x, creature.y - 20, 'Join a lattice first', '#fb923c');
+                      creature.currentThought = 'No lace memory — must bond to a colony network';
+                      return;
+                  }
+                  stealLatticeForScoop(creature);
                   creature._scoopActive = true;
                   if (!creature._scoopBag) creature._scoopBag = [];
                   creature._scoopScanCursor = 0;
-                  creature.currentThought = 'Tendrils reach for white drift…';
+                  creature.currentThought = creature._scoopUsingLattice
+                      ? 'Stole living lace — tendrils drink colony memory'
+                      : 'Tendrils reach from imprinted lace memory…';
                   updateInspectorScoopBar(creature);
               }
 
@@ -24346,17 +24624,37 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   const bar = document.getElementById('inspect-powerup-bar');
                   const btn = document.getElementById('inspect-scoop-btn');
                   const hint = document.getElementById('inspect-scoop-hint');
+                  const meter = document.getElementById('inspect-scoop-meter');
+                  const meterFill = document.getElementById('inspect-scoop-meter-fill');
                   const controlled = creature && manualControlCreature === creature;
+                  const unlocked = creature && canCreatureUseScoop(creature);
+                  const genome = creature?._scoopGenome?.unlocked;
                   if (bar) bar.classList.toggle('is-hidden', !controlled);
-                  if (btn) btn.classList.toggle('is-active', !!(controlled && creature._scoopActive));
+                  if (btn) {
+                      btn.classList.toggle('is-active', !!(controlled && creature._scoopActive));
+                      btn.disabled = controlled && !unlocked;
+                  }
+                  const meterPct = creature
+                      ? (genome ? 100 : min(100, creature._scoopLatticeMeter || 0))
+                      : 0;
+                  if (meter) meter.classList.toggle('is-hidden', !controlled);
+                  if (meterFill) meterFill.style.width = meterPct + '%';
                   if (hint) {
                       if (!controlled) {
-                          hint.textContent = 'Take control to unlock belly scoop.';
+                          hint.textContent = 'Take control — lattice meter builds while networked.';
+                      } else if (!unlocked) {
+                          const m = Math.floor(creature._scoopLatticeMeter || 0);
+                          hint.textContent = `Lace memory ${m}/${SCOOP_LATTICE_UNLOCK} — join a colony to unlock scoop`;
                       } else if (creature._scoopActive) {
                           const n = creature._scoopBag?.length || 0;
-                          hint.textContent = `Scooping · ${n}/${MANUAL_SCOOP_MAX_BAG} in belly · [0] release as ${getScoopImprintModuleType(creature)} seeds`;
+                          const stats = getScoopEffectiveStats(creature);
+                          const laceNote = creature._scoopUsingLattice ? ' · LIVE LACE' : '';
+                          hint.textContent = `Scoop T${stats.tier}${laceNote} · ${n}/${stats.maxBag} belly · [F] dash · [0] release seeds`;
                       } else {
-                          hint.textContent = 'Octopus scoop — flexible tendrils pull whites into belly chamber.';
+                          const tier = creature._scoopLatticeTier || creature._scoopGenome?.tier || 0;
+                          hint.textContent = genome
+                              ? `Genome scoop T${tier} — [0] deploy · steals lace if networked`
+                              : `Lattice scoop T${tier} ready — [0] deploy tendrils`;
                       }
                   }
               }
@@ -24421,25 +24719,138 @@ body.is-map-fullscreen #map-fullscreen-btn {
               function drawManualScoop(creature) {
                   if (!creature || !creature._scoopActive) return;
                   const geo = creature._scoopGeo || buildManualScoopGeometry(creature);
+                  const profile = geo.profile;
+                  const dashStyle = profile.dashStyle;
+                  const spring = geo.spring;
                   const coreCol = MODULE_AMMO_COLORS[getCreatureCoreType(creature)] || '#a78bfa';
                   const cr = red(color(coreCol)), cg = green(color(coreCol)), cb = blue(color(coreCol));
+                  const laceCol = geo.usingLattice ? [52, 211, 153] : [cr, cg, cb];
                   const spd = sqrt(creature.vx * creature.vx + creature.vy * creature.vy);
                   const sway = sin(frameCount * 0.09 + (creature._symSlot || 0)) * (0.35 + geo.flex * 0.25);
-                  const trailLen = CREATURE_SOCIAL_MAX * (0.35 + min(1, spd * 0.22) + (creature._symbiosisLevel || 0) * 0.06);
+                  const trailLen = CREATURE_SOCIAL_MAX * (0.32 + min(1, spd * 0.22)
+                      + (creature._scoopPowerMult || 0) * 0.12) * spring.stretch;
 
-                  if ((creature._symbiosisLevel || 0) >= 1 || (creature._scoopBag?.length || 0) >= 2) {
-                      const profile = geo.profile;
-                      const trailN = profile.tendrilStyle === 'trail' ? 4 : profile.tendrilStyle === 'radial' ? 5 : 3;
+                  if (creature._scoopStolenLinks?.length) {
+                      for (const sl of creature._scoopStolenLinks) {
+                          if ((sl.pulse || 0) <= 0) continue;
+                          const mx = lerp(sl.ox, sl.tx, 0.45) + sin(frameCount * 0.08) * 6;
+                          const my = lerp(sl.oy, sl.ty, 0.45) + cos(frameCount * 0.07) * 5;
+                          noFill();
+                          stroke(110, 231, 183, 40 + sl.pulse * 2.2);
+                          strokeWeight(0.65 + sl.pulse * 0.02);
+                          beginShape();
+                          vertex(sl.ox, sl.oy);
+                          quadraticVertex(mx, my, sl.tx, sl.ty);
+                          endShape();
+                          stroke(192, 132, 252, 28 + sl.pulse);
+                          strokeWeight(0.45);
+                          line(sl.ox, sl.oy, sl.tx, sl.ty);
+                      }
+                  }
+
+                  if (dashStyle === 'bell-pulse' && spring.wave > 0) {
+                      const bellR = geo.bellyR * (2.2 + spring.wave * 0.8);
+                      noFill();
+                      stroke(laceCol[0], laceCol[1], laceCol[2], 22 + spring.wave * 40);
+                      strokeWeight(0.5 + spring.wave * 0.35);
+                      ellipse(creature.x - cos(geo.facing) * 6, creature.y - sin(geo.facing) * 6, bellR * 2.1, bellR * 1.35);
+                  }
+                  if (dashStyle === 'sonar-snap' && spring.burst > 0.05) {
+                      noFill();
+                      stroke(56, 189, 248, 35 + spring.burst * 80);
+                      strokeWeight(0.55);
+                      circle(creature.x, creature.y, CREATURE_BODY_RADIUS * (2 + spring.burst * 4.5));
+                  }
+                  if (dashStyle === 'shell-shock' && spring.burst > 0.05) {
+                      noFill();
+                      stroke(248, 113, 113, 30 + spring.burst * 70);
+                      strokeWeight(0.7);
+                      circle(creature.x, creature.y, CREATURE_BODY_RADIUS * (2.2 + spring.burst * 3.2));
+                  }
+                  if (dashStyle === 'pollen-burst' && spring.burst > 0.08) {
+                      for (let pk = 0; pk < 8; pk++) {
+                          const pang = geo.facing + (pk / 8) * TWO_PI;
+                          const pr = CREATURE_BODY_RADIUS * (1.2 + spring.burst * 3.5);
+                          fill(52, 211, 153, 35 + spring.burst * 50);
+                          noStroke();
+                          circle(creature.x + cos(pang) * pr, creature.y + sin(pang) * pr, 2.5 + spring.burst * 2);
+                      }
+                  }
+                  if (dashStyle === 'sap-surge' && (spring.sap || 0) > 0.05) {
+                      const sap = spring.sap || spring.burst;
+                      for (let sk = 0; sk < 10; sk++) {
+                          const sang = geo.facing + PI * 0.55 + (sk - 5) * 0.22 + sin(frameCount * 0.09 + sk) * 0.08;
+                          const sr = CREATURE_BODY_RADIUS * (0.8 + sap * 4.2);
+                          fill(74, 222, 128, 28 + sap * 65);
+                          noStroke();
+                          circle(creature.x + cos(sang) * sr, creature.y + sin(sang) * sr * 0.82, 2 + sap * 2.4);
+                      }
+                      if (sap > 0.35) {
+                          noFill();
+                          stroke(34, 197, 94, 22 + sap * 55);
+                          strokeWeight(0.45);
+                          for (let mk = 0; mk < 5; mk++) {
+                              const mx = creature.x + cos(geo.facing + PI * 0.5 + mk * 0.35) * CREATURE_BODY_RADIUS * sap * 2.8;
+                              const my = creature.y + sin(geo.facing + PI * 0.5 + mk * 0.35) * CREATURE_BODY_RADIUS * sap * 2.2;
+                              const fx = mx + cos(geo.facing - 0.4) * 12 * sap;
+                              const fy = my + sin(geo.facing - 0.4) * 12 * sap;
+                              line(creature.x, creature.y, mx, my);
+                              line(mx, my, fx, fy);
+                          }
+                      }
+                  }
+                  if (dashStyle === 'coil-spring' && spring.burst > 0.04) {
+                      noFill();
+                      stroke(167, 139, 250, 30 + spring.burst * 70);
+                      strokeWeight(0.5);
+                      for (let ck = 0; ck < 3; ck++) {
+                          const coilR = CREATURE_BODY_RADIUS * (1.1 + ck * 0.55 + spring.squash * 0.8);
+                          arc(creature.x, creature.y, coilR * 2, coilR * 1.6,
+                              geo.facing - HALF_PI + ck * 0.4, geo.facing + HALF_PI - ck * 0.25);
+                      }
+                  }
+                  if (dashStyle === 'spear-lunge' && spring.stretch > 0.85) {
+                      const tipX = creature.x + cos(geo.facing) * CREATURE_BODY_RADIUS * (2.2 + spring.stretch * 2.8);
+                      const tipY = creature.y + sin(geo.facing) * CREATURE_BODY_RADIUS * (2.2 + spring.stretch * 2.8);
+                      stroke(251, 191, 36, 40 + spring.burst * 90);
+                      strokeWeight(0.65 + spring.burst * 0.35);
+                      line(creature.x, creature.y, tipX, tipY);
+                      fill(255, 237, 160, 35 + spring.burst * 50);
+                      noStroke();
+                      circle(tipX, tipY, 3 + spring.burst * 2.5);
+                  }
+
+                  const showTrail = geo.usingLattice || (creature._symbiosisLevel || 0) >= 1
+                      || (creature._scoopBag?.length || 0) >= 1;
+                  if (showTrail) {
+                      const trailN = profile.tendrilStyle === 'jellyfish' ? 5
+                          : profile.tendrilStyle === 'radial' ? 5
+                          : profile.tendrilStyle === 'root-siphon' ? 5
+                          : profile.tendrilStyle === 'bloom' ? 4 : 3;
                       for (let t = 0; t < trailN; t++) {
                           let tx, ty, mx, my;
-                          const lag = t * 0.22 + 1;
-                          if (profile.tendrilStyle === 'trail' || profile.tendrilStyle === 'front') {
+                          const lag = t * 0.22 + 1 + spring.burst * 0.35;
+                          if (profile.tendrilStyle === 'jellyfish' || profile.tendrilStyle === 'front') {
                               tx = creature.x - cos(geo.facing) * trailLen * lag - cos(geo.facing + HALF_PI) * (t - trailN * 0.5) * 8;
                               ty = creature.y - sin(geo.facing) * trailLen * lag - sin(geo.facing + HALF_PI) * (t - trailN * 0.5) * 8;
+                          } else if (profile.tendrilStyle === 'bloom') {
+                              const pang = geo.facing + PI * 0.85 + (t - trailN * 0.5) * 0.35;
+                              tx = creature.x + cos(pang) * trailLen * lag * 0.75;
+                              ty = creature.y + sin(pang) * trailLen * lag * 0.75;
+                          } else if (profile.tendrilStyle === 'root-siphon') {
+                              const side = t % 2 === 0 ? -1 : 1;
+                              const rootAng = geo.facing + PI * 0.58 + side * HALF_PI * 0.42 + (t - trailN * 0.5) * 0.28;
+                              tx = creature.x + cos(rootAng) * trailLen * lag * 0.82;
+                              ty = creature.y + sin(rootAng) * trailLen * lag * 0.95;
                           } else if (profile.tendrilStyle === 'side') {
                               const side = t % 2 === 0 ? 1 : -1;
-                              tx = creature.x + cos(geo.facing + side * HALF_PI) * trailLen * 0.55 * lag;
-                              ty = creature.y + sin(geo.facing + side * HALF_PI) * trailLen * 0.55 * lag;
+                              const coil = dashStyle === 'coil-spring' ? spring.squash : 1;
+                              tx = creature.x + cos(geo.facing + side * HALF_PI) * trailLen * 0.55 * lag * coil;
+                              ty = creature.y + sin(geo.facing + side * HALF_PI) * trailLen * 0.55 * lag * coil;
+                          } else if (profile.tendrilStyle === 'radial') {
+                              const rang = (t / trailN) * TWO_PI + frameCount * 0.02;
+                              tx = creature.x + cos(rang) * trailLen * 0.42 * lag;
+                              ty = creature.y + sin(rang) * trailLen * 0.42 * lag;
                           } else {
                               const ringAng = geo.facing + PI + (t / trailN) * profile.spread;
                               tx = creature.x + cos(ringAng) * trailLen * 0.45 * lag;
@@ -24448,9 +24859,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           mx = (creature.x + tx) * 0.5 + sin(frameCount * 0.05 + t) * (profile.rigid ? 2 : 8 + sway * 4);
                           my = (creature.y + ty) * 0.5 + cos(frameCount * 0.045 + t) * (profile.rigid ? 2 : 6 + sway * 3);
                           noFill();
-                          stroke(cr, cg, cb, 18 + t * 5);
+                          stroke(laceCol[0], laceCol[1], laceCol[2], 18 + t * 5 + spring.wave * 25);
                           strokeWeight(profile.rigid ? 0.55 : 0.38 + geo.flex * 0.22);
-                          if (profile.rigid) {
+                          if (profile.rigid || dashStyle === 'spear-lunge') {
                               line(creature.x, creature.y, tx, ty);
                           } else {
                               beginShape();
@@ -24462,20 +24873,60 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   }
 
                   for (const tent of geo.tentacles) {
-                      const wobble = sin(frameCount * 0.14 + tent.phase) * (geo.rigid ? 3 : 10 + spd * 2.5);
-                      const tipX = tent.targetX != null
+                      let ext = tent.len;
+                      if (dashStyle === 'spear-lunge') ext *= 0.65 + spring.stretch * 0.55;
+                      if (dashStyle === 'coil-spring') ext *= 0.7 + spring.stretch * 0.45;
+                      if (dashStyle === 'pollen-burst' && tent.petal) ext *= 0.8 + spring.burst * 0.65;
+                      if (dashStyle === 'sap-surge' && tent.fork) ext *= 0.62 + spring.stretch * 0.55;
+                      const wobble = sin(frameCount * 0.14 + tent.phase) * (geo.rigid ? 3 : 10 + spd * 2.5 + spring.wave * 6);
+                      let tipX = tent.targetX != null
                           ? lerp(tent.targetX, geo.bellyX, 0.18)
-                          : tent.baseX + cos(tent.ang) * tent.len + cos(tent.phase) * wobble;
-                      const tipY = tent.targetY != null
+                          : tent.baseX + cos(tent.ang) * ext + cos(tent.phase) * wobble;
+                      let tipY = tent.targetY != null
                           ? lerp(tent.targetY, geo.bellyY, 0.18)
-                          : tent.baseY + sin(tent.ang) * tent.len + sin(tent.phase * 1.1) * wobble;
+                          : tent.baseY + sin(tent.ang) * ext + sin(tent.phase * 1.1) * wobble;
+                      if (dashStyle === 'coil-spring' && spring.squash < 0.95) {
+                          tipX = lerp(tipX, tent.baseX, 1 - spring.squash);
+                          tipY = lerp(tipY, tent.baseY, 1 - spring.squash);
+                      }
                       const midX = (tent.baseX + tipX) * 0.5 + sin(frameCount * 0.11 + tent.phase) * (6 + geo.flex * 8);
                       const midY = (tent.baseY + tipY) * 0.5 + cos(frameCount * 0.1 + tent.phase) * (5 + geo.flex * 7);
                       const grabbing = tent.targetX != null;
-                      stroke(grabbing ? 220 : cr, grabbing ? 245 : cg, grabbing ? 255 : cb, grabbing ? 130 : 85);
-                      strokeWeight(grabbing ? 1.05 : 0.72);
+                      const powered = geo.usingLattice;
+                      stroke(grabbing ? 220 : (powered ? laceCol[0] : cr),
+                          grabbing ? 245 : (powered ? laceCol[1] : cg),
+                          grabbing ? 255 : (powered ? laceCol[2] : cb),
+                          grabbing ? 130 : (85 + spring.wave * 40));
+                      strokeWeight(grabbing ? 1.05 : (0.72 + (powered ? 0.2 : 0)));
                       noFill();
-                      if (geo.rigid) {
+                      if (tent.petal && dashStyle === 'pollen-burst') {
+                          const petalMx = tent.baseX + cos(tent.ang) * ext * 0.45 + sin(frameCount * 0.12 + tent.phase) * 8;
+                          const petalMy = tent.baseY + sin(tent.ang) * ext * 0.45 + cos(frameCount * 0.1 + tent.phase) * 6;
+                          beginShape();
+                          vertex(tent.baseX, tent.baseY);
+                          quadraticVertex(petalMx, petalMy, tipX, tipY);
+                          endShape();
+                          stroke(110, 231, 183, 45);
+                          strokeWeight(0.35);
+                          line(tent.baseX, tent.baseY, tipX, tipY);
+                      } else if (tent.fork && profile.tendrilStyle === 'root-siphon') {
+                          const forkX = (tent.baseX + tipX) * 0.5 + cos(tent.ang + HALF_PI) * (8 + spring.sap * 10);
+                          const forkY = (tent.baseY + tipY) * 0.5 + sin(tent.ang + HALF_PI) * (8 + spring.sap * 10);
+                          const fork2X = (tent.baseX + tipX) * 0.5 + cos(tent.ang - HALF_PI) * (6 + spring.sap * 8);
+                          const fork2Y = (tent.baseY + tipY) * 0.5 + sin(tent.ang - HALF_PI) * (6 + spring.sap * 8);
+                          beginShape();
+                          vertex(tent.baseX, tent.baseY);
+                          quadraticVertex(midX, midY, forkX, forkY);
+                          endShape();
+                          beginShape();
+                          vertex(tent.baseX, tent.baseY);
+                          quadraticVertex(midX * 0.92, midY * 0.92, fork2X, fork2Y);
+                          endShape();
+                          stroke(52, 211, 153, 55 + spring.sap * 40);
+                          strokeWeight(0.4);
+                          line(forkX, forkY, tipX, tipY);
+                          line(fork2X, fork2Y, tipX, tipY);
+                      } else if (geo.rigid) {
                           line(tent.baseX, tent.baseY, tipX, tipY);
                       } else {
                           beginShape();
@@ -24491,11 +24942,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   }
 
                   noStroke();
-                  fill(cr, cg, cb, 28);
-                  circle(geo.bellyX, geo.bellyY, geo.bellyR * 2.5);
+                  fill(cr, cg, cb, 28 + spring.wave * 30);
+                  circle(geo.bellyX, geo.bellyY, geo.bellyR * (2.5 + spring.stretch * 0.35));
                   fill(12, 16, 28, 55);
-                  circle(geo.bellyX, geo.bellyY, geo.bellyR * 2.05);
-                  stroke(180, 210, 255, 62);
+                  circle(geo.bellyX, geo.bellyY, geo.bellyR * 2.05 * spring.squash);
+                  stroke(180, 210, 255, 62 + spring.wave * 40);
                   strokeWeight(0.85);
                   noFill();
                   circle(geo.bellyX, geo.bellyY, geo.bellyR * 1.95);
@@ -24506,6 +24957,12 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       fill(245, 250, 255, 150);
                       noStroke();
                       circle(p.x, p.y, (p.size || 2) * 1.6);
+                  }
+                  if ((creature._scoopDashRipple || 0) > 0) {
+                      noFill();
+                      stroke(125, 211, 252, creature._scoopDashRipple * 8);
+                      strokeWeight(0.6);
+                      circle(creature.x, creature.y, CREATURE_BODY_RADIUS * (2 + creature._scoopDashRipple * 0.25));
                   }
                   noStroke();
               }
@@ -40121,6 +40578,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
                               continue;
                           }
                           c.update(isDay, vortexDir, vortexStrength, timeScale, envMods);
+                          if ((c._networkSize || 1) >= 2 || (c._symbiosisLevel || 0) >= 1) {
+                              tickCreatureScoopLatticeMeter(c, timeScale);
+                          }
                           applyCreatureWallCollisions(c);
                           c.energy -= popPressure * timeScale;
                           debugCreatureUpdateCount++;
@@ -40929,6 +41389,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
               window.toggleManualSuperPredator = toggleManualSuperPredator;
               window.toggleManualAutoLineage = toggleManualAutoLineage;
               window.toggleManualScoop = toggleManualScoop;
+              window.triggerScoopDash = triggerScoopDash;
               window.jumpToLatestOffspring = jumpToLatestOffspring;
               window.selectAlphaInFullscreen = selectAlphaInFullscreen;
               window.deselectAllCreaturesInFullscreen = deselectAllCreaturesInFullscreen;
