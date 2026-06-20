@@ -8,8 +8,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "minisimmy_orbital_ship_v2.html"
+GUIDE_SOURCE = ROOT / "minisimmy_orbital_ship_v2-guide-2026.html"
 DEST_DIR = Path(r"C:\Users\itreb\GrokBuildProjects\ModularLifeSim-Website")
 LATEST_NAME = "minisimmy_orbital_ship_v2.html"
+GUIDE_NAME = "minisimmy_orbital_ship_v2-guide-2026.html"
 
 
 def read_build_tag(html: str) -> str:
@@ -32,10 +34,14 @@ def main() -> None:
 
     shutil.copy2(SOURCE, latest)
     shutil.copy2(SOURCE, snapshot)
+    if GUIDE_SOURCE.is_file():
+        shutil.copy2(GUIDE_SOURCE, DEST_DIR / GUIDE_NAME)
 
     print(f"Published build: {build}")
     print(f"  latest   -> {latest}")
     print(f"  snapshot -> {snapshot}")
+    if GUIDE_SOURCE.is_file():
+        print(f"  guide    -> {DEST_DIR / GUIDE_NAME}")
 
 
 if __name__ == "__main__":
