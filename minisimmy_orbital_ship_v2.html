@@ -1546,6 +1546,22 @@ body.is-map-fullscreen .inspect-auto-lineage-btn {
     background: linear-gradient(90deg, #34d399, #38bdf8, #a78bfa);
     transition: width 0.2s ease;
 }
+.inspect-lace-leech-meter {
+    margin-top: 0.25rem;
+}
+.inspect-lace-leech-meter-fill {
+    background: linear-gradient(90deg, #7c3aed, #c084fc, #f472b6);
+}
+.inspect-lace-leech-label {
+    width: 100%;
+    font-size: 8px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: rgba(192, 132, 252, 0.62);
+    margin-top: 0.3rem;
+    text-align: left;
+}
 .inspect-scoop-style-wrap {
     display: flex;
     flex-direction: column;
@@ -6334,6 +6350,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
                                       </button>
                                       <span id="inspect-scoop-hint" class="inspect-powerup-hint">Take control to unlock belly scoop.</span>
                                       <div id="inspect-scoop-meter" class="inspect-scoop-meter is-hidden"><div id="inspect-scoop-meter-fill" class="inspect-scoop-meter-fill" style="width:0%"></div></div>
+                                      <div id="inspect-lace-leech-label" class="inspect-lace-leech-label is-hidden">Lace leech — brood meter</div>
+                                      <div id="inspect-lace-leech-meter" class="inspect-scoop-meter inspect-lace-leech-meter is-hidden"><div id="inspect-lace-leech-meter-fill" class="inspect-scoop-meter-fill inspect-lace-leech-meter-fill" style="width:0%"></div></div>
                                       <div id="inspect-scoop-style-wrap" class="inspect-scoop-style-wrap is-hidden">
                                           <label for="inspect-scoop-style-select" class="text-[9px] text-white/45">Tendril form (T2+)</label>
                                           <select id="inspect-scoop-style-select" class="inspect-scoop-style-select" onchange="onScoopStyleSelectChange()">
@@ -7984,7 +8002,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'orbital-ship-v2-2026-06-20-scoop-probe-toggle';
+              const MINISIMMY_BUILD = 'orbital-ship-v2-2026-06-20-lace-leech-bulb';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -8176,6 +8194,16 @@ body.is-map-fullscreen #map-fullscreen-btn {
               const SCOOP_JELLYFISH_AUTO_GOLD_CHANCE = 0.05;
               const SCOOP_JELLYFISH_MANUAL_SILVER_CHANCE = 0.04;
               const SCOOP_JELLYFISH_MANUAL_GOLD_CHANCE = 0.01;
+              const SCOOP_LACE_LEECH_METER_MAX = 100;
+              const SCOOP_LACE_LEECH_CYCLE = 100;
+              const SCOOP_LACE_LEECH_LINK_HIT = 17;
+              const SCOOP_LACE_LEECH_GAIN = 0.11;
+              const SCOOP_LACE_LEECH_DRAIN = 0.42;
+              const SCOOP_LACE_LEECH_BULB_RATE = 0.0016;
+              const SCOOP_LACE_LEECH_BULB_MAX = 1.28;
+              const SCOOP_LACE_LEECH_PULL = 0.014;
+              const SCOOP_LACE_LEECH_CANCER_RADIUS = 148;
+              const SCOOP_LACE_LEECH_FX_MAX = 28;
 
               const SCOOP_INCUBATOR_CORE_PERKS = {
                   harvester: { leakMult: 1.38, spawnEnergy: 58, foodLure: 1.45, label: 'Feast lure brood' },
@@ -8854,6 +8882,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       scoop_bubble_full: 16000,
                       scoop_toggle: 22000,
                       scoop_probe_toggle: 12000,
+                      scoop_lace_leech: 15000,
                       scoop_sprint: 14000,
                       scoop_melt: 18000,
                       scoop_prune: 15000,
@@ -10180,6 +10209,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           scoop_probe_toggle: options.extra === 'on'
                               ? 'Probe extended — I scan, tag, and herd the frailest prey while the bubble waits.'
                               : 'Probe stowed — only the bubble shell and tendrils stay active until I need a prune sweep.',
+                          scoop_lace_leech: `Rear tendrils sip the colony web — ${options.extra || 'energy'} flows in; the bell swells and peels off brood.`,
                           scoop_sprint: 'Bell pulse sprint — jellyfish dash throws the bubble forward so the probe can sweep a fresh arc.',
                           scoop_melt: modN > 0
                               ? `${modN} prey modules melting inside the bubble — infinite energy while shards tumble.`
@@ -19802,6 +19832,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                               }
                           }
                           if (c._networkStressPulse > 0) c._networkStressPulse--;
+                          if (c._laceCancerStress > 0) c._laceCancerStress--;
                           c._netPrevEnergy = c.energy;
                       }
 
@@ -20231,6 +20262,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                               const soulGlow = st ? (st.soulAbsorbGlow || 0) : 0;
                               const tightenPulse = st ? (st.laceTightenPulse || 0) : 0;
                               const laceCompressed = st ? (st.laceCompressed || 0) : 0;
+                              const cancerLeech = st ? (st.laceCancerLeech || 0) : 0;
                               const ca = getCreatureCoreType(a), cb = getCreatureCoreType(b);
                               const coreMatch = ca === cb && ca !== 'balanced';
                               noFill();
@@ -20242,6 +20274,23 @@ body.is-map-fullscreen #map-fullscreen-btn {
                               );
                               strokeWeight(0.28 + bond * 0.22 + laceCompressed * 0.18 + tightenPulse * 0.01);
                               line(a.x, a.y, b.x, b.y);
+                              if (cancerLeech > 2) {
+                                  const mx = (a.x + b.x) * 0.5;
+                                  const my = (a.y + b.y) * 0.5;
+                                  stroke(192, 38, 211, 16 + cancerLeech * 1.4);
+                                  strokeWeight(0.55 + cancerLeech * 0.03);
+                                  line(a.x, a.y, b.x, b.y);
+                                  stroke(103, 232, 249, 12 + cancerLeech * 1.1);
+                                  strokeWeight(0.38 + cancerLeech * 0.02);
+                                  line(mx, my, a.x, a.y);
+                                  line(mx, my, b.x, b.y);
+                                  const flowT = ((frameCount * 0.06) % 1);
+                                  fill(216, 180, 254, 55 + cancerLeech * 2.2);
+                                  noStroke();
+                                  circle(lerp(a.x, mx, flowT), lerp(a.y, my, flowT), 2.2 + cancerLeech * 0.08);
+                                  circle(lerp(b.x, mx, flowT), lerp(b.y, my, flowT), 2.2 + cancerLeech * 0.08);
+                                  if (st && st.laceCancerLeech > 0) st.laceCancerLeech--;
+                              }
                               if (soulGlow > 3) {
                                   const wobble = sin(frameCount * 0.16 + (a._symSlot || 0)) * (1.2 + soulGlow * 0.03);
                                   const mx = (a.x + b.x) * 0.5 + wobble;
@@ -20283,7 +20332,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
                                   laceRepairGlow = max(laceRepairGlow, 6 + (LACE_TEAR_SCAR_HOLE_FRAMES - scarHeal) * 0.42);
                               }
                               const atkFlash = feedSt ? (feedSt.predatorAttack || 0) : 0;
-                              const netStress = Math.max(a._networkStressPulse || 0, b._networkStressPulse || 0, stressFlash, laceTension * 14);
+                              const cancerLeech = feedSt ? (feedSt.laceCancerLeech || 0) : 0;
+                              const cancerStress = Math.max(a._laceCancerStress || 0, b._laceCancerStress || 0);
+                              const netStress = Math.max(a._networkStressPulse || 0, b._networkStressPulse || 0, stressFlash, laceTension * 14, cancerStress, cancerLeech * 0.85);
                               const pulse = Math.max(a._colonyLinkPulse || 0, b._colonyLinkPulse || 0, feedGlow * 0.35, netStress * 0.4, atkFlash * 0.55);
                               const signalCore = a._colonyLinkSignalCore || b._colonyLinkSignalCore || getCreatureCoreType(a);
                               const ca = MODULE_AMMO_COLORS[signalCore] || MODULE_AMMO_COLORS[getCreatureCoreType(a)] || '#a78bfa';
@@ -20377,6 +20428,24 @@ body.is-map-fullscreen #map-fullscreen-btn {
                                   vertex(a.x, a.y);
                                   quadraticVertex(mx, my, b.x, b.y);
                                   endShape();
+                              }
+                              if (cancerLeech > 2) {
+                                  stroke(192, 38, 211, 22 + cancerLeech * 1.8);
+                                  strokeWeight(0.75 + cancerLeech * 0.035);
+                                  beginShape();
+                                  vertex(a.x, a.y);
+                                  quadraticVertex(mx, my, b.x, b.y);
+                                  endShape();
+                                  stroke(103, 232, 249, 14 + cancerLeech * 1.2);
+                                  strokeWeight(0.45 + cancerLeech * 0.02);
+                                  line(mx, my, a.x, a.y);
+                                  line(mx, my, b.x, b.y);
+                                  const flowT = ((frameCount * 0.055 + i * 0.11) % 1);
+                                  fill(192, 132, 252, 70 + cancerLeech * 2.5);
+                                  noStroke();
+                                  circle(lerp(a.x, mx, flowT), lerp(a.y, my, flowT), 2.4 + cancerLeech * 0.09);
+                                  circle(lerp(b.x, mx, flowT), lerp(b.y, my, flowT), 2.4 + cancerLeech * 0.09);
+                                  if (feedSt && feedSt.laceCancerLeech > 0) feedSt.laceCancerLeech--;
                               }
                               if (feedSt && feedSt.feedFlash > 0) {
                                   fill(220, 252, 200, feedSt.feedFlash * 5.5);
@@ -24655,13 +24724,273 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   return true;
               }
 
+              function canCreatureLaceLeech(creature) {
+                  return !!(creature?._scoopActive && isJellyfishScoopCreature(creature));
+              }
+
+              function getRearScoopTentacleSegments(creature, geo) {
+                  const facing = geo.facing;
+                  const rearX = -cos(facing);
+                  const rearY = -sin(facing);
+                  const segs = [];
+                  for (const tent of geo.tentacles || []) tent._isRearTentacle = false;
+                  for (const tent of geo.tentacles || []) {
+                      if (tent.tipX == null) continue;
+                      const tdx = tent.tipX - creature.x;
+                      const tdy = tent.tipY - creature.y;
+                      if (tdx * rearX + tdy * rearY < CREATURE_BODY_RADIUS * 0.12) continue;
+                      tent._isRearTentacle = true;
+                      segs.push({ tent, x1: tent.baseX, y1: tent.baseY, x2: tent.midX, y2: tent.midY });
+                      segs.push({ tent, x1: tent.midX, y1: tent.midY, x2: tent.tipX, y2: tent.tipY });
+                  }
+                  return segs;
+              }
+
+              function scoopTentacleTouchesLaceSegment(seg, ax, ay, bx, by) {
+                  const hit = SCOOP_LACE_LEECH_LINK_HIT;
+                  if (distPointToSegment(ax, ay, seg.x1, seg.y1, seg.x2, seg.y2) < hit) return true;
+                  if (distPointToSegment(bx, by, seg.x1, seg.y1, seg.x2, seg.y2) < hit) return true;
+                  const mx = (ax + bx) * 0.5;
+                  const my = (ay + by) * 0.5;
+                  if (distPointToSegment(mx, my, seg.x1, seg.y1, seg.x2, seg.y2) < hit + 4) return true;
+                  if (distPointToSegment(seg.x2, seg.y2, ax, ay, bx, by) < hit + 2) return true;
+                  return false;
+              }
+
+              function collectLaceSegmentsNearCreature(creature) {
+                  const segments = [];
+                  const drawn = new Set();
+                  const links = ModuleIdentitySystem.refreshResonanceLinkCache();
+                  for (const link of links) {
+                      if (!link?.a || !link?.b) continue;
+                      segments.push({
+                          ax: link.a.x, ay: link.a.y, bx: link.b.x, by: link.b.y,
+                          a: link.a, b: link.b, key: link.key, strong: true, align: link.align || 1.2
+                      });
+                      drawn.add(link.key);
+                  }
+                  for (const a of creatures) {
+                      if (!ModuleIdentitySystem.isActiveCreature(a)) continue;
+                      for (const b of a.getLocalGroup(CREATURE_SOCIAL_MAX + 4)) {
+                          if (a === b || !ModuleIdentitySystem.isActiveCreature(b)) continue;
+                          const key = ModuleIdentitySystem.linkKey(a, b);
+                          if (drawn.has(key)) continue;
+                          if (ModuleIdentitySystem.computeAlignment(a, b) >= 1.2) continue;
+                          const st = ModuleIdentitySystem._linkFeedState[key];
+                          const bond = st ? (st.laceWeakBond || 0) : 0;
+                          if (bond < 0.06) continue;
+                          drawn.add(key);
+                          segments.push({ ax: a.x, ay: a.y, bx: b.x, by: b.y, a, b, key, strong: false, align: bond });
+                      }
+                  }
+                  return segments;
+              }
+
+              function findLaceLeechAttachments(creature, geo) {
+                  const rearSegs = getRearScoopTentacleSegments(creature, geo);
+                  if (!rearSegs.length) return [];
+                  const laceSegs = collectLaceSegmentsNearCreature(creature);
+                  const attached = [];
+                  const seen = new Set();
+                  for (const lace of laceSegs) {
+                      for (const seg of rearSegs) {
+                          if (!scoopTentacleTouchesLaceSegment(seg, lace.ax, lace.ay, lace.bx, lace.by)) continue;
+                          if (seen.has(lace.key)) break;
+                          seen.add(lace.key);
+                          attached.push(lace);
+                          break;
+                      }
+                  }
+                  return attached;
+              }
+
+              function pushLaceLeechFx(creature, fromX, fromY, toX, toY) {
+                  if (!creature._laceLeechFx) creature._laceLeechFx = [];
+                  if (creature._laceLeechFx.length >= SCOOP_LACE_LEECH_FX_MAX) creature._laceLeechFx.shift();
+                  creature._laceLeechFx.push({
+                      fromX, fromY, toX, toY,
+                      life: 34 + random(0, 18),
+                      phase: random(TWO_PI),
+                      t: random(0.15, 0.55)
+                  });
+              }
+
+              function spawnLaceLeechJellyfishClone(parent, geo) {
+                  const bodyMods = (parent.modules || []).filter((m) => !m.isCore);
+                  let spawnMods;
+                  if (bodyMods.length) {
+                      const pickN = min(3, max(1, floor(bodyMods.length * 0.5)));
+                      const picked = [...bodyMods].sort(() => random() - 0.5).slice(0, pickN);
+                      spawnMods = picked.map((m) => ({
+                          type: m.type,
+                          tier: 1,
+                          color: m.color || MODULE_AMMO_COLORS[m.type] || '#a78bfa'
+                      }));
+                  } else {
+                      const core = getCreatureCoreType(parent) || 'communicator';
+                      spawnMods = [{ type: core, tier: 1, color: MODULE_AMMO_COLORS[core] || '#a78bfa' }];
+                  }
+                  const facing = geo.facing;
+                  const bulb = parent._laceLeechBulb || 0;
+                  const drift = 26 + bulb * 18;
+                  const sx = parent.x - cos(facing) * drift + random(-10, 10);
+                  const sy = parent.y - sin(facing) * drift + random(-10, 10);
+                  const spawn = new Creature(
+                      constrain(sx, 24, width - 24),
+                      constrain(sy, 24, height - 24),
+                      spawnMods,
+                      parent.generation + 1,
+                      null
+                  );
+                  spawn.originAeonNumber = parent.originAeonNumber ?? parent.birthAeonNumber ?? currentAeonNumber;
+                  inheritJellyfishPopBrain(spawn, parent);
+                  applyJellyfishSize0ToSpawn(spawn);
+                  spawn._jellyfishLeechKin = true;
+                  spawn._jellyfishBodyScale = SCOOP_JELLYFISH_SIZE_0_BODY_SCALE * 0.86;
+                  spawn.vx = -cos(facing) * random(0.7, 1.6) + random(-0.5, 0.5);
+                  spawn.vy = -sin(facing) * random(0.7, 1.6) + random(-0.5, 0.5);
+                  ModuleIdentitySystem.normalizeLayout(spawn);
+                  ModuleIdentitySystem.updateCore(spawn);
+                  spawn.updateSpecialization();
+                  spawn.currentThought = 'Lace-leech brood — peeled off the cancer bulb';
+                  spawn.calculatePointValue();
+                  applyNewbornReproCooldown(spawn);
+                  creatures.push(spawn);
+                  registerCreatureOffspring(parent, spawn);
+                  return spawn;
+              }
+
+              function applyLaceLeechColonyHarm(creature, geo, attachments) {
+                  const victims = new Set();
+                  for (const lace of attachments) {
+                      victims.add(lace.a);
+                      victims.add(lace.b);
+                  }
+                  const bulb = creature._laceLeechBulb || 0;
+                  const drainMult = 1 + bulb * 0.85 + attachments.length * 0.12;
+                  for (const lace of attachments) {
+                      if (!ModuleIdentitySystem._linkFeedState[lace.key]) {
+                          ModuleIdentitySystem._linkFeedState[lace.key] = {};
+                      }
+                      const st = ModuleIdentitySystem._linkFeedState[lace.key];
+                      st.laceTension = min(1.2, (st.laceTension || 0) + 0.018 * timeScale);
+                      st.stressFlash = max(st.stressFlash || 0, 10 + bulb * 12);
+                      st.laceCancerLeech = max(st.laceCancerLeech || 0, 12 + bulb * 18);
+                  }
+                  for (const c of creatures) {
+                      if (c === creature || isManualControlImmune(c)) continue;
+                      const dx = c.x - creature.x;
+                      const dy = c.y - creature.y;
+                      const d = sqrt(dx * dx + dy * dy) || 1;
+                      const inWeb = victims.has(c);
+                      const inRadius = d <= SCOOP_LACE_LEECH_CANCER_RADIUS;
+                      if (!inWeb && !inRadius) continue;
+                      const proximity = inWeb ? 1 : max(0, 1 - d / SCOOP_LACE_LEECH_CANCER_RADIUS);
+                      const drain = SCOOP_LACE_LEECH_DRAIN * drainMult * proximity * timeScale
+                          * (inWeb ? 1.35 : 0.55);
+                      c.energy = max(0, c.energy - drain);
+                      c._laceCancerStress = max(c._laceCancerStress || 0, 8 + bulb * 22);
+                      c._networkStressPulse = max(c._networkStressPulse || 0, 6 + proximity * 14);
+                      c.damageFlash = max(c.damageFlash || 0, inWeb ? 10 : 5);
+                      if (inWeb && frameCount % 80 === 0) {
+                          c.currentThought = 'Lace cancer — energy bleeding into the bell';
+                      }
+                  }
+              }
+
+              function tickScoopLaceLeech(creature, geo) {
+                  if (!canCreatureLaceLeech(creature)) {
+                      creature._laceLeechActive = false;
+                      geo.laceLeech = null;
+                      return;
+                  }
+                  if (creature._laceLeechMeter == null) creature._laceLeechMeter = 0;
+                  if (creature._laceLeechBulb == null) creature._laceLeechBulb = 0;
+                  if (!creature._laceLeechFx) creature._laceLeechFx = [];
+
+                  const attachments = findLaceLeechAttachments(creature, geo);
+                  creature._laceLeechActive = attachments.length > 0;
+                  creature._laceLeechLinks = attachments;
+
+                  for (let i = creature._laceLeechFx.length - 1; i >= 0; i--) {
+                      creature._laceLeechFx[i].life -= timeScale;
+                      creature._laceLeechFx[i].t += 0.028 * timeScale;
+                      if (creature._laceLeechFx[i].life <= 0) creature._laceLeechFx.splice(i, 1);
+                  }
+
+                  if (!attachments.length) {
+                      creature._laceLeechAttachFrames = 0;
+                      creature._laceLeechMeter = max(0, creature._laceLeechMeter - 0.06 * timeScale);
+                      creature._laceLeechBulb = max(0, creature._laceLeechBulb - 0.0012 * timeScale);
+                      geo.laceLeech = { active: false, bulb: creature._laceLeechBulb, meter: creature._laceLeechMeter };
+                      return;
+                  }
+
+                  creature._laceLeechAttachFrames = (creature._laceLeechAttachFrames || 0) + timeScale;
+                  const attachBoost = 1 + min(1.4, creature._laceLeechAttachFrames * 0.0025);
+                  const gain = SCOOP_LACE_LEECH_GAIN * attachBoost * attachments.length * timeScale;
+                  creature._laceLeechMeter = min(SCOOP_LACE_LEECH_METER_MAX, creature._laceLeechMeter + gain);
+                  creature._laceLeechBulb = min(SCOOP_LACE_LEECH_BULB_MAX,
+                      creature._laceLeechBulb + SCOOP_LACE_LEECH_BULB_RATE * attachBoost * timeScale);
+                  creature.energy = min(100, creature.energy + gain * 0.35);
+
+                  let cx = 0;
+                  let cy = 0;
+                  for (const lace of attachments) {
+                      cx += (lace.ax + lace.bx) * 0.5;
+                      cy += (lace.ay + lace.by) * 0.5;
+                      const flowT = (sin(frameCount * 0.14 + creature._laceLeechAttachFrames * 0.04) + 1) * 0.5;
+                      const fx = lerp(lace.ax, creature.x, flowT);
+                      const fy = lerp(lace.ay, creature.y, flowT);
+                      pushLaceLeechFx(creature, lace.ax, lace.ay, creature.x, creature.y);
+                      pushLaceLeechFx(creature, lace.bx, lace.by, creature.x, creature.y);
+                      pushLaceLeechFx(creature, fx, fy, creature.x, creature.y);
+                  }
+                  cx /= attachments.length;
+                  cy /= attachments.length;
+                  const pdx = cx - creature.x;
+                  const pdy = cy - creature.y;
+                  const pd = sqrt(pdx * pdx + pdy * pdy) || 1;
+                  const pull = SCOOP_LACE_LEECH_PULL * creature._laceLeechBulb * timeScale;
+                  creature.x += (pdx / pd) * pull;
+                  creature.y += (pdy / pd) * pull;
+
+                  applyLaceLeechColonyHarm(creature, geo, attachments);
+
+                  while (creature._laceLeechMeter >= SCOOP_LACE_LEECH_CYCLE) {
+                      creature._laceLeechMeter -= SCOOP_LACE_LEECH_CYCLE;
+                      const spawn = spawnLaceLeechJellyfishClone(creature, geo);
+                      creature._laceLeechSpawnCount = (creature._laceLeechSpawnCount || 0) + 1;
+                      addFloatingText(spawn.x, spawn.y - 18, 'LEECH BROOD', '#c084fc');
+                      playTone(380 + random(-20, 20), 'sine', 0.12, 0.4);
+                      if (creature._laceLeechBulb > 0.55 && random() < 0.35) {
+                          spawnLaceLeechJellyfishClone(creature, geo);
+                      }
+                  }
+
+                  if (frameCount % 50 === 0) {
+                      maybeSpeakScoopInnerVoice(creature, 'scoop_lace_leech',
+                          `${attachments.length} lace${attachments.length === 1 ? '' : 's'} · bulb ${(creature._laceLeechBulb * 100).toFixed(0)}%`);
+                  }
+
+                  geo.laceLeech = {
+                      active: true,
+                      bulb: creature._laceLeechBulb,
+                      meter: creature._laceLeechMeter,
+                      attachments
+                  };
+              }
+
               function getJellyfishSize(creature) {
                   return creature?._jellyfishSize === 0 ? 0 : 1;
               }
 
               function getJellyfishBodyScale(creature) {
-                  if (creature?._jellyfishBodyScale != null) return creature._jellyfishBodyScale;
-                  return getJellyfishSize(creature) === 0 ? SCOOP_JELLYFISH_SIZE_0_BODY_SCALE : 1;
+                  let scale = creature?._jellyfishBodyScale != null
+                      ? creature._jellyfishBodyScale
+                      : (getJellyfishSize(creature) === 0 ? SCOOP_JELLYFISH_SIZE_0_BODY_SCALE : 1);
+                  if (creature?._laceLeechBulb > 0.05) scale *= 1 + creature._laceLeechBulb * 0.22;
+                  return scale;
               }
 
               function isJellyfishScoopCreature(creature) {
@@ -26464,7 +26793,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       geo.probe.grabbingCreature = false;
                   }
                   updateScoopTentacleTips(creature, geo);
-                  applyScoopTailEjection(creature, geo);
+                  if (!creature._laceLeechActive) applyScoopTailEjection(creature, geo);
+                  tickScoopLaceLeech(creature, geo);
 
                   const probeOn = isScoopProbeDeployed(creature);
                   let pullTarget = null;
@@ -26588,6 +26918,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           creature.currentThought = creature._manualSuperPredator
                               ? `Drift full (${pCount}) — [Space] fire particles · probe for prey`
                               : `Drift full (${pCount}) — [Space] fire from probe muzzle`;
+                      } else if (creature._laceLeechActive) {
+                          creature.currentThought = `Lace cancer — rear tendrils leeching ${(creature._laceLeechLinks || []).length} strand${(creature._laceLeechLinks || []).length === 1 ? '' : 's'} · bulb ${Math.round((creature._laceLeechBulb || 0) * 100)}% · brood ${Math.round(creature._laceLeechMeter || 0)}%`;
                       } else if ((creature._scoopBubbleOccupants || []).length > 0) {
                           const focus = creature._scoopBubbleFocus;
                           const n = creature._scoopBubbleOccupants.length;
@@ -27119,6 +27451,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   creature._scoopBubbleFocus = null;
                   creature._scoopProbeDeployed = true;
                   clearScoopProbeState(creature);
+                  creature._laceLeechMeter = 0;
+                  creature._laceLeechBulb = 0;
+                  creature._laceLeechActive = false;
+                  creature._laceLeechFx = [];
+                  creature._laceLeechAttachFrames = 0;
                   creature._scoopProbeTags = [];
                   creature._scoopProbePullTarget = null;
                   creature._scoopProbeWeakestTarget = null;
@@ -27182,6 +27519,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   if (!creature._scoopShards) creature._scoopShards = [];
                   if (!creature._scoopModuleBag) creature._scoopModuleBag = [];
                   if (!creature._scoopBubbleOccupants) creature._scoopBubbleOccupants = [];
+                  creature._laceLeechMeter = 0;
+                  creature._laceLeechBulb = 0;
+                  creature._laceLeechFx = [];
                   creature._scoopScanCursor = 0;
                   creature.currentThought = creature._scoopUsingLattice
                       ? 'Bubble deployed — touch the shell to absorb drift & prey'
@@ -27221,6 +27561,16 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   }
                   if (meter) meter.classList.toggle('is-hidden', !controlled);
                   if (meterFill) meterFill.style.width = meterPct + '%';
+                  const leechLabel = document.getElementById('inspect-lace-leech-label');
+                  const leechMeter = document.getElementById('inspect-lace-leech-meter');
+                  const leechFill = document.getElementById('inspect-lace-leech-meter-fill');
+                  const leechOn = controlled && creature?._scoopActive && isJellyfishScoopCreature(creature);
+                  const showLeech = leechOn && ((creature?._laceLeechMeter || 0) > 0.5 || creature?._laceLeechActive);
+                  if (leechLabel) leechLabel.classList.toggle('is-hidden', !showLeech);
+                  if (leechMeter) leechMeter.classList.toggle('is-hidden', !showLeech);
+                  if (leechFill && creature) {
+                      leechFill.style.width = min(100, ((creature._laceLeechMeter || 0) / SCOOP_LACE_LEECH_CYCLE) * 100) + '%';
+                  }
                   if (hint) {
                       if (!controlled) {
                           hint.textContent = 'Take control — scoop unlocks the moment you touch a colony web.';
@@ -27247,7 +27597,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           const incNote = !jelly && mods >= SCOOP_INCUBATOR_MIN_MODULES
                               ? ` · [0] hatch ${max(1, floor(mods / SCOOP_INCUBATOR_MODULES_PER_SPAWN))} kin`
                               : (!jelly && mods) ? ` · ${mods} mods brewing` : '';
-                          hint.textContent = `Bubble ${pN}/${MANUAL_SCOOP_MAX_PARTICLES} drift${mods ? ` · ${mods} mods` : ''}${jellyNote}${incNote}${shards ? ` · ${shards} shards` : ''}${laceNote} · [0] scoop · [2] probe${probeNote} · [F] sprint${fireNote}`;
+                          const leechNote = creature._laceLeechActive
+                              ? ` · LEECH ${Math.round((creature._laceLeechMeter || 0) / SCOOP_LACE_LEECH_CYCLE * 100)}% bulb ${Math.round((creature._laceLeechBulb || 0) * 100)}%`
+                              : (creature._laceLeechMeter > 0 ? ` · leech ${Math.round(creature._laceLeechMeter)}%` : '');
+                          hint.textContent = `Bubble ${pN}/${MANUAL_SCOOP_MAX_PARTICLES} drift${mods ? ` · ${mods} mods` : ''}${jellyNote}${leechNote}${incNote}${shards ? ` · ${shards} shards` : ''}${laceNote} · [0] scoop · [2] probe${probeNote} · [F] sprint${fireNote}`;
                       } else {
                           const tier = creature._scoopLatticeTier || creature._scoopGenome?.tier || 0;
                           hint.textContent = genome
@@ -27368,6 +27721,44 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   const sway = sin(frameCount * 0.09 + (creature._symSlot || 0)) * (0.35 + geo.flex * 0.25);
                   const trailLen = CREATURE_SOCIAL_MAX * (0.32 + min(1, spd * 0.22)
                       + (creature._scoopPowerMult || 0) * 0.12) * spring.stretch;
+                  const leech = geo.laceLeech;
+                  const bulb = creature._laceLeechBulb || 0;
+                  const bulbMult = 1 + bulb * 0.36;
+
+                  if (leech?.active && leech.attachments?.length) {
+                      for (const lace of leech.attachments) {
+                          const pulse = sin(frameCount * 0.16 + creature.x * 0.01) * 0.5 + 0.5;
+                          noFill();
+                          stroke(192, 38, 211, 28 + bulb * 55 + pulse * 30);
+                          strokeWeight(1.1 + bulb * 0.65);
+                          line(lace.ax, lace.ay, lace.bx, lace.by);
+                          stroke(103, 232, 249, 35 + bulb * 70);
+                          strokeWeight(0.55 + bulb * 0.35);
+                          const mx = (lace.ax + lace.bx) * 0.5;
+                          const my = (lace.ay + lace.by) * 0.5;
+                          line(mx, my, creature.x, creature.y);
+                          const flowT = ((frameCount * 0.05) % 1);
+                          const fx = lerp(lace.ax, creature.x, flowT);
+                          const fy = lerp(lace.ay, creature.y, flowT);
+                          fill(216, 180, 254, 120 + pulse * 80);
+                          noStroke();
+                          circle(fx, fy, 2.8 + bulb * 2.2);
+                          fill(125, 211, 252, 90 + pulse * 60);
+                          circle(fx + 2, fy - 1, 1.6 + bulb);
+                      }
+                  }
+
+                  for (const fx of creature._laceLeechFx || []) {
+                      const alpha = map(fx.life, 0, 34, 0, 175);
+                      const t = (fx.t % 1);
+                      const px = lerp(fx.fromX, fx.toX, t);
+                      const py = lerp(fx.fromY, fx.toY, t);
+                      fill(192, 132, 252, alpha);
+                      noStroke();
+                      circle(px, py, 2.2 + bulb * 1.2);
+                      fill(103, 232, 249, alpha * 0.65);
+                      circle(px - 0.8, py - 0.6, 1.3);
+                  }
 
                   const drawMemLinks = getScoopActiveMemoryLinks(creature);
                   if (drawMemLinks.length) {
@@ -27404,15 +27795,20 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       }
                   }
 
-                  if (dashStyle === 'bell-pulse' && spring.wave > 0) {
+                  if (dashStyle === 'bell-pulse' && (spring.wave > 0 || bulb > 0.08)) {
                       const gs = geo.geomScale || SCOOP_GEOMETRY_BASE_SCALE;
                       const bellCx = creature.x - cos(geo.facing) * 7 * gs;
                       const bellCy = creature.y - sin(geo.facing) * 7 * gs;
-                      const bellR = geo.bellyR * (2.35 + spring.wave * 1.05);
+                      const bellR = geo.bellyR * (2.35 + spring.wave * 1.05 + bulb * 1.45);
                       noFill();
                       stroke(laceCol[0], laceCol[1], laceCol[2], 28 + spring.wave * 52);
                       strokeWeight(0.55 + spring.wave * 0.42);
                       ellipse(bellCx, bellCy, bellR * 2.15, bellR * 1.38);
+                      if (bulb > 0.12) {
+                          stroke(192, 132, 252, 18 + bulb * 65);
+                          strokeWeight(0.5 + bulb * 0.35);
+                          ellipse(bellCx, bellCy, bellR * (2.35 + bulb * 0.5), bellR * (1.5 + bulb * 0.35));
+                      }
                       stroke(laceCol[0], laceCol[1], laceCol[2], 14 + spring.wave * 30);
                       strokeWeight(0.38);
                       ellipse(bellCx, bellCy, bellR * 2.55, bellR * 1.58);
@@ -27656,6 +28052,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           sa = grabbing ? 155 : 120 + spring.wave * 35;
                       } else if (grabbing) {
                           sr = 220; sg = 245; sb = 255; sa = 130;
+                      } else if (leech?.active && tent._isRearTentacle) {
+                          const pulse = sin(frameCount * 0.18 + tent.phase) * 0.5 + 0.5;
+                          sr = 103 + pulse * 40; sg = 180 + pulse * 30; sb = 252; sa = 120 + bulb * 90;
                       } else if (powered) {
                           sr = laceCol[0]; sg = laceCol[1]; sb = laceCol[2]; sa = 85 + spring.wave * 40;
                       } else {
@@ -27704,13 +28103,21 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           fill(245, 250, 255, 95);
                           noStroke();
                           circle(tipX, tipY, 3.2);
+                      } else if (leech?.active && tent._isRearTentacle) {
+                          fill(192, 132, 252, 95 + bulb * 80);
+                          noStroke();
+                          circle(tipX, tipY, 3.4 + bulb * 1.8);
+                          stroke(125, 211, 252, 55 + bulb * 60);
+                          strokeWeight(0.55);
+                          noFill();
+                          circle(tipX, tipY, 6 + bulb * 4 + sin(frameCount * 0.14 + tent.phase) * 1.2);
                       }
                   }
 
                   const pCount = getScoopParticleCount(creature);
                   const modN = getScoopModuleCount(creature);
                   const fillPct = pCount / MANUAL_SCOOP_MAX_PARTICLES;
-                  const containerR = geo.bubbleR || CREATURE_BODY_RADIUS * 2.75;
+                  const containerR = (geo.bubbleR || CREATURE_BODY_RADIUS * 2.75) * bulbMult;
                   const bx = geo.bubbleX ?? creature.x;
                   const by = geo.bubbleY ?? creature.y;
 
@@ -27734,6 +28141,15 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       stroke(52, 211, 153, 35 + sin(frameCount * 0.1) * 18);
                       strokeWeight(0.5);
                       circle(bx, by, containerR * 2.18);
+                  }
+                  if (bulb > 0.1) {
+                      noFill();
+                      stroke(192, 132, 252, 22 + bulb * 55);
+                      strokeWeight(0.65 + bulb * 0.4);
+                      circle(bx, by, containerR * (2.28 + bulb * 0.35));
+                      stroke(103, 232, 249, 16 + bulb * 40);
+                      strokeWeight(0.45);
+                      circle(bx, by, containerR * (2.42 + bulb * 0.5));
                   }
 
                   const essence = creature._scoopEssenceParticles || [];
