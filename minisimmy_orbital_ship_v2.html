@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- MiniSimmy build 2026-06-20-root-siphon-dash | See CODEBASE_INDEX in script + minisimmy_orbital_ship_v2-guide-2026.html -->
+<!-- MiniSimmy build 2026-06-20-lattice-memory-scoop | See CODEBASE_INDEX in script + minisimmy_orbital_ship_v2-guide-2026.html -->
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -7911,7 +7911,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'orbital-ship-v2-2026-06-20-root-siphon-dash';
+              const MINISIMMY_BUILD = 'orbital-ship-v2-2026-06-20-lattice-memory-scoop';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -24217,6 +24217,158 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   };
               }
 
+              function distPointToSegment(px, py, x1, y1, x2, y2) {
+                  const dx = x2 - x1, dy = y2 - y1;
+                  const len2 = dx * dx + dy * dy;
+                  if (len2 < 0.01) return dist(px, py, x1, y1);
+                  let t = ((px - x1) * dx + (py - y1) * dy) / len2;
+                  t = max(0, min(1, t));
+                  return dist(px, py, x1 + dx * t, y1 + dy * t);
+              }
+
+              function resolveStolenLinkMemory(creature, other, st) {
+                  const signalCore = other._colonyLinkSignalCore || creature._colonyLinkSignalCore
+                      || getCreatureCoreType(other) || getCreatureCoreType(creature) || 'communicator';
+                  let signalKind = 'resonance';
+                  if (st?.predatorAttack > 4) signalKind = 'danger';
+                  else if (st?.soulAbsorbGlow > 6) signalKind = 'soul';
+                  else if (st?.feedGlow > 12) signalKind = 'feast';
+                  else if (st?.pullBoost > 0.2) signalKind = 'rush';
+                  else if ((st?.stressFlash || 0) > 4 || (st?.laceTension || 0) > 0.3) signalKind = 'stress';
+                  else if (signalCore === 'harvester') signalKind = 'feast';
+                  else if (signalCore === 'sensor') signalKind = 'danger';
+                  else if (signalCore === 'mover') signalKind = 'rush';
+                  else if (signalCore === 'communicator') signalKind = 'echo';
+                  else if (signalCore === 'resistant') signalKind = 'hold';
+                  else if (signalCore === 'explorer') signalKind = 'scout';
+                  const col = MODULE_AMMO_COLORS[signalCore] || '#a78bfa';
+                  return {
+                      signalCore,
+                      signalKind,
+                      otherCore: getCreatureCoreType(other),
+                      cr: red(color(col)), cg: green(color(col)), cb: blue(color(col)),
+                      feedGlow: st?.feedGlow || 0,
+                      pullBoost: st?.pullBoost || 0,
+                      soulGlow: st?.soulAbsorbGlow || 0,
+                      laceMemory: (st?.feedGlow || 0) * 0.04 + (st?.pullBoost || 0) * 0.35,
+                      hits: st?.hits || 0
+                  };
+              }
+
+              function getScoopActiveMemoryLinks(creature) {
+                  if (!creature?._scoopActive) return [];
+                  if (creature._scoopStolenLinks?.length) return creature._scoopStolenLinks;
+                  const imp = creature._scoopLatticeImprint?.memoryLinks
+                      || creature._scoopGenome?.imprint?.memoryLinks;
+                  if (!imp?.length) return [];
+                  const geo = creature._scoopGeo;
+                  const facing = geo?.facing ?? (creature.wrigglePhase || 0) * 0.35;
+                  return imp.map((m, i) => {
+                      const ang = facing + PI + (i - (imp.length - 1) * 0.5) * 0.55;
+                      const len = (geo?.stats?.reach || MANUAL_SCOOP_REACH) * 0.75;
+                      return {
+                          ...m,
+                          ox: creature.x + cos(ang) * len * 0.65,
+                          oy: creature.y + sin(ang) * len * 0.65,
+                          tx: creature.x,
+                          ty: creature.y,
+                          pulse: 8 + (m.feedGlow || 0) * 0.1,
+                          phantom: true,
+                          phase: i * 1.37
+                      };
+                  });
+              }
+
+              function applyScoopMemoryLinkParticleFx(creature, p, geo) {
+                  const links = getScoopActiveMemoryLinks(creature);
+                  if (!links.length || !isScoopableWhiteParticle(p)) return false;
+                  let best = null, bestD = 999;
+                  for (const sl of links) {
+                      const reach = 14 + (sl.feedGlow || 0) * 0.06 + (sl.pullBoost || 0) * 8
+                          + (sl.phantom ? 4 : 0);
+                      const d = distPointToSegment(p.x, p.y, sl.ox, sl.oy, sl.tx, sl.ty);
+                      if (d < reach && d < bestD) { bestD = d; best = sl; }
+                  }
+                  if (!best) return false;
+                  const kind = best.signalKind || 'resonance';
+                  const mx = (best.ox + best.tx) * 0.5;
+                  const my = (best.oy + best.ty) * 0.5;
+                  const bellyX = geo.bellyX, bellyY = geo.bellyY;
+                  if (kind === 'feast' || best.signalCore === 'harvester') {
+                      const dx = bellyX - p.x, dy = bellyY - p.y;
+                      const d = sqrt(dx * dx + dy * dy) || 1;
+                      p.x += (dx / d) * 0.22 * timeScale;
+                      p.y += (dy / d) * 0.22 * timeScale;
+                      p._scoopMemoryTint = best.signalCore;
+                      return true;
+                  }
+                  if (kind === 'danger' || best.signalCore === 'sensor') {
+                      if (p.isPurple) {
+                          const dx = p.x - mx, dy = p.y - my;
+                          const d = sqrt(dx * dx + dy * dy) || 1;
+                          p.x += (dx / d) * 0.15 * timeScale;
+                          p.y += (dy / d) * 0.15 * timeScale;
+                          return true;
+                      }
+                      if (!p._memoryOrbit) p._memoryOrbit = random(TWO_PI);
+                      p._memoryOrbit += 0.14;
+                      const orbitR = 8 + bestD * 0.3;
+                      p.x = lerp(p.x, mx + cos(p._memoryOrbit) * orbitR, 0.12 * timeScale);
+                      p.y = lerp(p.y, my + sin(p._memoryOrbit) * orbitR, 0.12 * timeScale);
+                      return true;
+                  }
+                  if (kind === 'rush' || best.signalCore === 'mover') {
+                      const dx = best.tx - best.ox, dy = best.ty - best.oy;
+                      const d = sqrt(dx * dx + dy * dy) || 1;
+                      p.vx += (dx / d) * 0.35 * timeScale;
+                      p.vy += (dy / d) * 0.35 * timeScale;
+                      const tdx = bellyX - p.x, tdy = bellyY - p.y;
+                      const td = sqrt(tdx * tdx + tdy * tdy) || 1;
+                      p.x += (tdx / td) * 0.1 * timeScale;
+                      p.y += (tdy / td) * 0.1 * timeScale;
+                      return true;
+                  }
+                  if (kind === 'echo' || best.signalCore === 'communicator') {
+                      if (!p._memoryOrbit) p._memoryOrbit = random(TWO_PI);
+                      p._memoryOrbit += 0.09;
+                      const t = 0.35 + sin(p._memoryOrbit) * 0.15;
+                      p.x = lerp(p.x, lerp(best.ox, best.tx, t), 0.08 * timeScale);
+                      p.y = lerp(p.y, lerp(best.oy, best.ty, t), 0.08 * timeScale);
+                      return true;
+                  }
+                  if (kind === 'hold' || best.signalCore === 'resistant') {
+                      const dx = bellyX - p.x, dy = bellyY - p.y;
+                      const d = sqrt(dx * dx + dy * dy) || 1;
+                      if (d < geo.stats.reach * 1.2) {
+                          p.x += (dx / d) * 0.08 * timeScale;
+                          p.y += (dy / d) * 0.08 * timeScale;
+                          p.vx *= 0.96;
+                          p.vy *= 0.96;
+                      }
+                      return true;
+                  }
+                  if (kind === 'scout' || best.signalCore === 'explorer') {
+                      const sweep = sin(frameCount * 0.1 + (best.phase || 0)) * 0.4;
+                      const dx = bellyX - p.x + cos(geo.facing + sweep) * 12;
+                      const dy = bellyY - p.y + sin(geo.facing + sweep) * 12;
+                      const d = sqrt(dx * dx + dy * dy) || 1;
+                      p.x += (dx / d) * 0.16 * timeScale;
+                      p.y += (dy / d) * 0.16 * timeScale;
+                      return true;
+                  }
+                  if (kind === 'soul') {
+                      const dx = bellyX - p.x, dy = bellyY - p.y;
+                      const d = sqrt(dx * dx + dy * dy) || 1;
+                      p.x += (dx / d) * 0.28 * timeScale;
+                      p.y += (dy / d) * 0.28 * timeScale;
+                      return true;
+                  }
+                  const t = max(0, min(1, 1 - bestD / 18));
+                  p.x = lerp(p.x, lerp(best.ox, bellyX, t), 0.06 * timeScale);
+                  p.y = lerp(p.y, lerp(best.oy, bellyY, t), 0.06 * timeScale);
+                  return true;
+              }
+
               function stealLatticeForScoop(creature) {
                   const inColony = (creature._symbiosisLevel || 0) >= 1 && (creature._networkSize || 1) >= 2;
                   creature._scoopStolenLinks = [];
@@ -24236,8 +24388,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       const other = link.a === creature ? link.b : link.a;
                       if (!other || creatures.indexOf(other) < 0) continue;
                       const st = ModuleIdentitySystem._linkFeedState[link.key];
+                      const mem = resolveStolenLinkMemory(creature, other, st);
                       if (st) {
-                          laceMemory += (st.feedGlow || 0) * 0.04 + (st.pullBoost || 0) * 0.35;
+                          laceMemory += mem.laceMemory;
                           st.feedGlow = max(0, (st.feedGlow || 0) * 0.28);
                           st.pullBoost *= 0.32;
                           st.laceTension = min(1.2, (st.laceTension || 0) + 0.32);
@@ -24252,9 +24405,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       }
                       stolen.push({
                           key: link.key,
+                          otherRef: other,
                           ox: other.x, oy: other.y,
                           tx: creature.x, ty: creature.y,
-                          pulse: 24 + (st?.feedGlow || 0) * 0.2
+                          pulse: 24 + (st?.feedGlow || 0) * 0.2,
+                          ...mem
                       });
                   }
                   creature._scoopStolenLinks = stolen;
@@ -24263,6 +24418,17 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       + stolen.length * 1.4 + laceMemory * 0.02;
                   creature._scoopPowerMult = 0.88 + min(1.35, colonyPower * 0.07)
                       + (creature._scoopLatticeTier || 0) * 0.11;
+                  const memoryLinks = stolen.map((sl) => ({
+                      signalCore: sl.signalCore,
+                      signalKind: sl.signalKind,
+                      otherCore: sl.otherCore,
+                      cr: sl.cr, cg: sl.cg, cb: sl.cb,
+                      feedGlow: sl.feedGlow,
+                      pullBoost: sl.pullBoost,
+                      soulGlow: sl.soulGlow,
+                      laceMemory: sl.laceMemory,
+                      hits: sl.hits
+                  }));
                   creature._scoopLatticeImprint = {
                       tier: creature._scoopLatticeTier || 1,
                       colonySize: creature._networkSize || 1,
@@ -24270,6 +24436,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       stolenLinks: stolen.length,
                       powerMult: creature._scoopPowerMult,
                       laceMemory,
+                      memoryLinks,
                       composition: getScoopImprintModuleType(creature)
                   };
               }
@@ -24360,8 +24527,13 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       }
                   }
                   if ((creature._scoopDashRipple || 0) > 0) creature._scoopDashRipple--;
-                  if (creature._scoopStolenLinks?.length) {
-                      for (const sl of creature._scoopStolenLinks) {
+                  const memLinks = creature._scoopStolenLinks;
+                  if (memLinks?.length) {
+                      for (const sl of memLinks) {
+                          if (sl.otherRef && creatures.indexOf(sl.otherRef) >= 0) {
+                              sl.ox = sl.otherRef.x;
+                              sl.oy = sl.otherRef.y;
+                          }
                           sl.tx = creature.x;
                           sl.ty = creature.y;
                           sl.pulse = max(0, (sl.pulse || 0) - 0.35);
@@ -24520,6 +24692,22 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   candidates.sort((a, b) => a.d2 - b.d2);
                   const tentacles = geo.tentacles;
                   for (let ti = 0; ti < tentacles.length; ti++) tentacles[ti].targetX = tentacles[ti].targetY = null;
+
+                  const memLinks = getScoopActiveMemoryLinks(creature);
+                  if (memLinks.length) {
+                      let memScan = creature._scoopMemScanCursor || 0;
+                      let memChecked = 0;
+                      for (let n = 0; n < vortexParticles.length && memChecked < 24; n++) {
+                          const idx = (memScan + n) % vortexParticles.length;
+                          const p = vortexParticles[idx];
+                          if (!isScoopableWhiteParticle(p)) continue;
+                          memChecked++;
+                          if (applyScoopMemoryLinkParticleFx(creature, p, geo)) {
+                              p._scoopMemoryLine = true;
+                          }
+                      }
+                      creature._scoopMemScanCursor = (memScan + 24) % max(1, vortexParticles.length);
+                  }
 
                   const assignN = min(candidates.length, tentacles.length, geo.stats.maxBag - bag.length);
                   for (let i = 0; i < assignN; i++) {
@@ -24730,21 +24918,38 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   const trailLen = CREATURE_SOCIAL_MAX * (0.32 + min(1, spd * 0.22)
                       + (creature._scoopPowerMult || 0) * 0.12) * spring.stretch;
 
-                  if (creature._scoopStolenLinks?.length) {
-                      for (const sl of creature._scoopStolenLinks) {
-                          if ((sl.pulse || 0) <= 0) continue;
-                          const mx = lerp(sl.ox, sl.tx, 0.45) + sin(frameCount * 0.08) * 6;
-                          const my = lerp(sl.oy, sl.ty, 0.45) + cos(frameCount * 0.07) * 5;
+                  const drawMemLinks = getScoopActiveMemoryLinks(creature);
+                  if (drawMemLinks.length) {
+                      for (let li = 0; li < drawMemLinks.length; li++) {
+                          const sl = drawMemLinks[li];
+                          if ((sl.pulse || 0) <= 0 && !sl.phantom) continue;
+                          const lcr = sl.cr ?? laceCol[0], lcg = sl.cg ?? laceCol[1], lcb = sl.cb ?? laceCol[2];
+                          const mx = lerp(sl.ox, sl.tx, 0.45) + sin(frameCount * 0.08 + li) * 6;
+                          const my = lerp(sl.oy, sl.ty, 0.45) + cos(frameCount * 0.07 + li) * 5;
+                          const pulseA = sl.phantom ? 16 + (sl.feedGlow || 0) * 0.35 : 28 + (sl.pulse || 0) * 2.2;
                           noFill();
-                          stroke(110, 231, 183, 40 + sl.pulse * 2.2);
-                          strokeWeight(0.65 + sl.pulse * 0.02);
+                          stroke(lcr, lcg, lcb, pulseA);
+                          strokeWeight(0.65 + (sl.pulse || 0) * 0.02 + (sl.feedGlow || 0) * 0.004);
                           beginShape();
                           vertex(sl.ox, sl.oy);
                           quadraticVertex(mx, my, sl.tx, sl.ty);
                           endShape();
-                          stroke(192, 132, 252, 28 + sl.pulse);
-                          strokeWeight(0.45);
-                          line(sl.ox, sl.oy, sl.tx, sl.ty);
+                          if ((sl.feedGlow || 0) > 8) {
+                              stroke(220, 252, 180, 14 + sl.feedGlow * 0.4);
+                              strokeWeight(0.9);
+                              beginShape();
+                              vertex(sl.ox, sl.oy);
+                              quadraticVertex(mx, my, sl.tx, sl.ty);
+                              endShape();
+                          }
+                          if ((sl.pulse || sl.feedGlow || 0) > 4) {
+                              const t = ((frameCount * 0.04 + li * 0.17) % 1);
+                              const px = lerp(sl.ox, sl.tx, t) + sin(frameCount * 0.08 + li) * 2;
+                              const py = lerp(sl.oy, sl.ty, t) + cos(frameCount * 0.07 + li) * 2;
+                              stroke(lcr, lcg, lcb, 45 + (sl.pulse || 0) * 3);
+                              strokeWeight(1.05);
+                              point(px, py);
+                          }
                       }
                   }
 
