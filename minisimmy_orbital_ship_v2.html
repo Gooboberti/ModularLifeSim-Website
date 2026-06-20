@@ -8002,7 +8002,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'orbital-ship-v2-2026-06-20-scoop-capture-fix';
+              const MINISIMMY_BUILD = 'orbital-ship-v2-2026-06-20-scoop-audit-fix';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -8150,6 +8150,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
               const MANUAL_SCOOP_MAX_CREATURES = 3;
               const MANUAL_SCOOP_CREATURE_COOLDOWN = 18;
               const SCOOP_PROBE_STUN_FRAMES = 150;
+              const SCOOP_PROBE_TAG_STUN_FRAMES = 42;
               const SCOOP_PROBE_MIN_TAGS = 2;
               const SCOOP_MODULE_MELT_FRAMES = 220;
               const MANUAL_SCOOP_SCAN_BUDGET = 160;
@@ -21918,7 +21919,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           circle(0, 0, s * (1.32 + coreTier * 0.07));
                       }
 
-                      fill(cr, cg, cb, 235);
+                      const lifeFade = (this.energy || 0) < 20
+                          ? map(constrain(this.energy || 0, 0, 20), 0, 20, 0.38, 1)
+                          : 1;
+                      fill(cr, cg, cb, 235 * lifeFade);
                       if (this.isPredator || isManualSuperPred) {
                           if (isSocial) stroke(254, 215, 170);
                           else stroke(254, 202, 202);
@@ -25648,6 +25652,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
               function registerScoopBubbleOccupant(hunter, prey, geo) {
                   if (!isScoopableFeastCreature(hunter, prey)) return false;
+                  if (!isScoopBubblePullTarget(hunter, prey)) return false;
                   hunter._scoopBubbleOccupants = hunter._scoopBubbleOccupants || [];
                   if (hunter._scoopBubbleOccupants.includes(prey)) return false;
                   if (hunter._scoopBubbleOccupants.length >= MANUAL_SCOOP_MAX_CREATURES) {
@@ -25662,10 +25667,36 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   return false;
               }
 
+              function isScoopBubblePullTarget(hunter, prey) {
+                  if (!hunter || !prey || prey === hunter) return false;
+                  if ((hunter._scoopBubbleOccupants || []).includes(prey)) return true;
+                  return hunter._scoopProbePullTarget === prey;
+              }
+
               function canAutoJoinScoopBubble(hunter, prey) {
                   if (!hunter || !prey || prey === hunter) return false;
-                  // Probe tags are scan-only — prey must be actively pulled or already held in the bubble.
-                  return prey._scoopBeingDragged === hunter || prey._scoopInBubble === hunter;
+                  // Probe tags are scan-only — only the active pull target or held occupants may enter.
+                  if (prey._scoopInBubble === hunter) return isScoopBubblePullTarget(hunter, prey);
+                  return hunter._scoopProbePullTarget === prey && prey._scoopBeingDragged === hunter;
+              }
+
+              function clearStaleScoopDrags(hunter) {
+                  if (!hunter?._scoopActive) return;
+                  const pullTarget = hunter._scoopProbePullTarget;
+                  const occupants = new Set(hunter._scoopBubbleOccupants || []);
+                  for (const c of creatures) {
+                      if (c._scoopBeingDragged !== hunter) continue;
+                      if (c === pullTarget || occupants.has(c)) continue;
+                      c._scoopBeingDragged = null;
+                      if (c._scoopInBubble === hunter) c._scoopInBubble = null;
+                  }
+              }
+
+              function isPickableCreature(creature) {
+                  if (!creature || creatures.indexOf(creature) < 0) return false;
+                  if ((creature.energy || 0) <= 0 || creature._claimedByPredator) return false;
+                  if (creature._scoopBeingDragged === 'captured') return false;
+                  return true;
               }
 
               function releaseScoopBubbleOccupant(hunter, prey) {
@@ -25687,7 +25718,6 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
               function repelUntaggedScoopBubbleIntruders(hunter, geo) {
                   if (!hunter?._scoopActive) return;
-                  if (hunter._manualSuperPredator && hunter._manualControl) return;
                   const occupants = new Set(hunter._scoopBubbleOccupants || []);
                   const scan = SpatialGrid.cells
                       ? SpatialGrid.queryRadius(geo.bubbleX, geo.bubbleY, geo.bubbleR + CREATURE_BODY_RADIUS * 0.65, hunter)
@@ -25698,13 +25728,17 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       if (canAutoJoinScoopBubble(hunter, c)) continue;
                       repelCreatureFromScoopBubble(c, hunter, geo, 7.2);
                       c._scoopInBubble = null;
-                      if (c._scoopBeingDragged === hunter) c._scoopBeingDragged = false;
+                      if (c._scoopBeingDragged === hunter) c._scoopBeingDragged = null;
                   }
               }
 
               function syncScoopBubbleOccupants(hunter, geo) {
                   hunter._scoopBubbleOccupants = (hunter._scoopBubbleOccupants || []).filter((c) => {
-                      if (!c || creatures.indexOf(c) < 0 || (c.energy || 0) <= 0) return false;
+                      if (!c || creatures.indexOf(c) < 0) return false;
+                      if ((c.energy || 0) <= 0) {
+                          releaseScoopBubbleOccupant(hunter, c);
+                          return false;
+                      }
                       if (!isCreatureInsideScoopBubble(c, hunter, geo) || !canAutoJoinScoopBubble(hunter, c)) {
                           releaseScoopBubbleOccupant(hunter, c);
                           return false;
@@ -25814,6 +25848,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   entity.vx = 0;
                   entity.vy = 0;
                   if (isCreature) {
+                      if (!isScoopBubblePullTarget(hunter, entity)) return false;
                       entity._scoopBeingDragged = hunter;
                       entity._scoopProbeStun = max(entity._scoopProbeStun || 0, 24);
                   } else {
@@ -26451,11 +26486,17 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   if (!hunter || !prey || prey === hunter || isManualControlImmune(prey)) return;
                   if (prey._scoopBeingDragged === hunter) return;
                   const isFeast = hunter._manualSuperPredator && hunter._manualControl;
-                  prey._scoopProbeStun = max(prey._scoopProbeStun || 0, SCOOP_PROBE_STUN_FRAMES);
+                  const tagStun = isFeast ? SCOOP_PROBE_STUN_FRAMES : SCOOP_PROBE_TAG_STUN_FRAMES;
+                  const alreadyTagged = prey._scoopProbeTaggedBy === hunter;
+                  prey._scoopProbeStun = alreadyTagged
+                      ? min(tagStun, (prey._scoopProbeStun || 0) + 10)
+                      : tagStun;
                   prey._scoopProbeTaggedBy = hunter;
                   prey._scoopProbeFlash = max(prey._scoopProbeFlash || 0, 28);
-                  prey.vx = 0;
-                  prey.vy = 0;
+                  if (!alreadyTagged && isFeast) {
+                      prey.vx = 0;
+                      prey.vy = 0;
+                  }
                   hunter._scoopProbeTags = hunter._scoopProbeTags || [];
                   const existing = hunter._scoopProbeTags.find((t) => t.prey === prey);
                   if (existing) {
@@ -26847,6 +26888,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   if (probeOn) {
                       pullTarget = selectScoopProbeWeakestTarget(creature, geo);
                       creature._scoopProbePullTarget = pullTarget;
+                      clearStaleScoopDrags(creature);
                       if (pullTarget && geo.probe) {
                           geo.probe.targetX = pullTarget.x;
                           geo.probe.targetY = pullTarget.y;
@@ -26859,6 +26901,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       }
                   } else {
                       creature._scoopProbePullTarget = null;
+                      clearStaleScoopDrags(creature);
                   }
 
                   applyScoopTentacleContacts(creature, geo);
@@ -27314,6 +27357,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
               function emitScoopModuleLeakParticle(creature, geo) {
                   const mods = creature._scoopModuleBag || [];
                   if (!mods.length || scoopLureParticles.length >= SCOOP_LURE_PARTICLE_MAX) return;
+                  if (isScoopProbeDeployed(creature)) return;
+                  if ((creature._scoopBubbleOccupants || []).length > 0) return;
                   const m = mods[floor(random(mods.length))];
                   const col = m.color || MODULE_AMMO_COLORS[m.type] || '#a78bfa';
                   const ang = random(TWO_PI);
@@ -27383,13 +27428,15 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           parts.splice(i, 1);
                           continue;
                       }
-                      if (p.life < 50 && random() < 0.06 * timeScale) emitScoopModuleLeakParticle(creature, geo);
+                      if (p.life < 50 && !isScoopProbeDeployed(creature)
+                          && random() < 0.02 * timeScale) emitScoopModuleLeakParticle(creature, geo);
                   }
               }
 
               function tickScoopModuleLeak(creature, geo) {
                   const modN = getScoopModuleCount(creature);
-                  if (modN < 2) return;
+                  if (modN < 4) return;
+                  if (isScoopProbeDeployed(creature)) return;
                   const perk = getScoopIncubatorPerk(creature);
                   creature._scoopLeakTimer = (creature._scoopLeakTimer || 0) + timeScale;
                   const interval = max(6, (SCOOP_MODULE_LEAK_BASE_INTERVAL - modN * 0.55) / (perk.leakMult || 1));
@@ -27448,9 +27495,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   if (!scoopLureParticles.length) return;
                   noStroke();
                   for (const p of scoopLureParticles) {
-                      const alpha = map(p.life, 0, 320, 0, p.sheen === 'gold' ? 220 : p.sheen === 'silver' ? 190 : 155);
+                      const alpha = map(p.life, 0, 320, 0, p.sheen === 'gold' ? 165 : p.sheen === 'silver' ? 145 : 115);
+                      fill(p.cr, p.cg, p.cb, alpha * 0.55);
+                      circle(p.x, p.y, 1.5 + (p.tier || 1) * 0.2);
                       fill(p.cr, p.cg, p.cb, alpha);
-                      circle(p.x, p.y, 2.6 + (p.tier || 1) * 0.35);
+                      circle(p.x, p.y, 1.1 + (p.tier || 1) * 0.12);
                       if (p.sheen === 'gold') {
                           fill(255, 220, 120, alpha * 0.55);
                           circle(p.x, p.y, 4.8 + sin(frameCount * 0.2 + p.x) * 0.8);
@@ -27558,6 +27607,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   }
                   stealLatticeForScoop(creature);
                   resetScoopBubbleCapture(creature);
+                  scoopLureParticles = scoopLureParticles.filter((p) => p.owner !== creature);
                   creature._scoopActive = true;
                   creature._scoopProbeDeployed = true;
                   ensureJellyfishSizeState(creature);
@@ -42452,14 +42502,22 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   const hitR = getCreaturePickRadius();
                   let best = null;
                   let bestD = hitR;
+                  let fallback = null;
+                  let fallbackD = hitR;
                   for (const c of creatures) {
+                      if (!isPickableCreature(c)) continue;
                       const d = dist(wx, wy, c.x, c.y);
-                      if (d < bestD) {
-                          bestD = d;
-                          best = c;
+                      if (d >= hitR) continue;
+                      const deprioritize = (c._scoopProbeStun || 0) > 8
+                          || c._scoopInBubble
+                          || c._scoopBeingDragged;
+                      if (deprioritize) {
+                          if (d < fallbackD) { fallbackD = d; fallback = c; }
+                          continue;
                       }
+                      if (d < bestD) { bestD = d; best = c; }
                   }
-                  return best;
+                  return best || fallback;
               }
 
               function tryPickCreatureAtPointer(options = {}) {
