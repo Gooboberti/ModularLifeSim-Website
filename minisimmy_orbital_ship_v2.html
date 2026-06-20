@@ -7936,7 +7936,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'orbital-ship-v2-2026-06-20-camera-orient-smooth';
+              const MINISIMMY_BUILD = 'orbital-ship-v2-2026-06-20-jellyfish-size-pop';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -8112,6 +8112,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
               const SCOOP_PROBE_PULL_SCALE = 5.8;
               const SCOOP_FACING_LERP = 0.065;
               const SCOOP_PROBE_COLONY_TUG_RANGE = 96;
+              const SCOOP_JELLYFISH_SIZE_1_SCALE = 1.0;
+              const SCOOP_JELLYFISH_SIZE_0_SCALE = 0.82;
+              const SCOOP_JELLYFISH_SIZE_0_BODY_SCALE = 0.76;
+              const SCOOP_JELLYFISH_CONSUME_POP = 10;
+              const SCOOP_JELLYFISH_POP_MAX_SPAWNS = 24;
 
               const SCOOP_INCUBATOR_CORE_PERKS = {
                   harvester: { leakMult: 1.38, spawnEnergy: 58, foodLure: 1.45, label: 'Feast lure brood' },
@@ -8793,6 +8798,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       scoop_melt: 18000,
                       scoop_prune: 15000,
                       scoop_incubate: 20000,
+                      scoop_jellyfish_pop: 22000,
                       scoop_leak: 14000,
                       topic: 12000,
                       line: 18000
@@ -10119,6 +10125,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                               ? `Prune doctrine: touch many, highlight the frailest, vent drift from the probe to clear dead weight.`
                               : 'Prune doctrine: the tendril must touch before I judge — one candidate is not yet a cull list.',
                           scoop_incubate: `Ending scoop — ${options.extra || 'several'} brain-kin hatch from the module broth; they wear what I ate but think with my neural map.`,
+                          scoop_jellyfish_pop: `Bell burst — ${options.extra || 'several'} size-0 brood peel off; each carries one eaten module and my brain, not the squid shell.`,
                           scoop_leak: `Module essence leaking from the bubble — lure spree pulls the shoal closer so pruning stays easy.`
                       };
                       return lines[topic] || '';
@@ -12541,7 +12548,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       if (!topics.length) return '';
                       topics.sort((a, b) => b.score - a.score);
                       const recent = this._creaturePerspectiveTopicHistory || [];
-                      const priorityIds = ['catchup', 'thought', 'desire', 'hazard', 'hunger', 'manual', 'scoop_incubate', 'scoop_leak', 'scoop_weakest', 'scoop_candidates', 'scoop_prune', 'scoop_fire', 'scoop_bubble', 'scoop_scan', 'scoop_toggle', 'scoop_sprint', 'scoop_melt', 'scoop_digest', 'scoop_lace', 'synapse_grow', 'synapse_prune', 'identity_context', 'neighbors', 'surroundings', 'lace', 'laceMod', 'synapse_map', 'core_identity', 'subspec_identity', 'archetype_identity', 'role_class', 'prestige_core', 'operator_incubator', 'operator_eggs', 'operator_vault', 'operator_furnace', 'operator_furnace_fuel', 'operator_dust', 'operator_predators', 'operator_pop'];
+                      const priorityIds = ['catchup', 'thought', 'desire', 'hazard', 'hunger', 'manual', 'scoop_jellyfish_pop', 'scoop_incubate', 'scoop_leak', 'scoop_weakest', 'scoop_candidates', 'scoop_prune', 'scoop_fire', 'scoop_bubble', 'scoop_scan', 'scoop_toggle', 'scoop_sprint', 'scoop_melt', 'scoop_digest', 'scoop_lace', 'synapse_grow', 'synapse_prune', 'identity_context', 'neighbors', 'surroundings', 'lace', 'laceMod', 'synapse_map', 'core_identity', 'subspec_identity', 'archetype_identity', 'role_class', 'prestige_core', 'operator_incubator', 'operator_eggs', 'operator_vault', 'operator_furnace', 'operator_furnace_fuel', 'operator_dust', 'operator_predators', 'operator_pop'];
                       const pool = topics.filter((t) => !recent.includes(t.id));
                       let candidates = pool.length ? pool : topics;
                       const freshPriority = candidates.filter((t) => priorityIds.includes(t.id));
@@ -21696,6 +21703,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           s = max(9, 6.5 + min(modCount, 10) * 0.45);
                           if (coreTier > 0) s += getCoreSizeBonus(coreTier) * 0.65;
                       }
+                      s *= getJellyfishBodyScale(this);
 
                       if (selectedCreature === this) {
                           noFill();
@@ -24542,9 +24550,34 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       || (creature._scoopLatticeTier || 0) >= 1;
               }
 
+              function getJellyfishSize(creature) {
+                  return creature?._jellyfishSize === 0 ? 0 : 1;
+              }
+
+              function getJellyfishBodyScale(creature) {
+                  if (creature?._jellyfishBodyScale != null) return creature._jellyfishBodyScale;
+                  return getJellyfishSize(creature) === 0 ? SCOOP_JELLYFISH_SIZE_0_BODY_SCALE : 1;
+              }
+
+              function isJellyfishScoopCreature(creature) {
+                  if (!creature) return false;
+                  if ((creature._scoopStyleChoice || 'jellyfish') === 'jellyfish') return true;
+                  const profile = getScoopLaceProfile(creature);
+                  return profile.tendrilStyle === 'jellyfish';
+              }
+
+              function ensureJellyfishSizeState(creature) {
+                  if (!creature) return;
+                  if (creature._jellyfishSize == null) creature._jellyfishSize = 1;
+                  if (creature._jellyfishConsumeCount == null) creature._jellyfishConsumeCount = 0;
+              }
+
               function getScoopGeometryScale(creature) {
                   const tier = max(creature._scoopLatticeTier || 0, creature._scoopGenome?.tier || 0);
-                  return SCOOP_GEOMETRY_BASE_SCALE * (1 + tier * 0.08);
+                  const sizeMult = getJellyfishSize(creature) === 0
+                      ? SCOOP_JELLYFISH_SIZE_0_SCALE
+                      : SCOOP_JELLYFISH_SIZE_1_SCALE;
+                  return SCOOP_GEOMETRY_BASE_SCALE * sizeMult * (1 + tier * 0.08);
               }
 
               function getScoopEffectiveStats(creature) {
@@ -25168,6 +25201,19 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       : `Bubble absorbed ${prey.name || 'prey'} — ${loose.length} modules tumbling`;
                   addFloatingText(hunter.x, hunter.y - 22, `+${loose.length} mods`, MODULE_AMMO_COLORS[modType] || '#f87171');
                   playTone(95, 'sawtooth', 0.12, 0.45);
+                  if (hunter._scoopActive && isJellyfishScoopCreature(hunter)) {
+                      ensureJellyfishSizeState(hunter);
+                      hunter._jellyfishConsumeCount++;
+                      const left = SCOOP_JELLYFISH_CONSUME_POP - hunter._jellyfishConsumeCount;
+                      const modN = getScoopModuleCount(hunter);
+                      hunter.currentThought = left > 0
+                          ? `Jellyfish size ${getJellyfishSize(hunter)} — ${left} feeds until pop (${modN} mods for brood)`
+                          : `Bell full — popping into ${modN} size-0 brood…`;
+                      updateInspectorScoopBar(hunter);
+                      if (hunter._jellyfishConsumeCount >= SCOOP_JELLYFISH_CONSUME_POP) {
+                          popJellyfishScoop(hunter);
+                      }
+                  }
                   return true;
               }
 
@@ -26282,6 +26328,130 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   }
               }
 
+              function spawnLooseScoopModuleParticles(parent, mods) {
+                  let spawned = 0;
+                  for (const m of mods) {
+                      if (moduleParticles.length >= 140) break;
+                      moduleParticles.push(new ModuleParticle(true, {
+                          type: moduleTypeForParticle(m.type),
+                          tier: m.tier || 1,
+                          color: m.color || MODULE_AMMO_COLORS[m.type] || '#a78bfa',
+                          x: parent.x + random(-40, 40),
+                          y: parent.y + random(-40, 40),
+                          vx: random(-2.8, 2.8),
+                          vy: random(-2.8, 2.8),
+                          orbitGraceUntil: Date.now() + 900
+                      }));
+                      spawned++;
+                  }
+                  if (spawned > 0) triggerModuleFeedFrenzy(parent.x, parent.y);
+                  return spawned;
+              }
+
+              function inheritJellyfishPopBrain(spawn, parent) {
+                  if (!parent?.brain) return;
+                  spawn.brain = parent.brain.copy();
+                  spawn.brain.mutate(0.028, 0.14);
+                  NeuralNet.applyEmbodiedStructure(spawn, spawn.brain, 0.72);
+                  spawn._jellyfishPopKin = true;
+                  spawn._jellyfishPopParentName = parent.name;
+                  if (parent._lineageMemory?.length) {
+                      spawn._lineageMemory = [{
+                          sourceName: parent.name,
+                          generation: parent.generation,
+                          coreMatch: getCreatureCoreType(spawn) === getCreatureCoreType(parent),
+                          inheritStrength: 0.9,
+                          source: 'jellyfish_pop'
+                      }];
+                  }
+              }
+
+              function applyJellyfishSize0ToSpawn(spawn) {
+                  spawn._jellyfishSize = 0;
+                  spawn._jellyfishBodyScale = SCOOP_JELLYFISH_SIZE_0_BODY_SCALE;
+              }
+
+              function popJellyfishScoop(parent) {
+                  if (!parent || creatures.indexOf(parent) < 0) return 0;
+                  const mods = [...(parent._scoopModuleBag || [])];
+                  const parentSize = getJellyfishSize(parent);
+                  const wasManual = manualControlCreature === parent;
+                  const perk = getScoopIncubatorPerk(parent);
+                  let pools = mods.map((m) => [m]);
+                  if (!pools.length) {
+                      const core = getCreatureCoreType(parent) || 'communicator';
+                      pools = [[{
+                          type: core,
+                          tier: 1,
+                          color: MODULE_AMMO_COLORS[core] || '#a78bfa'
+                      }]];
+                  }
+                  let overflow = [];
+                  if (pools.length > SCOOP_JELLYFISH_POP_MAX_SPAWNS) {
+                      overflow = pools.splice(SCOOP_JELLYFISH_POP_MAX_SPAWNS).flat();
+                  }
+                  const hatched = [];
+                  const scatter = 36 + pools.length * 2.5;
+                  const px = parent.x;
+                  const py = parent.y;
+                  for (let i = 0; i < pools.length; i++) {
+                      const pool = pools[i];
+                      const spawnMods = buildScoopIncubatorSpawnModules(pool);
+                      const sx = constrain(px + random(-scatter, scatter), 24, width - 24);
+                      const sy = constrain(py + random(-scatter, scatter), 24, height - 24);
+                      const spawn = new Creature(sx, sy, spawnMods, parent.generation + 1, null);
+                      spawn.originAeonNumber = parent.originAeonNumber ?? parent.birthAeonNumber ?? currentAeonNumber;
+                      inheritJellyfishPopBrain(spawn, parent);
+                      applyScoopIncubatorSpecialInheritance(spawn, pool);
+                      ModuleIdentitySystem.normalizeLayout(spawn);
+                      ModuleIdentitySystem.updateCore(spawn);
+                      spawn.updateSpecialization();
+                      maybeAddScoopHybridModule(spawn, mods, perk);
+                      if (spawn.modules.length !== spawnMods.length) {
+                          ModuleIdentitySystem.normalizeLayout(spawn);
+                          spawn.updateSpecialization();
+                      }
+                      applyScoopIncubatorPerkToSpawn(spawn, parent, perk);
+                      applyJellyfishSize0ToSpawn(spawn);
+                      spawn._jellyfishPopFromSize = parentSize;
+                      spawn.currentThought = parentSize === 1
+                          ? `Size-0 brood — popped from parent's bell (${pool.length} mod body)`
+                          : `Size-0 copy — bell burst (${pool.length} mod body)`;
+                      spawn.calculatePointValue();
+                      applyNewbornReproCooldown(spawn);
+                      creatures.push(spawn);
+                      registerCreatureOffspring(parent, spawn);
+                      hatched.push(spawn);
+                  }
+                  const looseN = spawnLooseScoopModuleParticles(parent, overflow);
+                  playTone(165, 'sine', 0.3, 0.58);
+                  setTimeout(() => playTone(330, 'triangle', 0.22, 0.48), 80);
+                  setTimeout(() => playTone(520, 'sine', 0.16, 0.38), 160);
+                  explosions.push(new Explosion(px, py));
+                  addFloatingText(px, py - 34, `POP ×${hatched.length} size-0`, '#67e8f9');
+                  if (looseN > 0) {
+                      addFloatingText(px, py - 48, `+${looseN} loose mods`, '#c4b5fd');
+                  }
+                  maybeSpeakScoopInnerVoice(parent, 'scoop_jellyfish_pop',
+                      `${hatched.length} size-0 from ${mods.length} mods`);
+                  releaseManualScoop(parent, { skipHatch: true, jellyfishPop: true });
+                  const pIdx = creatures.indexOf(parent);
+                  if (pIdx >= 0) creatures.splice(pIdx, 1);
+                  if (selectedCreature === parent) deselectCreature();
+                  if (wasManual) {
+                      manualControlCreature = null;
+                      manualControlState.pressed = false;
+                      updateInspectorManualControlButton();
+                      if (hatched.length) {
+                          selectCreature(hatched[0]);
+                          enableManualCreatureControl(hatched[0]);
+                          hatched[0].currentThought = 'Inherited control from popped bell';
+                      }
+                  }
+                  updateInspector();
+                  return hatched.length;
+              }
+
               function hatchScoopIncubatorCreatures(parent) {
                   const mods = [...(parent._scoopModuleBag || [])];
                   if (mods.length < SCOOP_INCUBATOR_MIN_MODULES) return 0;
@@ -26485,9 +26655,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   }
               }
 
-              function releaseManualScoop(creature) {
+              function releaseManualScoop(creature, opts = {}) {
                   if (!creature) return;
-                  if (getScoopModuleCount(creature) >= SCOOP_INCUBATOR_MIN_MODULES) {
+                  const jellyScoop = isJellyfishScoopCreature(creature);
+                  if (!opts.skipHatch && !opts.jellyfishPop && !jellyScoop
+                      && getScoopModuleCount(creature) >= SCOOP_INCUBATOR_MIN_MODULES) {
                       hatchScoopIncubatorCreatures(creature);
                   }
                   scoopLureParticles = scoopLureParticles.filter((p) => p.owner !== creature);
@@ -26514,6 +26686,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   creature._scoopMuzzleFlash = 0;
                   creature._scoopFacing = null;
                   creature._manualOrient = null;
+                  creature._manualOrientVel = 0;
+                  if (opts.jellyfishPop) {
+                      creature._jellyfishConsumeCount = 0;
+                  }
                   creature._scoopEssenceParticles = [];
                   creature._scoopEssenceTimer = 0;
                   creature._scoopLeakTimer = 0;
@@ -26554,6 +26730,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   }
                   stealLatticeForScoop(creature);
                   creature._scoopActive = true;
+                  ensureJellyfishSizeState(creature);
                   if (!creature._scoopBag) creature._scoopBag = [];
                   if (!creature._scoopProbeTags) creature._scoopProbeTags = [];
                   if (!creature._scoopShards) creature._scoopShards = [];
@@ -26605,10 +26782,17 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           const fireNote = creature._manualSuperPredator
                               ? ' · [Space] fire modules'
                               : ' · [Space] probe muzzle';
-                          const incNote = mods >= SCOOP_INCUBATOR_MIN_MODULES
+                          const jelly = isJellyfishScoopCreature(creature);
+                          const consumeLeft = jelly
+                              ? max(0, SCOOP_JELLYFISH_CONSUME_POP - (creature._jellyfishConsumeCount || 0))
+                              : null;
+                          const jellyNote = jelly
+                              ? ` · size ${getJellyfishSize(creature)} · ${consumeLeft} feeds→pop · ${mods} mod brood`
+                              : '';
+                          const incNote = !jelly && mods >= SCOOP_INCUBATOR_MIN_MODULES
                               ? ` · [0] hatch ${max(1, floor(mods / SCOOP_INCUBATOR_MODULES_PER_SPAWN))} kin`
-                              : mods ? ` · ${mods} mods brewing` : '';
-                          hint.textContent = `Bubble ${pN}/${MANUAL_SCOOP_MAX_PARTICLES} drift${mods ? ` · ${mods} mods` : ''}${incNote}${shards ? ` · ${shards} shards` : ''}${laceNote} · [0] toggle · [F] sprint${fireNote}`;
+                              : (!jelly && mods) ? ` · ${mods} mods brewing` : '';
+                          hint.textContent = `Bubble ${pN}/${MANUAL_SCOOP_MAX_PARTICLES} drift${mods ? ` · ${mods} mods` : ''}${jellyNote}${incNote}${shards ? ` · ${shards} shards` : ''}${laceNote} · [0] toggle · [F] sprint${fireNote}`;
                       } else {
                           const tier = creature._scoopLatticeTier || creature._scoopGenome?.tier || 0;
                           hint.textContent = genome
