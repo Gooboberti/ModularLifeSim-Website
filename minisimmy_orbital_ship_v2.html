@@ -4,7 +4,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-19s-guide-cleanup" />
+    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-001-compact-drag-cam" />
     <title>MiniSimmy Orbital Ship v2</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2334d399'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%230a0a0f'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -7935,7 +7935,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'orbital-ship-v2-2026-06-20-scoop-probe-prune-tune';
+              const MINISIMMY_BUILD = 'orbital-ship-v2-2026-06-20-local-001-compact-drag-cam';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -8087,6 +8087,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
               const SCOOP_MODULE_MELT_FRAMES = 220;
               const MANUAL_SCOOP_SCAN_BUDGET = 160;
               const MANUAL_SCOOP_REACH = 78;
+              const SCOOP_GEOMETRY_BASE_SCALE = 0.84;
+              const SCOOP_BUBBLE_RADIUS_BASE = 2.28;
+              const SCOOP_TENDRIL_LEN_MULT = 0.74;
               const MANUAL_SCOOP_MAX_SEEDS = 24;
               const SCOOP_LATTICE_METER_MAX = 100;
               const SCOOP_LATTICE_UNLOCK = 1;
@@ -14008,6 +14011,14 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
               function tickMapCameraFollow() {
                   if (isFsArrowPanActive()) return;
+                  const dragFollow = manualControlCreature && manualControlState.pressed
+                      && creatures.indexOf(manualControlCreature) >= 0
+                      ? manualControlCreature
+                      : null;
+                  if (dragFollow) {
+                      Viewport.centerOnWorld(dragFollow.x, dragFollow.y, 0.42);
+                      return;
+                  }
                   if (mapCameraMode !== 'center' || !centerViewCreature) return;
                   const follow = manualControlCreature || centerViewCreature;
                   if (creatures.indexOf(follow) < 0) {
@@ -24527,7 +24538,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   const mult = creature._scoopPowerMult || creature._scoopGenome?.imprint?.powerMult
                       || (0.7 + tier * 0.18);
                   return {
-                      reach: MANUAL_SCOOP_REACH * (0.92 + mult * 0.22 + tier * 0.06),
+                      reach: MANUAL_SCOOP_REACH * SCOOP_TENDRIL_LEN_MULT * (0.92 + mult * 0.22 + tier * 0.06),
                       maxBag: min(14, MANUAL_SCOOP_MAX_BAG + Math.floor(tier * 1.2 + mult * 1.5)),
                       dashPower: 2.4 + mult * 1.55 + tier * 0.35,
                       flexMult: 0.85 + mult * 0.2,
@@ -25327,13 +25338,14 @@ body.is-map-fullscreen #map-fullscreen-btn {
               function buildManualScoopGeometry(creature) {
                   const profile = getScoopLaceProfile(creature);
                   const stats = getScoopEffectiveStats(creature);
+                  const geomScale = SCOOP_GEOMETRY_BASE_SCALE;
                   const spring = getScoopDashSpring(creature);
                   const facing = creature._scoopActive && creature._manualControl
                       ? resolveScoopFacing(creature)
                       : (sqrt(creature.vx * creature.vx + creature.vy * creature.vy) > 0.12
                           ? atan2(creature.vy, creature.vx)
                           : (creature.wrigglePhase || 0) * 0.35);
-                  const bellyR = CREATURE_BODY_RADIUS * 0.42 * spring.squash;
+                  const bellyR = CREATURE_BODY_RADIUS * 0.42 * geomScale * spring.squash;
                   const bellyX = creature.x - cos(facing) * CREATURE_BODY_RADIUS * 0.06 * spring.stretch
                       + cos(facing + HALF_PI) * 1.5;
                   const bellyY = creature.y - sin(facing) * CREATURE_BODY_RADIUS * 0.06 * spring.stretch
@@ -25344,7 +25356,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   for (let i = 0; i < n; i++) {
                       let ang;
                       if (profile.tendrilStyle === 'jellyfish') {
-                          ang = facing + PI + (i - (n - 1) * 0.5) * profile.spread * 0.38;
+                          ang = facing + PI + (i - (n - 1) * 0.5) * profile.spread * 0.32;
                       } else if (profile.tendrilStyle === 'root-siphon') {
                           const side = i % 2 === 0 ? -1 : 1;
                           ang = facing + PI * 0.62 + side * HALF_PI * 0.38
@@ -25360,7 +25372,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       } else {
                           ang = (i / n) * TWO_PI * profile.spread + facing * 0.25;
                       }
-                      const baseR = CREATURE_BODY_RADIUS * (0.72 + (i % 3) * 0.06);
+                      const baseR = CREATURE_BODY_RADIUS * geomScale * (0.72 + (i % 3) * 0.06);
                       const curl = profile.tendrilStyle === 'bloom'
                           ? sin(frameCount * 0.07 + i * 0.9) * 0.22 + spring.burst * 0.35
                           : profile.tendrilStyle === 'jellyfish'
@@ -25373,9 +25385,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           baseX: creature.x + cos(ang) * baseR * (profile.tendrilStyle === 'root-siphon' ? 0.42 : 0.55),
                           baseY: creature.y + sin(ang) * baseR * (profile.tendrilStyle === 'root-siphon' ? 0.42 : 0.55),
                           ang: ang + curl - dashRecoil * 0.22 * (profile.tendrilStyle === 'side' ? (i % 2 === 0 ? 1 : -1) : 1),
-                          len: reach * (0.55 + (i % 4) * 0.08) * stats.flexMult
+                          len: reach * (0.52 + (i % 4) * 0.07) * stats.flexMult
                               * (profile.tendrilStyle === 'root-siphon' ? 0.92 + spring.stretch * 0.12 : 1)
-                              * (1 + dashRecoil * 0.18),
+                              * (1 + dashRecoil * 0.15),
                           phase: (creature._symSlot || 0) * 0.7 + i * 1.37,
                           targetX: null,
                           targetY: null,
@@ -25401,12 +25413,13 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       };
                   }
                   const load = getScoopBellyLoad(creature);
-                  const bubbleR = CREATURE_BODY_RADIUS * (2.75 + min(0.55, load * 0.0025) + spring.stretch * 0.18);
+                  const bubbleR = CREATURE_BODY_RADIUS * geomScale
+                      * (SCOOP_BUBBLE_RADIUS_BASE + min(0.42, load * 0.002) + spring.stretch * 0.14);
                   return {
                       bellyX, bellyY, bellyR, facing, profile, tentacles, probe,
                       bubbleX: creature.x, bubbleY: creature.y, bubbleR,
                       flex: profile.flex * stats.flexMult, rigid: profile.rigid,
-                      stats, spring, usingLattice: !!creature._scoopUsingLattice
+                      stats, spring, geomScale, usingLattice: !!creature._scoopUsingLattice
                   };
               }
 
@@ -27072,10 +27085,20 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       releaseManualCreatureControl();
                       return;
                   }
-                  const { x, y } = gamePointer();
-                  manualControlState.x = x;
-                  manualControlState.y = y;
-                  manualControlState.pressed = mouseIsPressed;
+                  let px, py;
+                  if (!DeviceProfile.isTouch && typeof mouseX !== 'undefined' && !isNaN(mouseX)
+                          && (mouseIsPressed || PointerInput._buttonsDown)) {
+                      const world = Viewport.screenToWorld(mouseX, mouseY);
+                      px = world.x;
+                      py = world.y;
+                  } else {
+                      const ptr = gamePointer();
+                      px = ptr.x;
+                      py = ptr.y;
+                  }
+                  manualControlState.x = px;
+                  manualControlState.y = py;
+                  manualControlState.pressed = mouseIsPressed || !!(PointerInput._buttonsDown);
               }
 
               function getCreatureMaxSpeed(creature, timeScale = 1) {
@@ -40928,10 +40951,27 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
                       el.addEventListener('pointerdown', (e) => {
                           this.syncFromClient(e.clientX, e.clientY);
+                          PointerInput._buttonsDown = e.buttons || 1;
                           this._touchStart = { x: e.clientX, y: e.clientY, t: performance.now() };
                           this._lastClient = { x: e.clientX, y: e.clientY };
                           this._touchMode = null;
                           this._shipDragging = false;
+
+                          if (manualControlCreature) {
+                              const c = manualControlCreature;
+                              const geo = c._scoopGeo;
+                              const scoopR = c._scoopActive
+                                  ? (geo?.bubbleR || CREATURE_BODY_RADIUS * 2.2) * 1.06
+                                  : DeviceProfile.creatureHitRadius * 1.5;
+                              const onControlled = dist(PointerInput.x, PointerInput.y, c.x, c.y) < scoopR
+                                  || pickCreatureAtWorld(PointerInput.x, PointerInput.y) === c;
+                              if (onControlled) {
+                                  beginManualCreatureTug(PointerInput.x, PointerInput.y);
+                                  this._handPanPending = false;
+                                  e.preventDefault();
+                                  return;
+                              }
+                          }
 
                           if (this.canPanMap()) {
                               clearLongPress();
@@ -40971,6 +41011,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
                       el.addEventListener('pointermove', (e) => {
                           this.syncFromClient(e.clientX, e.clientY);
+                          PointerInput._buttonsDown = e.buttons || 0;
+                          if (manualControlCreature && manualControlState.pressed) {
+                              syncManualControlPointer();
+                          }
                           if (!this._touchStart || !this._lastClient) return;
 
                           const dx = e.clientX - this._lastClient.x;
@@ -41015,6 +41059,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       }, { passive: false });
 
                       const endPointer = (e) => {
+                          PointerInput._buttonsDown = e?.buttons || 0;
+                          if (manualControlCreature && manualControlState.pressed && !PointerInput._buttonsDown) {
+                              endManualCreatureTug();
+                          }
                           if (this._wallPointerActive && isDrawingWall && e) {
                               this.syncFromClient(e.clientX, e.clientY);
                               const { x, y } = gamePointer();
@@ -41063,7 +41111,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
               };
 
               const PointerInput = {
-                  x: 0, y: 0, canvasX: 0, canvasY: 0, lastActionAt: 0,
+                  x: 0, y: 0, canvasX: 0, canvasY: 0, lastActionAt: 0, _buttonsDown: 0,
                   setFromClient(clientX, clientY) {
                       Viewport.syncFromClient(clientX, clientY);
                   },
