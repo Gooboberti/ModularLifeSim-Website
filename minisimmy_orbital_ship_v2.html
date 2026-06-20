@@ -4,7 +4,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-jelly-tendril-connect" />
+    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-jelly-tendril-fluid" />
     <title>MiniSimmy Orbital Ship v2</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2334d399'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%230a0a0f'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -8006,7 +8006,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'orbital-ship-v2-2026-06-20-jelly-tendril-connect';
+              const MINISIMMY_BUILD = 'orbital-ship-v2-2026-06-20-jelly-tendril-fluid';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -8241,7 +8241,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
               const SCOOP_REAR_PROBE_LATCH_HIT = 54;
               const SCOOP_REAR_PROBE_SEEK_RANGE = 340;
               const SCOOP_REAR_PROBE_PULL = 0.038;
-              const SCOOP_LACE_CREATURE_REACH_LERP = 0.44;
+              const SCOOP_LACE_CREATURE_REACH_LERP = 0.16;
+              const SCOOP_JELLY_TENDRIL_SMOOTH_K = 0.11;
+              const SCOOP_JELLY_TENDRIL_LATCH_SMOOTH_K = 0.085;
               const SCOOP_LACE_LATTICE_CRYSTAL_GROW = 0.006;
               const SCOOP_LACE_FISSURE_DEPTH_RATE = 0.014;
               const SCOOP_LACE_ROOT_MIN_LATCH = 1;
@@ -14174,14 +14176,21 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
               function tickMapCameraFollow() {
                   if (isFsArrowPanActive()) return;
-                  if (mapCameraMode !== 'center' || !centerViewCreature) return;
-                  const follow = manualControlCreature || centerViewCreature;
-                  if (creatures.indexOf(follow) < 0) {
-                      clearMapCameraMode();
+                  let follow = null;
+                  let lerpAmt = 0.38;
+                  if (manualControlCreature && manualControlState.pressed
+                      && creatures.indexOf(manualControlCreature) >= 0) {
+                      follow = manualControlCreature;
+                      lerpAmt = manualControlCreature._scoopActive ? 0.52 : 0.44;
+                  } else if (mapCameraMode === 'center' && centerViewCreature) {
+                      follow = manualControlCreature || centerViewCreature;
+                  }
+                  if (!follow || creatures.indexOf(follow) < 0) {
+                      if (mapCameraMode === 'center') clearMapCameraMode();
                       return;
                   }
                   if (follow !== centerViewCreature) centerViewCreature = follow;
-                  Viewport.centerOnWorld(follow.x, follow.y, 0.38);
+                  Viewport.centerOnWorld(follow.x, follow.y, lerpAmt);
               }
 
               function syncPerformanceInputs() {
@@ -25043,14 +25052,17 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           rp.targetY = target.y;
                           rp.grabbingCreature = true;
                           rp.connected = true;
-                          const dx = target.x - creature.x;
-                          const dy = target.y - creature.y;
-                          const d = sqrt(dx * dx + dy * dy) || 1;
-                          const pull = SCOOP_REAR_PROBE_PULL * (1 + min(1, d / CREATURE_SOCIAL_MAX)) * timeScale;
-                          creature.x += (dx / d) * pull;
-                          creature.y += (dy / d) * pull;
-                          creature.vx = lerp(creature.vx, (dx / d) * pull * 3.4, 0.14);
-                          creature.vy = lerp(creature.vy, (dy / d) * pull * 3.4, 0.14);
+                          const manualDrag = creature._manualControl && manualControlState.pressed;
+                          if (!manualDrag) {
+                              const dx = target.x - creature.x;
+                              const dy = target.y - creature.y;
+                              const d = sqrt(dx * dx + dy * dy) || 1;
+                              const pull = SCOOP_REAR_PROBE_PULL * (1 + min(1, d / CREATURE_SOCIAL_MAX)) * timeScale;
+                              creature.x += (dx / d) * pull;
+                              creature.y += (dy / d) * pull;
+                              creature.vx = lerp(creature.vx, (dx / d) * pull * 3.4, 0.14);
+                              creature.vy = lerp(creature.vy, (dy / d) * pull * 3.4, 0.14);
+                          }
                           creature.energy = 100;
                           creature._scoopInfiniteEnergy = true;
                           return;
@@ -25093,7 +25105,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           midX: rp.midX, midY: rp.midY, seg1X: rp.seg1X, seg1Y: rp.seg1Y,
                           seg2X: rp.seg2X, seg2Y: rp.seg2Y }, target)) {
                       latchRearColonyProbe(creature, target, colony);
-                  } else if (tipD < SCOOP_REAR_PROBE_LATCH_HIT * 2.2) {
+                  } else if (tipD < SCOOP_REAR_PROBE_LATCH_HIT * 2.2
+                      && !(creature._manualControl && manualControlState.pressed)) {
                       const dx = target.x - creature.x;
                       const dy = target.y - creature.y;
                       const d = sqrt(dx * dx + dy * dy) || 1;
@@ -26156,6 +26169,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       tent._laceVineSearch = (link.phase !== 'latched' && link.phase !== 'fissure')
                           && !link.candidateMember && !link.candidatePt && !!link.vinePt;
                       tent._laceCreatureSeek = !!(link.targetMember || link.candidateMember);
+                      tent._laceLatched = link.phase === 'latched' || link.phase === 'fissure';
                       tent._laceReserved = true;
                       tent.targetX = tgt.x;
                       tent.targetY = tgt.y;
@@ -26468,17 +26482,26 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       + 0.025 * latched.length * timeScale);
 
                   const pullScale = timeScale * (1 + creature._laceBandTension * 0.006);
-                  creature.x += pullX * pullScale;
-                  creature.y += pullY * pullScale;
-                  creature.vx = lerp(creature.vx, pullX * 3.2, 0.16);
-                  creature.vy = lerp(creature.vy, pullY * 3.2, 0.16);
+                  const manualDrag = creature._manualControl && manualControlState.pressed;
+                  if (manualDrag) {
+                      const tugScale = max(0.22, 1 - (creature._laceBandStuck || 0) * 0.42);
+                      creature.vx += pullX * pullScale * 0.55 * tugScale;
+                      creature.vy += pullY * pullScale * 0.55 * tugScale;
+                  } else {
+                      creature.x += pullX * pullScale;
+                      creature.y += pullY * pullScale;
+                      creature.vx = lerp(creature.vx, pullX * 3.2, 0.16);
+                      creature.vy = lerp(creature.vy, pullY * 3.2, 0.16);
+                  }
 
                   if (creature._manualControl) {
-                      const stick = max(0.18, SCOOP_LACE_RUBBER_BAND_STICK - latched.length * 0.04);
+                      const stick = manualDrag
+                          ? max(0.42, SCOOP_LACE_RUBBER_BAND_STICK + 0.18 - latched.length * 0.03)
+                          : max(0.18, SCOOP_LACE_RUBBER_BAND_STICK - latched.length * 0.04);
                       creature.vx *= stick;
                       creature.vy *= stick;
-                      const escapeDamp = max(0.08, 1 - creature._laceBandStuck * 0.88);
-                      if (manualControlState.pressed) {
+                      if (!manualDrag) {
+                          const escapeDamp = max(0.08, 1 - creature._laceBandStuck * 0.88);
                           creature.vx *= escapeDamp;
                           creature.vy *= escapeDamp;
                       }
@@ -26830,6 +26853,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
               function anchorLaceLeechBulb(creature, anchorLace) {
                   if (!anchorLace) return;
+                  if (creature._manualControl && manualControlState.pressed) return;
                   const mx = (anchorLace.ax + anchorLace.bx) * 0.5;
                   const my = (anchorLace.ay + anchorLace.by) * 0.5;
                   const dx = mx - creature.x;
@@ -28563,12 +28587,13 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       if (dashStyle === 'sap-surge' && tent.fork) ext *= 0.62 + spring.stretch * 0.55;
                       const laceReach = !!tent._laceReaching;
                       const laceVine = !!tent._laceVineSearch;
-                      const bandFluid = isJelly && (creature._laceBandTension || 0) > 2;
+                      const laceLatched = !!tent._laceLatched;
+                      const bandFluid = isJelly && ((creature._laceBandTension || 0) > 1.2 || laceReach);
                       const whip = (spring.recoil || 0) * 0.65 + (spring.propel || 0) * 0.4;
                       let idleMix = tent.targetX == null
                           ? constrain(1 - whip * 1.35 - (spring.propel || 0) * 1.8, 0, 1)
-                          : (laceReach ? (laceVine ? 0.78 : (isJelly ? 0.62 : 0.48)) : 0);
-                      if (bandFluid && laceReach) idleMix = max(idleMix, laceVine ? 0.72 : 0.58);
+                          : (laceReach ? (laceVine ? 0.82 : (isJelly ? 0.74 : 0.48)) : 0);
+                      if (bandFluid && laceReach) idleMix = max(idleMix, laceVine ? 0.78 : 0.68);
                       const idleSway = sin(frameCount * 0.055 + tent.phase) * (5 + spd * 1.2) * idleMix * gs;
                       const idleDrift = cos(frameCount * 0.038 + tent.phase * 1.25) * 4.5 * idleMix * gs;
                       const idleBreath = sin(frameCount * 0.042 + tent.phase * 0.65) * 0.08 * idleMix;
@@ -28577,29 +28602,56 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       const restX = tent.baseX + cos(tent.ang + idleBreath) * ext + cos(tent.phase) * wobble;
                       const restY = tent.baseY + sin(tent.ang + idleBreath) * ext + sin(tent.phase * 1.1) * wobble;
                       const creatureSeek = !!tent._laceCreatureSeek;
-                      let laceLerp = laceReach
-                          ? (laceVine ? 0.3
-                              : (creatureSeek && isJelly ? SCOOP_LACE_CREATURE_REACH_LERP
-                                  : (isJelly ? 0.22 : 0.52)))
-                          : (isJelly ? 0.38 : 0.48);
-                      if (bandFluid && laceReach && !laceVine && !creatureSeek) laceLerp = min(laceLerp, 0.2);
-                      let tipX = tent.targetX != null
-                          ? laceReach
-                              ? lerp(restX, tent.targetX, laceLerp)
-                              : lerp(tent.targetX, geo.bellyX, 0.18)
-                          : restX;
-                      let tipY = tent.targetY != null
-                          ? laceReach
-                              ? lerp(restY, tent.targetY, laceLerp)
-                              : lerp(tent.targetY, geo.bellyY, 0.18)
-                          : restY;
+                      let tipX = restX;
+                      let tipY = restY;
+                      if (isJelly && laceReach && tent.targetX != null) {
+                          if (tent._laceSmoothTipX == null) {
+                              tent._laceSmoothTipX = tent.tipX ?? restX;
+                              tent._laceSmoothTipY = tent.tipY ?? restY;
+                          }
+                          const smoothK = laceLatched ? SCOOP_JELLY_TENDRIL_LATCH_SMOOTH_K
+                              : (laceVine ? 0.1 : (creatureSeek ? SCOOP_LACE_CREATURE_REACH_LERP
+                                  : SCOOP_JELLY_TENDRIL_SMOOTH_K));
+                          tent._laceSmoothTipX = lerp(tent._laceSmoothTipX, tent.targetX, smoothK);
+                          tent._laceSmoothTipY = lerp(tent._laceSmoothTipY, tent.targetY, smoothK);
+                          const followK = laceLatched ? 0.42 : (creatureSeek ? 0.48 : 0.38);
+                          tipX = lerp(restX, tent._laceSmoothTipX, followK);
+                          tipY = lerp(restY, tent._laceSmoothTipY, followK);
+                      } else {
+                          tent._laceSmoothTipX = tent._laceSmoothTipY = null;
+                          let laceLerp = laceReach
+                              ? (laceVine ? 0.3
+                                  : (creatureSeek && isJelly ? SCOOP_LACE_CREATURE_REACH_LERP
+                                      : (isJelly ? 0.18 : 0.52)))
+                              : (isJelly ? 0.38 : 0.48);
+                          if (bandFluid && laceReach && !laceVine && !creatureSeek) laceLerp = min(laceLerp, 0.16);
+                          tipX = tent.targetX != null
+                              ? laceReach
+                                  ? lerp(restX, tent.targetX, laceLerp)
+                                  : lerp(tent.targetX, geo.bellyX, 0.18)
+                              : restX;
+                          tipY = tent.targetY != null
+                              ? laceReach
+                                  ? lerp(restY, tent.targetY, laceLerp)
+                                  : lerp(tent.targetY, geo.bellyY, 0.18)
+                              : restY;
+                      }
                       if (laceReach && laceVine) {
                           const vineSway = sin(frameCount * 0.07 + tent.phase * 1.15) * (8 + spd * 0.8) * gs;
                           const vineDrift = cos(frameCount * 0.05 + tent.phase * 0.8) * 6 * gs;
                           tipX += cos(tent.ang + HALF_PI) * vineSway + cos(geo.facing + tent.phase * 0.15) * vineDrift;
                           tipY += sin(tent.ang + HALF_PI) * vineSway + sin(geo.facing + tent.phase * 0.15) * vineDrift;
                       }
-                      if (bandFluid && laceReach) {
+                      if (isJelly && laceReach) {
+                          const fluidPulse = sin(frameCount * 0.09 + tent.phase * 0.85) * 0.5
+                              + sin(frameCount * 0.14 + tent.phase * 1.2) * 0.35;
+                          const swayAmp = (laceLatched ? 16 : 11) + spd * 1.3
+                              + (creature._laceBandTension || 0) * 0.35 + spring.wave * 8;
+                          const bandSway = fluidPulse * swayAmp * gs;
+                          const bandDrift = cos(frameCount * 0.07 + tent.phase * 0.65) * swayAmp * 0.55 * gs;
+                          tipX += cos(tent.ang + HALF_PI) * bandSway + cos(geo.facing + tent.phase * 0.2) * bandDrift;
+                          tipY += sin(tent.ang + HALF_PI) * bandSway + sin(geo.facing + tent.phase * 0.2) * bandDrift;
+                      } else if (bandFluid && laceReach) {
                           const bandSway = sin(frameCount * 0.11 + tent.phase) * (11 + (creature._laceBandTension || 0) * 0.42) * gs;
                           tipX += cos(tent.ang + HALF_PI) * bandSway;
                           tipY += sin(tent.ang + HALF_PI) * bandSway;
@@ -28628,18 +28680,25 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       const perpX = cos(tent.ang + HALF_PI);
                       const perpY = sin(tent.ang + HALF_PI);
                       if (isJelly) {
-                          const exitSway = sin(frameCount * 0.1 + tent.phase * 0.75) * (18 + spd * 1.4 + spring.wave * 9) * gs;
-                          const baseSway = sin(frameCount * 0.12 + tent.phase) * (14 + spd * 1.8 + spring.wave * 10) * gs;
-                          const baseDrift = cos(frameCount * 0.075 + tent.phase * 1.15) * (12 + geo.flex * 5) * gs;
-                          const midSway = sin(frameCount * 0.09 + tent.phase * 0.9) * (9 + spd * 1.1) * gs;
-                          tent.seg0X = tent.baseX + pathDx * 0.06 + perpX * exitSway * 0.92;
-                          tent.seg0Y = tent.baseY + pathDy * 0.06 + perpY * exitSway * 0.92;
-                          tent.seg1X = tent.baseX + pathDx * 0.14 + perpX * (baseSway + exitSway * 0.55);
-                          tent.seg1Y = tent.baseY + pathDy * 0.14 + perpY * (baseSway + exitSway * 0.55);
-                          tent.midX = tent.baseX + pathDx * 0.5 + perpX * (baseDrift * 0.62 + midSway);
-                          tent.midY = tent.baseY + pathDy * 0.5 + perpY * (baseDrift * 0.62 + midSway);
-                          tent.seg2X = tent.baseX + pathDx * 0.76 + perpX * midSway * 0.52;
-                          tent.seg2Y = tent.baseY + pathDy * 0.76 + perpY * midSway * 0.52;
+                          const reachFluid = laceReach ? (laceLatched ? 1.45 : 1.22) : 1;
+                          const exitSway = sin(frameCount * 0.1 + tent.phase * 0.75)
+                              * (22 + spd * 1.6 + spring.wave * 11) * gs * reachFluid;
+                          const baseSway = sin(frameCount * 0.12 + tent.phase)
+                              * (18 + spd * 2.1 + spring.wave * 12) * gs * reachFluid;
+                          const baseDrift = cos(frameCount * 0.075 + tent.phase * 1.15)
+                              * (15 + geo.flex * 6) * gs * reachFluid;
+                          const midSway = sin(frameCount * 0.09 + tent.phase * 0.9)
+                              * (12 + spd * 1.35) * gs * reachFluid;
+                          const trailSway = sin(frameCount * 0.11 + tent.phase * 1.05)
+                              * (8 + spd * 0.9) * gs * reachFluid;
+                          tent.seg0X = tent.baseX + pathDx * 0.05 + perpX * exitSway * 0.95;
+                          tent.seg0Y = tent.baseY + pathDy * 0.05 + perpY * exitSway * 0.95;
+                          tent.seg1X = tent.baseX + pathDx * 0.18 + perpX * (baseSway + exitSway * 0.62);
+                          tent.seg1Y = tent.baseY + pathDy * 0.18 + perpY * (baseSway + exitSway * 0.62);
+                          tent.midX = tent.baseX + pathDx * 0.48 + perpX * (baseDrift * 0.7 + midSway);
+                          tent.midY = tent.baseY + pathDy * 0.48 + perpY * (baseDrift * 0.7 + midSway);
+                          tent.seg2X = tent.baseX + pathDx * 0.74 + perpX * (midSway + trailSway * 0.65);
+                          tent.seg2Y = tent.baseY + pathDy * 0.74 + perpY * (midSway + trailSway * 0.65);
                       } else {
                           tent.seg1X = tent.seg1Y = tent.seg2X = tent.seg2Y = null;
                           const midIdle = (6 + geo.flex * 9) * idleMix * gs;
@@ -29115,6 +29174,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       tent._laceReaching = false;
                       tent._laceVineSearch = false;
                       tent._laceCreatureSeek = false;
+                      tent._laceLatched = false;
+                      tent._laceSmoothTipX = tent._laceSmoothTipY = null;
                       tent._laceReserved = false;
                   }
                   if (geo.probe) {
@@ -31578,7 +31639,16 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       wriggleAmt *= 2.35;
                   }
                   if (bandTension > 6) {
-                      pullBase *= max(0.12, 1 - bandStuck * 0.82 - min(0.5, bandTension * 0.008));
+                      const latchAnchor = getLaceColonyAnchorPoint(creature);
+                      const dragAway = latchAnchor
+                          ? (px - creature.x) * (creature.x - latchAnchor.x)
+                              + (py - creature.y) * (creature.y - latchAnchor.y)
+                          : 0;
+                      if (dragAway > 0) {
+                          pullBase *= max(0.48, 1 - bandStuck * 0.38 - min(0.22, bandTension * 0.004));
+                      } else {
+                          pullBase *= max(0.12, 1 - bandStuck * 0.82 - min(0.5, bandTension * 0.008));
+                      }
                   }
                   pullBase *= 1 + stretchNorm * LACE_PULL_STRETCH_MULT;
                   const pullMag = pullBase * timeScale;
