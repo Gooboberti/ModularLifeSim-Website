@@ -4,7 +4,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-021-squid-voice-guide" />
+    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-022-squid-leak-replicate-voice" />
     <title>MiniSimmy Orbital Ship v2</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2334d399'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%230a0a0f'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -8207,7 +8207,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'local-021-squid-voice-guide';
+              const MINISIMMY_BUILD = 'local-022-squid-leak-replicate-voice';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -9073,8 +9073,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   _lastPerspectiveSynSnapshot: {},
                   _creatureVoiceWatch: null,
                   _creatureVoiceSpokenAt: {},
+                  _creatureVoiceTopicAt: {},
+                  CREATURE_VOICE_TOPIC_MIN_GAP: 42000,
                   CREATURE_VOICE_REPEAT_CD: {
-                      thought: 24000,
+                      thought: 52000,
                       desire: 20000,
                       manual: 28000,
                       repro: 22000,
@@ -9109,8 +9111,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       scoop_steal_gear: 10000,
                       scoop_clone_cap: 20000,
                       scoop_burst: 16000,
-                      topic: 12000,
-                      line: 18000
+                      topic: 18000,
+                      line: 24000
                   },
                   _speakingCreatureVoice: false,
                   CREATURE_VOICE_PROFILES: {
@@ -10302,6 +10304,19 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           || 12000;
                   },
 
+                  wasVoiceTopicSpokenRecently(creature, topicId) {
+                      if (!creature || !topicId) return false;
+                      const id = this.getCreatureVoiceId(creature) || 'creature';
+                      const last = this._creatureVoiceTopicAt[`${id}:${topicId}`] || 0;
+                      return Date.now() - last < this.CREATURE_VOICE_TOPIC_MIN_GAP;
+                  },
+
+                  markVoiceTopicSpoken(creature, topicId) {
+                      if (!creature || !topicId) return;
+                      const id = this.getCreatureVoiceId(creature) || 'creature';
+                      this._creatureVoiceTopicAt[`${id}:${topicId}`] = Date.now();
+                  },
+
                   wasVoiceLineSpokenRecently(creature, kind, extra = '', line = '') {
                       const keys = [
                           this.getVoiceRepeatKey(creature, kind, extra),
@@ -10314,6 +10329,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
                               ? this.getVoiceRepeatCooldownMs('line')
                               : this.getVoiceRepeatCooldownMs(kind);
                           if (now - last < cd) return true;
+                      }
+                      if (kind === 'thought' && extra) {
+                          const thoughtKey = this.getVoiceRepeatKey(creature, 'thought', extra);
+                          const lastThought = this._creatureVoiceSpokenAt[thoughtKey] || 0;
+                          if (now - lastThought < this.CREATURE_VOICE_REPEAT_CD.thought) return true;
                       }
                       return false;
                   },
@@ -12967,8 +12987,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
                       if (ctx.thought && ctx.thought !== '–' && ctx.thought !== 'Exploring...') {
                           const t = ctx.thought.replace(/\.\.\.$/, '');
-                          push('thought', 8.8 + (ctx.manual ? 1.2 : 0),
-                              `Inspector thought: ${t} — underneath, food drive is ${this.plainUrge(o.o0)} and hazard avoid is ${this.plainUrge(o.o2)}.${ctx.manual ? ' Manual control is overriding my path while the brain still records strain on weak bonds.' : ''}`);
+                          const thoughtExtra = this.normalizeVoiceLineKey(t).slice(0, 48);
+                          if (!this.wasVoiceLineSpokenRecently(ctx.creature, 'thought', thoughtExtra, t)) {
+                              push('thought', 8.8 + (ctx.manual ? 1.2 : 0),
+                                  `Inspector thought: ${t} — underneath, food drive is ${this.plainUrge(o.o0)} and hazard avoid is ${this.plainUrge(o.o2)}.${ctx.manual ? ' Manual control is overriding my path while the brain still records strain on weak bonds.' : ''}`);
+                          }
                       }
 
                       if (ctx.hazard.dist > 0.35 || o.o2 > 0.55 || env.redScar > 0.3) {
@@ -13051,26 +13074,41 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       const recent = this._creaturePerspectiveTopicHistory || [];
                       const priorityIds = ['catchup', 'thought', 'desire', 'hazard', 'hunger', 'manual', 'scoop_colony_emergence', 'scoop_colony_emergence_pressure', 'scoop_social_rejection', 'scoop_predator_duel', 'scoop_steal_gear', 'scoop_burst', 'scoop_squid_auto', 'scoop_clone_cap', 'scoop_dandruff', 'scoop_jellyfish_pop', 'scoop_incubate', 'scoop_leak', 'scoop_weakest', 'scoop_candidates', 'scoop_prune', 'scoop_fire', 'scoop_bubble', 'scoop_scan', 'scoop_toggle', 'scoop_probe_toggle', 'scoop_tendril_toggle', 'scoop_sprint', 'scoop_melt', 'scoop_digest', 'scoop_lace', 'synapse_grow', 'synapse_prune', 'identity_context', 'neighbors', 'surroundings', 'lace', 'laceMod', 'synapse_map', 'core_identity', 'subspec_identity', 'archetype_identity', 'role_class', 'prestige_core', 'operator_incubator', 'operator_eggs', 'operator_vault', 'operator_furnace', 'operator_furnace_fuel', 'operator_dust', 'operator_predators', 'operator_pop'];
                       const pool = topics.filter((t) => !recent.includes(t.id));
-                      let candidates = pool.length ? pool : topics;
+                      let candidates = pool.length ? pool : topics.filter((t) =>
+                          !this.wasVoiceTopicSpokenRecently(creature, t.id)
+                      );
+                      if (!candidates.length) {
+                          candidates = topics.filter((t) => !this.wasVoiceLineSpokenRecently(
+                              creature, 'line', this.normalizeVoiceLineKey(t.line), t.line
+                          ));
+                      }
+                      if (!candidates.length && !options.forceTopic) return '';
                       const freshPriority = candidates.filter((t) => priorityIds.includes(t.id));
                       const hasLiveCue = candidates.some((t) => ['thought', 'desire', 'hazard', 'hunger', 'manual', 'synapse_grow', 'synapse_prune'].includes(t.id));
                       if (freshPriority.length && Math.random() < (hasLiveCue ? 0.88 : 0.62)) {
-                          candidates = freshPriority;
+                          candidates = freshPriority.filter((t) => !this.wasVoiceTopicSpokenRecently(creature, t.id));
+                          if (!candidates.length) candidates = freshPriority;
                       }
-                      const freshCandidates = candidates.filter((t) => !this.wasVoiceLineSpokenRecently(
-                          creature, t.id || 'topic', t.id || 'topic', t.line
-                      ));
+                      const freshCandidates = candidates.filter((t) => {
+                          const thoughtExtra = t.id === 'thought'
+                              ? this.normalizeVoiceLineKey((ctx.thought || '')).slice(0, 48)
+                              : (t.id || 'topic');
+                          return !this.wasVoiceLineSpokenRecently(creature, t.id || 'topic', thoughtExtra, t.line)
+                              && !this.wasVoiceTopicSpokenRecently(creature, t.id);
+                      });
                       if (freshCandidates.length) {
                           candidates = freshCandidates;
                       } else if (!options.forceTopic) {
                           return '';
                       }
-                      const pick = candidates[Math.floor(Math.random() * Math.min(5, candidates.length))] || topics[0];
+                      const pick = candidates[Math.floor(Math.random() * Math.min(6, candidates.length))];
+                      if (!pick) return '';
                       if (!pick?.line) return '';
                       if (pick.id && pick.id.startsWith('operator_')) this.markOperatorReminderShown(pick.id);
                       recent.unshift(pick.id);
-                      if (recent.length > 14) recent.length = 14;
+                      if (recent.length > 28) recent.length = 28;
                       this._creaturePerspectiveTopicHistory = recent;
+                      this.markVoiceTopicSpoken(creature, pick.id);
                       if (options.forceTopic === 'engage' || options.forceTopic === 'resume' || options.forceTopic === 'catchup') {
                           return pick.line;
                       }
@@ -16600,8 +16638,19 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       this.type = opts.type || random(types);
                       this.color = opts.color || colors[this.type] || '#fbbf24';
                       this.tier = opts.tier || 1;
-                      this.x = opts.x ?? random(width);
-                      this.y = opts.y ?? (isFloating ? random(height * 0.2, height * 0.8) : random(height));
+                      if (opts.x != null && opts.y != null) {
+                          this.x = opts.x;
+                          this.y = opts.y;
+                      } else if (this.fromSquidLeak && opts.owner) {
+                          const shell = typeof getSquidLeakShellPoint === 'function'
+                              ? getSquidLeakShellPoint(opts.owner, opts.owner._scoopGeo, null)
+                              : { x: opts.owner.x, y: opts.owner.y };
+                          this.x = shell.x;
+                          this.y = shell.y;
+                      } else {
+                          this.x = opts.x ?? random(width);
+                          this.y = opts.y ?? (isFloating ? random(height * 0.2, height * 0.8) : random(height));
+                      }
                       this.vx = opts.vx ?? random(-0.9, 0.9);
                       this.vy = opts.vy ?? random(-0.9, 0.9);
                       this.fromAmmoBurst = !!opts.fromAmmoBurst;
@@ -24238,8 +24287,12 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   return { strengthWave, dir, turbulence, phase };
               }
 
+              function isReplicateMusicModeActive() {
+                  return currentMusicMode === 'replicate';
+              }
+
               function getEnvironmentalRedHazardState() {
-                  if (typeof replicateMusicMode !== 'undefined' && replicateMusicMode === true) {
+                  if (isReplicateMusicModeActive()) {
                       return { active: false, targetCount: 0, spawnMult: 0, intensityMult: 0, roughnessMult: 0 };
                   }
                   if (environmentPhase === 0) {
@@ -24273,6 +24326,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
               }
 
               function tickEnvironmentalRedHazards(vortexDir, vortexStrength) {
+                  if (isReplicateMusicModeActive()) {
+                      if (redHazards.length > 0) redHazards = [];
+                      return;
+                  }
                   const cycleState = getEnvironmentalRedHazardState();
                   const pruneActive = currentMusicMode === 'prune';
                   const rentalActive = redHazardsEnabled && environmentPhase !== 0;
@@ -25612,22 +25669,44 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   return SCOOP_JELLYFISH_TIER_BODY[getJellyfishTier(creature)];
               }
 
-              function spawnLooseScoopModuleParticles(parent, mods, brainInherit = null) {
+              function getSquidLeakShellPoint(creature, geo, at = null) {
+                  if (at?.x != null && at?.y != null) return { x: at.x, y: at.y };
+                  const bx = geo?.bubbleX ?? creature?.x ?? centerX;
+                  const by = geo?.bubbleY ?? creature?.y ?? centerY;
+                  const br = geo?.bubbleR ?? CREATURE_BODY_RADIUS * (getJellyfishBodyScale(creature) || 1) * 2.35;
+                  const ang = random(TWO_PI);
+                  const shellR = br * random(0.82, 1.02);
+                  return {
+                      x: bx + cos(ang) * shellR + random(-0.8, 0.8),
+                      y: by + sin(ang) * shellR + random(-0.8, 0.8)
+                  };
+              }
+
+              function spawnLooseScoopModuleParticles(parent, mods, brainInherit = null, opts = {}) {
                   let spawned = 0;
                   const inherit = brainInherit || buildJellyfishLooseBrainInherit(parent);
                   const decayAt = Date.now() + SCOOP_JELLYFISH_LOOSE_DECAY_MS;
+                  const geo = parent?._scoopGeo || (parent ? buildManualScoopGeometry(parent) : null);
+                  const fromSquid = opts.fromSquidBurst !== false && isJellyfishScoopCreature(parent);
                   for (const m of mods) {
                       if (moduleParticles.length >= 140) break;
+                      const shell = fromSquid ? getSquidLeakShellPoint(parent, geo) : null;
                       const mp = new ModuleParticle(true, {
                           type: moduleTypeForParticle(m.type),
                           tier: m.tier || 1,
                           color: m.color || MODULE_AMMO_COLORS[m.type] || '#a78bfa',
-                          x: parent.x + random(-40, 40),
-                          y: parent.y + random(-40, 40),
-                          vx: random(-2.8, 2.8),
-                          vy: random(-2.8, 2.8),
-                          orbitGraceUntil: Date.now() + 900
+                          x: shell?.x ?? parent.x + random(-18, 18),
+                          y: shell?.y ?? parent.y + random(-18, 18),
+                          vx: fromSquid ? random(-0.14, 0.14) : random(-2.8, 2.8),
+                          vy: fromSquid ? random(-0.14, 0.14) : random(-2.8, 2.8),
+                          fromSquidLeak: fromSquid,
+                          owner: fromSquid ? parent : null,
+                          orbitGraceUntil: Date.now() + (fromSquid ? 1800 : 900)
                       });
+                      if (fromSquid) {
+                          mp._squidLeak = true;
+                          mp._squidLeakOwner = parent;
+                      }
                       mp._scoopLooseDecayAt = decayAt;
                       mp._scoopBrainInherit = inherit;
                       if (m._scoopSpecialSheen) mp._scoopSpecialSheen = m._scoopSpecialSheen;
@@ -28078,24 +28157,66 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   return hatched.length;
               }
 
+              function spawnCreatureFromSquidLeakMerge(x, y, modType, tier, owner) {
+                  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+                  if (creatures.length >= 220) return null;
+                  const type = normalizeModuleTypeKey(modType || 'communicator');
+                  const col = MODULE_AMMO_COLORS[type] || MODULE_TYPE_COLORS[type] || '#a78bfa';
+                  const modTier = constrain(Math.floor(tier || 1), 1, 4);
+                  const spawnMods = [{
+                      type,
+                      tier: modTier,
+                      color: col,
+                      offsetX: random(-5, 5),
+                      offsetY: random(-5, 5)
+                  }];
+                  if (modTier >= 2 && random() < 0.55) {
+                      spawnMods.push({
+                          type,
+                          tier: max(1, modTier - 1),
+                          color: col,
+                          offsetX: random(-6, 6),
+                          offsetY: random(-6, 6)
+                      });
+                  }
+                  const sx = constrain(x + random(-6, 6), 24, width - 24);
+                  const sy = constrain(y + random(-6, 6), 24, height - 24);
+                  const spawn = new Creature(sx, sy, spawnMods, (owner?.generation || 1) + 1, null);
+                  spawn.originAeonNumber = owner?.originAeonNumber ?? owner?.birthAeonNumber ?? currentAeonNumber;
+                  if (owner?.brain) inheritScoopIncubatorBrain(spawn, owner);
+                  ModuleIdentitySystem.normalizeLayout(spawn);
+                  ModuleIdentitySystem.updateCore(spawn);
+                  spawn.updateSpecialization();
+                  spawn.energy = 40 + modTier * 5;
+                  spawn._squidLeakKin = true;
+                  spawn._squidLeakParentName = owner?.name || 'bell';
+                  spawn.currentThought = 'Knit from shed bell flecks — modules clicked together into a body';
+                  spawn.calculatePointValue();
+                  applyNewbornReproCooldown(spawn);
+                  creatures.push(spawn);
+                  if (owner) registerCreatureOffspring(owner, spawn);
+                  spawnEffects.push(new SpawnEffect(sx, sy));
+                  addFloatingText(sx, sy - 18, 'LEAK HATCH', '#67e8f9');
+                  if (Math.random() < 0.65) playBirthSound();
+                  return spawn;
+              }
+
               function emitSquidLeakFloatingModule(creature, geo, mod, at = null) {
                   if (!mod || moduleParticles.length >= SCOOP_SQUID_LEAK_MODULE_MAX) return null;
                   const col = mod.color || MODULE_AMMO_COLORS[mod.type] || '#a78bfa';
-                  const ang = random(TWO_PI);
-                  const bx = geo.bubbleX ?? creature.x;
-                  const by = geo.bubbleY ?? creature.y;
-                  const br = geo.bubbleR ?? CREATURE_BODY_RADIUS * 2.75;
-                  const shellR = br * random(0.94, 1.06);
-                  const drift = random(0.04, 0.18);
+                  const shell = getSquidLeakShellPoint(creature, geo, at);
+                  const ang = atan2(shell.y - (geo?.bubbleY ?? creature.y), shell.x - (geo?.bubbleX ?? creature.x)) || random(TWO_PI);
+                  const drift = random(0.03, 0.12);
                   const mp = new ModuleParticle(true, {
                       type: moduleTypeForParticle(mod.type),
                       tier: mod.tier || 1,
                       color: col,
                       fromSquidLeak: true,
-                      x: at?.x ?? bx + cos(ang) * shellR,
-                      y: at?.y ?? by + sin(ang) * shellR,
-                      vx: cos(ang) * drift + random(-0.04, 0.04),
-                      vy: sin(ang) * drift + random(-0.04, 0.04),
+                      owner: creature,
+                      x: shell.x,
+                      y: shell.y,
+                      vx: cos(ang) * drift + random(-0.03, 0.03),
+                      vy: sin(ang) * drift + random(-0.03, 0.03),
                       orbitGraceUntil: Date.now() + 2400
                   });
                   mp._squidLeak = true;
@@ -28115,14 +28236,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   if (scoopLureParticles.length >= SCOOP_LURE_PARTICLE_MAX) return;
                   const col = m.color || MODULE_AMMO_COLORS[m.type] || '#a78bfa';
                   const ang = random(TWO_PI);
-                  const bx = geo.bubbleX ?? creature.x;
-                  const by = geo.bubbleY ?? creature.y;
-                  const br = geo.bubbleR ?? CREATURE_BODY_RADIUS * 2.75;
-                  const shellR = br * random(0.9, 1.08);
-                  const drift = random(0.05, 0.2);
+                  const shell = getSquidLeakShellPoint(creature, geo);
+                  const drift = random(0.04, 0.14);
                   scoopLureParticles.push({
-                      x: bx + cos(ang) * shellR + random(-1.2, 1.2),
-                      y: by + sin(ang) * shellR + random(-1.2, 1.2),
+                      x: shell.x,
+                      y: shell.y,
                       vx: cos(ang) * drift + random(-0.05, 0.05),
                       vy: sin(ang) * drift + random(-0.05, 0.05),
                       life: 520 + random(0, 220),
@@ -28304,7 +28422,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           scoopLureParticles.push(merged);
                           const owner = merged.owner;
                           const geo = owner?._scoopGeo || (owner ? buildManualScoopGeometry(owner) : null);
-                          if (owner && geo) {
+                          if ((merged.tier || 1) >= 2) {
+                              spawnCreatureFromSquidLeakMerge(merged.x, merged.y, merged.moduleType, merged.tier, owner);
+                          } else if (owner && geo) {
                               emitSquidLeakFloatingModule(owner, geo, {
                                   type: merged.moduleType,
                                   tier: merged.tier || 1,
@@ -31323,6 +31443,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       moduleParticles.push(merged);
                       addFloatingText(cx, cy - 20, `${sample.type} → T${nextTier}`, '#fde047');
                       playTone(620 + nextTier * 40, 'sine', 0.2, 0.42);
+                      if (squidMerge && nextTier >= 2) {
+                          const owner = merged._squidLeakOwner || sample._squidLeakOwner || null;
+                          spawnCreatureFromSquidLeakMerge(cx, cy, sample.type, nextTier, owner);
+                      }
                   }
               }
 
@@ -32206,7 +32330,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   redHazardsEnabled = !!enabled;
                   if (redHazardsEnabled && redHazards.length < 6) {
                       for (let i = redHazards.length; i < 6; i++) redHazards.push(new RedHazard());
-                  } else if (!redHazardsEnabled && environmentPhase === 0 && currentMusicMode !== 'prune') {
+                  } else if (!redHazardsEnabled && environmentPhase === 0 && currentMusicMode !== 'prune' && !isReplicateMusicModeActive()) {
                       redHazards = [];
                   }
                   updateQuickButtons();
@@ -32221,7 +32345,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   if (redHazardsEnabled && redHazards.length < 6) {
                       for (let i = 0; i < 6; i++) redHazards.push(new RedHazard());
                   }
-                  if (!redHazardsEnabled && environmentPhase === 0 && currentMusicMode !== 'prune') redHazards = [];
+                  if (!redHazardsEnabled && environmentPhase === 0 && currentMusicMode !== 'prune' && !isReplicateMusicModeActive()) redHazards = [];
                   updateQuickButtons();
               }
 
@@ -35451,6 +35575,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   settings.energyDrain = 0.10;
                   settings.particleFoodValue = 3.3;
                   redHazardsEnabled = false;
+                  redHazards = [];
+                  environmentPhase = 0;
+                  envPhaseProgress = 0;
                   if (typeof greenZone !== 'undefined' && greenZone) greenZone.food = 920;
                   if (typeof blueZone !== 'undefined' && blueZone) blueZone.food = 920;
                   for (let i = 0; i < 11; i++) {
@@ -41671,7 +41798,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       cursorHazardDragIndex = -1;
                   } else if (toolId === 'hazard') {
                       redHazardsEnabled = false;
-                      if (environmentPhase === 0 && currentMusicMode !== 'prune') redHazards = [];
+                      if (environmentPhase === 0 && currentMusicMode !== 'prune' && !isReplicateMusicModeActive()) redHazards = [];
                   } else if (toolId === 'wall') {
                       setEnergyWallMode(false);
                       energyWalls = [];
@@ -44316,11 +44443,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   }
 
                   // ==================== REPLICATE MUSIC MODE: FORCE FERTILE SEASON ONLY ====================
-                  if (typeof replicateMusicMode !== 'undefined' && replicateMusicMode === true) {
-                      // Force Fertile phase only — do NOT force isDay
+                  if (isReplicateMusicModeActive()) {
                       environmentPhase = 0;
                       envPhaseProgress = 0;
-                      // Day/night cycle continues normally so night penalties stay active
                   }
 
                   let env = getEnvironmentModifiers();
@@ -44341,8 +44466,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   // Environmental modifier on vortex
                   let envMods;
 
-                  if (typeof replicateMusicMode !== 'undefined' && replicateMusicMode === true) {
-                      // Boosted fertile modifiers while in replicate music mode
+                  if (isReplicateMusicModeActive()) {
                       envMods = {
                           energyGainMult: 1.22,
                           drainMult: 0.92,
