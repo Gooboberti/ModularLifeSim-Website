@@ -4,7 +4,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-010-squid-reservoir-modal" />
+    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-011-squid-handoff" />
     <title>MiniSimmy Orbital Ship v2</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2334d399'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%230a0a0f'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -8200,7 +8200,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'local-010-squid-reservoir-modal';
+              const MINISIMMY_BUILD = 'local-011-squid-handoff';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -29359,11 +29359,27 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   }
               }
 
+              function handOffControlledSquidToAutonomous(creature) {
+                  if (!creature || !creature._scoopActive) return false;
+                  if (!isJellyfishScoopCreature(creature)) {
+                      if (!creature._squidAutomated) releaseManualScoop(creature);
+                      return false;
+                  }
+                  creature._squidAutomated = true;
+                  creature._manualOrient = null;
+                  creature._manualOrientVel = 0;
+                  const state = getSquidReservoirState(creature);
+                  creature.currentThought = state?.babyCount > 0
+                      ? `Auto squid T${getJellyfishTier(creature)} — ${state.babyCount} clone${state.babyCount === 1 ? '' : 's'} ready · still hunting`
+                      : `Auto squid T${getJellyfishTier(creature)} — homing on drift while you steer elsewhere`;
+                  addFloatingText(creature.x, creature.y - 28, 'Squid autonomous', '#7dd3fc');
+                  updateInspectorScoopBar(creature);
+                  return true;
+              }
+
               function releaseManualCreatureControl() {
                   if (manualControlCreature) {
-                      if (manualControlCreature._scoopActive && !manualControlCreature._squidAutomated) {
-                          releaseManualScoop(manualControlCreature);
-                      }
+                      handOffControlledSquidToAutonomous(manualControlCreature);
                       if (manualControlState.pressed) endManualCreatureTug();
                       if (manualControlCreature._manualSuperPredator) {
                           manualControlCreature._manualSuperPredator = false;
@@ -42251,18 +42267,21 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           this._shipDragging = false;
 
                           if (manualControlCreature) {
-                              const c = manualControlCreature;
-                              const geo = c._scoopGeo;
-                              const scoopR = c._scoopActive
-                                  ? (geo?.bubbleR || CREATURE_BODY_RADIUS * 2.2) * 1.06
-                                  : DeviceProfile.creatureHitRadius * 1.5;
-                              const onControlled = dist(PointerInput.x, PointerInput.y, c.x, c.y) < scoopR
-                                  || pickCreatureAtWorld(PointerInput.x, PointerInput.y) === c;
-                              if (onControlled) {
-                                  beginManualCreatureTug(PointerInput.x, PointerInput.y);
-                                  this._handPanPending = false;
-                                  e.preventDefault();
-                                  return;
+                              const picked = pickCreatureAtWorld(PointerInput.x, PointerInput.y);
+                              if (!picked || picked === manualControlCreature) {
+                                  const c = manualControlCreature;
+                                  const geo = c._scoopGeo;
+                                  const scoopR = c._scoopActive
+                                      ? (geo?.bubbleR || CREATURE_BODY_RADIUS * 2.2) * 1.06
+                                      : DeviceProfile.creatureHitRadius * 1.5;
+                                  const onControlled = dist(PointerInput.x, PointerInput.y, c.x, c.y) < scoopR
+                                      || picked === c;
+                                  if (onControlled) {
+                                      beginManualCreatureTug(PointerInput.x, PointerInput.y);
+                                      this._handPanPending = false;
+                                      e.preventDefault();
+                                      return;
+                                  }
                               }
                           }
 
@@ -44172,6 +44191,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       processPostTugFeastKills();
                       drawManualControlTether();
                       drawManualSuperPredatorLinks();
+                      for (const c of creatures) {
+                          if (c._scoopActive && c !== manualControlCreature) drawManualScoop(c);
+                      }
                       if (manualControlCreature && manualControlCreature._scoopActive) {
                           drawManualScoop(manualControlCreature);
                       }
