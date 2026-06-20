@@ -4,7 +4,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-017-squid-module-leak" />
+    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-018-squid-predator-duel" />
     <title>MiniSimmy Orbital Ship v2</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2334d399'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%230a0a0f'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -8207,7 +8207,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'local-017-squid-module-leak';
+              const MINISIMMY_BUILD = 'local-018-squid-predator-duel';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -8402,6 +8402,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
               const SCOOP_JELLYFISH_LOOSE_SPAWN_MIN = 3;
               const SCOOP_JELLYFISH_LEAK_START = 4;
               const SCOOP_JELLYFISH_LEAK_MULT = 1.85;
+              const SQUID_DUEL_STEAL_COOLDOWN = 42;
               const SCOOP_JELLYFISH_PRESSURE_POP = 1400;
               const SCOOP_JELLYFISH_AUTO_SILVER_CHANCE = 0.14;
               const SCOOP_JELLYFISH_AUTO_GOLD_CHANCE = 0.05;
@@ -17837,6 +17838,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
               })();
 
               const CREATURE_BODY_RADIUS = 13;
+              const SQUID_DUEL_POP_DIST = CREATURE_BODY_RADIUS * 2.35;
               const CREATURE_MIN_SEP = 18;
               const CREATURE_IDEAL_DIST = 23;
               const CREATURE_SOCIAL_MAX = 52;
@@ -17865,6 +17867,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   const hunter = resolvePredatorKillCredit(victim);
                   if (!hunter) return false;
                   if (isSquidFeastMode(hunter)) {
+                      if (isSquidPredatorDuelTarget(hunter, victim)) return false;
                       const taggedByHunter = victim._predatorKillCredit === hunter || victim._huntTargetOf === hunter;
                       const lockedTarget = victim === hunter._manualFeastLock || victim === hunter._manualSuperPredWeakTarget;
                       if (!taggedByHunter && !lockedTarget) return false;
@@ -21270,9 +21273,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           return;
                       }
 
+                      const squidRivals = victims.filter((v) => isSquidPredatorDuelTarget(this, v));
                       let pickWeakest = () => {
-                          let weakest = victims[0];
-                          for (const v of victims) {
+                          let pool = squidRivals.length ? squidRivals : victims;
+                          let weakest = pool[0];
+                          for (const v of pool) {
                               const vScore = v.energy + (v.getPointValue?.() || 0) * 0.02;
                               const wScore = weakest.energy + (weakest.getPointValue?.() || 0) * 0.02;
                               if (vScore < wScore) weakest = v;
@@ -21291,6 +21296,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       }
 
                       this._manualSuperPredWeakTarget = target;
+
+                      if (isSquidPredatorDuelTarget(this, target)) {
+                          tickSquidPredatorDuel(this, target, timeScale);
+                          return;
+                      }
 
                       const moverCount = this.getTieredModuleCount('mover');
                       const ts = max(1, timeScale);
@@ -24067,6 +24077,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           if ((c._symbiosisLevel || 0) >= 2) baseDamage *= 0.88;
 
                           c.energy = max(0, c.energy - baseDamage);
+                          c._killedByHazard = true;
                           c.damageFlash = 50;
                           c.purpleFlash = max(c.purpleFlash || 0, 48);
                           c.hazardDamageTaken = (c.hazardDamageTaken || 0) + baseDamage;
@@ -24853,6 +24864,47 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   return !!(creature?._manualSuperPredator && (creature._manualControl || creature._squidAutomated));
               }
 
+              function isSquidPredatorDuelist(creature) {
+                  return isSquidFeastMode(creature) && !!creature?._scoopActive && isJellyfishScoopCreature(creature);
+              }
+
+              function isSquidPredatorDuelTarget(attacker, victim) {
+                  return isSquidPredatorDuelist(attacker) && isSquidPredatorDuelist(victim) && victim !== attacker;
+              }
+
+              function ensureSquidEquipmentState(creature) {
+                  if (!creature) return;
+                  if (creature._scoopBaseTendrilCount == null) {
+                      creature._scoopBaseTendrilCount = getScoopLaceProfile(creature).count;
+                  }
+                  if (creature._scoopTendrilLoss == null) creature._scoopTendrilLoss = 0;
+                  if (!creature._scoopLootTendrils) creature._scoopLootTendrils = [];
+                  if (creature._scoopLootProbe == null) creature._scoopLootProbe = false;
+                  if (creature._scoopProbeStolen == null) creature._scoopProbeStolen = false;
+              }
+
+              function getScoopNativeTendrilCount(creature) {
+                  ensureSquidEquipmentState(creature);
+                  return creature._scoopBaseTendrilCount || getScoopLaceProfile(creature).count;
+              }
+
+              function getScoopRemainingNativeTendrils(creature) {
+                  return max(0, getScoopNativeTendrilCount(creature) - (creature._scoopTendrilLoss || 0));
+              }
+
+              function isSquidFullyStripped(creature) {
+                  if (!creature?._scoopActive) return false;
+                  ensureSquidEquipmentState(creature);
+                  if (getScoopRemainingNativeTendrils(creature) > 0) return false;
+                  if (!creature._scoopProbeStolen && creature._scoopProbeDeployed !== false) return false;
+                  return true;
+              }
+
+              function creatureHasNativeProbe(creature) {
+                  if (!creature?._scoopActive || creature._scoopProbeStolen) return false;
+                  return creature._scoopProbeDeployed !== false;
+              }
+
               function getJellyfishTier(creature) {
                   if (!creature) return SCOOP_JELLYFISH_DEFAULT_TIER;
                   if (creature._jellyfishTier != null) return constrain(Math.floor(creature._jellyfishTier), 0, 3);
@@ -25367,6 +25419,195 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   const state = getSquidReservoirState(creature);
                   if (state.babyCount < 1) return;
                   popJellyfishScoop(creature, { autoPop: true, pressurePop: true });
+              }
+
+              function collectSquidPopModules(creature) {
+                  const mods = [];
+                  for (const m of creature?.modules || []) {
+                      const copy = ModuleIdentitySystem.copyModuleWithLayout(m);
+                      copy.isCore = false;
+                      if (m.prestigeCore || m.subSpecialization) {
+                          copy.prestigeCore = m.prestigeCore;
+                          copy.subSpecialization = m.subSpecialization;
+                          copy.subSpecializationId = m.subSpecializationId;
+                          copy.subSpecializationName = m.subSpecializationName;
+                      }
+                      markScoopModuleSpecial(copy);
+                      mods.push(copy);
+                  }
+                  for (const m of creature?._scoopModuleBag || []) {
+                      const copy = { ...m };
+                      markScoopModuleSpecial(copy);
+                      mods.push(copy);
+                  }
+                  if (!mods.length) {
+                      const t = getCreatureCoreType(creature) || 'communicator';
+                      mods.push({
+                          type: t, tier: 1,
+                          color: MODULE_AMMO_COLORS[t] || '#a78bfa',
+                          offsetX: random(-4, 4), offsetY: random(-4, 4)
+                      });
+                  }
+                  return mods;
+              }
+
+              function popSquidFromDirectDamage(creature, source = null, opts = {}) {
+                  if (!creature || creatures.indexOf(creature) < 0) return false;
+                  if (!creature._scoopActive || !isJellyfishScoopCreature(creature)) return false;
+                  if (creature._squidPopping) return false;
+                  creature._squidPopping = true;
+                  creature._claimedByPredator = true;
+                  creature._squidDirectPop = true;
+
+                  const px = creature.x;
+                  const py = creature.y;
+                  const mods = collectSquidPopModules(creature);
+                  spawnLooseScoopModuleParticles(creature, mods);
+                  const bag = creature._scoopBag || [];
+                  for (const p of bag) {
+                      if (!p) continue;
+                      p._scooped = false;
+                      p._scoopOwner = null;
+                      p._scoopSnared = null;
+                      p.x = px + random(-38, 38);
+                      p.y = py + random(-38, 38);
+                      p.vx = random(-4.2, 4.2);
+                      p.vy = random(-4.2, 4.2);
+                      if (vortexParticles.indexOf(p) < 0) vortexParticles.push(p);
+                  }
+                  const whiteBurst = min(22, 7 + floor(mods.length * 0.45) + floor(bag.length * 0.35));
+                  for (let wi = 0; wi < whiteBurst; wi++) {
+                      const vp = new VortexParticle(random() < 0.18);
+                      vp.x = px + random(-44, 44);
+                      vp.y = py + random(-44, 44);
+                      vp.vx = random(-3.6, 3.6);
+                      vp.vy = random(-3.6, 3.6);
+                      vortexParticles.push(vp);
+                  }
+                  explosions.push(new Explosion(px, py));
+                  playExplosionSound();
+                  triggerModuleFeedFrenzy(px, py);
+                  const label = opts.bumpPop ? 'RIVAL POP' : 'SQUID BURST';
+                  addFloatingText(px, py - 34, `${label} ×${mods.length} mods`, '#f87171');
+
+                  const wasManual = manualControlCreature === creature;
+                  SquidSpawnModal?.close?.();
+                  releaseManualScoop(creature, { skipHatch: true });
+                  if (selectedCreature === creature) deselectCreature();
+                  if (wasManual) releaseManualCreatureControl();
+                  const idx = creatures.indexOf(creature);
+                  if (idx >= 0) {
+                      ModuleIdentitySystem.unregisterCreature(creature);
+                      creatures.splice(idx, 1);
+                  }
+
+                  if (source && creatures.indexOf(source) >= 0) {
+                      source.killCount = (source.killCount || 0) + 1;
+                      source._eatFlash = max(source._eatFlash || 0, 16);
+                      source.currentThought = opts.bumpPop
+                          ? `Stripped rival — belly burst into loot!`
+                          : `Rival squid burst from direct hit`;
+                      if (isSquidPredatorDuelist(source)) {
+                          source._manualFeastLock = null;
+                          source._manualSuperPredWeakTarget = null;
+                      }
+                  }
+                  updateInspector();
+                  return true;
+              }
+
+              function tryStealSquidTendril(attacker, victim) {
+                  if (!isSquidPredatorDuelTarget(attacker, victim)) return false;
+                  if (getScoopRemainingNativeTendrils(victim) <= 0) return false;
+                  const now = frameCount;
+                  if ((attacker._squidStealCooldown || 0) > now) return false;
+                  attacker._squidStealCooldown = now + SQUID_DUEL_STEAL_COOLDOWN;
+
+                  victim._scoopTendrilLoss = (victim._scoopTendrilLoss || 0) + 1;
+                  ensureSquidEquipmentState(attacker);
+                  const vType = getCreatureCoreType(victim) || 'communicator';
+                  const vCol = MODULE_AMMO_COLORS[vType] || '#f87171';
+                  attacker._scoopLootTendrils.push({
+                      ang: random(TWO_PI),
+                      phase: random(TWO_PI),
+                      lenMult: random(0.82, 1.18),
+                      cr: red(color(vCol)),
+                      cg: green(color(vCol)),
+                      cb: blue(color(vCol)),
+                      from: victim.name || 'rival'
+                  });
+                  victim._scoopStripFlash = max(victim._scoopStripFlash || 0, 30);
+                  attacker._scoopLootFlash = max(attacker._scoopLootFlash || 0, 22);
+                  addFloatingText(victim.x, victim.y - 18, 'TENDRIL STOLEN', '#f87171');
+                  addFloatingText(attacker.x, attacker.y - 14, '+tendril', '#fde047');
+                  playTone(420 + random(-30, 30), 'sawtooth', 0.14, 0.48);
+                  attacker.currentThought = `Shredding ${victim.name || 'rival'} — tendril loot (${attacker._scoopLootTendrils.length})`;
+                  victim.currentThought = `Tendril torn away — ${getScoopRemainingNativeTendrils(victim)} left`;
+                  return true;
+              }
+
+              function tryStealSquidProbe(attacker, victim) {
+                  if (!isSquidPredatorDuelTarget(attacker, victim)) return false;
+                  if (getScoopRemainingNativeTendrils(victim) > 0) return false;
+                  if (victim._scoopProbeStolen || !creatureHasNativeProbe(victim)) return false;
+                  const now = frameCount;
+                  if ((attacker._squidStealCooldown || 0) > now) return false;
+                  attacker._squidStealCooldown = now + SQUID_DUEL_STEAL_COOLDOWN;
+
+                  victim._scoopProbeStolen = true;
+                  clearScoopProbeState(victim);
+                  attacker._scoopLootProbe = true;
+                  if (attacker._scoopLootProbeAng == null) attacker._scoopLootProbeAng = random(TWO_PI);
+                  victim._scoopStripFlash = max(victim._scoopStripFlash || 0, 36);
+                  attacker._scoopLootFlash = max(attacker._scoopLootFlash || 0, 28);
+                  addFloatingText(victim.x, victim.y - 20, 'PROBE STOLEN', '#ef4444');
+                  addFloatingText(attacker.x, attacker.y - 16, '+probe [2]', '#7dd3fc');
+                  playTone(280, 'sine', 0.18, 0.52);
+                  setTimeout(() => playTone(560, 'triangle', 0.12, 0.42), 90);
+                  attacker.currentThought = `${victim.name || 'Rival'} stripped — ram to pop!`;
+                  victim.currentThought = 'Probe gone — naked bell!';
+                  return true;
+              }
+
+              function tryStealSquidEquipmentOnContact(attacker, victim, geo) {
+                  if (!isSquidPredatorDuelTarget(attacker, victim)) return false;
+                  if (getScoopRemainingNativeTendrils(victim) > 0) {
+                      return tryStealSquidTendril(attacker, victim);
+                  }
+                  if (creatureHasNativeProbe(victim)) {
+                      const pr = geo?.probe;
+                      if (pr?.tipX != null && dist(pr.tipX, pr.tipY, victim.x, victim.y) < CREATURE_BODY_RADIUS * 2.1) {
+                          return tryStealSquidProbe(attacker, victim);
+                      }
+                  }
+                  return false;
+              }
+
+              function tickSquidPredatorDuel(attacker, victim, timeScale) {
+                  if (!attacker || !victim || creatures.indexOf(victim) < 0) return;
+                  attacker._manualFeastLock = victim;
+                  attacker._manualSuperPredWeakTarget = victim;
+                  attacker._huntTarget = victim;
+
+                  const dx = victim.x - attacker.x;
+                  const dy = victim.y - attacker.y;
+                  const d = sqrt(dx * dx + dy * dy) || 1;
+                  const moverT = attacker.getTieredModuleCount('mover');
+                  const chase = 2.35 + min(moverT, 4) * 0.22;
+                  attacker.vx += (dx / d) * chase * 0.2 * timeScale;
+                  attacker.vy += (dy / d) * chase * 0.2 * timeScale;
+
+                  if (isSquidFullyStripped(victim) && d < SQUID_DUEL_POP_DIST) {
+                      popSquidFromDirectDamage(victim, attacker, { bumpPop: true });
+                      return;
+                  }
+                  const tendrilsLeft = getScoopRemainingNativeTendrils(victim);
+                  const probeLeft = creatureHasNativeProbe(victim);
+                  attacker.currentThought = tendrilsLeft > 0
+                      ? `Dueling ${victim.name || 'rival'} — shred tendrils (${tendrilsLeft})`
+                      : probeLeft
+                          ? `Tendrils gone — steal the probe!`
+                          : `Stripped rival — bump to burst!`;
               }
 
               const SquidSpawnModal = {
@@ -25984,6 +26225,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   if (!hunter || !prey || prey === hunter) return false;
                   if (isManualControlImmune(prey)) return false;
                   if (prey.energy <= 0 || creatures.indexOf(prey) < 0) return false;
+                  if (isSquidPredatorDuelTarget(hunter, prey)) return false;
                   return true;
               }
 
@@ -26409,28 +26651,32 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   const bellyY = creature.y - sin(facing) * CREATURE_BODY_RADIUS * 0.06 * spring.stretch
                       + sin(facing + HALF_PI) * 1.5;
                   const tentacles = [];
-                  const n = profile.count;
+                  ensureSquidEquipmentState(creature);
+                  const n = getScoopRemainingNativeTendrils(creature);
+                  const lootTendrils = creature._scoopLootTendrils || [];
                   const reach = stats.reach;
                   if (isScoopTendrilsDeployed(creature)) for (let i = 0; i < n; i++) {
+                      const srcIdx = i;
                       let ang;
+                      const nativeN = getScoopNativeTendrilCount(creature);
                       if (profile.tendrilStyle === 'jellyfish') {
-                          ang = facing + PI + (i - (n - 1) * 0.5) * profile.spread * 0.32;
+                          ang = facing + PI + (srcIdx - (nativeN - 1) * 0.5) * profile.spread * 0.32;
                       } else if (profile.tendrilStyle === 'root-siphon') {
-                          const side = i % 2 === 0 ? -1 : 1;
+                          const side = srcIdx % 2 === 0 ? -1 : 1;
                           ang = facing + PI * 0.62 + side * HALF_PI * 0.38
-                              + (i - (n - 1) * 0.5) * profile.spread * 0.34;
+                              + (srcIdx - (nativeN - 1) * 0.5) * profile.spread * 0.34;
                       } else if (profile.tendrilStyle === 'bloom') {
-                          ang = facing - profile.spread * 0.55 + (i / max(1, n - 1)) * profile.spread * 1.1;
+                          ang = facing - profile.spread * 0.55 + (srcIdx / max(1, nativeN - 1)) * profile.spread * 1.1;
                       } else if (profile.tendrilStyle === 'front') {
-                          ang = facing + (i - (n - 1) * 0.5) * profile.spread * 0.42;
+                          ang = facing + (srcIdx - (nativeN - 1) * 0.5) * profile.spread * 0.42;
                       } else if (profile.tendrilStyle === 'side') {
-                          ang = facing + (i % 2 === 0 ? HALF_PI : -HALF_PI) + (i - (n - 1) * 0.5) * 0.18;
+                          ang = facing + (srcIdx % 2 === 0 ? HALF_PI : -HALF_PI) + (srcIdx - (nativeN - 1) * 0.5) * 0.18;
                       } else if (profile.tendrilStyle === 'ring') {
-                          ang = (i / n) * TWO_PI + frameCount * 0.012;
+                          ang = (srcIdx / max(1, nativeN)) * TWO_PI + frameCount * 0.012;
                       } else {
-                          ang = (i / n) * TWO_PI * profile.spread + facing * 0.25;
+                          ang = (srcIdx / max(1, nativeN)) * TWO_PI * profile.spread + facing * 0.25;
                       }
-                      const baseR = CREATURE_BODY_RADIUS * geomScale * (0.72 + (i % 3) * 0.06);
+                      const baseR = CREATURE_BODY_RADIUS * geomScale * (0.72 + (srcIdx % 3) * 0.06);
                       const curl = profile.tendrilStyle === 'bloom'
                           ? sin(frameCount * 0.07 + i * 0.9) * 0.22 + spring.burst * 0.35
                           : profile.tendrilStyle === 'jellyfish'
@@ -26446,15 +26692,36 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           len: reach * (0.52 + (i % 4) * 0.07) * stats.flexMult
                               * (profile.tendrilStyle === 'root-siphon' ? 0.92 + spring.stretch * 0.12 : 1)
                               * (1 + dashRecoil * 0.15),
-                          phase: (creature._symSlot || 0) * 0.7 + i * 1.37,
+                          phase: (creature._symSlot || 0) * 0.7 + srcIdx * 1.37,
                           targetX: null,
                           targetY: null,
                           petal: profile.tendrilStyle === 'bloom',
                           fork: profile.tendrilStyle === 'root-siphon'
                       });
                   }
+                  if (isScoopTendrilsDeployed(creature)) {
+                      for (let li = 0; li < lootTendrils.length; li++) {
+                          const loot = lootTendrils[li];
+                          const ang = loot.ang + sin(frameCount * 0.06 + loot.phase) * 0.14;
+                          const baseR = CREATURE_BODY_RADIUS * geomScale * (0.78 + (li % 3) * 0.05);
+                          tentacles.push({
+                              baseX: creature.x + cos(ang) * baseR * 0.68,
+                              baseY: creature.y + sin(ang) * baseR * 0.68,
+                              ang: ang + PI * 0.42 + sin(frameCount * 0.09 + loot.phase) * 0.22,
+                              len: reach * (0.44 + (loot.lenMult || 1) * 0.1) * stats.flexMult,
+                              phase: loot.phase,
+                              targetX: null,
+                              targetY: null,
+                              stolen: true,
+                              lootCr: loot.cr,
+                              lootCg: loot.cg,
+                              lootCb: loot.cb
+                          });
+                      }
+                  }
                   let probe = null;
-                  if (isScoopProbeDeployed(creature)) {
+                  let lootProbe = null;
+                  if (isScoopProbeDeployed(creature) && creatureHasNativeProbe(creature)) {
                       const probeLen = reach * (1.14 + sin(frameCount * 0.05 + (creature._symSlot || 0)) * 0.08);
                       const probeAng = facing + sin(frameCount * 0.04 + (creature._symSlot || 0) * 0.25) * 0.07;
                       const probeBaseR = bellyR * 0.38;
@@ -26470,11 +26737,28 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           grabbingCreature: false
                       };
                   }
+                  if (isScoopProbeDeployed(creature) && creature._scoopLootProbe) {
+                      const lootAng = (creature._scoopLootProbeAng || 0) + sin(frameCount * 0.05 + (creature._symSlot || 0)) * 0.11;
+                      const lootLen = reach * (0.92 + sin(frameCount * 0.07 + lootAng) * 0.1);
+                      const lootBaseR = bellyR * 0.52;
+                      lootProbe = {
+                          baseX: bellyX + cos(lootAng) * lootBaseR,
+                          baseY: bellyY + sin(lootAng) * lootBaseR,
+                          ang: lootAng + PI * 0.08,
+                          len: lootLen,
+                          phase: frameCount * 0.09 + lootAng,
+                          isProbe: true,
+                          stolen: true,
+                          targetX: null,
+                          targetY: null,
+                          grabbingCreature: false
+                      };
+                  }
                   const load = getScoopBellyLoad(creature);
                   const bubbleR = CREATURE_BODY_RADIUS * geomScale
                       * (SCOOP_BUBBLE_RADIUS_BASE + min(0.42, load * 0.002) + spring.stretch * 0.14);
                   return {
-                      bellyX, bellyY, bellyR, facing, profile, tentacles, probe,
+                      bellyX, bellyY, bellyR, facing, profile, tentacles, probe, lootProbe,
                       bubbleX: creature.x, bubbleY: creature.y, bubbleR,
                       flex: profile.flex * stats.flexMult, rigid: profile.rigid,
                       stats, spring, geomScale, usingLattice: !!creature._scoopUsingLattice
@@ -26543,8 +26827,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       tent.midX = (tent.baseX + tipX) * 0.5 + sin(frameCount * 0.11 + tent.phase) * (6 + geo.flex * 8);
                       tent.midY = (tent.baseY + tipY) * 0.5 + cos(frameCount * 0.1 + tent.phase) * (5 + geo.flex * 7);
                   }
-                  if (geo.probe) {
-                      const pr = geo.probe;
+                  const updateProbeTips = (pr) => {
+                      if (!pr) return;
                       const reach = pr.len * (1 + sin(frameCount * 0.09 + pr.phase) * 0.2);
                       const sway = sin(frameCount * 0.05 + pr.phase) * 0.1;
                       const ang = pr.ang + sway;
@@ -26557,7 +26841,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           : pr.baseY + sin(ang) * reach;
                       pr.midX = (pr.baseX + pr.tipX) * 0.5 + sin(frameCount * 0.1 + pr.phase) * 8;
                       pr.midY = (pr.baseY + pr.tipY) * 0.5 + cos(frameCount * 0.09 + pr.phase) * 6;
-                  }
+                  };
+                  updateProbeTips(geo.probe);
+                  updateProbeTips(geo.lootProbe);
               }
 
               function applyScoopTentacleBrushInfection(target, hunter) {
@@ -26906,11 +27192,13 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       segs.push({ x1: tent.baseX, y1: tent.baseY, x2: tent.midX, y2: tent.midY, tent, isProbe: false });
                       segs.push({ x1: tent.midX, y1: tent.midY, x2: tent.tipX, y2: tent.tipY, tent, isProbe: false });
                   }
-                  if (geo.probe?.tipX != null) {
-                      const pr = geo.probe;
+                  const addProbeSegs = (pr) => {
+                      if (!pr || pr.tipX == null) return;
                       segs.push({ x1: pr.baseX, y1: pr.baseY, x2: pr.midX, y2: pr.midY, tent: pr, isProbe: true });
                       segs.push({ x1: pr.midX, y1: pr.midY, x2: pr.tipX, y2: pr.tipY, tent: pr, isProbe: true });
-                  }
+                  };
+                  addProbeSegs(geo.probe);
+                  addProbeSegs(geo.lootProbe);
                   return segs;
               }
 
@@ -26947,10 +27235,20 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           const d = distPointToSegment(c.x, c.y, seg.x1, seg.y1, seg.x2, seg.y2);
                           if (d >= creatureHit) continue;
                           touched = true;
+                          if (isSquidPredatorDuelTarget(creature, c)) {
+                              tryStealSquidEquipmentOnContact(creature, c, geo);
+                              bounceOffWallSegment(c, seg.x1, seg.y1, seg.x2, seg.y2, false);
+                              break;
+                          }
                           if (c._scoopBeingDragged === creature) break;
                           bounceOffWallSegment(c, seg.x1, seg.y1, seg.x2, seg.y2, false);
                           if (isFeast) applyScoopTentacleBrushInfection(c, creature);
                           break;
+                      }
+                      if (!touched && isSquidPredatorDuelTarget(creature, c) && isSquidFullyStripped(c)) {
+                          if (dist(creature.x, creature.y, c.x, c.y) < SQUID_DUEL_POP_DIST) {
+                              popSquidFromDirectDamage(c, creature, { bumpPop: true });
+                          }
                       }
                   }
               }
@@ -26969,6 +27267,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   if (geo.probe) {
                       geo.probe.targetX = geo.probe.targetY = null;
                       geo.probe.grabbingCreature = false;
+                  }
+                  if (geo.lootProbe) {
+                      geo.lootProbe.targetX = geo.lootProbe.targetY = null;
+                      geo.lootProbe.grabbingCreature = false;
                   }
                   updateScoopTentacleTips(creature, geo);
                   if (isScoopTendrilsDeployed(creature)) applyScoopTailEjection(creature, geo);
@@ -26994,6 +27296,24 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   }
 
                   if (isScoopTendrilsDeployed(creature)) applyScoopTentacleContacts(creature, geo);
+                  if (isSquidFeastMode(creature) && isScoopProbeDeployed(creature)) {
+                      const probeSegs = getScoopTentacleSegments(geo).filter((s) => s.isProbe);
+                      const duelScan = SpatialGrid.cells
+                          ? SpatialGrid.queryRadius(creature.x, creature.y, geo.stats.reach * 1.2, creature)
+                          : creatures;
+                      for (const rival of duelScan) {
+                          if (!isSquidPredatorDuelTarget(creature, rival)) continue;
+                          if (getScoopRemainingNativeTendrils(rival) > 0) continue;
+                          if (!creatureHasNativeProbe(rival)) continue;
+                          for (const seg of probeSegs) {
+                              const d = distPointToSegment(rival.x, rival.y, seg.x1, seg.y1, seg.x2, seg.y2);
+                              if (d < CREATURE_BODY_RADIUS * 1.6) {
+                                  tryStealSquidProbe(creature, rival);
+                                  break;
+                              }
+                          }
+                      }
+                  }
                   applyScoopBubbleAbsorption(creature, geo);
                   creature._scoopGeo = geo;
 
@@ -27751,7 +28071,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
               }
 
               function isScoopProbeDeployed(creature) {
-                  return !!(creature?._scoopActive && creature._scoopProbeDeployed !== false);
+                  if (!creature?._scoopActive || creature._scoopProbeDeployed === false) return false;
+                  if (creature._scoopProbeStolen && !creature._scoopLootProbe) return false;
+                  return true;
               }
 
               function clearScoopProbeState(creature) {
@@ -27800,6 +28122,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   }
                   creature._scoopProbeDeployed = true;
                   creature._scoopTendrilsDeployed = true;
+                  ensureSquidEquipmentState(creature);
                   ensureJellyfishTierState(creature);
                   if (!creature._scoopBag) creature._scoopBag = [];
                   if (!creature._scoopProbeTags) creature._scoopProbeTags = [];
@@ -28331,6 +28654,40 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       }
                   }
 
+                  if (geo.lootProbe) {
+                      const pr = geo.lootProbe;
+                      const hueShift = sin(frameCount * 0.11 + pr.phase) * 14;
+                      stroke(251, 191 + hueShift * 0.2, 36, 195);
+                      strokeWeight(1.45);
+                      noFill();
+                      beginShape();
+                      vertex(pr.baseX, pr.baseY);
+                      quadraticVertex(pr.midX, pr.midY, pr.tipX, pr.tipY);
+                      endShape();
+                      fill(253, 186, 116, 210);
+                      noStroke();
+                      circle(pr.tipX, pr.tipY, 4.6);
+                      stroke(255, 214, 120, 55);
+                      strokeWeight(0.55);
+                      noFill();
+                      circle(pr.tipX, pr.tipY, 11 + sin(frameCount * 0.16) * 2);
+                  }
+
+                  if ((creature._scoopStripFlash || 0) > 0) {
+                      creature._scoopStripFlash--;
+                      noFill();
+                      stroke(248, 113, 113, creature._scoopStripFlash * 7);
+                      strokeWeight(1.4);
+                      circle(creature.x, creature.y, geo.bubbleR * 2.2 + (30 - creature._scoopStripFlash));
+                  }
+                  if ((creature._scoopLootFlash || 0) > 0) {
+                      creature._scoopLootFlash--;
+                      noFill();
+                      stroke(253, 224, 71, creature._scoopLootFlash * 6);
+                      strokeWeight(1.1);
+                      circle(creature.x, creature.y, CREATURE_BODY_RADIUS * 2.6 + (22 - creature._scoopLootFlash));
+                  }
+
                   for (const tent of geo.tentacles) {
                       const tipX = tent.tipX;
                       const tipY = tent.tipY;
@@ -28340,7 +28697,12 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       const grabCreature = tent.grabbingCreature;
                       const powered = geo.usingLattice;
                       let sr, sg, sb, sa;
-                      if (grabCreature) {
+                      if (tent.stolen) {
+                          sr = tent.lootCr ?? 251;
+                          sg = tent.lootCg ?? 191;
+                          sb = tent.lootCb ?? 36;
+                          sa = 145 + sin(frameCount * 0.14 + tent.phase) * 35;
+                      } else if (grabCreature) {
                           sr = 248; sg = 113; sb = 113; sa = 150;
                       } else if (isFeast) {
                           sr = grabbing ? 200 : 168;
@@ -44352,6 +44714,12 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           if (c.energy <= 0) {
                               const killedByBullet = !!c._killedByBullet;
                               const killedByAntimatter = !!c._killedByAntimatter;
+                              const killedByHazard = !!c._killedByHazard;
+                              const directSquidHit = c._scoopActive && isJellyfishScoopCreature(c)
+                                  && (killedByBullet || killedByHazard || c._squidDirectPop);
+                              if (directSquidHit && popSquidFromDirectDamage(c, c._predatorKillCredit || null)) {
+                                  continue;
+                              }
                               let feastedByPredator = !!c._claimedByPredator;
                               let slainByColony = false;
                               if (c.isPredator && !feastedByPredator) {
@@ -44685,6 +45053,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       for (let c of creatures) {
                           if (dist(p.x, p.y, c.x, c.y) < 11) {
                               c.energy = max(0, c.energy - p.damage * timeScale);
+                              c._killedByHazard = true;
                               c.damageFlash = max(c.damageFlash || 0, 35);
                               c.purpleFlash = max(c.purpleFlash || 0, 40);
                           }
