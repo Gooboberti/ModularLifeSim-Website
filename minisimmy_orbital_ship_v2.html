@@ -4,7 +4,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-lace-garden-orchestrate" />
+    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-jelly-rubberband" />
     <title>MiniSimmy Orbital Ship v2</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2334d399'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%230a0a0f'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -8006,7 +8006,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'orbital-ship-v2-2026-06-20-lace-garden-orchestrate';
+              const MINISIMMY_BUILD = 'orbital-ship-v2-2026-06-20-jelly-rubberband';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -8228,6 +8228,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
               const SCOOP_LACE_GARDEN_GATHER_RING_MIN = 42;
               const SCOOP_LACE_GARDEN_GATHER_RING_MAX = 92;
               const SCOOP_LACE_GARDEN_MODULE_NUDGE = 0.038;
+              const SCOOP_JELLYFISH_DRAIN_MULT = 0.028;
+              const SCOOP_JELLYFISH_FLUID_DAMP = 0.972;
+              const SCOOP_LACE_TENDRIL_LATCH_STAGGER_FRAMES = 48;
+              const SCOOP_LACE_RUBBER_BAND_K = 0.034;
+              const SCOOP_LACE_RUBBER_BAND_STICK = 0.34;
               const SCOOP_LACE_LATTICE_CRYSTAL_GROW = 0.006;
               const SCOOP_LACE_FISSURE_DEPTH_RATE = 0.014;
               const SCOOP_LACE_ROOT_MIN_LATCH = 1;
@@ -21362,6 +21367,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       }
                       let baseDrain = (settings.energyDrain || 0.108) * 0.88 - this.getEfficiencyBonus();
                       let finalDrain = baseDrain * 0.92;
+                      if (this._scoopActive && isJellyfishScoopCreature(this)) {
+                          finalDrain *= SCOOP_JELLYFISH_DRAIN_MULT;
+                      }
                       if (envMods) finalDrain *= envMods.drainMult;
                       let attackingPrey = false;
                       if (this.isPredator && this._huntTarget && creatures.indexOf(this._huntTarget) >= 0) {
@@ -21689,6 +21697,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       if (isDay && this.getTieredModuleCount('explorer') >= 2) {
                           finalMoveSpeed *= 1 + this.getTieredModuleCount('explorer') * (MODULE_IDENTITY.explorer.dayExplore || 0) * 0.35;
                       }
+                      if (this._scoopActive && isJellyfishScoopCreature(this)) {
+                          tickJellyfishFluidDrift(this, timeScale);
+                      }
                       if (this._manualControl) applyManualCreatureTug(this, timeScale);
                       this.vx *= finalMoveSpeed;
                       this.vy *= finalMoveSpeed;
@@ -21701,8 +21712,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       ModuleIdentitySystem.applyMechanics(this, { timeScale, effectiveHazardDist, envMods });
                       this.x += this.vx;
                       this.y += this.vy;
-                      this.vx *= 0.90;
-                      this.vy *= 0.90;
+                      const jellyFluid = this._scoopActive && isJellyfishScoopCreature(this);
+                      const damp = jellyFluid ? SCOOP_JELLYFISH_FLUID_DAMP : 0.90;
+                      this.vx *= damp;
+                      this.vy *= damp;
                       stabilizeCreatureBounds(this, timeScale);
                       // ==================== PREDATOR HUNTING BEHAVIOR ====================
                       const scoopSuspended = this._scoopActive && this._manualControl;
@@ -24770,6 +24783,38 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       && !(creature._manualSuperPredator && creature._manualControl);
               }
 
+              function tickJellyfishFluidDrift(creature, timeScale) {
+                  if (!creature?._scoopActive || !isJellyfishScoopCreature(creature)) return;
+                  const facing = creature._scoopFacing ?? creature._manualOrient ?? 0;
+                  const phase = frameCount * 0.038 + (creature._symSlot || 0) * 0.7;
+                  const perpX = -sin(facing);
+                  const perpY = cos(facing);
+                  const bellPulse = sin(phase) * 0.17 + sin(phase * 1.35) * 0.08;
+                  const rearPulse = cos(phase * 0.85) * 0.11 + sin(phase * 0.55) * 0.04;
+                  const driftScale = (creature._laceBandStuck || 0) > 0.2 ? 0.55 : 1;
+                  creature.vx += (-cos(facing) * rearPulse + perpX * bellPulse) * timeScale * driftScale;
+                  creature.vy += (-sin(facing) * rearPulse + perpY * bellPulse) * timeScale * driftScale;
+                  if ((creature._laceBandTension || 0) > 4) {
+                      const wobble = sin(phase * 2.1) * 0.06 * timeScale;
+                      creature.vx += perpX * wobble;
+                      creature.vy += perpY * wobble;
+                  }
+              }
+
+              function countLatchedTendrils(links) {
+                  return (links || []).filter((l) => l.phase === 'latched' || l.phase === 'fissure').length;
+              }
+
+              function getLaceSeekTendrilIndex(creature, links) {
+                  if ((creature._laceLatchCooldown || 0) > 0) return -1;
+                  for (let i = 0; i < links.length; i++) {
+                      const link = links[i];
+                      if (link.phase === 'latched' || link.phase === 'fissure') continue;
+                      return i;
+                  }
+                  return -1;
+              }
+
               function isLaceGardenerColonyKin(gardener, member) {
                   return !!(gardener && member && gardener._laceTumorColony?.has(member));
               }
@@ -24819,10 +24864,17 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
               function tentacleTouchesLace(tent, lace, geo) {
                   if (!tent || !lace) return false;
-                  const segs = [
-                      { x1: tent.baseX, y1: tent.baseY, x2: tent.midX, y2: tent.midY },
-                      { x1: tent.midX, y1: tent.midY, x2: tent.tipX, y2: tent.tipY }
-                  ];
+                  const segs = tent.seg1X != null
+                      ? [
+                          { x1: tent.baseX, y1: tent.baseY, x2: tent.seg1X, y2: tent.seg1Y },
+                          { x1: tent.seg1X, y1: tent.seg1Y, x2: tent.midX, y2: tent.midY },
+                          { x1: tent.midX, y1: tent.midY, x2: tent.seg2X ?? tent.midX, y2: tent.seg2Y ?? tent.midY },
+                          { x1: tent.seg2X ?? tent.midX, y1: tent.seg2Y ?? tent.midY, x2: tent.tipX, y2: tent.tipY }
+                      ]
+                      : [
+                          { x1: tent.baseX, y1: tent.baseY, x2: tent.midX, y2: tent.midY },
+                          { x1: tent.midX, y1: tent.midY, x2: tent.tipX, y2: tent.tipY }
+                      ];
                   for (const seg of segs) {
                       if (scoopTentacleTouchesLaceSegment(seg, lace.ax, lace.ay, lace.bx, lace.by)) return true;
                   }
@@ -25537,7 +25589,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           ? raw
                           : wobbleLaceTendrilTarget(link, raw);
                       tent._laceReaching = true;
-                      tent._laceVineSearch = !(link.phase === 'latched' || link.phase === 'fissure');
+                      tent._laceVineSearch = (link.phase !== 'latched' && link.phase !== 'fissure')
+                          && !link.candidatePt && !!link.vinePt;
                       tent._laceReserved = true;
                       tent.targetX = tgt.x;
                       tent.targetY = tgt.y;
@@ -25630,11 +25683,16 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   link.candidateLace = lace;
                   link.latchFrames = 0;
                   link.approachFrames = 0;
+                  link.bandStretch = 0;
+                  creature._laceLatchCooldown = SCOOP_LACE_TENDRIL_LATCH_STAGGER_FRAMES;
+                  creature._laceLastLatchFrame = frameCount;
                   if (!creature._lacePrimaryLatch) {
                       creature._lacePrimaryLatch = link;
                       creature._laceLeechAnchor = lace;
                       creature._laceNetworkAudit = auditLaceNetworkFromLace(lace, creature);
                   }
+                  maybeSpeakScoopInnerVoice(creature, 'scoop_lace_leech',
+                      `tendril ${(link.tentIndex ?? 0) + 1} snaps to lace — rubber band tension`);
               }
 
               function tickLaceTendrilNetwork(creature, geo, coneHits) {
@@ -25651,6 +25709,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   const extReach = geo.stats.reach * SCOOP_LACE_FEELER_REACH_MULT * 0.62
                       + SCOOP_LACE_ROOT_SEEK_RANGE * 0.34;
                   latchedN = 0;
+                  const seekIdx = getLaceSeekTendrilIndex(creature, links);
 
                   for (let i = 0; i < links.length; i++) {
                       const link = links[i];
@@ -25660,6 +25719,15 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       const oy = tent.tipY ?? tent.baseY;
 
                       if (link.phase === 'feel' || link.phase === 'seek') {
+                          if (i !== seekIdx) {
+                              const vine = pickLaceVineSearchPoint(link, anchor, tent, i,
+                                  extReach * SCOOP_LACE_VINE_SEARCH_MULT);
+                              link.vinePt = vine;
+                              link.feelTip = vine;
+                              link.candidatePt = null;
+                              link.candidateLace = null;
+                              continue;
+                          }
                           let best = null, bestScore = -Infinity;
                           for (const lace of segPool) {
                               const cp = closestPointOnLace(lace, ox, oy);
@@ -25719,15 +25787,18 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   applyLaceTendrilTargets(creature, geo, links);
                   updateScoopTentacleTips(creature, geo);
 
-                  for (const link of links) {
-                      if (link.phase !== 'feel' && link.phase !== 'seek') continue;
-                      if (!link.candidatePt || !link.candidateLace || !link.tent) continue;
-                      const cp = closestPointOnLace(link.candidateLace, link.tent.tipX, link.tent.tipY);
-                      link.feelTip = { x: cp.x, y: cp.y };
-                      link.candidatePt = { x: cp.x, y: cp.y };
-                      if (tentacleTouchesLace(link.tent, link.candidateLace, geo)
-                          || cp.d < SCOOP_LACE_FEELER_LATCH_HIT) {
-                          latchLaceTendrilLink(creature, link, link.candidatePt, link.candidateLace);
+                  const postSeekIdx = getLaceSeekTendrilIndex(creature, links);
+                  if (postSeekIdx >= 0) {
+                      const link = links[postSeekIdx];
+                      if ((link.phase === 'feel' || link.phase === 'seek')
+                          && link.candidatePt && link.candidateLace && link.tent) {
+                          const cp = closestPointOnLace(link.candidateLace, link.tent.tipX, link.tent.tipY);
+                          link.feelTip = { x: cp.x, y: cp.y };
+                          link.candidatePt = { x: cp.x, y: cp.y };
+                          if (tentacleTouchesLace(link.tent, link.candidateLace, geo)
+                              || cp.d < SCOOP_LACE_FEELER_LATCH_HIT) {
+                              latchLaceTendrilLink(creature, link, link.candidatePt, link.candidateLace);
+                          }
                       }
                   }
                   latchedN = links.filter((l) => l.phase === 'latched' || l.phase === 'fissure').length;
@@ -25737,7 +25808,60 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   return latchedN;
               }
 
+              function tickLaceRubberBandPull(creature, geo, links) {
+                  const latched = (links || []).filter((l) => l.phase === 'latched' || l.phase === 'fissure');
+                  if (!latched.length) {
+                      creature._laceBandTension = lerp(creature._laceBandTension || 0, 0, 0.1);
+                      creature._laceBandStuck = lerp(creature._laceBandStuck || 0, 0, 0.08);
+                      return 0;
+                  }
+                  const anchor = getLaceTumorRearAnchor(creature, geo);
+                  let pullX = 0;
+                  let pullY = 0;
+                  let totalStretch = 0;
+
+                  for (const link of latched) {
+                      if (!link.targetPt) continue;
+                      const dx = link.targetPt.x - creature.x;
+                      const dy = link.targetPt.y - creature.y;
+                      const d = sqrt(dx * dx + dy * dy) || 1;
+                      const restLen = CREATURE_BODY_RADIUS * 2.8 + (link.tent?.len || 40) * 0.35;
+                      const stretch = max(0, d - restLen);
+                      link.bandStretch = stretch;
+                      totalStretch += stretch;
+                      const age = min(1, (link.latchFrames || 0) / 90);
+                      const manualBoost = creature._manualControl ? 1.28 : 1;
+                      const k = SCOOP_LACE_RUBBER_BAND_K * manualBoost * (0.55 + age * 0.85 + latched.length * 0.1);
+                      pullX += (dx / d) * k * (1 + stretch * 0.022);
+                      pullY += (dy / d) * k * (1 + stretch * 0.022);
+                  }
+
+                  const avgStretch = totalStretch / latched.length;
+                  creature._laceBandTension = lerp(creature._laceBandTension || 0, avgStretch, 0.14);
+                  creature._laceBandStuck = min(1, (creature._laceBandStuck || 0)
+                      + 0.025 * latched.length * timeScale);
+
+                  const pullScale = timeScale * (1 + creature._laceBandTension * 0.006);
+                  creature.x += pullX * pullScale;
+                  creature.y += pullY * pullScale;
+                  creature.vx = lerp(creature.vx, pullX * 3.2, 0.16);
+                  creature.vy = lerp(creature.vy, pullY * 3.2, 0.16);
+
+                  if (creature._manualControl) {
+                      const stick = max(0.18, SCOOP_LACE_RUBBER_BAND_STICK - latched.length * 0.04);
+                      creature.vx *= stick;
+                      creature.vy *= stick;
+                      const escapeDamp = max(0.08, 1 - creature._laceBandStuck * 0.88);
+                      if (manualControlState.pressed) {
+                          creature.vx *= escapeDamp;
+                          creature.vy *= escapeDamp;
+                      }
+                  }
+                  return latched.length;
+              }
+
               function driftTowardLaceNetwork(creature, geo, latchedN) {
+                  if (latchedN > 0) return;
                   const primary = creature._lacePrimaryLatch?.targetPt;
                   const centroid = creature._laceNetworkAudit?.centroid;
                   const tx = primary?.x ?? centroid?.x;
@@ -25748,13 +25872,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   const dx = clamped.x - creature.x;
                   const dy = clamped.y - creature.y;
                   const d = sqrt(dx * dx + dy * dy) || 1;
-                  const drift = SCOOP_LACE_ROOT_APPROACH_SPEED
-                      * (1 + min(0.85, latchedN * 0.14) + (creature._laceLeechBulb || 0) * 0.2)
-                      * timeScale;
+                  const drift = SCOOP_LACE_ROOT_APPROACH_SPEED * 0.65 * timeScale;
                   creature.x += (dx / d) * drift;
                   creature.y += (dy / d) * drift;
-                  creature.vx = lerp(creature.vx, (dx / d) * drift * 2.4, 0.12);
-                  creature.vy = lerp(creature.vy, (dy / d) * drift * 2.4, 0.12);
+                  creature.vx = lerp(creature.vx, (dx / d) * drift * 1.6, 0.08);
+                  creature.vy = lerp(creature.vy, (dy / d) * drift * 1.6, 0.08);
               }
 
               function tickLaceColonyHeal(tumor, colonySet) {
@@ -26118,6 +26240,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   creature._laceGardenLockFrames = 0;
                   creature._laceGardenOptimize = 0;
                   creature._laceGardenMetrics = null;
+                  creature._laceLatchCooldown = 0;
+                  creature._laceBandTension = 0;
+                  creature._laceBandStuck = 0;
               }
 
               function tickScoopLaceLeech(creature, geo) {
@@ -26131,6 +26256,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   if (creature._laceLeechBulb == null) creature._laceLeechBulb = 0;
                   if (!creature._laceLeechFx) creature._laceLeechFx = [];
                   if (!creature._laceLeechPhase) creature._laceLeechPhase = 'idle';
+                  if (creature._laceLatchCooldown > 0) creature._laceLatchCooldown -= timeScale;
 
                   for (let i = creature._laceLeechFx.length - 1; i >= 0; i--) {
                       creature._laceLeechFx[i].life -= timeScale;
@@ -26167,8 +26293,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   } else if (latchedN >= 1 || seekHit) {
                       creature._laceLeechPhase = latchedN >= 1 ? 'reach' : 'seek';
                       creature._laceLeechSeekTarget = creature._lacePrimaryLatch?.targetPt || seekHit?.pt || null;
-                      if (latchedN >= 1 && hasRealContact) driftTowardLaceNetwork(creature, geo, latchedN);
-                      else if (seekHit) driftTowardLaceNetwork(creature, geo, 0);
+                      if (latchedN >= 1) {
+                          tickLaceRubberBandPull(creature, geo, creature._laceTendrilLinks || []);
+                      } else {
+                          driftTowardLaceNetwork(creature, geo, 0);
+                      }
                   } else if (isJellyfishLaceGardener(creature)) {
                       creature._laceLeechPhase = 'seek';
                   }
@@ -26210,7 +26339,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       tickLaceColonyHeal(creature, colony);
                       tickLaceColonyWelcome(creature, colony);
                       tickLaceGardenOrchestration(creature, colony, geo);
-                      driftTowardLaceNetwork(creature, geo, latchedN);
+                      tickLaceRubberBandPull(creature, geo, creature._laceTendrilLinks || []);
                       const popCap = getTumorPopCap(creature);
                       creature._laceLeechBulb = min(SCOOP_LACE_LEECH_BULB_MAX,
                           creature._laceTumorBrood.length / max(1, popCap));
@@ -26234,7 +26363,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                               ? (creature._laceGardenLocked
                                   ? `flower lattice locked · ${colonyN} kin · ${broodN} brood in bell`
                                   : `garden orchestrating ${colonyN} kin at ${optPct}% · ${broodN} brood routing through tumor`)
-                              : `${phase} — ${tendrilN} tendrils latching the network`);
+                              : `${phase} — ${tendrilN} tendril${tendrilN === 1 ? '' : 's'} latched, rubber-band pull ${Math.round(creature._laceBandTension || 0)}`);
                   }
 
                   geo.laceLeech = {
@@ -27688,7 +27817,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       const whip = (spring.recoil || 0) * 0.65 + (spring.propel || 0) * 0.4;
                       const idleMix = tent.targetX == null
                           ? constrain(1 - whip * 1.35 - (spring.propel || 0) * 1.8, 0, 1)
-                          : (laceReach ? (laceVine ? 0.72 : 0.48) : 0);
+                          : (laceReach ? (laceVine ? 0.78 : (isJelly ? 0.62 : 0.48)) : 0);
                       const idleSway = sin(frameCount * 0.055 + tent.phase) * (5 + spd * 1.2) * idleMix * gs;
                       const idleDrift = cos(frameCount * 0.038 + tent.phase * 1.25) * 4.5 * idleMix * gs;
                       const idleBreath = sin(frameCount * 0.042 + tent.phase * 0.65) * 0.08 * idleMix;
@@ -27696,7 +27825,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           * (geo.rigid ? 3 : (6 + spd * 1.8 + spring.wave * 5) * gs);
                       const restX = tent.baseX + cos(tent.ang + idleBreath) * ext + cos(tent.phase) * wobble;
                       const restY = tent.baseY + sin(tent.ang + idleBreath) * ext + sin(tent.phase * 1.1) * wobble;
-                      const laceLerp = laceReach ? (laceVine ? 0.36 : 0.52) : 0.48;
+                      const laceLerp = laceReach
+                          ? (laceVine ? 0.3 : (isJelly ? 0.22 : 0.52))
+                          : (isJelly ? 0.38 : 0.48);
                       let tipX = tent.targetX != null
                           ? laceReach
                               ? lerp(restX, tent.targetX, laceLerp)
@@ -27732,13 +27863,33 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       }
                       tent.tipX = tipX;
                       tent.tipY = tipY;
-                      const midIdle = (6 + geo.flex * 9) * idleMix * gs;
-                      tent.midX = (tent.baseX + tipX) * 0.5
-                          + sin(frameCount * 0.09 + tent.phase) * midIdle
-                          + cos(tent.ang + HALF_PI) * sin(frameCount * 0.06 + tent.phase * 0.8) * midIdle * 0.45;
-                      tent.midY = (tent.baseY + tipY) * 0.5
-                          + cos(frameCount * 0.085 + tent.phase) * midIdle * 0.9
-                          + sin(tent.ang + HALF_PI) * cos(frameCount * 0.055 + tent.phase * 0.75) * midIdle * 0.4;
+                      const pathDx = tipX - tent.baseX;
+                      const pathDy = tipY - tent.baseY;
+                      const perpX = cos(tent.ang + HALF_PI);
+                      const perpY = sin(tent.ang + HALF_PI);
+                      if (isJelly) {
+                          const exitSway = sin(frameCount * 0.1 + tent.phase * 0.75) * (18 + spd * 1.4 + spring.wave * 9) * gs;
+                          const baseSway = sin(frameCount * 0.12 + tent.phase) * (14 + spd * 1.8 + spring.wave * 10) * gs;
+                          const baseDrift = cos(frameCount * 0.075 + tent.phase * 1.15) * (12 + geo.flex * 5) * gs;
+                          const midSway = sin(frameCount * 0.09 + tent.phase * 0.9) * (9 + spd * 1.1) * gs;
+                          tent.seg0X = tent.baseX + pathDx * 0.06 + perpX * exitSway * 0.92;
+                          tent.seg0Y = tent.baseY + pathDy * 0.06 + perpY * exitSway * 0.92;
+                          tent.seg1X = tent.baseX + pathDx * 0.14 + perpX * (baseSway + exitSway * 0.55);
+                          tent.seg1Y = tent.baseY + pathDy * 0.14 + perpY * (baseSway + exitSway * 0.55);
+                          tent.midX = tent.baseX + pathDx * 0.5 + perpX * (baseDrift * 0.62 + midSway);
+                          tent.midY = tent.baseY + pathDy * 0.5 + perpY * (baseDrift * 0.62 + midSway);
+                          tent.seg2X = tent.baseX + pathDx * 0.76 + perpX * midSway * 0.52;
+                          tent.seg2Y = tent.baseY + pathDy * 0.76 + perpY * midSway * 0.52;
+                      } else {
+                          tent.seg1X = tent.seg1Y = tent.seg2X = tent.seg2Y = null;
+                          const midIdle = (6 + geo.flex * 9) * idleMix * gs;
+                          tent.midX = (tent.baseX + tipX) * 0.5
+                              + sin(frameCount * 0.09 + tent.phase) * midIdle
+                              + perpX * sin(frameCount * 0.06 + tent.phase * 0.8) * midIdle * 0.45;
+                          tent.midY = (tent.baseY + tipY) * 0.5
+                              + cos(frameCount * 0.085 + tent.phase) * midIdle * 0.9
+                              + perpY * cos(frameCount * 0.055 + tent.phase * 0.75) * midIdle * 0.4;
+                      }
                   }
                   if (geo.probe) {
                       const pr = geo.probe;
@@ -29218,6 +29369,36 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       }
                   }
 
+                  const bandLinks = leech?.tendrilLinks || creature._laceTendrilLinks || [];
+                  for (const link of bandLinks) {
+                      if (link.phase !== 'latched' && link.phase !== 'fissure') continue;
+                      if (!link.targetPt || !link.tent) continue;
+                      const ox = link.tent.tipX ?? link.tent.baseX;
+                      const oy = link.tent.tipY ?? link.tent.baseY;
+                      const stretch = link.bandStretch ?? dist(ox, oy, link.targetPt.x, link.targetPt.y);
+                      const tension = constrain(stretch / 36, 0, 1.65);
+                      const pulse = sin(frameCount * 0.22 + (link.tentIndex || 0) * 0.55) * 0.5 + 0.5;
+                      const sag = (1 - tension * 0.35) * (6 + sin(frameCount * 0.14 + link.tentIndex) * 3);
+                      const mx = lerp(ox, link.targetPt.x, 0.48) + sin(frameCount * 0.12 + link.tentIndex) * sag;
+                      const my = lerp(oy, link.targetPt.y, 0.48) + cos(frameCount * 0.1 + link.tentIndex) * sag * 0.85;
+                      stroke(255, 168 + tension * 48, 82, 22 + tension * 58 + pulse * 18);
+                      strokeWeight(0.42 + tension * 0.72);
+                      noFill();
+                      beginShape();
+                      vertex(ox, oy);
+                      quadraticVertex(mx, my, link.targetPt.x, link.targetPt.y);
+                      endShape();
+                      stroke(255, 210, 120, 10 + tension * 22);
+                      strokeWeight(0.28 + tension * 0.35);
+                      beginShape();
+                      vertex(ox, oy);
+                      quadraticVertex(mx * 0.98 + ox * 0.02, my * 0.98 + oy * 0.02, link.targetPt.x, link.targetPt.y);
+                      endShape();
+                      fill(255, 200, 110, 16 + tension * 34 + pulse * 12);
+                      noStroke();
+                      circle(link.targetPt.x, link.targetPt.y, 2.2 + tension * 2.4);
+                  }
+
                   for (const f of leech?.feelers || []) {
                       if (f.latched && !connected) continue;
                       const pulse = sin(frameCount * 0.16 + (f.phase || 0)) * 0.5 + 0.5;
@@ -29671,6 +29852,38 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           strokeWeight(0.4);
                           line(forkX, forkY, tipX, tipY);
                           line(fork2X, fork2Y, tipX, tipY);
+                      } else if (profile.tendrilStyle === 'jellyfish' && tent.seg1X != null) {
+                          const s0x = tent.seg0X ?? tent.baseX;
+                          const s0y = tent.seg0Y ?? tent.baseY;
+                          const s1x = tent.seg1X;
+                          const s1y = tent.seg1Y;
+                          const s2x = tent.seg2X ?? midX;
+                          const s2y = tent.seg2Y ?? midY;
+                          const softA = 0.34 + sin(frameCount * 0.028 + tent.phase) * 0.14;
+                          const cp0x = tent.baseX + (s0x - tent.baseX) * 0.55 + sin(frameCount * 0.032 + tent.phase) * 2.8;
+                          const cp0y = tent.baseY + (s0y - tent.baseY) * 0.55 + cos(frameCount * 0.03 + tent.phase) * 2.4;
+                          stroke(sr, sg, sb, sa * (0.72 + softA * 0.18));
+                          strokeWeight(grabbing ? 1.45 : 1.05 + softA * 0.35);
+                          beginShape();
+                          vertex(tent.baseX, tent.baseY);
+                          quadraticVertex(cp0x, cp0y, s0x, s0y);
+                          endShape();
+                          const cp1x = lerp(s0x, s1x, 0.5) + sin(frameCount * 0.04 + tent.phase) * 2.2;
+                          const cp1y = lerp(s0y, s1y, 0.5) + cos(frameCount * 0.038 + tent.phase) * 1.9;
+                          beginShape();
+                          vertex(s0x, s0y);
+                          quadraticVertex(cp1x, cp1y, s1x, s1y);
+                          endShape();
+                          stroke(sr, sg, sb, sa);
+                          strokeWeight(grabbing ? 1.08 : 0.82 + (powered ? 0.18 : 0));
+                          beginShape();
+                          vertex(s1x, s1y);
+                          quadraticVertex(midX, midY, s2x, s2y);
+                          endShape();
+                          beginShape();
+                          vertex(s2x, s2y);
+                          quadraticVertex((s2x + tipX) * 0.5, (s2y + tipY) * 0.5, tipX, tipY);
+                          endShape();
                       } else if (geo.rigid) {
                           line(tent.baseX, tent.baseY, tipX, tipY);
                       } else {
@@ -30423,6 +30636,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   if (!creature._manualControl || manualControlCreature !== creature) return;
                   if (!manualControlState.pressed) return;
 
+                  const jellyScoop = creature._scoopActive && isJellyfishScoopCreature(creature);
+                  const bandStuck = creature._laceBandStuck || 0;
+                  const bandTension = creature._laceBandTension || 0;
+
                   syncManualControlPointer();
                   const px = constrain(manualControlState.x, 8, width - 8);
                   const py = constrain(manualControlState.y, 8, height - 8);
@@ -30445,6 +30662,13 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   let pullBase = manualControlState.grabDirect
                       ? 0.78 + constrain(d / LACE_PULL_MOUSE_SCALE, 0, 1.65)
                       : 0.62 + constrain(d / (LACE_PULL_MOUSE_SCALE + 8), 0.18, 1.35);
+                  if (jellyScoop) {
+                      pullBase *= 0.82;
+                      wriggleAmt *= 2.35;
+                  }
+                  if (bandTension > 6) {
+                      pullBase *= max(0.12, 1 - bandStuck * 0.82 - min(0.5, bandTension * 0.008));
+                  }
                   pullBase *= 1 + stretchNorm * LACE_PULL_STRETCH_MULT;
                   const pullMag = pullBase * timeScale;
 
@@ -30474,8 +30698,19 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   creature._laceTearPulse = 0;
                   creature._laceTearDepth = 0;
 
-                  if (manualControlState.grabDirect && d < 16) {
-                      if (frameCount % 34 === (creature._symSlot || 0) % 34) creature.currentThought = 'Wriggling against the lace…';
+                  const latchedN = countLatchedTendrils(creature._laceTendrilLinks);
+                  if (bandStuck > 0.35 && latchedN > 0 && frameCount % 36 === (creature._symSlot || 0) % 36) {
+                      creature.currentThought = latchedN < (creature._laceTendrilLinks?.length || 0)
+                          ? `Tendril ${latchedN + 1} hunting lace — ${latchedN} rubber bands hold me (${Math.round(bandTension)})`
+                          : `All tendrils latched — pulled in like rubber bands (${Math.round(bandTension)})`;
+                  } else if (bandTension > 8 && frameCount % 40 === (creature._symSlot || 0) % 40) {
+                      creature.currentThought = `Rubber-band tendrils hold — ${latchedN} latched, tension ${Math.round(bandTension)}`;
+                  } else if (manualControlState.grabDirect && d < 16) {
+                      if (frameCount % 34 === (creature._symSlot || 0) % 34) {
+                          creature.currentThought = bandStuck > 0.25
+                              ? 'Stuck — tendrils snap me back toward the lattice…'
+                              : 'Wriggling against the lace…';
+                      }
                   } else if (frameCount % 46 === (creature._symSlot || 0) % 46) {
                       if (stretchNorm > 0.55) creature.currentThought = 'The lace screams under tension…';
                       else if (stretchNorm > 0.28) creature.currentThought = 'The lace stretches — they feel it…';
