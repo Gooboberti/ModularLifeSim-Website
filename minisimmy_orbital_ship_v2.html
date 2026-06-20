@@ -4,7 +4,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-013-squid-spawn-modal-v2" />
+    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-014-squid-clone-activate" />
     <title>MiniSimmy Orbital Ship v2</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2334d399'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%230a0a0f'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -8207,7 +8207,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'local-013-squid-spawn-modal-v2';
+              const MINISIMMY_BUILD = 'local-014-squid-clone-activate';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -24966,7 +24966,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   const pressure = creature._jellyfishLeakPressure || 0;
                   const pressurePct = min(100, Math.round((pressure / SCOOP_JELLYFISH_PRESSURE_POP) * 100));
                   const parentTier = getJellyfishTier(creature);
-                  const childTier = max(0, parentTier - 1);
+                  const childTier = getSquidSpawnChildTier(parentTier);
                   const have = countJellyfishBagModules(creature._scoopModuleBag || []);
                   const tally = blueprint.entries.map((entry) => ({
                       ...entry,
@@ -25199,6 +25199,44 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   spawn._jellyfishBodyScale = SCOOP_JELLYFISH_TIER_BODY[t];
               }
 
+              function getSquidSpawnChildTier(parentTier) {
+                  const pt = constrain(Math.floor(parentTier), 0, 3);
+                  if (pt <= 1) return 1;
+                  return pt - 1;
+              }
+
+              function primeCreatureForSquidSpawn(spawn, parent) {
+                  spawn._scoopStyleChoice = parent._scoopStyleChoice || 'jellyfish';
+                  if (parent._scoopGenome) {
+                      try {
+                          spawn._scoopGenome = JSON.parse(JSON.stringify(parent._scoopGenome));
+                      } catch (_) {
+                          spawn._scoopGenome = { unlocked: true, tier: 1 };
+                      }
+                  } else {
+                      spawn._scoopGenome = { unlocked: true, tier: 1 };
+                  }
+                  if (!spawn._scoopGenome.unlocked) spawn._scoopGenome.unlocked = true;
+                  spawn._scoopLatticeTier = max(parent._scoopLatticeTier || 0, spawn._scoopGenome.tier || 1, 1);
+                  spawn._scoopLatticeMeter = max(parent._scoopLatticeMeter || 0, SCOOP_LATTICE_UNLOCK);
+              }
+
+              function finalizeJellyfishSquidSpawn(spawn, parent, childTier) {
+                  if (!spawn || !parent || !isJellyfishScoopCreature(parent)) return false;
+                  primeCreatureForSquidSpawn(spawn, parent);
+                  applyJellyfishTierToSpawn(spawn, childTier);
+                  if (!activateJellyfishSquid(spawn, { automated: true, force: true })) return false;
+                  if (isSquidFeastMode(parent)) {
+                      spawn._manualSuperPredator = true;
+                      spawn.isPredator = true;
+                      spawn.socialPredator = false;
+                      spawn.currentThought = `Predator squid T${getJellyfishTier(spawn)} — feast autonomous`;
+                  } else {
+                      spawn.currentThought = `Auto squid T${getJellyfishTier(spawn)} — replicating`;
+                  }
+                  return true;
+              }
+
               function spawnJellyfishSquidBaby(parent, opts = {}) {
                   if (!parent || creatures.indexOf(parent) < 0) return null;
                   ensureJellyfishTierState(parent);
@@ -25208,7 +25246,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       if (!consumeBellyValue(parent, state.costPerBaby)) return null;
                   }
                   const parentTier = getJellyfishTier(parent);
-                  const childTier = max(0, parentTier - 1);
+                  const childTier = getSquidSpawnChildTier(parentTier);
                   const bodyMods = getJellyfishBodyPlanModules(parent);
                   const spawnMods = buildScoopIncubatorSpawnModules(bodyMods);
                   const coreType = getCreatureCoreType(parent);
@@ -25232,20 +25270,15 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   ModuleIdentitySystem.normalizeLayout(spawn);
                   ModuleIdentitySystem.updateCore(spawn);
                   spawn.updateSpecialization();
-                  applyJellyfishTierToSpawn(spawn, childTier);
                   spawn._jellyfishPopFromTier = parentTier;
-                  spawn.currentThought = `Tier-${childTier} squid clone — parent brain & body plan`;
                   spawn.calculatePointValue();
                   applyNewbornReproCooldown(spawn);
                   creatures.push(spawn);
                   registerCreatureOffspring(parent, spawn);
-                  if (parent._squidAutomated && canCreatureUseScoop(spawn) && isJellyfishScoopCreature(spawn)) {
-                      activateJellyfishSquid(spawn, { automated: true });
-                      spawn.currentThought = `Auto squid T${getJellyfishTier(spawn)} — replicating`;
-                  }
+                  finalizeJellyfishSquidSpawn(spawn, parent, childTier);
                   if (!opts.silent) {
                       playTone(220, 'sine', 0.14, 0.42);
-                      addFloatingText(parent.x, parent.y - 20, `+1 T${childTier} clone`, '#67e8f9');
+                      addFloatingText(parent.x, parent.y - 20, `+1 T${childTier} squid`, '#67e8f9');
                       updateInspectorScoopBar(parent);
                       if (SquidSpawnModal?.open) SquidSpawnModal.render(parent);
                   }
@@ -25259,7 +25292,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   const spawnCount = min(state.babyCount, SCOOP_JELLYFISH_POP_MAX_SPAWNS);
                   if (spawnCount < 1) return 0;
                   const parentTier = getJellyfishTier(parent);
-                  const childTier = max(0, parentTier - 1);
+                  const childTier = getSquidSpawnChildTier(parentTier);
                   const wasManual = manualControlCreature === parent;
                   const wasAutomated = !!parent._squidAutomated;
                   const px = parent.x;
@@ -27594,7 +27627,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
               function activateJellyfishSquid(creature, opts = {}) {
                   if (!creature || creatures.indexOf(creature) < 0) return false;
-                  if (!canCreatureUseScoop(creature)) return false;
+                  if (!opts.force && !canCreatureUseScoop(creature)) return false;
                   stealLatticeForScoop(creature);
                   creature._scoopActive = true;
                   if (opts.automated !== false && isJellyfishScoopCreature(creature)) {
