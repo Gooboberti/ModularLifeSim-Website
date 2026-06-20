@@ -4,7 +4,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-013-squid-absorb-fix" />
+    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-014-scoop-pull-draw-fix" />
     <title>MiniSimmy Orbital Ship v2</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2334d399'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%230a0a0f'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -8508,7 +8508,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'local-013-squid-absorb-fix';
+              const MINISIMMY_BUILD = 'local-014-scoop-pull-draw-fix';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -27427,7 +27427,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           ? SpatialGrid.queryRadius(creature.x, creature.y, geo.bubbleR + geo.stats.reach, creature)
                           : creatures;
                       for (const prey of preyScan) {
-                          if (!isScoopableFeastCreature(creature, prey)) continue;
+                          if (!canAbsorbScoopCreatureInBubble(creature, prey)) continue;
                           if (prey === pullTarget) continue;
                           const dx = prey.x - geo.bubbleX;
                           const dy = prey.y - geo.bubbleY;
@@ -44438,7 +44438,13 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       syncManualControlPointer();
                       for (let si = 0; si < creatures.length; si++) {
                           const scoopC = creatures[si];
-                          if (scoopC?._scoopActive) updateManualScoop(scoopC);
+                          if (!scoopC?._scoopActive) continue;
+                          try {
+                              updateManualScoop(scoopC);
+                          } catch (scoopErr) {
+                              console.error('Scoop update error:', scoopErr);
+                              debugLog(`Scoop update error (${scoopC?.name || 'creature'}): ${scoopErr.message}`);
+                          }
                       }
                       updateScoopModuleBullets();
                       if (scoopSeedParticles.length) tickScoopSeedParticles();
@@ -44605,7 +44611,20 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       drawManualControlTether();
                       drawManualSuperPredatorLinks();
                       if (manualControlCreature && manualControlCreature._scoopActive) {
-                          drawManualScoop(manualControlCreature);
+                          const scoopOwner = manualControlCreature;
+                          drawManualScoop(scoopOwner);
+                          ModuleIdentitySystem.drawEffects(scoopOwner, PerfScale.lod);
+                          if (hasPrestigedCore(scoopOwner)) drawCoreCreatureEffects(scoopOwner);
+                          if (isEliteCreature(scoopOwner)) drawEliteCreatureEffects(scoopOwner);
+                          scoopOwner.show();
+                          for (const herdC of creatures) {
+                              if (herdC === scoopOwner || herdC.energy <= 0) continue;
+                              if (herdC._scoopBeingDragged !== scoopOwner && herdC._scoopProbeTaggedBy !== scoopOwner) continue;
+                              ModuleIdentitySystem.drawEffects(herdC, PerfScale.lod);
+                              if (hasPrestigedCore(herdC)) drawCoreCreatureEffects(herdC);
+                              if (isEliteCreature(herdC)) drawEliteCreatureEffects(herdC);
+                              herdC.show();
+                          }
                       }
                       drawScoopModuleBullets();
                       drawScoopSeedParticles();
