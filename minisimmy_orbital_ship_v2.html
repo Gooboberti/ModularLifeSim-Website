@@ -6212,9 +6212,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           <span class="inspect-hotkey-legend__key">5</span><span>Select Alpha</span>
                           <span class="inspect-hotkey-legend__key">6</span><span>Clear selection</span>
                           <span class="inspect-hotkey-legend__key">7</span><span>Cycle all creatures — strongest first</span>
-                          <span class="inspect-hotkey-legend__key">0</span><span>Scoop — belly tendrils grab white drift (lattice unlock)</span>
-                          <span class="inspect-hotkey-legend__key">F</span><span>Sprint — tendril jet burst while scoop is deployed</span>
-                          <span class="inspect-hotkey-legend__key">Space</span><span>Fire loose modules from belly (feast + scoop)</span>
+                          <span class="inspect-hotkey-legend__key">0</span><span>Toggle scoop — belly bubble absorbs drift &amp; prey</span>
+                          <span class="inspect-hotkey-legend__key">F</span><span>Sprint — jellyfish bell pulse while scoop is on</span>
+                          <span class="inspect-hotkey-legend__key">Space</span><span>Fire belly ammo — drift particles (scoop) or modules (feast [1])</span>
                           <span class="inspect-hotkey-legend__key">V</span><span>Inner voice — announcer narrates this creature's perspective</span>
                       </div>
                       <div class="inspect-hotkey-legend__note">Keys 1–4 and V need a selected creature. Key 7 walks the full roster by rank.</div>
@@ -6278,7 +6278,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                                   <div id="inspect-manual-hint" class="text-center text-[10px] leading-snug text-sky-300/55">Drag on the creature to grab, or click elsewhere to pull it like a string.</div>
                                   <div id="inspect-powerup-bar" class="inspect-powerup-bar is-hidden">
                                       <button type="button" id="inspect-scoop-btn" class="inspect-powerup-btn is-scoop"
-                                              onclick="playUIClick(); toggleManualScoop()" title="Belly scoop — tendrils grab drift [0] · dash [F] while active">
+                                              onclick="playUIClick(); toggleManualScoop()" title="Toggle scoop bubble [0] · [F] sprint · [Space] fire drift (or modules in feast [1])">
                                           <i class="fa-solid fa-otter text-[9px]"></i>
                                           <span>Scoop</span>
                                           <span class="opacity-60">[0]</span>
@@ -7935,7 +7935,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'orbital-ship-v2-2026-06-20-scoop-belly-container';
+              const MINISIMMY_BUILD = 'orbital-ship-v2-2026-06-20-scoop-bubble-space-fire';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -8083,6 +8083,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
               const MANUAL_SCOOP_CREATURE_COOLDOWN = 60;
               const SCOOP_PROBE_STUN_FRAMES = 150;
               const SCOOP_PROBE_MIN_TAGS = 2;
+              const SCOOP_MODULE_MELT_FRAMES = 220;
               const MANUAL_SCOOP_SCAN_BUDGET = 160;
               const MANUAL_SCOOP_REACH = 78;
               const MANUAL_SCOOP_MAX_SEEDS = 24;
@@ -15660,7 +15661,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       return false;
                   }
                   if (key === ' ' && manualControlCreature?._scoopActive) {
-                      fireScoopBellyModule(manualControlCreature);
+                      fireScoopBellyShot(manualControlCreature);
                       return false;
                   }
                   if (key === 'Escape' && energyWallMode) {
@@ -24716,9 +24717,12 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   return getScoopParticleCount(creature) < MANUAL_SCOOP_MAX_PARTICLES;
               }
 
+              function getScoopModuleCount(creature) {
+                  return creature?._scoopModuleBag?.length || 0;
+              }
+
               function canScoopMoreCreatures(creature) {
-                  return getScoopHeldCreatureCount(creature) < MANUAL_SCOOP_MAX_CREATURES
-                      && (creature?._scoopCreatureCooldown || 0) <= 0;
+                  return (creature?._scoopCreatureCooldown || 0) <= 0;
               }
 
               function isCreatureScoopSuspended(creature) {
@@ -24729,10 +24733,141 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   if (!hunter || !prey || prey === hunter) return false;
                   if (isManualControlImmune(prey)) return false;
                   if (prey.energy <= 0 || creatures.indexOf(prey) < 0) return false;
-                  if (prey._scoopBeingDragged && prey._scoopBeingDragged !== hunter) return false;
-                  if (prey._scoopProbeTaggedBy === hunter && (prey._scoopProbeStun || 0) > 0) return true;
-                  if (prey._scoopBeingDragged === hunter) return true;
+                  return true;
+              }
+
+              function pullTowardScoopBubble(entity, hunter, geo, pullScale = 1, isCreature = false) {
+                  const bx = geo.bubbleX ?? hunter.x;
+                  const by = geo.bubbleY ?? hunter.y;
+                  const br = geo.bubbleR ?? CREATURE_BODY_RADIUS * 2.8;
+                  const dx = bx - entity.x;
+                  const dy = by - entity.y;
+                  const d = sqrt(dx * dx + dy * dy) || 1;
+                  const touchR = br * (isCreature ? 0.96 : 0.9);
+                  if (d <= touchR) {
+                      return isCreature
+                          ? absorbScoopCreature(hunter, entity, geo)
+                          : captureScoopParticle(hunter, entity, geo);
+                  }
+                  const pull = (0.55 + geo.flex * 0.38) * pullScale * timeScale;
+                  const step = pull * min(5.2, max(1.5, d * 0.14));
+                  entity.x += (dx / d) * step;
+                  entity.y += (dy / d) * step;
+                  entity.vx = 0;
+                  entity.vy = 0;
+                  if (isCreature) {
+                      entity._scoopBeingDragged = hunter;
+                      entity._scoopProbeStun = max(entity._scoopProbeStun || 0, 24);
+                  } else {
+                      entity._scoopSnared = hunter;
+                  }
                   return false;
+              }
+
+              function applyScoopBubbleAbsorption(creature, geo) {
+                  const bx = geo.bubbleX;
+                  const by = geo.bubbleY;
+                  const br = geo.bubbleR;
+                  const br2 = br * br;
+
+                  if (canScoopMoreParticles(creature)) {
+                      for (const p of vortexParticles) {
+                          if (!isScoopableWhiteParticle(p)) continue;
+                          const dx = p.x - bx;
+                          const dy = p.y - by;
+                          if (dx * dx + dy * dy <= br2 * 0.92) {
+                              captureScoopParticle(creature, p, geo);
+                          }
+                      }
+                  }
+
+                  if (canScoopMoreCreatures(creature)) {
+                      const scan = SpatialGrid.cells
+                          ? SpatialGrid.queryRadius(bx, by, br + CREATURE_BODY_RADIUS, creature)
+                          : creatures;
+                      for (const c of scan) {
+                          if (c === creature || isManualControlImmune(c)) continue;
+                          const dx = c.x - bx;
+                          const dy = c.y - by;
+                          const touch = br + CREATURE_BODY_RADIUS * 0.45;
+                          if (dx * dx + dy * dy <= touch * touch) {
+                              absorbScoopCreature(creature, c, geo);
+                          }
+                      }
+                  }
+              }
+
+              function tickScoopBellyEnergy(creature) {
+                  if (!creature?._scoopActive) return;
+                  const modN = getScoopModuleCount(creature);
+                  const shardN = creature._scoopShards?.length || 0;
+                  if (modN > 0 || shardN > 0) {
+                      creature.energy = 100;
+                      creature._scoopInfiniteEnergy = true;
+                      return;
+                  }
+                  creature._scoopInfiniteEnergy = false;
+                  const pN = getScoopParticleCount(creature);
+                  if (pN > 0) {
+                      const gain = min(1.2, 0.08 + pN * 0.005) * timeScale;
+                      creature.energy = min(100, creature.energy + gain);
+                  }
+              }
+
+              function spawnScoopModuleShard(creature, mod, geo) {
+                  if (!creature._scoopShards) creature._scoopShards = [];
+                  const col = mod.color || MODULE_AMMO_COLORS[mod.type] || '#a78bfa';
+                  const cr = red(color(col)), cg = green(color(col)), cb = blue(color(col));
+                  creature._scoopShards.push({
+                      moduleType: mod.type,
+                      tier: mod.tier || 1,
+                      color: col,
+                      cr, cg, cb,
+                      swirl: random(TWO_PI),
+                      vx: random(-0.6, 0.6),
+                      vy: random(-0.6, 0.6),
+                      life: 480 + random(0, 120)
+                  });
+              }
+
+              function tickScoopModuleMelt(creature, geo) {
+                  const mods = creature._scoopModuleBag || [];
+                  for (let i = mods.length - 1; i >= 0; i--) {
+                      const m = mods[i];
+                      m._meltTimer = (m._meltTimer || 0) + timeScale;
+                      if (m._meltTimer >= SCOOP_MODULE_MELT_FRAMES) {
+                          spawnScoopModuleShard(creature, m, geo);
+                          mods.splice(i, 1);
+                      }
+                  }
+              }
+
+              function tickScoopShardParticles(creature, geo) {
+                  const shards = creature._scoopShards || [];
+                  const bx = geo.bubbleX;
+                  const by = geo.bubbleY;
+                  const br = geo.bubbleR * 0.72;
+                  for (let i = shards.length - 1; i >= 0; i--) {
+                      const s = shards[i];
+                      s.life -= timeScale;
+                      s.swirl = (s.swirl || 0) + 0.11 + s.tier * 0.01;
+                      s.vx = (s.vx || 0) * 0.94 + sin(s.swirl * 1.7) * 0.06;
+                      s.vy = (s.vy || 0) * 0.94 + cos(s.swirl * 1.5) * 0.06;
+                      s.x = bx + cos(s.swirl) * br * (0.35 + (i % 5) * 0.08);
+                      s.y = by + sin(s.swirl * 1.09) * br * (0.32 + (i % 4) * 0.07);
+                      s.x += s.vx * 2.2;
+                      s.y += s.vy * 2.2;
+                      const dx = s.x - bx;
+                      const dy = s.y - by;
+                      const d = sqrt(dx * dx + dy * dy) || 1;
+                      if (d > br) {
+                          s.x = bx + (dx / d) * br;
+                          s.y = by + (dy / d) * br;
+                          s.vx *= -0.55;
+                          s.vy *= -0.55;
+                      }
+                      if (s.life <= 0) shards.splice(i, 1);
+                  }
               }
 
               function digestPreyIntoLooseModules(hunter, prey) {
@@ -24758,27 +24893,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   return out;
               }
 
-              function digestScoopHeldCreature(hunter, held) {
-                  if (!hunter || !held) return;
-                  const prey = held.creature || held;
+              function absorbScoopCreature(hunter, prey, geo) {
+                  if (!hunter || !prey || creatures.indexOf(prey) < 0) return false;
+                  if (!canScoopMoreCreatures(hunter)) return false;
                   if (!hunter._scoopModuleBag) hunter._scoopModuleBag = [];
                   const loose = digestPreyIntoLooseModules(hunter, prey);
-                  for (const mod of loose) {
-                      mod._bellySwirl = random(TWO_PI);
-                      hunter._scoopModuleBag.push(mod);
-                  }
-                  hunter.killCount = (hunter.killCount || 0) + 1;
-                  hunter._eatFlash = 18;
-                  const modType = loose[0]?.type || 'module';
-                  hunter.currentThought = `Belly broke down ${held.snapshot?.name || 'prey'} — ${loose.length} mods`;
-                  addFloatingText(hunter.x, hunter.y - 22, `+${loose.length} mods [Space]`, MODULE_AMMO_COLORS[modType] || '#f87171');
-                  playTone(95, 'sawtooth', 0.12, 0.45);
-              }
-
-              function captureScoopCreature(hunter, prey, geo) {
-                  if (!hunter || !prey || prey._scoopBeingDragged === 'captured') return false;
-                  if (!canScoopMoreCreatures(hunter)) return false;
-                  if (!hunter._scoopHeldCreatures) hunter._scoopHeldCreatures = [];
                   prey._scoopBeingDragged = 'captured';
                   prey._scoopProbeStun = 0;
                   prey._scoopProbeTaggedBy = null;
@@ -24786,91 +24905,78 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   if (idx >= 0) creatures.splice(idx, 1);
                   if (selectedCreature === prey) deselectCreature();
                   else updateInspectorExtractButton(selectedCreature);
-                  hunter._scoopHeldCreatures.push({
-                      creature: prey,
-                      digestTimer: 48,
-                      swirl: random(TWO_PI),
-                      snapshot: {
-                          name: prey.name,
-                          modCount: prey.modules?.length || 0,
-                          core: getCreatureCoreType(prey),
-                          color: MODULE_AMMO_COLORS[getCreatureCoreType(prey)] || '#a78bfa'
-                      }
-                  });
+                  for (const mod of loose) {
+                      mod._bellySwirl = random(TWO_PI);
+                      mod._meltTimer = 0;
+                      hunter._scoopModuleBag.push(mod);
+                  }
                   hunter._scoopCreatureCooldown = MANUAL_SCOOP_CREATURE_COOLDOWN;
                   hunter._scoopProbePullTarget = null;
                   hunter._scoopProbeTags = (hunter._scoopProbeTags || []).filter((t) => t.prey !== prey);
-                  hunter.currentThought = 'Belly chamber — probing while prey breaks down';
-                  addFloatingText(hunter.x, hunter.y - 22, 'CAPTURED', '#f87171');
+                  hunter.killCount = (hunter.killCount || 0) + 1;
+                  hunter._eatFlash = 18;
+                  const modType = loose[0]?.type || 'module';
+                  hunter.currentThought = `Bubble absorbed ${prey.name || 'prey'} — ${loose.length} modules tumbling`;
+                  addFloatingText(hunter.x, hunter.y - 22, `+${loose.length} mods`, MODULE_AMMO_COLORS[modType] || '#f87171');
+                  playTone(95, 'sawtooth', 0.12, 0.45);
                   return true;
               }
 
-              function tickScoopHeldCreatures(creature, geo) {
-                  const held = creature._scoopHeldCreatures || [];
-                  for (let i = held.length - 1; i >= 0; i--) {
-                      const h = held[i];
-                      h.digestTimer -= timeScale;
-                      h.swirl = (h.swirl || 0) + 0.09 + i * 0.02;
-                      const orbitR = geo.bellyR * (0.42 + (i % 3) * 0.14);
-                      h._bellyX = geo.bellyX + cos(h.swirl) * orbitR;
-                      h._bellyY = geo.bellyY + sin(h.swirl * 1.07) * orbitR * 0.78;
-                      if (h.creature) {
-                          h.creature.x = h._bellyX;
-                          h.creature.y = h._bellyY;
-                          h.creature.vx = 0;
-                          h.creature.vy = 0;
-                      }
-                      if (h.digestTimer <= 0) {
-                          digestScoopHeldCreature(creature, h);
-                          held.splice(i, 1);
-                      }
-                  }
-              }
-
               function pullCreatureAlongTentacle(hunter, prey, tentacle, geo, pullScale = 1) {
-                  const tipX = tentacle.tipX ?? tentacle.targetX ?? tentacle.baseX + cos(tentacle.ang) * tentacle.len;
-                  const tipY = tentacle.tipY ?? tentacle.targetY ?? tentacle.baseY + sin(tentacle.ang) * tentacle.len;
-                  const dx = tipX - prey.x;
-                  const dy = tipY - prey.y;
-                  const d2 = dx * dx + dy * dy;
-                  if (d2 < CREATURE_BODY_RADIUS * CREATURE_BODY_RADIUS * 0.45) {
-                      if (dist(prey.x, prey.y, geo.bellyX, geo.bellyY) < geo.bellyR * 1.65) {
-                          return captureScoopCreature(hunter, prey, geo);
-                      }
-                  }
-                  const d = sqrt(d2) || 1;
-                  const pull = (0.38 + geo.flex * 0.26) * pullScale * timeScale;
-                  const step = pull * min(3.8, max(1.2, d * 0.14));
-                  prey.x += (dx / d) * step;
-                  prey.y += (dy / d) * step;
-                  const bellyDx = geo.bellyX - prey.x;
-                  const bellyDy = geo.bellyY - prey.y;
-                  const bellyD = sqrt(bellyDx * bellyDx + bellyDy * bellyDy) || 1;
-                  const toBelly = tentacle.isProbe ? 0.55 : 0.35;
-                  const mixDx = lerp(dx / d, bellyDx / bellyD, toBelly);
-                  const mixDy = lerp(dy / d, bellyDy / bellyD, toBelly);
-                  const mixLen = sqrt(mixDx * mixDx + mixDy * mixDy) || 1;
-                  prey.x += (mixDx / mixLen) * step * 1.15;
-                  prey.y += (mixDy / mixLen) * step * 1.15;
-                  prey.vx = 0;
-                  prey.vy = 0;
-                  prey._scoopProbeStun = max(prey._scoopProbeStun || 0, 30);
-                  prey._scoopBeingDragged = hunter;
-                  return false;
+                  return pullTowardScoopBubble(prey, hunter, geo, pullScale * (tentacle.isProbe ? 1.8 : 1.35), true);
               }
 
               function tickScoopBellyModules(creature, geo) {
                   const mods = creature._scoopModuleBag || [];
                   for (let i = 0; i < mods.length; i++) {
                       const m = mods[i];
-                      const orbitR = geo.bellyR * (0.38 + (i % 4) * 0.11);
-                      m._bellySwirl = (m._bellySwirl || 0) + 0.1 + i * 0.02;
-                      m._bellyX = geo.bellyX + cos(m._bellySwirl) * orbitR;
-                      m._bellyY = geo.bellyY + sin(m._bellySwirl * 1.07) * orbitR * 0.82;
+                      const orbitR = geo.bubbleR * (0.28 + (i % 5) * 0.09) * 0.55;
+                      m._bellySwirl = (m._bellySwirl || 0) + 0.12 + i * 0.015;
+                      m._bellyX = geo.bubbleX + cos(m._bellySwirl) * orbitR;
+                      m._bellyY = geo.bubbleY + sin(m._bellySwirl * 1.07) * orbitR * 0.8;
                   }
               }
 
               let lastScoopModuleFireTime = 0;
+              let lastScoopParticleFireTime = 0;
+
+              function fireScoopBellyParticle(creature) {
+                  if (!creature) return false;
+                  const bag = creature._scoopBag || [];
+                  if (!bag.length) {
+                      addFloatingText(creature.x, creature.y - 18, 'Bubble empty — scoop white drift first', '#fb923c');
+                      return false;
+                  }
+                  const now = Date.now();
+                  if (now - lastScoopParticleFireTime < SCOOP_MODULE_FIRE_GAP) return false;
+                  lastScoopParticleFireTime = now;
+                  const p = bag.pop();
+                  p._scooped = false;
+                  p._scoopOwner = null;
+                  p._scoopSnared = null;
+                  const geo = creature._scoopGeo || buildManualScoopGeometry(creature);
+                  let aim = geo.facing;
+                  const mx = manualControlState.x - creature.x;
+                  const my = manualControlState.y - creature.y;
+                  if (sqrt(mx * mx + my * my) > 12) aim = atan2(my, mx);
+                  const speed = 8.5 + random(0, 2.5);
+                  p.x = geo.bubbleX + cos(aim) * geo.bubbleR * 0.42;
+                  p.y = geo.bubbleY + sin(aim) * geo.bubbleR * 0.42;
+                  p.vx = cos(aim) * speed;
+                  p.vy = sin(aim) * speed;
+                  if (vortexParticles.indexOf(p) < 0) vortexParticles.push(p);
+                  playTone(340 + random(-20, 20), 'sine', 0.08, 0.35);
+                  addFloatingText(p.x, p.y - 10, 'DRIFT SHOT', '#e0f2fe');
+                  return true;
+              }
+
+              function fireScoopBellyShot(creature) {
+                  if (!creature?._scoopActive) return false;
+                  if (creature._manualSuperPredator && creature._manualControl) {
+                      return fireScoopBellyModule(creature);
+                  }
+                  return fireScoopBellyParticle(creature);
+              }
 
               function fireScoopBellyModule(creature) {
                   if (!creature) return false;
@@ -24891,8 +24997,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   const speed = 10.5 + (mod.tier || 1) * 0.65;
                   const col = mod.color || MODULE_AMMO_COLORS[mod.type] || '#a78bfa';
                   bullets.push({
-                      x: geo.bellyX,
-                      y: geo.bellyY,
+                      x: geo.bubbleX ?? geo.bellyX,
+                      y: geo.bubbleY ?? geo.bellyY,
                       vx: cos(aim) * speed,
                       vy: sin(aim) * speed,
                       kind: 'scoop-module',
@@ -25030,8 +25136,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           grabbingCreature: false
                       };
                   }
+                  const load = getScoopBellyLoad(creature);
+                  const bubbleR = CREATURE_BODY_RADIUS * (2.75 + min(0.55, load * 0.0025) + spring.stretch * 0.18);
                   return {
                       bellyX, bellyY, bellyR, facing, profile, tentacles, probe,
+                      bubbleX: creature.x, bubbleY: creature.y, bubbleR,
                       flex: profile.flex * stats.flexMult, rigid: profile.rigid,
                       stats, spring, usingLattice: !!creature._scoopUsingLattice
                   };
@@ -25052,47 +25161,20 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
               function tickScoopBellyParticle(p, geo, slot, creature) {
                   if (!p || !geo) return;
-                  const layer = slot % 9;
-                  const orbitR = geo.bellyR * (0.16 + layer * 0.07);
-                  const swirl = (p._scoopSwirl || 0) + 0.13 + slot * 0.018;
+                  const layer = slot % 11;
+                  const orbitR = geo.bubbleR * (0.2 + layer * 0.055) * 0.58;
+                  const swirl = (p._scoopSwirl || 0) + 0.15 + slot * 0.012;
                   p._scoopSwirl = swirl;
-                  p.x = geo.bellyX + cos(swirl) * orbitR;
-                  p.y = geo.bellyY + sin(swirl * 1.08) * orbitR * 0.78;
+                  p._tumbleVx = (p._tumbleVx || 0) * 0.9 + sin(swirl * 2.1) * 0.12;
+                  p._tumbleVy = (p._tumbleVy || 0) * 0.9 + cos(swirl * 1.8) * 0.12;
+                  p.x = geo.bubbleX + cos(swirl) * orbitR + p._tumbleVx * 3;
+                  p.y = geo.bubbleY + sin(swirl * 1.08) * orbitR * 0.82 + p._tumbleVy * 3;
                   p.vx = 0;
                   p.vy = 0;
               }
 
               function pullParticleAlongTentacle(creature, p, tentacle, geo, pullScale = 1) {
-                  const tipX = tentacle.tipX ?? tentacle.baseX + cos(tentacle.ang) * tentacle.len;
-                  const tipY = tentacle.tipY ?? tentacle.baseY + sin(tentacle.ang) * tentacle.len;
-                  const dx = tipX - p.x;
-                  const dy = tipY - p.y;
-                  const d2 = dx * dx + dy * dy;
-                  if (!p._scoopSnared) {
-                      p.vx = 0;
-                      p.vy = 0;
-                      p._scoopSnared = creature;
-                  }
-                  if (d2 < 6) {
-                      const bdx = geo.bellyX - p.x;
-                      const bdy = geo.bellyY - p.y;
-                      const bellyPull = (0.42 + geo.flex * 0.28) * pullScale * timeScale;
-                      const bd = sqrt(bdx * bdx + bdy * bdy) || 1;
-                      p.x += (bdx / bd) * bellyPull;
-                      p.y += (bdy / bd) * bellyPull;
-                      if (dist(p.x, p.y, geo.bellyX, geo.bellyY) < geo.bellyR * 1.35) {
-                          p._scoopSnared = null;
-                          captureScoopParticle(creature, p, geo);
-                      }
-                      return;
-                  }
-                  const d = sqrt(d2) || 1;
-                  const pull = (0.42 + geo.flex * 0.3) * pullScale * timeScale;
-                  const step = pull * min(3.6, max(1.1, d * 0.16));
-                  p.x += (dx / d) * step;
-                  p.y += (dy / d) * step;
-                  p.vx = 0;
-                  p.vy = 0;
+                  pullTowardScoopBubble(p, creature, geo, pullScale * 1.25, false);
               }
 
               function updateScoopTentacleTips(creature, geo) {
@@ -25417,9 +25499,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   }
 
                   applyScoopTentacleContacts(creature, geo);
+                  applyScoopBubbleAbsorption(creature, geo);
                   creature._scoopGeo = geo;
 
-                  const reach2 = geo.stats.reach * geo.stats.reach * 1.35;
+                  const reach2 = geo.bubbleR * geo.bubbleR * 2.8;
                   const bag = creature._scoopBag || [];
                   let scanCursor = creature._scoopScanCursor || 0;
                   let scanned = 0;
@@ -25430,29 +25513,44 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   if (particleRoom > 0) {
                       for (const p of vortexParticles) {
                           if (p._scoopSnared === creature && isScoopableWhiteParticle(p)) {
-                              const dx = p.x - geo.bellyX;
-                              const dy = p.y - geo.bellyY;
-                              candidates.push({ p, d2: dx * dx + dy * dy, snared: true });
-                              snaredSet.add(p);
-                          }
+                          const dx = p.x - geo.bubbleX;
+                          const dy = p.y - geo.bubbleY;
+                          candidates.push({ p, d2: dx * dx + dy * dy, snared: true });
+                          snaredSet.add(p);
                       }
+                  }
 
-                      for (let n = 0; n < vortexParticles.length && scanned < MANUAL_SCOOP_SCAN_BUDGET; n++) {
-                          const idx = (scanCursor + n) % vortexParticles.length;
-                          const p = vortexParticles[idx];
-                          if (!isScoopableWhiteParticle(p) || snaredSet.has(p)) continue;
-                          scanned++;
-                          const dx = p.x - geo.bellyX;
-                          const dy = p.y - geo.bellyY;
-                          const d2 = dx * dx + dy * dy;
-                          if (d2 > reach2) continue;
-                          const nearTent = getScoopTentacleSegments(geo).some((seg) =>
-                              distPointToSegment(p.x, p.y, seg.x1, seg.y1, seg.x2, seg.y2) < geo.stats.reach * 0.65
-                          );
-                          if (nearTent || d2 < geo.bellyR * geo.bellyR * 9) {
-                              candidates.push({ p, d2, snared: false });
+                  for (let n = 0; n < vortexParticles.length && scanned < MANUAL_SCOOP_SCAN_BUDGET; n++) {
+                      const idx = (scanCursor + n) % vortexParticles.length;
+                      const p = vortexParticles[idx];
+                      if (!isScoopableWhiteParticle(p) || snaredSet.has(p)) continue;
+                      scanned++;
+                      const dx = p.x - geo.bubbleX;
+                      const dy = p.y - geo.bubbleY;
+                      const d2 = dx * dx + dy * dy;
+                      if (d2 > reach2) continue;
+                      const nearTent = getScoopTentacleSegments(geo).some((seg) =>
+                          distPointToSegment(p.x, p.y, seg.x1, seg.y1, seg.x2, seg.y2) < geo.stats.reach * 0.7
+                      );
+                      if (nearTent || d2 < geo.bubbleR * geo.bubbleR * 1.6) {
+                          candidates.push({ p, d2, snared: false });
+                      }
+                  }
+
+                  if (canScoopMoreCreatures(creature)) {
+                      const preyScan = SpatialGrid.cells
+                          ? SpatialGrid.queryRadius(creature.x, creature.y, geo.bubbleR + geo.stats.reach, creature)
+                          : creatures;
+                      for (const prey of preyScan) {
+                          if (!isScoopableFeastCreature(creature, prey)) continue;
+                          if (prey === pullTarget) continue;
+                          const dx = prey.x - geo.bubbleX;
+                          const dy = prey.y - geo.bubbleY;
+                          if (dx * dx + dy * dy < reach2) {
+                              pullTowardScoopBubble(prey, creature, geo, 1.2, true);
                           }
                       }
+                  }
                       creature._scoopScanCursor = (scanCursor + MANUAL_SCOOP_SCAN_BUDGET) % max(1, vortexParticles.length);
                   }
 
@@ -25488,27 +25586,32 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   for (let i = 0; i < bag.length; i++) {
                       tickScoopBellyParticle(bag[i], geo, i, creature);
                   }
-                  tickScoopHeldCreatures(creature, geo);
                   tickScoopBellyModules(creature, geo);
+                  tickScoopModuleMelt(creature, geo);
+                  tickScoopShardParticles(creature, geo);
+                  tickScoopBellyEnergy(creature);
                   updateScoopTentacleTips(creature, geo);
 
                   const pCount = getScoopParticleCount(creature);
-                  const cCount = getScoopHeldCreatureCount(creature);
+                  const modN = getScoopModuleCount(creature);
+                  const shardN = creature._scoopShards?.length || 0;
                   if (frameCount % 60 === 0) {
-                      if (pCount >= MANUAL_SCOOP_MAX_PARTICLES && cCount >= MANUAL_SCOOP_MAX_CREATURES) {
-                          creature.currentThought = 'Belly full — [0] release seeds · [Space] fire mods';
+                      if (pCount >= MANUAL_SCOOP_MAX_PARTICLES && modN > 0) {
+                          creature.currentThought = creature._manualSuperPredator
+                              ? `Bubble full — [Space] fire modules`
+                              : `Bubble full — [Space] fire drift shots`;
                       } else if (pCount >= MANUAL_SCOOP_MAX_PARTICLES) {
                           creature.currentThought = creature._manualSuperPredator
-                              ? `Particles full (${pCount}) — probe tagging prey`
-                              : `Particles full (${pCount}) — [0] release seeds`;
+                              ? `Drift full (${pCount}) — [Space] fire particles · probe for prey`
+                              : `Drift full (${pCount}) — [Space] fire belly shots`;
                       } else if ((creature._scoopCreatureCooldown || 0) > 0) {
-                          creature.currentThought = `Digesting — probe tagging (${(creature._scoopProbeTags || []).length} marked)`;
+                          creature.currentThought = `Digesting prey — probe tagging (${(creature._scoopProbeTags || []).length} marked)`;
                       } else if (pullTarget) {
-                          creature.currentThought = `Probe pulling ${pullTarget.name || 'prey'} — no control`;
-                      } else if ((creature._scoopProbeTags || []).length >= SCOOP_PROBE_MIN_TAGS) {
-                          creature.currentThought = 'Probe selecting weakest tagged prey…';
+                          creature.currentThought = `Probe herding ${pullTarget.name || 'prey'} into bubble`;
+                      } else if (modN > 0 || shardN > 0) {
+                          creature.currentThought = `Modules melting (${modN}) · infinite energy · [Space] fire`;
                       } else {
-                          creature.currentThought = `Scooping drift (${pCount}/${MANUAL_SCOOP_MAX_PARTICLES}) · probe clearing path`;
+                          creature.currentThought = `Bubble scoop ${pCount}/${MANUAL_SCOOP_MAX_PARTICLES} — touch bubble to absorb`;
                       }
                   }
               }
@@ -25552,28 +25655,25 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   }
               }
 
-              function releaseManualScoop(creature, transform = true) {
+              function releaseManualScoop(creature) {
                   if (!creature) return;
-                  if (transform && creature._scoopBag?.length) emitScoopSeedParticles(creature);
-                  else if (creature._scoopBag?.length) {
-                      for (const p of creature._scoopBag) {
-                          if (!p) continue;
-                          p._scooped = false;
-                          p._scoopOwner = null;
-                      }
-                      creature._scoopBag = [];
+                  for (const p of creature._scoopBag || []) {
+                      if (!p) continue;
+                      p._scooped = false;
+                      p._scoopOwner = null;
+                      p._scoopSnared = null;
+                      p.x = creature.x + random(-24, 24);
+                      p.y = creature.y + random(-24, 24);
+                      if (vortexParticles.indexOf(p) < 0) vortexParticles.push(p);
                   }
+                  creature._scoopBag = [];
                   creature._scoopActive = false;
                   creature._scoopGeo = null;
                   creature._scoopUsingLattice = false;
                   creature._scoopStolenLinks = [];
                   creature._scoopModuleBag = creature._scoopModuleBag || [];
-                  if (creature._scoopHeldCreatures?.length) {
-                      for (const h of creature._scoopHeldCreatures) {
-                          if (h.creature) digestScoopHeldCreature(creature, h);
-                      }
-                      creature._scoopHeldCreatures = [];
-                  }
+                  creature._scoopShards = creature._scoopShards || [];
+                  creature._scoopHeldCreatures = [];
                   creature._scoopProbeTags = [];
                   creature._scoopProbePullTarget = null;
                   creature._scoopCreatureCooldown = 0;
@@ -25596,10 +25696,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
               function toggleManualScoop(creature = manualControlCreature) {
                   if (!creature || manualControlCreature !== creature) return;
                   if (creature._scoopActive) {
-                      releaseManualScoop(creature, true);
+                      releaseManualScoop(creature);
                       creature._scoopUsingLattice = false;
                       creature._scoopStolenLinks = [];
-                      creature.currentThought = 'Belly opens — seeds drift outward';
+                      creature.currentThought = 'Scoop off — bubble retracted';
                       return;
                   }
                   if (!canCreatureUseScoop(creature)) {
@@ -25610,12 +25710,13 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   stealLatticeForScoop(creature);
                   creature._scoopActive = true;
                   if (!creature._scoopBag) creature._scoopBag = [];
-                  if (!creature._scoopHeldCreatures) creature._scoopHeldCreatures = [];
                   if (!creature._scoopProbeTags) creature._scoopProbeTags = [];
+                  if (!creature._scoopShards) creature._scoopShards = [];
+                  if (!creature._scoopModuleBag) creature._scoopModuleBag = [];
                   creature._scoopScanCursor = 0;
                   creature.currentThought = creature._scoopUsingLattice
-                      ? 'Stole living lace — tendrils drink colony memory'
-                      : 'Tendrils reach from imprinted lace memory…';
+                      ? 'Bubble deployed — touch the shell to absorb drift & prey'
+                      : 'Bubble shell open — tendrils herd loot inward';
                   updateInspectorScoopBar(creature);
               }
 
@@ -25652,13 +25753,13 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           hint.textContent = 'Join a colony — lace sticks instantly and tier 1 scoop unlocks';
                       } else if (creature._scoopActive) {
                           const pN = getScoopParticleCount(creature);
-                          const cN = getScoopHeldCreatureCount(creature);
-                          const mods = creature._scoopModuleBag?.length || 0;
-                          const stats = getScoopEffectiveStats(creature);
+                          const mods = getScoopModuleCount(creature);
+                          const shards = creature._scoopShards?.length || 0;
                           const laceNote = creature._scoopUsingLattice ? ' · LIVE LACE' : '';
-                          const feastNote = creature._manualSuperPredator ? ' · [Space] fire mods' : ' · [0] release seeds';
-                          const tagN = creature._scoopProbeTags?.length || 0;
-                          hint.textContent = `Belly ${pN}/${MANUAL_SCOOP_MAX_PARTICLES} drift · ${cN}/${MANUAL_SCOOP_MAX_CREATURES} prey${tagN ? ` · ${tagN} tagged` : ''}${mods ? ` · ${mods} mods` : ''} · [F] sprint${feastNote}`;
+                          const fireNote = creature._manualSuperPredator
+                              ? ' · [Space] fire modules'
+                              : ' · [Space] fire drift';
+                          hint.textContent = `Bubble ${pN}/${MANUAL_SCOOP_MAX_PARTICLES} drift${mods ? ` · ${mods} mods` : ''}${shards ? ` · ${shards} shards` : ''}${laceNote} · [0] toggle · [F] sprint${fireNote}`;
                       } else {
                           const tier = creature._scoopLatticeTier || creature._scoopGenome?.tier || 0;
                           hint.textContent = genome
@@ -26027,26 +26128,33 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   }
 
                   const pCount = getScoopParticleCount(creature);
-                  const cCount = getScoopHeldCreatureCount(creature);
+                  const modN = getScoopModuleCount(creature);
                   const fillPct = pCount / MANUAL_SCOOP_MAX_PARTICLES;
-                  const containerR = geo.bellyR * (2.65 + spring.stretch * 0.4);
+                  const containerR = geo.bubbleR || CREATURE_BODY_RADIUS * 2.75;
+                  const bx = geo.bubbleX ?? creature.x;
+                  const by = geo.bubbleY ?? creature.y;
 
                   noStroke();
-                  fill(8, 12, 24, 120);
-                  circle(geo.bellyX, geo.bellyY, containerR * 2.15);
-                  fill(cr, cg, cb, 22 + spring.wave * 28);
-                  circle(geo.bellyX, geo.bellyY, containerR * 2.02);
-                  fill(220, 245, 255, 35 + fillPct * 110);
-                  circle(geo.bellyX, geo.bellyY, containerR * (0.55 + fillPct * 1.05) * spring.squash);
-                  fill(12, 16, 28, 70);
+                  fill(8, 12, 24, 130);
+                  circle(bx, by, containerR * 2.12);
+                  fill(cr, cg, cb, 24 + spring.wave * 30);
+                  circle(bx, by, containerR * 2.0);
+                  fill(220, 245, 255, 38 + fillPct * 115);
+                  circle(bx, by, containerR * (0.58 + fillPct * 0.95) * spring.squash);
+                  fill(12, 16, 28, 75);
                   circle(geo.bellyX, geo.bellyY, geo.bellyR * 2.05 * spring.squash);
-                  stroke(180, 210, 255, 72 + spring.wave * 40);
-                  strokeWeight(0.95);
+                  stroke(180, 210, 255, 78 + spring.wave * 42);
+                  strokeWeight(1.05);
                   noFill();
-                  circle(geo.bellyX, geo.bellyY, containerR * 2.05);
-                  stroke(125, 211, 252, 40 + fillPct * 80);
-                  strokeWeight(0.55);
-                  arc(geo.bellyX, geo.bellyY, containerR * 2.1, containerR * 2.1, -HALF_PI, -HALF_PI + fillPct * TWO_PI);
+                  circle(bx, by, containerR * 2.04);
+                  stroke(125, 211, 252, 45 + fillPct * 85);
+                  strokeWeight(0.6);
+                  arc(bx, by, containerR * 2.08, containerR * 2.08, -HALF_PI, -HALF_PI + fillPct * TWO_PI);
+                  if (modN > 0 || creature._scoopInfiniteEnergy) {
+                      stroke(52, 211, 153, 35 + sin(frameCount * 0.1) * 18);
+                      strokeWeight(0.5);
+                      circle(bx, by, containerR * 2.18);
+                  }
 
                   const bag = creature._scoopBag || [];
                   const drawParticleCap = bag.length > 48 ? 48 : bag.length;
@@ -26061,20 +26169,17 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       fill(245, 250, 255, 70);
                       textSize(8);
                       textAlign(CENTER, CENTER);
-                      text(`+${bag.length - drawParticleCap}`, geo.bellyX, geo.bellyY + geo.bellyR * 0.35);
+                      text(`+${bag.length - drawParticleCap}`, bx, by + containerR * 0.2);
                   }
 
-                  const held = creature._scoopHeldCreatures || [];
-                  for (let hi = 0; hi < held.length; hi++) {
-                      const h = held[hi];
-                      const hx = h._bellyX ?? geo.bellyX;
-                      const hy = h._bellyY ?? geo.bellyY;
-                      const hcol = h.snapshot?.color || '#f87171';
-                      fill(red(color(hcol)), green(color(hcol)), blue(color(hcol)), 200);
+                  const shards = creature._scoopShards || [];
+                  for (let si = 0; si < shards.length; si++) {
+                      const s = shards[si];
+                      fill(s.cr ?? 200, s.cg ?? 180, s.cb ?? 255, 210);
                       noStroke();
-                      circle(hx, hy, 7 + (h.snapshot?.modCount || 0) * 0.35);
-                      fill(255, 120, 120, 120);
-                      circle(hx, hy, 10 + sin(frameCount * 0.12 + hi) * 1.5);
+                      circle(s.x, s.y, 3.5 + (s.tier || 1) * 0.45);
+                      fill(255, 255, 255, 90);
+                      circle(s.x - 0.4, s.y - 0.4, 1.4);
                   }
 
                   const modBag = creature._scoopModuleBag || [];
@@ -27107,7 +27212,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
               function releaseManualCreatureControl() {
                   if (manualControlCreature) {
-                      if (manualControlCreature._scoopActive) releaseManualScoop(manualControlCreature, true);
+                      if (manualControlCreature._scoopActive) releaseManualScoop(manualControlCreature);
                       if (manualControlState.pressed) endManualCreatureTug();
                       if (manualControlCreature._manualSuperPredator) {
                           manualControlCreature._manualSuperPredator = false;
@@ -42552,6 +42657,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
               window.triggerScoopDash = triggerScoopDash;
               window.onScoopStyleSelectChange = onScoopStyleSelectChange;
               window.fireScoopBellyModule = fireScoopBellyModule;
+              window.fireScoopBellyParticle = fireScoopBellyParticle;
+              window.fireScoopBellyShot = fireScoopBellyShot;
               window.jumpToLatestOffspring = jumpToLatestOffspring;
               window.selectAlphaInFullscreen = selectAlphaInFullscreen;
               window.deselectAllCreaturesInFullscreen = deselectAllCreaturesInFullscreen;
