@@ -4,7 +4,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-016-squid-spawn-half" />
+    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-017-squid-module-leak" />
     <title>MiniSimmy Orbital Ship v2</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2334d399'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%230a0a0f'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -8207,7 +8207,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'local-016-squid-spawn-half';
+              const MINISIMMY_BUILD = 'local-017-squid-module-leak';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -8375,12 +8375,16 @@ body.is-map-fullscreen #map-fullscreen-btn {
               const SCOOP_MODULE_FIRE_GAP = 110;
               const SCOOP_INCUBATOR_MIN_MODULES = 3;
               const SCOOP_INCUBATOR_MODULES_PER_SPAWN = 3;
-              const SCOOP_MODULE_LEAK_BASE_INTERVAL = 14;
+              const SCOOP_MODULE_LEAK_BASE_INTERVAL = 9;
               const SCOOP_MODULE_ESSENCE_INTERVAL = 5;
-              const SCOOP_LURE_PARTICLE_MAX = 80;
-              const SCOOP_LURE_COHERE_RADIUS = 44;
+              const SCOOP_LURE_PARTICLE_MAX = 120;
+              const SCOOP_LURE_COHERE_RADIUS = 58;
               const SCOOP_LURE_MERGE_RADIUS = 11;
-              const SCOOP_LURE_SEEK_RADIUS = 360;
+              const SCOOP_LURE_TRIPLE_MERGE_RADIUS = 16;
+              const SCOOP_LURE_SEEK_RADIUS = 480;
+              const SCOOP_SQUID_LEAK_SEEK_RADIUS = 520;
+              const SCOOP_SQUID_LEAK_PULL = 2.55;
+              const SCOOP_SQUID_LEAK_MODULE_MAX = 160;
               const SCOOP_PROBE_PULL_SCALE = 5.8;
               const SCOOP_FACING_LERP = 0.065;
               const SCOOP_PROBE_COLONY_TUG_RANGE = 96;
@@ -8396,7 +8400,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
               const SCOOP_JELLYFISH_LOOSE_DECAY_MS = 7200;
               const SCOOP_JELLYFISH_LOOSE_CLUSTER_RADIUS = 58;
               const SCOOP_JELLYFISH_LOOSE_SPAWN_MIN = 3;
-              const SCOOP_JELLYFISH_LEAK_START = 6;
+              const SCOOP_JELLYFISH_LEAK_START = 4;
+              const SCOOP_JELLYFISH_LEAK_MULT = 1.85;
               const SCOOP_JELLYFISH_PRESSURE_POP = 1400;
               const SCOOP_JELLYFISH_AUTO_SILVER_CHANCE = 0.14;
               const SCOOP_JELLYFISH_AUTO_GOLD_CHANCE = 0.05;
@@ -27319,22 +27324,49 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   return hatched.length;
               }
 
+              function emitSquidLeakFloatingModule(creature, geo, mod) {
+                  if (!mod || moduleParticles.length >= SCOOP_SQUID_LEAK_MODULE_MAX) return null;
+                  const col = mod.color || MODULE_AMMO_COLORS[mod.type] || '#a78bfa';
+                  const ang = random(TWO_PI);
+                  const bx = geo.bubbleX ?? creature.x;
+                  const by = geo.bubbleY ?? creature.y;
+                  const br = geo.bubbleR ?? CREATURE_BODY_RADIUS * 2.75;
+                  const speed = random(1.4, 3.4);
+                  const mp = new ModuleParticle(true, {
+                      type: moduleTypeForParticle(mod.type),
+                      tier: mod.tier || 1,
+                      color: col,
+                      x: bx + cos(ang) * br * random(0.55, 1.05),
+                      y: by + sin(ang) * br * random(0.55, 1.05),
+                      vx: cos(ang) * speed + random(-0.7, 0.7),
+                      vy: sin(ang) * speed + random(-0.7, 0.7),
+                      orbitGraceUntil: Date.now() + 820
+                  });
+                  mp._squidLeak = true;
+                  mp._squidLeakOwner = creature;
+                  if (mod._scoopSpecialSheen) mp._scoopSpecialSheen = mod._scoopSpecialSheen;
+                  moduleParticles.push(mp);
+                  return mp;
+              }
+
               function emitScoopModuleLeakParticle(creature, geo) {
                   const mods = creature._scoopModuleBag || [];
-                  if (!mods.length || scoopLureParticles.length >= SCOOP_LURE_PARTICLE_MAX) return;
+                  if (!mods.length) return;
                   const m = mods[floor(random(mods.length))];
+                  emitSquidLeakFloatingModule(creature, geo, m);
+                  if (scoopLureParticles.length >= SCOOP_LURE_PARTICLE_MAX) return;
                   const col = m.color || MODULE_AMMO_COLORS[m.type] || '#a78bfa';
                   const ang = random(TWO_PI);
                   const bx = geo.bubbleX ?? creature.x;
                   const by = geo.bubbleY ?? creature.y;
                   const br = geo.bubbleR ?? CREATURE_BODY_RADIUS * 2.75;
-                  const speed = random(0.9, 2.4);
+                  const speed = random(1.2, 3.1);
                   scoopLureParticles.push({
-                      x: bx + cos(ang) * br * 0.9,
-                      y: by + sin(ang) * br * 0.9,
+                      x: bx + cos(ang) * br * random(0.65, 1.05),
+                      y: by + sin(ang) * br * random(0.65, 1.05),
                       vx: cos(ang) * speed,
                       vy: sin(ang) * speed,
-                      life: 260 + random(0, 140),
+                      life: 360 + random(0, 180),
                       moduleType: m.type,
                       tier: m.tier || 1,
                       sheen: m._scoopSpecialSheen || null,
@@ -27397,18 +27429,30 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
               function tickScoopModuleLeak(creature, geo) {
                   const modN = getScoopModuleCount(creature);
-                  if (modN < 2) return;
+                  const jelly = isJellyfishScoopCreature(creature);
+                  const leakFloor = jelly ? 1 : 2;
+                  if (modN < leakFloor) return;
                   const perk = getScoopIncubatorPerk(creature);
                   creature._scoopLeakTimer = (creature._scoopLeakTimer || 0) + timeScale;
-                  const interval = max(6, (SCOOP_MODULE_LEAK_BASE_INTERVAL - modN * 0.55) / (perk.leakMult || 1));
-                  const burst = modN >= 12 ? 4 : modN >= 8 ? 3 : modN >= 4 ? 2 : 1;
+                  let jellyMult = jelly ? SCOOP_JELLYFISH_LEAK_MULT : 1;
+                  if (jelly && modN >= SCOOP_JELLYFISH_LEAK_START) {
+                      jellyMult *= 1 + (modN - SCOOP_JELLYFISH_LEAK_START + 1) * 0.2;
+                  }
+                  const interval = max(4, (SCOOP_MODULE_LEAK_BASE_INTERVAL - modN * 0.78) / ((perk.leakMult || 1) * jellyMult));
+                  let burst = modN >= 16 ? 6 : modN >= 12 ? 5 : modN >= 8 ? 4 : modN >= 4 ? 3 : jelly ? 2 : 1;
+                  if (jelly && modN >= SCOOP_JELLYFISH_LEAK_START) {
+                      burst = ceil(burst * jellyMult * 0.68);
+                  }
                   if (creature._scoopLeakTimer >= interval) {
                       creature._scoopLeakTimer = 0;
                       for (let b = 0; b < burst; b++) emitScoopModuleLeakParticle(creature, geo);
                       if (burst >= 2 && frameCount % 90 === 0) maybeSpeakScoopInnerVoice(creature, 'scoop_leak');
-                      if (isJellyfishScoopCreature(creature) && modN >= SCOOP_JELLYFISH_LEAK_START) {
+                      if (jelly && burst >= 3 && frameCount % 110 === 0) {
+                          triggerModuleFeedFrenzy(creature.x, creature.y);
+                      }
+                      if (jelly && modN >= SCOOP_JELLYFISH_LEAK_START) {
                           ensureJellyfishTierState(creature);
-                          const pressureGain = burst * (modN - SCOOP_JELLYFISH_LEAK_START + 1) * 0.55;
+                          const pressureGain = burst * (modN - SCOOP_JELLYFISH_LEAK_START + 1) * 0.72;
                           creature._jellyfishLeakPressure = (creature._jellyfishLeakPressure || 0) + pressureGain;
                       }
                   }
@@ -27439,34 +27483,90 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   return true;
               }
 
-              function mergeScoopLureParticles(a, b) {
-                  if (!a || !b) return null;
+              function mergeScoopLureTriple(a, b, c) {
+                  if (!a || !b || !c) return null;
                   const tier = min(10, (a.tier || 1) + 1);
+                  const col = color(a.cr, a.cg, a.cb);
                   return {
-                      x: (a.x + b.x) * 0.5,
-                      y: (a.y + b.y) * 0.5,
-                      vx: (a.vx + b.vx) * 0.48,
-                      vy: (a.vy + b.vy) * 0.48,
-                      life: max(a.life, b.life) + 48,
+                      x: (a.x + b.x + c.x) / 3,
+                      y: (a.y + b.y + c.y) / 3,
+                      vx: (a.vx + b.vx + c.vx) * 0.36,
+                      vy: (a.vy + b.vy + c.vy) * 0.36,
+                      life: max(a.life, b.life, c.life) + 72,
                       moduleType: a.moduleType,
                       tier,
-                      sheen: a.sheen || b.sheen,
-                      owner: a.owner || b.owner,
-                      cr: a.cr, cg: a.cg, cb: a.cb,
-                      mergeGlow: 1.15
+                      sheen: a.sheen || b.sheen || c.sheen,
+                      owner: a.owner || b.owner || c.owner,
+                      cr: red(col),
+                      cg: green(col),
+                      cb: blue(col),
+                      mergeGlow: 1.35
                   };
               }
 
-              function tickScoopLureParticles() {
+              function tryTripleMergeScoopLureParticles() {
+                  if (scoopLureParticles.length < 3) return;
+                  const groups = {};
+                  for (const p of scoopLureParticles) {
+                      const key = (p.moduleType || '') + '-' + (p.tier || 1);
+                      if (!groups[key]) groups[key] = [];
+                      groups[key].push(p);
+                  }
+                  for (const key in groups) {
+                      const particles = groups[key];
+                      if (particles.length < 3) continue;
+                      const sample = particles[0];
+                      if ((sample.tier || 1) >= 10) continue;
+                      for (let i = 0; i < particles.length - 2; i++) {
+                          const a = particles[i];
+                          if (!scoopLureParticles.includes(a)) continue;
+                          const cluster = [a];
+                          for (let j = i + 1; j < particles.length && cluster.length < 3; j++) {
+                              const candidate = particles[j];
+                              if (!scoopLureParticles.includes(candidate)) continue;
+                              const nearAll = cluster.every((member) =>
+                                  dist(member.x, member.y, candidate.x, candidate.y) < SCOOP_LURE_TRIPLE_MERGE_RADIUS * 1.4
+                              );
+                              if (nearAll) cluster.push(candidate);
+                          }
+                          if (cluster.length < 3) continue;
+                          const merged = mergeScoopLureTriple(cluster[0], cluster[1], cluster[2]);
+                          for (const p of cluster) {
+                              const idx = scoopLureParticles.indexOf(p);
+                              if (idx >= 0) scoopLureParticles.splice(idx, 1);
+                          }
+                          scoopLureParticles.push(merged);
+                          addFloatingText(merged.x, merged.y - 14, `${merged.moduleType} ×3 → T${merged.tier}`, '#fde047');
+                          playTone(560 + merged.tier * 38, 'sine', 0.18, 0.45);
+                          return;
+                      }
+                  }
+              }
+
+              function tickScoopLureParticles(vortexDir = 1, vortexStrength = 1) {
+                  const vcX = centerX;
+                  const vcY = centerY;
                   for (let i = scoopLureParticles.length - 1; i >= 0; i--) {
                       const p = scoopLureParticles[i];
                       p.life -= timeScale;
+                      const dx = p.x - vcX;
+                      const dy = p.y - vcY;
+                      const distToCenter = sqrt(dx * dx + dy * dy) || 1;
+                      const tangentX = -dy;
+                      const tangentY = dx;
+                      const tLen = sqrt(tangentX * tangentX + tangentY * tangentY) || 1;
+                      const rotForce = 0.95 * vortexStrength * vortexDir;
+                      p.vx += (tangentX / tLen) * rotForce * 0.044 * timeScale;
+                      p.vy += (tangentY / tLen) * rotForce * 0.044 * timeScale;
+                      const pull = 0.5 * vortexStrength;
+                      p.vx += (vcX - p.x) * pull / (distToCenter + 22) * timeScale;
+                      p.vy += (vcY - p.y) * pull / (distToCenter + 22) * timeScale;
                       p.x += p.vx * timeScale;
                       p.y += p.vy * timeScale;
-                      p.vx *= 0.988;
-                      p.vy *= 0.988;
+                      p.vx *= 0.986;
+                      p.vy *= 0.986;
                       if (p.mergeGlow > 0) p.mergeGlow = max(0, p.mergeGlow - 0.035);
-                      if (p.life <= 0 || !p.owner?._scoopActive) scoopLureParticles.splice(i, 1);
+                      if (p.life <= 0) scoopLureParticles.splice(i, 1);
                   }
                   for (let i = 0; i < scoopLureParticles.length; i++) {
                       for (let j = i + 1; j < scoopLureParticles.length; j++) {
@@ -27479,20 +27579,41 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           const d = sqrt(dx * dx + dy * dy) || 1;
                           if (d > SCOOP_LURE_COHERE_RADIUS) continue;
                           const t = 1 - d / SCOOP_LURE_COHERE_RADIUS;
-                          const pull = 0.11 * t * timeScale;
+                          const pull = 0.16 * t * timeScale;
                           a.vx += (dx / d) * pull;
                           a.vy += (dy / d) * pull;
                           b.vx -= (dx / d) * pull;
                           b.vy -= (dy / d) * pull;
-                          if (d < SCOOP_LURE_MERGE_RADIUS && (a.tier || 1) < 10) {
-                              const merged = mergeScoopLureParticles(a, b);
-                              scoopLureParticles.splice(j, 1);
-                              scoopLureParticles[i] = merged;
-                              addFloatingText(merged.x, merged.y - 14, `${merged.moduleType} → T${merged.tier}`, '#fde047');
-                              playTone(560 + merged.tier * 38, 'sine', 0.16, 0.4);
-                              j--;
-                          }
                       }
+                  }
+                  if (frameCount % 6 === 0) tryTripleMergeScoopLureParticles();
+              }
+
+              function applySquidLeakModuleSeek(creature, timeScale) {
+                  if (!creature || creature.isPredator || isManualControlImmune(creature)) return;
+                  if (creature.modules.length >= 14) return;
+                  let best = null;
+                  let bestD = Infinity;
+                  for (const mp of moduleParticles) {
+                      if (!mp || mp.collected || !mp.isFloating || !mp._squidLeak || !mp.isHarvestable()) continue;
+                      const d = dist(creature.x, creature.y, mp.x, mp.y);
+                      if (d < bestD) {
+                          bestD = d;
+                          best = mp;
+                      }
+                  }
+                  if (!best || bestD > SCOOP_SQUID_LEAK_SEEK_RADIUS) return;
+                  const dx = best.x - creature.x;
+                  const dy = best.y - creature.y;
+                  const d = bestD || 1;
+                  let pull = SCOOP_SQUID_LEAK_PULL + (1 - bestD / SCOOP_SQUID_LEAK_SEEK_RADIUS) * 4.4;
+                  pull += creature.getTieredModuleCount('harvester') * 0.34;
+                  pull += creature.getTieredModuleCount('communicator') * 0.24;
+                  if (getCreatureFullness(creature) > 0.65) pull *= 1.58;
+                  creature.vx += (dx / d) * pull * 0.24 * timeScale;
+                  creature.vy += (dy / d) * pull * 0.24 * timeScale;
+                  if (bestD < 30 && frameCount % 36 === (creature._symSlot || 0) % 36) {
+                      creature.currentThought = 'Chasing squid-leaked modules!';
                   }
               }
 
@@ -27512,12 +27633,12 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   const dx = best.x - creature.x;
                   const dy = best.y - creature.y;
                   const d = bestD || 1;
-                  let pull = 1.55 + (1 - bestD / SCOOP_LURE_SEEK_RADIUS) * 3.1;
-                  pull += creature.getTieredModuleCount('harvester') * 0.24;
-                  pull += creature.getTieredModuleCount('communicator') * 0.14;
-                  if (getCreatureFullness(creature) > 0.7) pull *= 1.42;
-                  creature.vx += (dx / d) * pull * 0.15 * timeScale;
-                  creature.vy += (dy / d) * pull * 0.15 * timeScale;
+                  let pull = 2.35 + (1 - bestD / SCOOP_LURE_SEEK_RADIUS) * 4.6;
+                  pull += creature.getTieredModuleCount('harvester') * 0.32;
+                  pull += creature.getTieredModuleCount('communicator') * 0.2;
+                  if (getCreatureFullness(creature) > 0.7) pull *= 1.55;
+                  creature.vx += (dx / d) * pull * 0.26 * timeScale;
+                  creature.vy += (dy / d) * pull * 0.26 * timeScale;
                   if (bestD < 22) {
                       for (let i = scoopLureParticles.length - 1; i >= 0; i--) {
                           const p = scoopLureParticles[i];
@@ -27532,8 +27653,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
               function applyScoopLurePull(creature, timeScale) {
                   if (!creature || isManualControlImmune(creature)) return;
+                  applySquidLeakModuleSeek(creature, timeScale);
                   applyScoopLureSeek(creature, timeScale);
-                  const lureR = 168;
+                  const lureR = 280;
                   let pullX = 0;
                   let pullY = 0;
                   let strength = 0;
@@ -27548,12 +27670,25 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       pullX += (dx / d) * t;
                       pullY += (dy / d) * t;
                       strength += t;
-                      if (p.sheen) foodBoost += t * 0.45;
+                      if (p.sheen) foodBoost += t * 0.55;
+                  }
+                  for (const mp of moduleParticles) {
+                      if (!mp || mp.collected || !mp.isFloating || !mp._squidLeak || !mp.isHarvestable()) continue;
+                      const dx = mp.x - creature.x;
+                      const dy = mp.y - creature.y;
+                      const d2 = dx * dx + dy * dy;
+                      if (d2 > lureR * lureR) continue;
+                      const d = sqrt(d2) || 1;
+                      const t = 1 - d / lureR;
+                      pullX += (dx / d) * t * 1.35;
+                      pullY += (dy / d) * t * 1.35;
+                      strength += t * 1.2;
+                      if (mp._scoopSpecialSheen) foodBoost += t * 0.65;
                   }
                   if (strength <= 0) return;
-                  const owner = scoopLureParticles.find((p) => p.owner?._scoopActive)?.owner;
+                  const owner = scoopLureParticles.find((p) => p.owner)?.owner;
                   const perk = owner ? getScoopIncubatorPerk(owner) : null;
-                  const pull = (0.58 + (perk?.foodLure || 0) * 0.18 + foodBoost) * strength * timeScale;
+                  const pull = (0.92 + (perk?.foodLure || 0) * 0.24 + foodBoost) * strength * timeScale;
                   creature.vx += pullX * pull;
                   creature.vy += pullY * pull;
               }
@@ -30335,6 +30470,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           vy: random(-0.4, 0.4)
                       });
                       merged.mergeGlow = 1.2;
+                      if (mergeSet.some((p) => p._squidLeak)) {
+                          merged._squidLeak = true;
+                          merged._squidLeakOwner = mergeSet.find((p) => p._squidLeakOwner)?._squidLeakOwner || null;
+                      }
                       moduleParticles.push(merged);
                       addFloatingText(cx, cy - 20, `${sample.type} → T${nextTier}`, '#fde047');
                       playTone(620 + nextTier * 40, 'sine', 0.2, 0.42);
@@ -32422,12 +32561,40 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   }
               }
 
+              function tickSquidLeakModuleCohere() {
+                  const leaks = [];
+                  for (const mp of moduleParticles) {
+                      if (mp && mp.isFloating && !mp.collected && mp._squidLeak) leaks.push(mp);
+                  }
+                  if (leaks.length < 2) return;
+                  const radius = 76;
+                  for (let i = 0; i < leaks.length; i++) {
+                      for (let j = i + 1; j < leaks.length; j++) {
+                          const a = leaks[i];
+                          const b = leaks[j];
+                          if (!a || !b || a.collected || b.collected) continue;
+                          if (a.getMergeKey() !== b.getMergeKey()) continue;
+                          const dx = b.x - a.x;
+                          const dy = b.y - a.y;
+                          const d = sqrt(dx * dx + dy * dy) || 1;
+                          if (d > radius) continue;
+                          const t = 1 - d / radius;
+                          const pull = 0.17 * t * timeScale;
+                          a.vx += (dx / d) * pull;
+                          a.vy += (dy / d) * pull;
+                          b.vx -= (dx / d) * pull;
+                          b.vy -= (dy / d) * pull;
+                      }
+                  }
+              }
+
               function tickShipSpawnedModuleParticles(vortexDir = 1, vortexStrength = 1) {
                   if (currentMusicMode === 'evolve' || moduleParticles.length === 0) return;
                   const frenzy = moduleFeedFrenzy.active && Date.now() < moduleFeedFrenzy.until;
                   if (!frenzy && Date.now() >= (moduleFeedFrenzy.until || 0)) {
                       moduleFeedFrenzy.active = false;
                   }
+                  let squidLeakN = 0;
                   for (let i = moduleParticles.length - 1; i >= 0; i--) {
                       const mp = moduleParticles[i];
                       if (!mp || typeof mp.update !== 'function') {
@@ -32435,6 +32602,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           continue;
                       }
                       if (!mp.isFloating || mp.collected) continue;
+                      if (mp._squidLeak) squidLeakN++;
                       mp.update(vortexDir, vortexStrength);
                       mp.draw();
 
@@ -32445,7 +32613,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       }
                       if (mp.isDead()) moduleParticles.splice(i, 1);
                   }
-                  if (frameCount % 18 === 0) tryMergeFloatingModules(vortexDir, vortexStrength);
+                  if (squidLeakN > 1) tickSquidLeakModuleCohere();
+                  const mergeCadence = squidLeakN > 0 ? 9 : 18;
+                  if (frameCount % mergeCadence === 0) tryMergeFloatingModules(vortexDir, vortexStrength);
               }
 
               function getShipOrbitCenter() {
@@ -44088,7 +44258,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       }
                       updateScoopModuleBullets();
                       if (scoopSeedParticles.length) tickScoopSeedParticles();
-                      if (scoopLureParticles.length) tickScoopLureParticles();
+                      if (scoopLureParticles.length) tickScoopLureParticles(vortexDir, vortexStrength);
                       ModuleIdentitySystem.propagateColonyNetwork();
                       ModuleIdentitySystem.drawResonanceLinks(PerfScale.lod);
                       ModuleIdentitySystem.drawMacroClusterHints(PerfScale.lod);
