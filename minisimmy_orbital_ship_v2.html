@@ -8058,9 +8058,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
               const MANUAL_SCOOP_REACH = 78;
               const MANUAL_SCOOP_MAX_SEEDS = 24;
               const SCOOP_LATTICE_METER_MAX = 100;
-              const SCOOP_LATTICE_UNLOCK = 12;
-              const SCOOP_LATTICE_TIER2 = 65;
+              const SCOOP_LATTICE_UNLOCK = 1;
+              const SCOOP_LATTICE_TIER2 = 48;
               const SCOOP_LATTICE_TIER3 = 100;
+              const SCOOP_LATTICE_TIER2_GAIN = 0.52;
+              const SCOOP_LATTICE_TIER3_GAIN = 0.28;
               const SCOOP_DASH_DURATION = 20;
               const SCOOP_DASH_COOLDOWN = 22;
 
@@ -24187,11 +24189,26 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
               function tickCreatureScoopLatticeMeter(creature, ts = 1) {
                   if (!creature || creature.isPredator) return;
-                  if ((creature._networkSize || 1) < 2 && (creature._symbiosisLevel || 0) < 1) return;
+                  const networked = (creature._networkSize || 1) >= 2 || (creature._symbiosisLevel || 0) >= 1;
+                  if (!networked) {
+                      creature._scoopLatticeContact = false;
+                      return;
+                  }
+                  if (!creature._scoopLatticeContact) {
+                      creature._scoopLatticeContact = true;
+                      creature._scoopLatticeMeter = max(creature._scoopLatticeMeter || 0, SCOOP_LATTICE_UNLOCK);
+                      creature._scoopLatticeTier = max(creature._scoopLatticeTier || 0, 1);
+                      if (manualControlCreature === creature) {
+                          creature.currentThought = 'Lace sticks — scoop unlocked, pull a thread anytime';
+                      }
+                  }
                   const popFactor = min(1.4, 0.75 + (creature._networkSize || 1) * 0.04);
                   const comp = creature._complementarityComfort || creature._alignmentComfort || 0;
-                  const gain = (0.045 + (creature._symbiosisLevel || 0) * 0.028 + comp * 0.05) * popFactor * ts;
-                  creature._scoopLatticeMeter = min(SCOOP_LATTICE_METER_MAX, (creature._scoopLatticeMeter || 0) + gain);
+                  let gain = (0.045 + (creature._symbiosisLevel || 0) * 0.028 + comp * 0.05) * popFactor * ts;
+                  const meter = creature._scoopLatticeMeter || 0;
+                  if (meter >= SCOOP_LATTICE_TIER2) gain *= SCOOP_LATTICE_TIER3_GAIN;
+                  else if (meter >= SCOOP_LATTICE_UNLOCK) gain *= SCOOP_LATTICE_TIER2_GAIN;
+                  creature._scoopLatticeMeter = min(SCOOP_LATTICE_METER_MAX, meter + gain);
                   const tier = getScoopLatticeTierFromMeter(creature._scoopLatticeMeter);
                   creature._scoopLatticeTier = max(creature._scoopLatticeTier || 0, tier);
               }
@@ -24822,17 +24839,23 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       btn.classList.toggle('is-active', !!(controlled && creature._scoopActive));
                       btn.disabled = controlled && !unlocked;
                   }
-                  const meterPct = creature
-                      ? (genome ? 100 : min(100, creature._scoopLatticeMeter || 0))
-                      : 0;
+                  const rawMeter = creature?._scoopLatticeMeter || 0;
+                  const scoopTier = creature ? max(creature._scoopLatticeTier || 0, getScoopLatticeTierFromMeter(rawMeter)) : 0;
+                  let meterPct = 0;
+                  if (creature) {
+                      if (genome) meterPct = 100;
+                      else if (scoopTier >= 3) meterPct = 100;
+                      else if (scoopTier >= 2) meterPct = min(100, ((rawMeter - SCOOP_LATTICE_TIER2) / (SCOOP_LATTICE_TIER3 - SCOOP_LATTICE_TIER2)) * 100);
+                      else if (scoopTier >= 1) meterPct = min(100, ((rawMeter - SCOOP_LATTICE_UNLOCK) / (SCOOP_LATTICE_TIER2 - SCOOP_LATTICE_UNLOCK)) * 100);
+                      else meterPct = min(100, (rawMeter / SCOOP_LATTICE_UNLOCK) * 100);
+                  }
                   if (meter) meter.classList.toggle('is-hidden', !controlled);
                   if (meterFill) meterFill.style.width = meterPct + '%';
                   if (hint) {
                       if (!controlled) {
-                          hint.textContent = 'Take control — lattice meter builds while networked.';
+                          hint.textContent = 'Take control — scoop unlocks the moment you touch a colony web.';
                       } else if (!unlocked) {
-                          const m = Math.floor(creature._scoopLatticeMeter || 0);
-                          hint.textContent = `Lace memory ${m}/${SCOOP_LATTICE_UNLOCK} — join a colony to unlock scoop`;
+                          hint.textContent = 'Join a colony — lace sticks instantly and tier 1 scoop unlocks';
                       } else if (creature._scoopActive) {
                           const n = creature._scoopBag?.length || 0;
                           const stats = getScoopEffectiveStats(creature);
