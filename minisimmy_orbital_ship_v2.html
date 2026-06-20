@@ -21607,6 +21607,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       if (isDay && this.getTieredModuleCount('explorer') >= 2) {
                           finalMoveSpeed *= 1 + this.getTieredModuleCount('explorer') * (MODULE_IDENTITY.explorer.dayExplore || 0) * 0.35;
                       }
+                      if (this._scoopActive && isJellyfishScoopCreature(this)) {
+                          applySquidWhiteDriftSeek(this, timeScale);
+                      }
                       if (this._manualControl) applyManualCreatureTug(this, timeScale);
                       this.vx *= finalMoveSpeed;
                       this.vy *= finalMoveSpeed;
@@ -25460,6 +25463,46 @@ body.is-map-fullscreen #map-fullscreen-btn {
               function isScoopableWhiteParticle(p) {
                   return p && !p._scooped && !p.isPurple
                       && (!p.isSpecial || p.specialType === 'white');
+              }
+
+              function findNearestWhiteParticleForSquid(creature) {
+                  if (!creature) return null;
+                  let best = null;
+                  let bestD2 = Infinity;
+                  for (let i = 0; i < vortexParticles.length; i++) {
+                      const p = vortexParticles[i];
+                      if (!isScoopableWhiteParticle(p)) continue;
+                      const dx = p.x - creature.x;
+                      const dy = p.y - creature.y;
+                      const d2 = dx * dx + dy * dy;
+                      if (d2 < bestD2) {
+                          bestD2 = d2;
+                          best = p;
+                      }
+                  }
+                  return best;
+              }
+
+              function applySquidWhiteDriftSeek(creature, timeScale) {
+                  if (!creature?._scoopActive || !isJellyfishScoopCreature(creature)) return;
+                  if (creature.energy <= 0 || isManualControlImmune(creature)) return;
+                  const target = findNearestWhiteParticleForSquid(creature);
+                  if (!target) return;
+                  const dx = target.x - creature.x;
+                  const dy = target.y - creature.y;
+                  const d = sqrt(dx * dx + dy * dy) || 1;
+                  if (d < 6) return;
+                  const tier = getJellyfishTier(creature);
+                  const moverT = creature.getTieredModuleCount('mover');
+                  let pull = 0.92 + tier * 0.16 + moverT * 0.05;
+                  if ((creature._scoopSpeedSurge || 0) > 0) pull *= 1.15;
+                  if (!canScoopMoreParticles(creature)) pull *= 0.55;
+                  creature.vx += (dx / d) * pull * 0.15 * timeScale;
+                  creature.vy += (dy / d) * pull * 0.15 * timeScale;
+                  creature._squidDriftTarget = target;
+                  if (frameCount % 52 === (creature._symSlot || 0) % 52) {
+                      creature.currentThought = `Homing on nearest drift (${Math.floor(d)})`;
+                  }
               }
 
               function getScoopParticleCount(creature) {
