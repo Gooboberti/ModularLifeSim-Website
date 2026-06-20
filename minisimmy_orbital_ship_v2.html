@@ -4,7 +4,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-022-squid-leak-replicate-voice" />
+    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-023-soul-thread-flower" />
     <title>MiniSimmy Orbital Ship v2</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2334d399'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%230a0a0f'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -8207,7 +8207,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'local-022-squid-leak-replicate-voice';
+              const MINISIMMY_BUILD = 'local-023-soul-thread-flower';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -9488,7 +9488,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           'Death soul caught by the lace — emerald thread drinking the echo and tightening the weave.',
                           'Green soul orb absorbed on a network line. Repro urge and colony food rising; opposing cores pushed aside.',
                           'Soul resonance: the lattice drank a death echo. Tension lines cinch — distant links may tear to reshape the colony.',
-                          'Operator note: soul thread magnetized to lace. Network organizing by module layout; hostility spike against intermingled rivals.'
+                          'Operator note: soul thread magnetized to lace. Colony spreading into flower-of-life rings — module layout pulling kin to petal spacing; rivals pushed aside.'
                       ],
                       lace_white_relay: [
                           'Saturated entity relaying surplus white energy into the lace — routing toward hungry kin.',
@@ -18197,6 +18197,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
               const LACE_PULL_MOUSE_SCALE = 20;
               const LACE_PULL_STRETCH_MULT = 2.55;
               const LACE_COMPRESS_STRETCH_COST = 0.034;
+              const SOUL_ORGANIZE_PULSE_MAX = 78;
+              const SOUL_HOSTILITY_PULSE_MAX = 58;
+              const SOUL_FLOWER_RING_RATIO = 1.732;
+              const SOUL_FLOWER_PETALS = 6;
               const LACE_LINK_SCAR_FRAMES = 150;
               const LACE_TEAR_SCAR_HOLE_FRAMES = 38;
               const LACE_TEAR_DEATH_CHANCE = 0.11;
@@ -18787,6 +18791,30 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       return { speedMult, frozen, inRange: true, depth, paralysis };
                   },
 
+                  applySoulFlowerWeaveForces(creature, soulOrganize, slot, orbitPhase, timeScale) {
+                      if (soulOrganize < 0.05 || creature._soulWeaveOriginX == null) return { vx: 0, vy: 0 };
+                      const wx = creature._soulWeaveOriginX, wy = creature._soulWeaveOriginY;
+                      const petalSlot = slot % SOUL_FLOWER_PETALS;
+                      const useOuterRing = slot >= SOUL_FLOWER_PETALS
+                          && (creature._networkSize || 1) >= SOUL_FLOWER_PETALS + 1;
+                      const targetRing = useOuterRing
+                          ? CREATURE_IDEAL_DIST * SOUL_FLOWER_RING_RATIO
+                          : CREATURE_IDEAL_DIST;
+                      const targetAngle = petalSlot * (TWO_PI / SOUL_FLOWER_PETALS) + orbitPhase * 0.09;
+                      const tx = wx + cos(targetAngle) * targetRing;
+                      const ty = wy + sin(targetAngle) * targetRing;
+                      const tdx = tx - creature.x, tdy = ty - creature.y;
+                      const tdist = sqrt(tdx * tdx + tdy * tdy) || 1;
+                      const ringPull = soulOrganize * 0.034 * timeScale;
+                      let vx = (tdx / tdist) * ringPull;
+                      let vy = (tdy / tdist) * ringPull;
+                      const tanX = -sin(targetAngle), tanY = cos(targetAngle);
+                      const tangential = sin(orbitPhase + petalSlot * 1.05) * soulOrganize * 0.018 * timeScale;
+                      vx += tanX * tangential;
+                      vy += tanY * tangential;
+                      return { vx, vy };
+                  },
+
                   applySpatialSocialForces(creature, timeScale) {
                       const neighbors = creature.getLocalGroup(CREATURE_SOCIAL_MAX + 12);
                       let vx = 0, vy = 0, overlapDrain = 0, spaceComfort = 0;
@@ -18795,9 +18823,12 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       const orbitPhase = frameCount * 0.018 + slot * 1.31;
                       let stress = creature._overlapStress || 0;
                       const manualPush = isManualControlImmune(creature);
-                      const soulOrganize = (creature._soulOrganizePulse || 0) / 52;
-                      const soulHostile = (creature._soulHostilityPulse || 0) / 44;
+                      const soulOrganize = (creature._soulOrganizePulse || 0) / SOUL_ORGANIZE_PULSE_MAX;
+                      const soulHostile = (creature._soulHostilityPulse || 0) / SOUL_HOSTILITY_PULSE_MAX;
                       const soulAnchor = creature._soulAnchorCore;
+                      const flowerWeave = this.applySoulFlowerWeaveForces(creature, soulOrganize, slot, orbitPhase, timeScale);
+                      vx += flowerWeave.vx;
+                      vy += flowerWeave.vy;
 
                       for (const o of neighbors) {
                           const dx = o.x - creature.x, dy = o.y - creature.y;
@@ -18806,25 +18837,36 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           const similar = this.coresSimilar(creature, o);
                           const alignScore = this.computeAlignment(creature, o);
 
-                          if (soulOrganize > 0.08 && soulAnchor) {
+                          if (soulOrganize > 0.05 && soulAnchor) {
                               const opposed = this.coresOpposedToAnchor(o, soulAnchor);
                               const comp = this.getPairComplementarity(creature, o);
-                              if (opposed && soulHostile > 0.05) {
-                                  const push = soulHostile * soulOrganize * 0.038 * timeScale;
+                              if (opposed && soulHostile > 0.04) {
+                                  const push = soulHostile * soulOrganize * 0.052 * timeScale;
                                   vx += nx * push;
                                   vy += ny * push;
-                                  o.vx -= nx * push * 0.7;
-                                  o.vy -= ny * push * 0.7;
-                              } else if (!opposed && (similar || comp >= 0.4)) {
-                                  const ideal = CREATURE_IDEAL_DIST + (1 - min(1, comp)) * 3;
-                                  if (d > ideal + 2) {
-                                      const pull = soulOrganize * alignScore * 0.022 * timeScale;
+                                  o.vx -= nx * push * 0.75;
+                                  o.vy -= ny * push * 0.75;
+                              } else if (!opposed && (similar || comp >= 0.32)) {
+                                  const ringIdeal = comp >= 0.48 ? CREATURE_IDEAL_DIST
+                                      : comp >= 0.34 ? CREATURE_IDEAL_DIST * SOUL_FLOWER_RING_RATIO * 0.92
+                                      : CREATURE_IDEAL_DIST + (1 - min(1, comp)) * 4;
+                                  const ideal = ringIdeal + (1 - min(1, comp)) * 2.2;
+                                  if (d > ideal + 1.5) {
+                                      const pull = soulOrganize * alignScore * (0.032 + comp * 0.012) * timeScale;
                                       vx += nx * pull;
                                       vy += ny * pull;
-                                  } else if (d < ideal - 3 && d >= CREATURE_MIN_SEP) {
-                                      const rep = soulOrganize * 0.012 * timeScale;
+                                  } else if (d < ideal - 2.5 && d >= CREATURE_MIN_SEP) {
+                                      const rep = soulOrganize * (0.016 + comp * 0.006) * timeScale;
                                       vx -= nx * rep;
                                       vy -= ny * rep;
+                                  }
+                                  if (comp >= 0.34 && d >= CREATURE_MIN_SEP && d <= CREATURE_SOCIAL_MAX) {
+                                      const tangentX = -ny, tangentY = nx;
+                                      const slotSign = ((slot + (o._symSlot || 0)) % 2 === 0) ? 1 : -1;
+                                      const petalSlide = sin(orbitPhase + d * 0.035 + comp * 2.1)
+                                          * soulOrganize * 0.02 * alignScore * timeScale * slotSign;
+                                      vx += tangentX * petalSlide;
+                                      vy += tangentY * petalSlide;
                                   }
                               }
                           }
@@ -18902,10 +18944,17 @@ body.is-map-fullscreen #map-fullscreen-btn {
                               vx += nx * pull;
                               vy += ny * pull;
                           } else if (d >= CREATURE_MIN_SEP && d <= CREATURE_IDEAL_DIST + 10) {
-                              const slide = alignScore * 0.014 * linkPull * timeScale;
-                              const orbit = sin(orbitPhase + d * 0.04) * 0.006 * alignScore * linkPull * timeScale;
+                              const soulOrbitBoost = soulOrganize > 0.06 ? 1 + soulOrganize * 1.8 : 1;
+                              const slide = alignScore * 0.014 * linkPull * soulOrbitBoost * timeScale;
+                              const orbit = sin(orbitPhase + d * 0.04) * 0.006 * alignScore * linkPull * soulOrbitBoost * timeScale;
                               vx += tangentX * slide * slotSign + nx * orbit * 0.3;
                               vy += tangentY * slide * slotSign + ny * orbit * 0.3;
+                              if (soulOrganize > 0.06) {
+                                  const flowerOrbit = sin(orbitPhase + d * 0.04 + slot * 0.9)
+                                      * soulOrganize * 0.02 * alignScore * linkPull * timeScale;
+                                  vx += tangentX * flowerOrbit * slotSign;
+                                  vy += tangentY * flowerOrbit * slotSign;
+                              }
                               const faceAB = atan2(dy, dx);
                               const myFacing = creature.modules.find((m) => !m.isCore && Math.abs(this.angleDiff(m.layoutAngle ?? 0, faceAB)) < PI / 3);
                               if (myFacing) {
@@ -19284,10 +19333,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       lace.laceStrength = laceStrength;
                       lace.cohesion = min(1, symLevel * 0.24 + alignComfort * 0.34 + laceStrength * 0.42 + compComfort * 0.12);
                       lace.learningRate = 0.78 + laceStrength * 0.58 + symLevel * 0.09 + alignComfort * 0.08;
-                      lace.stability = min(1, lace.cohesion * 0.42 + (creature._soulOrganizePulse || 0) * 0.007
+                      lace.stability = min(1, lace.cohesion * 0.42 + (creature._soulOrganizePulse || 0) * 0.0085
                           + (creature._anchorSignalBoost || 0) * 0.18);
                       lace.pressure = min(1, hazardProx * 0.48 + burden * 0.14
-                          + (creature._soulHostilityPulse || 0) * 0.009 + (creature.damageFlash || 0) * 0.02);
+                          + (creature._soulHostilityPulse || 0) * 0.01 + (creature.damageFlash || 0) * 0.02);
 
                       lace.hazardGain = max(lace.hazardGain, (creature._colonyHazardBoost || 0) * 0.88);
                       lace.foodGain = max(lace.foodGain, (creature._colonyFoodBoost || 0) * 0.88);
@@ -19302,7 +19351,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           lace.socialGain = max(lace.socialGain, 0.12);
                       }
                       if ((creature._soulOrganizePulse || 0) > 0) {
-                          lace.socialGain = max(lace.socialGain, 0.1 * min(1, creature._soulOrganizePulse / 52));
+                          lace.socialGain = max(lace.socialGain, 0.16 * min(1, creature._soulOrganizePulse / SOUL_ORGANIZE_PULSE_MAX));
+                          lace.cohesion = max(lace.cohesion, 0.14 * min(1, creature._soulOrganizePulse / SOUL_ORGANIZE_PULSE_MAX));
                       }
 
                       lace.learningRate *= 1 + lace.pressure * 0.34;
@@ -19648,8 +19698,16 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           if ((c._laceTearPulse || 0) > 0) c._laceTearPulse -= timeScale * 0.85;
                           if ((c._laceTearBoundary || 0) > 0) c._laceTearBoundary -= timeScale * 0.9;
                           if ((c._laceTearDepth || 0) > 0) c._laceTearDepth *= 0.992;
-                          if ((c._soulOrganizePulse || 0) > 0) c._soulOrganizePulse -= timeScale;
-                          if ((c._soulHostilityPulse || 0) > 0) c._soulHostilityPulse -= timeScale * 0.85;
+                          if ((c._soulOrganizePulse || 0) > 0) c._soulOrganizePulse -= timeScale * 0.62;
+                          if ((c._soulHostilityPulse || 0) > 0) c._soulHostilityPulse -= timeScale * 0.58;
+                          if ((c._soulWeavePulse || 0) > 0) {
+                              c._soulWeavePulse -= timeScale * 0.62;
+                              if (c._soulWeavePulse <= 0) {
+                                  c._soulWeavePulse = 0;
+                                  c._soulWeaveOriginX = null;
+                                  c._soulWeaveOriginY = null;
+                              }
+                          }
                           if ((c._soulReproBoost || 0) > 0) c._soulReproBoost -= timeScale;
                           tickColonySquidEmergencePressure(c, timeScale);
                       }
@@ -19937,30 +19995,41 @@ body.is-map-fullscreen #map-fullscreen-btn {
                               const ally = edge.other;
                               if (!this.isActiveCreature(ally)) continue;
                               const st = this.ensureLinkState(c, ally);
-                              const tighten = intensity * max(0.08, 0.26 - hop * 0.05);
-                              st.laceCompressed = min(1.2, (st.laceCompressed || 0) + tighten);
-                              st.laceCompressAge = min(140, (st.laceCompressAge || 0) + tighten * 22);
-                              st.laceTension = min(0.98, (st.laceTension || 0) + tighten * 0.42);
-                              st.laceTightenPulse = max(st.laceTightenPulse || 0, 24 + tighten * 18);
-                              st.soulAbsorbGlow = max(st.soulAbsorbGlow || 0, 18 + tighten * 20);
-                              st.pullBoost = min(1.15, (st.pullBoost || 0) + tighten * 0.22);
+                              const tighten = intensity * max(0.1, 0.34 - hop * 0.04);
+                              st.laceCompressed = min(1.28, (st.laceCompressed || 0) + tighten);
+                              st.laceCompressAge = min(155, (st.laceCompressAge || 0) + tighten * 26);
+                              st.laceTension = min(0.98, (st.laceTension || 0) + tighten * 0.48);
+                              st.laceTightenPulse = max(st.laceTightenPulse || 0, 30 + tighten * 22);
+                              st.soulAbsorbGlow = max(st.soulAbsorbGlow || 0, 22 + tighten * 24);
+                              st.pullBoost = min(1.28, (st.pullBoost || 0) + tighten * 0.28);
 
                               const d = edge.dist || dist(c.x, c.y, ally.x, ally.y);
                               const comp = this.getPairComplementarity(c, ally);
                               const sameCore = this.coresSimilar(c, ally);
-                              if (sameCore && comp >= 0.35 && d > CREATURE_IDEAL_DIST - 2) {
-                                  const pull = tighten * 0.11;
+                              const flowerIdeal = comp >= 0.48 ? CREATURE_IDEAL_DIST
+                                  : comp >= 0.34 ? CREATURE_IDEAL_DIST * SOUL_FLOWER_RING_RATIO * 0.94
+                                  : CREATURE_IDEAL_DIST + 4;
+                              if ((sameCore || comp >= 0.34) && d > flowerIdeal - 3) {
+                                  const pull = tighten * (0.14 + comp * 0.08);
                                   const nx = (ally.x - c.x) / max(1, d);
                                   const ny = (ally.y - c.y) / max(1, d);
-                                  c.vx += nx * pull * 0.5;
-                                  c.vy += ny * pull * 0.5;
-                                  ally.vx -= nx * pull * 0.5;
-                                  ally.vy -= ny * pull * 0.5;
+                                  c.vx += nx * pull * 0.58;
+                                  c.vy += ny * pull * 0.58;
+                                  ally.vx -= nx * pull * 0.58;
+                                  ally.vy -= ny * pull * 0.58;
+                              } else if ((sameCore || comp >= 0.34) && d < flowerIdeal - 4 && d >= CREATURE_MIN_SEP) {
+                                  const nx = (ally.x - c.x) / max(1, d);
+                                  const ny = (ally.y - c.y) / max(1, d);
+                                  const rep = tighten * (0.08 + comp * 0.05);
+                                  c.vx -= nx * rep * 0.5;
+                                  c.vy -= ny * rep * 0.5;
+                                  ally.vx += nx * rep * 0.5;
+                                  ally.vy += ny * rep * 0.5;
                               }
                               if (this.coresOpposedToAnchor(ally, sourceCore) || this.coresOpposedToAnchor(c, sourceCore)) {
                                   const nx = (ally.x - c.x) / max(1, d);
                                   const ny = (ally.y - c.y) / max(1, d);
-                                  const push = tighten * 0.14;
+                                  const push = tighten * 0.18;
                                   ally.vx += nx * push;
                                   ally.vy += ny * push;
                                   c.vx -= nx * push;
@@ -19983,7 +20052,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                                   if (typeof AnnouncerSystem !== 'undefined') AnnouncerSystem.onLaceTear?.();
                               }
 
-                              if (!visited.has(ally) && hop < 4) {
+                              if (!visited.has(ally) && hop < 5) {
                                   visited.add(ally);
                                   queue.push({ c: ally, hop: hop + 1 });
                               }
@@ -19996,18 +20065,18 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       if (!link || !this.isActiveCreature(link.a) || !this.isActiveCreature(link.b)) return false;
                       const { a, b } = link;
                       const st = this.ensureLinkState(a, b);
-                      const intensity = min(1.55, 0.38 + (orb.energy || 10) * 0.038 + (orb.networkSize || 1) * 0.025);
+                      const intensity = min(1.85, 0.44 + (orb.energy || 10) * 0.042 + (orb.networkSize || 1) * 0.03);
                       const sourceCore = orb.sourceCore || getCreatureCoreType(a) || 'balanced';
                       const hitX = hit.x, hitY = hit.y;
 
-                      st.soulAbsorbGlow = 52;
-                      st.feedGlow = min(140, (st.feedGlow || 0) + 48);
-                      st.feedFlash = 28;
-                      st.pullBoost = min(1.2, (st.pullBoost || 0) + 0.42 * intensity);
-                      st.laceCompressed = min(1.15, (st.laceCompressed || 0) + 0.34 * intensity);
-                      st.laceCompressAge = min(130, (st.laceCompressAge || 0) + 22 * intensity);
-                      st.laceTension = min(0.96, (st.laceTension || 0) + 0.28 * intensity);
-                      st.laceTightenPulse = 36;
+                      st.soulAbsorbGlow = 62;
+                      st.feedGlow = min(155, (st.feedGlow || 0) + 54);
+                      st.feedFlash = 34;
+                      st.pullBoost = min(1.35, (st.pullBoost || 0) + 0.5 * intensity);
+                      st.laceCompressed = min(1.25, (st.laceCompressed || 0) + 0.42 * intensity);
+                      st.laceCompressAge = min(145, (st.laceCompressAge || 0) + 26 * intensity);
+                      st.laceTension = min(0.96, (st.laceTension || 0) + 0.34 * intensity);
+                      st.laceTightenPulse = 48;
                       st.lastHitX = hitX;
                       st.lastHitY = hitY;
 
@@ -20024,17 +20093,20 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           cur.energy = min(maxE, cur.energy + foodBump * 0.35);
                           cur.particleReproUrge = min(PARTICLE_REPRO_URGE_FRAMES,
                               (cur.particleReproUrge || 0) + 16 * intensity);
-                          cur._soulReproBoost = max(cur._soulReproBoost || 0, 95);
-                          cur._soulOrganizePulse = max(cur._soulOrganizePulse || 0, 52);
-                          cur._soulHostilityPulse = max(cur._soulHostilityPulse || 0, 44);
+                          cur._soulReproBoost = max(cur._soulReproBoost || 0, 110);
+                          cur._soulOrganizePulse = max(cur._soulOrganizePulse || 0, SOUL_ORGANIZE_PULSE_MAX);
+                          cur._soulHostilityPulse = max(cur._soulHostilityPulse || 0, SOUL_HOSTILITY_PULSE_MAX);
                           cur._soulAnchorCore = sourceCore;
-                          cur._colonyLinkPulse = max(cur._colonyLinkPulse || 0, 22);
+                          cur._soulWeaveOriginX = hitX;
+                          cur._soulWeaveOriginY = hitY;
+                          cur._soulWeavePulse = max(cur._soulWeavePulse || 0, SOUL_ORGANIZE_PULSE_MAX);
+                          cur._colonyLinkPulse = max(cur._colonyLinkPulse || 0, 32);
                           const soulLace = ModuleIdentitySystem.ensureLaceMod(cur);
-                          soulLace.reproGain = max(soulLace.reproGain, 0.18 * intensity);
-                          soulLace.socialGain = max(soulLace.socialGain, 0.16 * intensity);
-                          soulLace.stability = max(soulLace.stability, 0.24 * intensity);
-                          soulLace.lineageBias = max(soulLace.lineageBias, 0.28 * intensity);
-                          soulLace.cohesion = max(soulLace.cohesion, 0.2 * intensity);
+                          soulLace.reproGain = max(soulLace.reproGain, 0.2 * intensity);
+                          soulLace.socialGain = max(soulLace.socialGain, 0.26 * intensity);
+                          soulLace.stability = max(soulLace.stability, 0.3 * intensity);
+                          soulLace.lineageBias = max(soulLace.lineageBias, 0.34 * intensity);
+                          soulLace.cohesion = max(soulLace.cohesion, 0.32 * intensity);
                           let inheritedCount = 0;
                           if (orb.lineageImprint) {
                               inheritedCount = NeuralNet.applySoulLineageInheritance(cur, orb.lineageImprint, intensity);
@@ -20066,10 +20138,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
                               if (!this.coresOpposedToAnchor(o, sourceCore)) continue;
                               const dx = o.x - cur.x, dy = o.y - cur.y;
                               const d = sqrt(dx * dx + dy * dy) || 1;
-                              const push = intensity * 0.2 * (1 + (cur._networkSize || 1) * 0.04);
+                              const push = intensity * 0.26 * (1 + (cur._networkSize || 1) * 0.05);
                               o.vx += (dx / d) * push;
                               o.vy += (dy / d) * push;
-                              o._soulHostilityPulse = max(o._soulHostilityPulse || 0, 36);
+                              o._soulHostilityPulse = max(o._soulHostilityPulse || 0, 48);
                               cur.vx -= (dx / d) * push * 0.45;
                               cur.vy -= (dy / d) * push * 0.45;
                           }
@@ -20732,6 +20804,18 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           stroke(red(color(coreCol)), green(color(coreCol)), blue(color(coreCol)), 12 + spaceC * 22);
                           strokeWeight(0.55);
                           circle(creature.x, creature.y, CREATURE_IDEAL_DIST * 0.52 + sin(frameCount * 0.05 + symSlot) * 1.5);
+                      }
+                      const weavePulse = creature._soulWeavePulse || 0;
+                      if (shouldDrawEffect('links') && weavePulse > 2 && creature._soulWeaveOriginX != null) {
+                          const weaveAmt = min(1, weavePulse / SOUL_ORGANIZE_PULSE_MAX);
+                          const wx = creature._soulWeaveOriginX, wy = creature._soulWeaveOriginY;
+                          noFill();
+                          stroke(52, 211, 153, 8 + weaveAmt * 18);
+                          strokeWeight(0.35 + weaveAmt * 0.25);
+                          circle(wx, wy, CREATURE_IDEAL_DIST * 2 + sin(frameCount * 0.04) * 1.2);
+                          stroke(110, 231, 183, 5 + weaveAmt * 12);
+                          strokeWeight(0.28);
+                          circle(wx, wy, CREATURE_IDEAL_DIST * SOUL_FLOWER_RING_RATIO * 2 + sin(frameCount * 0.03 + 1.2) * 1.5);
                       }
                   },
 
