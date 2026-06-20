@@ -4,7 +4,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-004-tendril-toggle" />
+    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-006-distant-squid-food" />
     <title>MiniSimmy Orbital Ship v2</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2334d399'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%230a0a0f'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -8016,7 +8016,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'local-005-squid-belly-pop';
+              const MINISIMMY_BUILD = 'local-006-distant-squid-food';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -24049,15 +24049,101 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   circle(sx - 4, sy - 4, 8);
               }
 
+              function quadBezierPoint(x1, y1, cx, cy, x2, y2, t) {
+                  const u = 1 - t;
+                  return {
+                      x: u * u * x1 + 2 * u * t * cx + t * t * x2,
+                      y: u * u * y1 + 2 * u * t * cy + t * t * y2
+                  };
+              }
+
+              function strokeFadingQuadTendril(x1, y1, cx, cy, x2, y2, cr, cg, cb, baseAlpha, baseWeight) {
+                  const steps = 14;
+                  let px = x1;
+                  let py = y1;
+                  for (let i = 1; i <= steps; i++) {
+                      const t0 = (i - 1) / steps;
+                      const pt = quadBezierPoint(x1, y1, cx, cy, x2, y2, i / steps);
+                      const fade = 1 - t0 * 0.94;
+                      stroke(cr, cg, cb, baseAlpha * fade);
+                      strokeWeight(max(0.15, baseWeight * fade));
+                      line(px, py, pt.x, pt.y);
+                      px = pt.x;
+                      py = pt.y;
+                  }
+              }
+
+              function drawDistantSquidFoodZone(bx, by, displayR, isDay, isGreen, vortexX, vortexY) {
+                  if (!displayR || displayR < 2) return;
+                  const awayAng = atan2(by - vortexY, bx - vortexX);
+                  const awayX = cos(awayAng);
+                  const awayY = sin(awayAng);
+                  const perpX = -awayY;
+                  const perpY = awayX;
+                  const bodyScale = 5.8 + displayR * 0.04;
+                  const cr = isGreen ? 16 : 56;
+                  const cg = isGreen ? 185 : 189;
+                  const cb = isGreen ? 129 : 248;
+                  const dayBoost = isDay ? (isGreen ? 1 : 0.42) : (isGreen ? 0.38 : 1);
+                  const pulse = 0.88 + sin(frameCount * 0.04 + (isGreen ? 0 : 2.1)) * 0.12;
+
+                  noStroke();
+                  fill(cr, cg, cb, 10 * dayBoost * pulse);
+                  ellipse(bx, by, displayR * bodyScale * 2.1, displayR * bodyScale * 1.45);
+                  fill(cr, cg, cb, 16 * dayBoost * pulse);
+                  ellipse(bx, by, displayR * bodyScale * 1.35, displayR * bodyScale * 0.92);
+                  fill(cr, cg, cb, 24 * dayBoost * pulse);
+                  ellipse(bx - awayX * displayR * 0.2, by - awayY * displayR * 0.2, displayR * 1.8, displayR * 1.25);
+
+                  const tendrilN = PerfScale.lod >= 2 ? 7 : 10;
+                  const reachMult = 3.6 + displayR * 0.018;
+                  const distV = dist(bx, by, vortexX, vortexY) || 1;
+                  noFill();
+
+                  for (let i = 0; i < tendrilN; i++) {
+                      const side = i - (tendrilN - 1) * 0.5;
+                      const spread = side * 0.11;
+                      const ang = awayAng + PI + spread;
+                      const len = distV * reachMult + displayR * (9 + abs(side) * 2.2);
+                      const sx = bx + cos(ang) * displayR * 0.55;
+                      const sy = by + sin(ang) * displayR * 0.55;
+                      const ex = bx + cos(ang) * len;
+                      const ey = by + sin(ang) * len;
+                      const midT = 0.42 + sin(frameCount * 0.018 + i * 0.85) * 0.06;
+                      const mx = lerp(sx, ex, midT) + perpX * (side * displayR * 0.35 + sin(frameCount * 0.03 + i) * 6);
+                      const my = lerp(sy, ey, midT) + perpY * (side * displayR * 0.35 + cos(frameCount * 0.028 + i * 1.1) * 6);
+                      strokeFadingQuadTendril(sx, sy, mx, my, ex, ey, cr, cg, cb, 34 * dayBoost, 2.1);
+                  }
+
+                  const wispN = PerfScale.lod >= 2 ? 2 : 4;
+                  for (let i = 0; i < wispN; i++) {
+                      const side = (i - (wispN - 1) * 0.5) * 0.22;
+                      const ang = awayAng + side;
+                      const len = distV * 1.15 + displayR * 4;
+                      const sx = bx + cos(ang + PI) * displayR * 0.25;
+                      const sy = by + sin(ang + PI) * displayR * 0.25;
+                      const ex = vortexX + cos(ang) * displayR * 0.6;
+                      const ey = vortexY + sin(ang) * displayR * 0.6;
+                      const curl = sin(frameCount * 0.025 + i * 1.4) * 22;
+                      const mx = lerp(sx, ex, 0.5) + perpX * curl;
+                      const my = lerp(sy, ey, 0.5) + perpY * curl * 0.7;
+                      strokeFadingQuadTendril(sx, sy, mx, my, ex, ey, cr, cg, cb, 12 * dayBoost, 0.85);
+                  }
+
+                  fill(cr, cg, cb, (isDay ? (isGreen ? 90 : 32) : (isGreen ? 32 : 90)) * pulse);
+                  circle(bx, by, displayR * 2);
+                  fill(cr, cg, cb, (isDay ? (isGreen ? 50 : 18) : (isGreen ? 18 : 50)) * pulse);
+                  circle(bx, by, displayR * 2.2);
+                  fill(220, 252, 245, 18 * dayBoost * pulse);
+                  circle(bx - awayX * displayR * 0.12, by - awayY * displayR * 0.12, displayR * 0.55);
+              }
+
               function drawFoodZoneBackdropWorld(isDay, greenDisplayR, blueDisplayR) {
-                  fill(16, 185, 129, isDay ? 90 : 32);
-                  circle(greenZone.x, greenZone.y, greenDisplayR * 2);
-                  fill(16, 185, 129, isDay ? 50 : 18);
-                  circle(greenZone.x, greenZone.y, greenDisplayR * 2.2);
-                  fill(56, 189, 248, isDay ? 32 : 90);
-                  circle(blueZone.x, blueZone.y, blueDisplayR * 2);
-                  fill(56, 189, 248, isDay ? 18 : 50);
-                  circle(blueZone.x, blueZone.y, blueDisplayR * 2.2);
+                  if (!greenZone || !blueZone) return;
+                  const vx = centerX;
+                  const vy = centerY;
+                  drawDistantSquidFoodZone(greenZone.x, greenZone.y, greenDisplayR, isDay, true, vx, vy);
+                  drawDistantSquidFoodZone(blueZone.x, blueZone.y, blueDisplayR, isDay, false, vx, vy);
               }
 
               function drawWorldMapContent() {
