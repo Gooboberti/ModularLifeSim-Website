@@ -4,7 +4,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-012-squid-belly-ui" />
+    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-013-squid-absorb-fix" />
     <title>MiniSimmy Orbital Ship v2</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2334d399'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%230a0a0f'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -8508,7 +8508,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'local-012-squid-belly-ui';
+              const MINISIMMY_BUILD = 'local-013-squid-absorb-fix';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -26355,6 +26355,14 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   return false;
               }
 
+              function canAbsorbScoopCreatureInBubble(hunter, prey) {
+                  if (!isScoopableFeastCreature(hunter, prey)) return false;
+                  if (!isJellyfishScoopCreature(hunter)) return true;
+                  if (hunter._manualSuperPredator && hunter._manualControl) return true;
+                  if (prey._scoopBeingDragged === hunter) return true;
+                  return (hunter._scoopProbeTags || []).some((t) => t.prey === prey);
+              }
+
               function applyScoopBubbleAbsorption(creature, geo) {
                   const bx = geo.bubbleX;
                   const by = geo.bubbleY;
@@ -26378,6 +26386,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           : creatures;
                       for (const c of scan) {
                           if (c === creature || isManualControlImmune(c)) continue;
+                          if (!canAbsorbScoopCreatureInBubble(creature, c)) continue;
                           const dx = c.x - bx;
                           const dy = c.y - by;
                           const touch = br + CREATURE_BODY_RADIUS * 0.45;
@@ -26522,6 +26531,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       if (energyOrbs.length >= 35) break;
                       const angle = random(TWO_PI);
                       const spread = 10 + tier * 4;
+                      let lineageImprint = null;
+                      try {
+                          lineageImprint = NeuralNet.buildSoulLineageImprint(prey);
+                      } catch (_) { /* keep absorb path alive */ }
                       energyOrbs.push({
                           x: sx + cos(angle) * random(3, spread),
                           y: sy + sin(angle) * random(3, spread),
@@ -26534,7 +26547,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           vy: sin(angle) * random(0.5, 2.1),
                           sourceCore: getCreatureCoreType(prey),
                           networkSize: prey._networkSize || 1,
-                          lineageImprint: NeuralNet.buildSoulLineageImprint(prey)
+                          lineageImprint
                       });
                       spawned++;
                   }
@@ -27384,10 +27397,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   if (particleRoom > 0) {
                       for (const p of vortexParticles) {
                           if (p._scoopSnared === creature && isScoopableWhiteParticle(p)) {
-                          const dx = p.x - geo.bubbleX;
-                          const dy = p.y - geo.bubbleY;
-                          candidates.push({ p, d2: dx * dx + dy * dy, snared: true });
-                          snaredSet.add(p);
+                              const dx = p.x - geo.bubbleX;
+                              const dy = p.y - geo.bubbleY;
+                              candidates.push({ p, d2: dx * dx + dy * dy, snared: true });
+                              snaredSet.add(p);
+                          }
                       }
                   }
 
@@ -27422,8 +27436,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           }
                       }
                   }
-                      creature._scoopScanCursor = (scanCursor + MANUAL_SCOOP_SCAN_BUDGET) % max(1, vortexParticles.length);
-                  }
+                  creature._scoopScanCursor = (scanCursor + MANUAL_SCOOP_SCAN_BUDGET) % max(1, vortexParticles.length);
 
                   candidates.sort((a, b) => (b.snared ? 1 : 0) - (a.snared ? 1 : 0) || a.d2 - b.d2);
                   const tentacles = geo.tentacles;
