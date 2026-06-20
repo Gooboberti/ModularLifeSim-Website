@@ -8002,7 +8002,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'orbital-ship-v2-2026-06-20-scoop-bubble-fix';
+              const MINISIMMY_BUILD = 'orbital-ship-v2-2026-06-20-scoop-capture-fix';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -25664,11 +25664,25 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
               function canAutoJoinScoopBubble(hunter, prey) {
                   if (!hunter || !prey || prey === hunter) return false;
-                  const isFeast = hunter._manualSuperPredator && hunter._manualControl;
-                  if (isFeast) return true;
-                  return prey._scoopBeingDragged === hunter
-                      || prey._scoopInBubble === hunter
-                      || prey._scoopProbeTaggedBy === hunter;
+                  // Probe tags are scan-only — prey must be actively pulled or already held in the bubble.
+                  return prey._scoopBeingDragged === hunter || prey._scoopInBubble === hunter;
+              }
+
+              function releaseScoopBubbleOccupant(hunter, prey) {
+                  if (!hunter || !prey) return;
+                  if (prey._scoopInBubble === hunter) prey._scoopInBubble = null;
+                  if (prey._scoopBeingDragged === hunter) prey._scoopBeingDragged = null;
+                  if (hunter._scoopBubbleOccupants) {
+                      hunter._scoopBubbleOccupants = hunter._scoopBubbleOccupants.filter((c) => c !== prey);
+                  }
+                  if (hunter._scoopBubbleFocus === prey) hunter._scoopBubbleFocus = null;
+              }
+
+              function resetScoopBubbleCapture(hunter) {
+                  if (!hunter) return;
+                  for (const c of hunter._scoopBubbleOccupants || []) releaseScoopBubbleOccupant(hunter, c);
+                  hunter._scoopBubbleOccupants = [];
+                  hunter._scoopBubbleFocus = null;
               }
 
               function repelUntaggedScoopBubbleIntruders(hunter, geo) {
@@ -25689,10 +25703,14 @@ body.is-map-fullscreen #map-fullscreen-btn {
               }
 
               function syncScoopBubbleOccupants(hunter, geo) {
-                  hunter._scoopBubbleOccupants = (hunter._scoopBubbleOccupants || []).filter((c) =>
-                      c && creatures.indexOf(c) >= 0 && (c.energy || 0) > 0
-                      && isCreatureInsideScoopBubble(c, hunter, geo)
-                  );
+                  hunter._scoopBubbleOccupants = (hunter._scoopBubbleOccupants || []).filter((c) => {
+                      if (!c || creatures.indexOf(c) < 0 || (c.energy || 0) <= 0) return false;
+                      if (!isCreatureInsideScoopBubble(c, hunter, geo) || !canAutoJoinScoopBubble(hunter, c)) {
+                          releaseScoopBubbleOccupant(hunter, c);
+                          return false;
+                      }
+                      return true;
+                  });
                   const scan = SpatialGrid.cells
                       ? SpatialGrid.queryRadius(geo.bubbleX, geo.bubbleY, geo.bubbleR + CREATURE_BODY_RADIUS * 0.5, hunter)
                       : creatures;
@@ -26742,9 +26760,6 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           ally.vy += (dy / d) * stress;
                           ally._scoopProbeStress = (ally._scoopProbeStress || 0) + stress;
                           ally._scoopProbeTugFlash = max(ally._scoopProbeTugFlash || 0, 14);
-                          if (d < geo.probe.len * 1.6 || laceStress > 0.75) {
-                              tagScoopProbeCreature(hunter, ally);
-                          }
                           if (frameCount % 55 === 0 && laceStress > 0.6) {
                               ally.currentThought = 'Colony strain — weak link found';
                           }
@@ -27542,6 +27557,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       return;
                   }
                   stealLatticeForScoop(creature);
+                  resetScoopBubbleCapture(creature);
                   creature._scoopActive = true;
                   creature._scoopProbeDeployed = true;
                   ensureJellyfishSizeState(creature);
@@ -29550,6 +29566,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   c._predatorHitFlash = 28;
                   if (canCreatureUseScoop(c) && !c._scoopActive) {
                       stealLatticeForScoop(c);
+                      resetScoopBubbleCapture(c);
                       c._scoopActive = true;
                       if (!c._scoopBag) c._scoopBag = [];
                       if (!c._scoopModuleBag) c._scoopModuleBag = [];
