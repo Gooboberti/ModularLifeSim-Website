@@ -4,7 +4,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-lace-tumor-visual-fix" />
+    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-lace-tendril-lattice" />
     <title>MiniSimmy Orbital Ship v2</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2334d399'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%230a0a0f'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -8006,7 +8006,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'orbital-ship-v2-2026-06-20-lace-tumor-visual-fix';
+              const MINISIMMY_BUILD = 'orbital-ship-v2-2026-06-20-lace-tendril-lattice';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -8216,9 +8216,14 @@ body.is-map-fullscreen #map-fullscreen-btn {
               const SCOOP_LACE_ROOT_REPATH_FRAMES = 38;
               const SCOOP_LACE_ROOT_SEEK_RANGE = 290;
               const SCOOP_LACE_FEELER_REACH_MULT = 2.75;
-              const SCOOP_LACE_TUMOR_SUSTAIN_RATE = 0.0032;
+              const SCOOP_LACE_TUMOR_HEAL_RATE = 0.042;
               const SCOOP_LACE_TUMOR_POP_MIN = 6;
               const SCOOP_LACE_TUMOR_POP_MAX = 14;
+              const SCOOP_LACE_TENDRIL_RELATCH_FRAMES = 52;
+              const SCOOP_LACE_FEELER_LATCH_HIT = 22;
+              const SCOOP_LACE_LATTICE_CRYSTAL_GROW = 0.006;
+              const SCOOP_LACE_FISSURE_DEPTH_RATE = 0.014;
+              const SCOOP_LACE_ROOT_MIN_LATCH = 2;
               const SCOOP_LACE_LEECH_FX_MAX = 36;
               const TUMOR_RELEASE_CURRENCIES = ['score', 'dust', 'crystal', 'voidheart', 'sovereign'];
 
@@ -25037,50 +25042,329 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       `tumor pops — ${entries.length} brood swim out`);
               }
 
-              function tickLaceTumorSustain(tumor, colonySet) {
-                  const members = [...(colonySet || [])].filter((m) => m && m !== tumor && creatures.indexOf(m) >= 0);
-                  if (!members.length) return 0;
-                  let totalSip = 0;
-                  const budget = SCOOP_LACE_TUMOR_SUSTAIN_RATE * timeScale;
-                  const perMember = budget / members.length;
-                  for (const m of members) {
-                      const surplus = getLaceNodeResidualEnergy(m);
-                      if (surplus < 0.15) continue;
-                      const sip = min(perMember, surplus * 0.008);
-                      m.energy = max(SCOOP_LACE_ROOT_RESIDUAL_FLOOR, m.energy - sip);
-                      totalSip += sip;
+              function auditLaceNetworkFromLace(seedLace, creature) {
+                  if (!seedLace) return null;
+                  const seeds = [seedLace.a, seedLace.b].filter(Boolean);
+                  const adj = buildLaceColonyAdjacency(seeds);
+                  const nodes = new Set();
+                  const queue = [...seeds];
+                  const seen = new Set();
+                  for (const s of seeds) seen.add(s);
+                  while (queue.length) {
+                      const node = queue.shift();
+                      if (!node || creatures.indexOf(node) < 0) continue;
+                      nodes.add(node);
+                      for (const edge of adj.get(node) || []) {
+                          const n = edge.neighbor;
+                          if (!n || seen.has(n) || creatures.indexOf(n) < 0) continue;
+                          seen.add(n);
+                          queue.push(n);
+                      }
                   }
-                  if (totalSip > 0) tumor.energy = min(100, tumor.energy + totalSip * 3.2);
-                  return totalSip;
+                  const edges = [];
+                  const edgeSeen = new Set();
+                  for (const lace of collectLaceSegmentsNearCreature(creature)) {
+                      if (!nodes.has(lace.a) && !nodes.has(lace.b)) continue;
+                      if (edgeSeen.has(lace.key)) continue;
+                      edgeSeen.add(lace.key);
+                      edges.push(lace);
+                  }
+                  let cx = 0, cy = 0, n = 0;
+                  for (const node of nodes) { cx += node.x; cy += node.y; n++; }
+                  return {
+                      nodes, edges, adj,
+                      centroid: n ? { x: cx / n, y: cy / n } : null,
+                      seedLace
+                  };
               }
 
-              function updateLaceSeekFeelers(creature, geo, seekHit) {
-                  if (!seekHit) {
-                      creature._laceLeechFeelers = [];
-                      return;
+              function ensureLaceTendrilLinks(creature, geo) {
+                  tagRearScoopTentacles(creature, geo);
+                  const rearTents = (geo.tentacles || []).filter((t) => t._isRearTentacle);
+                  if (!creature._laceTendrilLinks) creature._laceTendrilLinks = [];
+                  const links = creature._laceTendrilLinks;
+                  while (links.length < rearTents.length) {
+                      links.push({ phase: 'feel', latchFrames: 0, fissureT: 0 });
                   }
+                  links.length = rearTents.length;
+                  for (let i = 0; i < rearTents.length; i++) {
+                      links[i].tent = rearTents[i];
+                      links[i].tentIndex = i;
+                  }
+                  return links;
+              }
+
+              function scoreTendrilLatchCandidate(link, pt, lace, tent, links, anchor, i) {
+                  const ox = tent.tipX ?? tent.baseX;
+                  const oy = tent.tipY ?? tent.baseY;
+                  const d = dist(ox, oy, pt.x, pt.y);
+                  let spread = 0;
+                  for (const other of links) {
+                      if (other === link) continue;
+                      const op = other.targetPt || other.candidatePt;
+                      if (!op) continue;
+                      spread += min(90, dist(pt.x, pt.y, op.x, op.y));
+                  }
+                  const rearX = -cos(anchor.facing), rearY = -sin(anchor.facing);
+                  const rearDot = (pt.x - anchor.x) * rearX + (pt.y - anchor.y) * rearY;
+                  return spread * 0.55 + (lace.strong ? 28 : 12) - d * 0.12 + rearDot * 0.08 + i * 2.5;
+              }
+
+              function pickRelatchSite(link, network, links, anchor) {
+                  if (!network?.edges?.length || !link.targetPt) return null;
+                  let best = null, bestScore = -Infinity;
+                  for (const lace of network.edges) {
+                      const pts = [
+                          { x: (lace.ax + lace.bx) * 0.5, y: (lace.ay + lace.by) * 0.5 },
+                          { x: lace.ax, y: lace.ay },
+                          { x: lace.bx, y: lace.by }
+                      ];
+                      for (const raw of pts) {
+                          const pt = clampPointToRearHemisphere(anchor, raw.x, raw.y);
+                          const spread = links.reduce((s, o) => {
+                              if (o === link) return s;
+                              const op = o.targetPt;
+                              return op ? s + min(85, dist(pt.x, pt.y, op.x, op.y)) : s;
+                          }, 0);
+                          const align = 40 - dist(pt.x, pt.y, link.targetPt.x, link.targetPt.y) * 0.08;
+                          const score = spread * 0.5 + align + (lace.strong ? 15 : 0);
+                          if (score > bestScore) { bestScore = score; best = { pt, lace }; }
+                      }
+                  }
+                  return best;
+              }
+
+              function pickDeeperFissureNode(link, network, creature) {
+                  if (!network?.adj || !link.targetPt) return null;
+                  let nearest = null, nearestD = Infinity;
+                  for (const node of network.nodes) {
+                      const d = dist(node.x, node.y, link.targetPt.x, link.targetPt.y);
+                      if (d < nearestD) { nearestD = d; nearest = node; }
+                  }
+                  if (!nearest || !network.adj.has(nearest)) return null;
+                  let best = null, bestScore = -Infinity;
+                  for (const edge of network.adj.get(nearest)) {
+                      const n = edge.neighbor;
+                      if (!n || n === creature) continue;
+                      const d0 = dist(nearest.x, nearest.y, link.targetPt.x, link.targetPt.y);
+                      const d1 = dist(n.x, n.y, link.targetPt.x, link.targetPt.y);
+                      if (d1 <= d0 + 4) continue;
+                      const score = scoreLaceRootTarget(n) + d1 * 0.05;
+                      if (score > bestScore) { bestScore = score; best = n; }
+                  }
+                  return best;
+              }
+
+              function applyLaceTendrilTargets(creature, geo, links) {
+                  for (const link of links || []) {
+                      const tent = link.tent;
+                      if (!tent) continue;
+                      const tgt = (link.phase === 'latched' || link.phase === 'fissure')
+                          ? link.targetPt
+                          : (link.feelTip || link.candidatePt);
+                      if (!tgt) continue;
+                      tent._laceReaching = true;
+                      tent._laceReserved = true;
+                      tent.targetX = tgt.x;
+                      tent.targetY = tgt.y;
+                      tent.grabbingCreature = false;
+                  }
+              }
+
+              function updateLaceFeelersFromLinks(creature, links) {
+                  creature._laceLeechFeelers = (links || []).map((link, i) => {
+                      const tent = link.tent;
+                      if (!tent) return null;
+                      const fromX = tent.tipX ?? tent.baseX;
+                      const fromY = tent.tipY ?? tent.baseY;
+                      const to = (link.phase === 'latched' || link.phase === 'fissure')
+                          ? link.targetPt
+                          : (link.feelTip || link.candidatePt);
+                      if (!to) return null;
+                      return {
+                          fromX, fromY, toX: to.x, toY: to.y,
+                          phase: i * 0.65,
+                          latched: link.phase === 'latched' || link.phase === 'fissure',
+                          fissure: link.fissureT || 0
+                      };
+                  }).filter(Boolean);
+              }
+
+              function rebuildLaceCrystalLattice(creature, geo) {
+                  const links = (creature._laceTendrilLinks || [])
+                      .filter((l) => l.phase === 'latched' || l.phase === 'fissure');
                   const anchor = getLaceTumorRearAnchor(creature, geo);
-                  const clamped = clampPointToRearHemisphere(anchor, seekHit.pt.x, seekHit.pt.y);
-                  const feelers = [];
-                  const rearSegs = getRearScoopTentacleSegments(creature, geo);
-                  const extReach = geo.stats.reach * SCOOP_LACE_FEELER_REACH_MULT * 0.55
-                      + SCOOP_LACE_ROOT_SEEK_RANGE * 0.28;
-                  for (let i = 0; i < rearSegs.length; i++) {
-                      const seg = rearSegs[i];
-                      const ox = seg.x2 ?? seg.x1;
-                      const oy = seg.y2 ?? seg.y1;
-                      const dx = clamped.x - ox;
-                      const dy = clamped.y - oy;
-                      const d = sqrt(dx * dx + dy * dy) || 1;
-                      const extend = min(extReach, d * 0.92);
-                      feelers.push({
-                          fromX: ox, fromY: oy,
-                          toX: ox + (dx / d) * extend,
-                          toY: oy + (dy / d) * extend,
-                          phase: i * 0.65 + random(0, 0.4)
-                      });
+                  const pts = links.map((l) => l.targetPt).filter(Boolean);
+                  const faces = [];
+                  const crystal = creature._laceLatticeCrystal || 0;
+                  for (let i = 0; i < pts.length; i++) {
+                      for (let j = i + 1; j < pts.length; j++) {
+                          if (dist(pts[i].x, pts[i].y, pts[j].x, pts[j].y) > CREATURE_SOCIAL_MAX * 0.9) continue;
+                          const fi = links[i].fissureT || 0;
+                          const fj = links[j].fissureT || 0;
+                          faces.push({
+                              verts: [
+                                  { x: anchor.x, y: anchor.y },
+                                  pts[i],
+                                  pts[j]
+                              ],
+                              crystal: min(1, crystal * 0.65 + (fi + fj) * 0.28)
+                          });
+                      }
                   }
-                  creature._laceLeechFeelers = feelers;
+                  const audit = creature._laceNetworkAudit;
+                  if (audit?.edges?.length && pts.length >= 2) {
+                      for (const lace of audit.edges) {
+                          if (faces.length >= 28) break;
+                          const mx = (lace.ax + lace.bx) * 0.5;
+                          const my = (lace.ay + lace.by) * 0.5;
+                          let nearA = null, nearB = null, da = Infinity, db = Infinity;
+                          for (const p of pts) {
+                              const d = dist(p.x, p.y, mx, my);
+                              if (d < da) { db = da; nearB = nearA; da = d; nearA = p; }
+                              else if (d < db) { db = d; nearB = p; }
+                          }
+                          if (!nearA || !nearB || da > 55 || db > 75) continue;
+                          faces.push({
+                              verts: [nearA, nearB, { x: mx, y: my }],
+                              crystal: min(1, crystal * 0.8 + 0.15)
+                          });
+                      }
+                  }
+                  creature._laceCrystalFaces = faces.slice(0, 28);
+              }
+
+              function tickLaceTendrilNetwork(creature, geo, coneHits) {
+                  const links = ensureLaceTendrilLinks(creature, geo);
+                  const anchor = getLaceTumorRearAnchor(creature, geo);
+                  const laceSegs = collectLaceSegmentsNearCreature(creature);
+                  const seekHit = coneHits?.[0] || null;
+                  if (!creature._laceNetworkAudit && seekHit?.lace) {
+                      creature._laceNetworkAudit = auditLaceNetworkFromLace(seekHit.lace, creature);
+                  }
+                  const network = creature._laceNetworkAudit;
+                  const segPool = network?.edges?.length ? network.edges : laceSegs;
+                  const extReach = geo.stats.reach * SCOOP_LACE_FEELER_REACH_MULT * 0.52
+                      + SCOOP_LACE_ROOT_SEEK_RANGE * 0.26;
+                  let latchedN = 0;
+
+                  for (let i = 0; i < links.length; i++) {
+                      const link = links[i];
+                      const tent = link.tent;
+                      if (!tent) continue;
+                      const ox = tent.tipX ?? tent.baseX;
+                      const oy = tent.tipY ?? tent.baseY;
+
+                      if (link.phase === 'feel' || link.phase === 'seek') {
+                          let best = null, bestScore = -Infinity;
+                          for (const lace of segPool) {
+                              const rawPts = [
+                                  { x: (lace.ax + lace.bx) * 0.5, y: (lace.ay + lace.by) * 0.5 },
+                                  { x: lace.ax, y: lace.ay },
+                                  { x: lace.bx, y: lace.by }
+                              ];
+                              for (const raw of rawPts) {
+                                  const pt = clampPointToRearHemisphere(anchor, raw.x, raw.y);
+                                  const d = dist(ox, oy, pt.x, pt.y);
+                                  if (d > extReach) continue;
+                                  const score = scoreTendrilLatchCandidate(link, pt, lace, tent, links, anchor, i);
+                                  if (score > bestScore) { bestScore = score; best = { pt, lace, d }; }
+                              }
+                          }
+                          if (best) {
+                              const dx = best.pt.x - ox, dy = best.pt.y - oy;
+                              const fd = sqrt(dx * dx + dy * dy) || 1;
+                              link.feelTip = {
+                                  x: ox + (dx / fd) * min(extReach, fd * 0.95),
+                                  y: oy + (dy / fd) * min(extReach, fd * 0.95)
+                              };
+                              link.candidatePt = best.pt;
+                              link.candidateLace = best.lace;
+                              const touchSeg = { x1: ox, y1: oy, x2: link.feelTip.x, y2: link.feelTip.y };
+                              if (best.d < SCOOP_LACE_FEELER_LATCH_HIT
+                                  || scoopTentacleTouchesLaceSegment(touchSeg, best.lace.ax, best.lace.ay, best.lace.bx, best.lace.by)) {
+                                  link.phase = 'latched';
+                                  link.targetPt = { x: best.pt.x, y: best.pt.y };
+                                  link.targetLace = best.lace;
+                                  link.latchFrames = 0;
+                                  if (!creature._lacePrimaryLatch) {
+                                      creature._lacePrimaryLatch = link;
+                                      creature._laceLeechAnchor = best.lace;
+                                      creature._laceNetworkAudit = auditLaceNetworkFromLace(best.lace, creature);
+                                  }
+                              }
+                          }
+                      }
+
+                      if (link.phase === 'latched' || link.phase === 'fissure') {
+                          latchedN++;
+                          link.latchFrames = (link.latchFrames || 0) + timeScale;
+                          link.fissureT = min(1, (link.fissureT || 0) + SCOOP_LACE_FISSURE_DEPTH_RATE * timeScale);
+                          if (link.fissureT > 0.32) link.phase = 'fissure';
+                          if (network && link.fissureT > 0.18 && frameCount % 22 === (i * 5) % 22) {
+                              const deeper = pickDeeperFissureNode(link, network, creature);
+                              if (deeper) link.targetPt = { x: deeper.x, y: deeper.y };
+                          }
+                          if (frameCount % SCOOP_LACE_TENDRIL_RELATCH_FRAMES === (i * 9) % SCOOP_LACE_TENDRIL_RELATCH_FRAMES) {
+                              const better = pickRelatchSite(link, network, links, anchor);
+                              if (better && dist(better.pt.x, better.pt.y, link.targetPt.x, link.targetPt.y) > 8) {
+                                  link.targetPt = better.pt;
+                                  link.targetLace = better.lace;
+                              }
+                          }
+                      }
+                  }
+
+                  applyLaceTendrilTargets(creature, geo, links);
+                  updateScoopTentacleTips(creature, geo);
+                  updateLaceFeelersFromLinks(creature, links);
+                  rebuildLaceCrystalLattice(creature, geo);
+                  return latchedN;
+              }
+
+              function driftTowardLaceNetwork(creature, geo, latchedN) {
+                  const primary = creature._lacePrimaryLatch?.targetPt;
+                  const centroid = creature._laceNetworkAudit?.centroid;
+                  const tx = primary?.x ?? centroid?.x;
+                  const ty = primary?.y ?? centroid?.y;
+                  if (tx == null || ty == null) return;
+                  const anchor = getLaceTumorRearAnchor(creature, geo);
+                  const clamped = clampPointToRearHemisphere(anchor, tx, ty, 20);
+                  const dx = clamped.x - creature.x;
+                  const dy = clamped.y - creature.y;
+                  const d = sqrt(dx * dx + dy * dy) || 1;
+                  const drift = SCOOP_LACE_ROOT_APPROACH_SPEED
+                      * (1 + min(0.85, latchedN * 0.14) + (creature._laceLeechBulb || 0) * 0.2)
+                      * timeScale;
+                  creature.x += (dx / d) * drift;
+                  creature.y += (dy / d) * drift;
+                  creature.vx = lerp(creature.vx, (dx / d) * drift * 2.4, 0.12);
+                  creature.vy = lerp(creature.vy, (dy / d) * drift * 2.4, 0.12);
+              }
+
+              function tickLaceColonyHeal(tumor, colonySet) {
+                  const members = [...(colonySet || [])].filter((m) => m && m !== tumor && creatures.indexOf(m) >= 0);
+                  if (!members.length) return 0;
+                  const latchedN = (tumor._laceTendrilLinks || [])
+                      .filter((l) => l.phase === 'latched' || l.phase === 'fissure').length;
+                  if (latchedN < 1) return 0;
+                  let totalHeal = 0;
+                  const healMult = 1 + latchedN * 0.14 + (tumor._laceLatticeCrystal || 0) * 0.35;
+                  for (const m of members) {
+                      const maxE = ModuleIdentitySystem.getMaxEnergy(m);
+                      const missing = max(0, maxE - (m.energy || 0));
+                      if (missing < 0.25) continue;
+                      const heal = min(missing, SCOOP_LACE_TUMOR_HEAL_RATE * healMult * timeScale);
+                      m.energy = min(maxE, m.energy + heal);
+                      m._laceTumorHealFlash = min(28, (m._laceTumorHealFlash || 0) + heal * 1.8);
+                      totalHeal += heal;
+                  }
+                  if (totalHeal > 0) {
+                      tumor.energy = min(100, tumor.energy + totalHeal * 0.06);
+                      tumor._laceLatticeCrystal = min(1, (tumor._laceLatticeCrystal || 0)
+                          + totalHeal * SCOOP_LACE_LATTICE_CRYSTAL_GROW * 0.02);
+                  }
+                  return totalHeal;
               }
 
               function getTumorReleaseCost(tumor, tier, currency) {
@@ -25416,6 +25700,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   creature._laceLeechSeekTarget = null;
                   creature._laceLeechFeelers = [];
                   creature._laceTumorColony = new Set();
+                  creature._laceTendrilLinks = [];
+                  creature._lacePrimaryLatch = null;
+                  creature._laceNetworkAudit = null;
+                  creature._laceCrystalFaces = [];
+                  creature._laceLatticeCrystal = 0;
               }
 
               function tickScoopLaceLeech(creature, geo) {
@@ -25436,42 +25725,37 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       if (creature._laceLeechFx[i].life <= 0) creature._laceLeechFx.splice(i, 1);
                   }
 
-                  const attachments = findLaceLeechAttachments(creature, geo);
                   const coneHits = findColonyLaceInRearCone(creature, geo);
                   const seekHit = coneHits[0] || null;
+                  const latchedN = tickLaceTendrilNetwork(creature, geo, coneHits);
+                  const attachments = findLaceLeechAttachments(creature, geo);
 
-                  if (attachments.length) {
+                  if (latchedN > 0 || attachments.length) {
                       creature._laceLeechReachFrames = (creature._laceLeechReachFrames || 0) + timeScale;
                   } else if (seekHit) {
-                      creature._laceLeechReachFrames = max(0, (creature._laceLeechReachFrames || 0) - timeScale * 0.5);
+                      creature._laceLeechReachFrames = max(0, (creature._laceLeechReachFrames || 0) - timeScale * 0.35);
                   } else {
                       creature._laceLeechReachFrames = max(0, (creature._laceLeechReachFrames || 0) - timeScale * 1.4);
                       if (creature._laceLeechPhase !== 'rooted') creature._laceLeechPhase = 'idle';
                   }
 
-                  if (creature._laceLeechPhase === 'rooted' || creature._laceLeechReachFrames >= SCOOP_LACE_ROOT_ROOT_FRAMES) {
-                      if (attachments.length) {
+                  const canRoot = latchedN >= SCOOP_LACE_ROOT_MIN_LATCH
+                      || (latchedN >= 1 && creature._laceLeechReachFrames >= SCOOP_LACE_ROOT_ROOT_FRAMES);
+                  if (creature._laceLeechPhase === 'rooted' || canRoot) {
+                      if (latchedN >= 1 && creature._laceLeechAnchor) {
                           creature._laceLeechPhase = 'rooted';
                           creature._laceLeechRooted = true;
-                          creature._laceLeechAnchor = attachments[0];
-                          if (!(creature._laceLeechRoots || []).length) initLaceLeechRoots(creature, attachments);
+                          if (!(creature._laceLeechRoots || []).length) {
+                              initLaceLeechRoots(creature, attachments.length ? attachments
+                                  : [creature._laceLeechAnchor]);
+                          }
                           refreshTumorColonySet(creature);
                       }
-                  } else if (seekHit) {
-                      creature._laceLeechPhase = attachments.length ? 'reach' : 'seek';
-                      creature._laceLeechSeekTarget = seekHit.pt;
-                      updateLaceSeekFeelers(creature, geo, seekHit);
-                      setRearTentacleReachTargets(creature, geo, seekHit.pt.x, seekHit.pt.y);
-                      const dx = seekHit.pt.x - creature.x;
-                      const dy = seekHit.pt.y - creature.y;
-                      const d = sqrt(dx * dx + dy * dy) || 1;
-                      const drift = SCOOP_LACE_ROOT_APPROACH_SPEED
-                          * (1 + min(0.65, creature._laceLeechBulb || 0) + (attachments.length ? 0.2 : 0))
-                          * timeScale;
-                      creature.x += (dx / d) * drift;
-                      creature.y += (dy / d) * drift;
-                      creature.vx = lerp(creature.vx, (dx / d) * drift * 2.6, 0.14);
-                      creature.vy = lerp(creature.vy, (dy / d) * drift * 2.6, 0.14);
+                  } else if (latchedN >= 1 || seekHit) {
+                      creature._laceLeechPhase = latchedN >= 1 ? 'reach' : 'seek';
+                      creature._laceLeechSeekTarget = creature._lacePrimaryLatch?.targetPt || seekHit?.pt || null;
+                      if (latchedN >= 1) driftTowardLaceNetwork(creature, geo, latchedN);
+                      else if (seekHit) driftTowardLaceNetwork(creature, geo, 0);
                   } else {
                       creature._laceLeechFeelers = [];
                   }
@@ -25479,9 +25763,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   creature._laceLeechActive = creature._laceLeechPhase === 'rooted'
                       || creature._laceLeechPhase === 'reach'
                       || creature._laceLeechPhase === 'seek'
-                      || attachments.length > 0
+                      || latchedN > 0
                       || !!seekHit;
-                  creature._laceLeechLinks = attachments.length ? attachments : (seekHit ? [seekHit.lace] : []);
+                  creature._laceLeechLinks = attachments.length ? attachments
+                      : (creature._laceLeechAnchor ? [creature._laceLeechAnchor] : (seekHit ? [seekHit.lace] : []));
 
                   if (!creature._laceTumorBrood) creature._laceTumorBrood = [];
 
@@ -25504,7 +25789,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       tickLaceLeechRootMaze(creature, geo, adj);
                       if (frameCount % 24 === 0) refreshTumorColonySet(creature);
                       const colony = creature._laceTumorColony || refreshTumorColonySet(creature);
-                      tickLaceTumorSustain(creature, colony);
+                      tickLaceColonyHeal(creature, colony);
+                      driftTowardLaceNetwork(creature, geo, latchedN);
                       const popCap = getTumorPopCap(creature);
                       creature._laceLeechBulb = min(SCOOP_LACE_LEECH_BULB_MAX,
                           creature._laceTumorBrood.length / max(1, popCap));
@@ -25520,10 +25806,12 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       const rootN = (creature._laceLeechRoots || []).length;
                       const broodN = creature._laceTumorBrood.length;
                       const colonyN = creature._laceTumorColony?.size || 0;
+                      const tendrilN = (creature._laceTendrilLinks || [])
+                          .filter((l) => l.phase === 'latched' || l.phase === 'fissure').length;
                       maybeSpeakScoopInnerVoice(creature, 'scoop_lace_leech',
                           phase === 'rooted'
-                              ? `tumor rooted · ${broodN}/${getTumorPopCap(creature)} brood · ${colonyN} colony kin queued`
-                              : `${phase} — feelers seeking colony lace`);
+                              ? `lattice rooted · ${tendrilN} tendrils · healing ${colonyN} kin · ${broodN} brood queued`
+                              : `${phase} — ${tendrilN} tendrils latching the network`);
                   }
 
                   geo.laceLeech = {
@@ -25537,7 +25825,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       attachments: creature._laceLeechLinks,
                       roots: creature._laceLeechRoots || [],
                       seekTarget: creature._laceLeechSeekTarget,
-                      feelers: creature._laceLeechFeelers || []
+                      feelers: creature._laceLeechFeelers || [],
+                      tendrilLinks: creature._laceTendrilLinks || [],
+                      crystalFaces: creature._laceCrystalFaces || [],
+                      latticeCrystal: creature._laceLatticeCrystal || 0
                   };
               }
 
@@ -27588,9 +27879,16 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           const broodN = creature._laceTumorBrood?.length || 0;
                           const popCap = getTumorPopCap(creature);
                           const colonyN = creature._laceTumorColony?.size || 0;
-                          creature.currentThought = `Tumor rooted — ${broodN}/${popCap} hijacked brood · ${colonyN} colony kin feeding queue`;
+                          const tendrilN = (creature._laceTendrilLinks || [])
+                              .filter((l) => l.phase === 'latched' || l.phase === 'fissure').length;
+                          creature.currentThought = `Crystal lattice rooted — ${tendrilN} tendrils heal ${colonyN} kin · ${broodN}/${popCap} brood queued`;
                       } else if (creature._laceLeechPhase === 'seek' || creature._laceLeechPhase === 'reach') {
-                          creature.currentThought = `Feelers probing colony lace — drifting to root tumor · ${(creature._laceLeechFeelers || []).length} tendrils extended`;
+                          const latched = (creature._laceTendrilLinks || [])
+                              .filter((l) => l.phase === 'latched' || l.phase === 'fissure').length;
+                          const feelN = creature._laceLeechFeelers?.length || 0;
+                          creature.currentThought = latched
+                              ? `${latched}/${feelN} tendrils latched — drifting into the network`
+                              : `${feelN} feelers probing colony lace for first latch`;
                       } else if ((creature._scoopBubbleOccupants || []).length > 0) {
                           const focus = creature._scoopBubbleFocus;
                           const n = creature._scoopBubbleOccupants.length;
@@ -28311,10 +28609,12 @@ body.is-map-fullscreen #map-fullscreen-btn {
                               : (!jelly && mods) ? ` · ${mods} mods brewing` : '';
                           const broodN = creature._laceTumorBrood?.length || 0;
                           const popCap = getTumorPopCap(creature);
+                          const tendrilN = (creature._laceTendrilLinks || [])
+                              .filter((l) => l.phase === 'latched' || l.phase === 'fissure').length;
                           const leechNote = creature._laceLeechPhase === 'rooted'
-                              ? ` · TUMOR ${broodN}/${popCap} · ${creature._laceTumorColony?.size || 0} kin`
+                              ? ` · LATTICE ${tendrilN}t · HEAL · ${broodN}/${popCap}`
                               : creature._laceLeechActive
-                              ? ` · FEELERS ${(creature._laceLeechFeelers || []).length}`
+                              ? ` · LATCH ${tendrilN}/${creature._laceLeechFeelers?.length || 0}`
                               : '';
                           hint.textContent = `Bubble ${pN}/${MANUAL_SCOOP_MAX_PARTICLES} drift${mods ? ` · ${mods} mods` : ''}${jellyNote}${leechNote}${incNote}${shards ? ` · ${shards} shards` : ''}${laceNote} · [0] scoop · [2] probe${probeNote} · [F] sprint${fireNote}`;
                       } else {
@@ -28422,24 +28722,51 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   }
               }
 
-              /** Rear-only lace tumor overlay — no center spokes, no global lace pollution. */
+              /** Rear-only lace tumor overlay — tendril lattice, crystal polygons, colony heal shimmer. */
               function drawLaceTumorVisuals(creature, geo, leech, bulb) {
                   if (!leech?.active && !(creature._laceTumorBrood?.length)) return;
                   const anchor = getLaceTumorRearAnchor(creature, geo);
                   const ax = anchor.x;
                   const ay = anchor.y;
+                  const crystal = leech.latticeCrystal || creature._laceLatticeCrystal || 0;
 
-                  if (leech.phase === 'seek' || leech.phase === 'reach') {
-                      for (const f of leech.feelers || []) {
-                          const pulse = sin(frameCount * 0.16 + (f.phase || 0)) * 0.5 + 0.5;
-                          stroke(120, 180, 255, 22 + pulse * 32);
-                          strokeWeight(0.4);
-                          noFill();
-                          line(f.fromX, f.fromY, f.toX, f.toY);
-                          fill(160, 210, 255, 40 + pulse * 35);
-                          noStroke();
-                          circle(f.toX, f.toY, 1.8 + pulse);
-                      }
+                  for (const face of leech.crystalFaces || []) {
+                      const cA = 10 + (face.crystal || 0) * 42 + crystal * 18;
+                      fill(186, 230, 255, cA);
+                      stroke(210, 245, 255, 18 + (face.crystal || 0) * 55);
+                      strokeWeight(0.35 + (face.crystal || 0) * 0.45);
+                      beginShape();
+                      for (const v of face.verts) vertex(v.x, v.y);
+                      endShape(CLOSE);
+                      let fx = 0, fy = 0;
+                      for (const v of face.verts) { fx += v.x; fy += v.y; }
+                      fx /= face.verts.length; fy /= face.verts.length;
+                      fill(255, 255, 255, 25 + (face.crystal || 0) * 45);
+                      noStroke();
+                      circle(fx, fy, 1.2 + (face.crystal || 0) * 2.2);
+                  }
+
+                  for (const f of leech.feelers || []) {
+                      const pulse = sin(frameCount * 0.16 + (f.phase || 0)) * 0.5 + 0.5;
+                      const fissure = f.fissure || 0;
+                      const latched = !!f.latched;
+                      stroke(latched ? 160 : 120, latched ? 210 : 180, 255, 20 + pulse * 30 + fissure * 25);
+                      strokeWeight(0.38 + fissure * 0.35);
+                      noFill();
+                      line(f.fromX, f.fromY, f.toX, f.toY);
+                      fill(latched ? 200 : 160, 220, 255, 35 + pulse * 40 + fissure * 30);
+                      noStroke();
+                      circle(f.toX, f.toY, 1.6 + pulse + fissure * 2);
+                  }
+
+                  for (const link of leech.tendrilLinks || []) {
+                      if (link.phase !== 'fissure' || !link.targetPt || !link.tent) continue;
+                      const ox = link.tent.tipX ?? link.tent.baseX;
+                      const oy = link.tent.tipY ?? link.tent.baseY;
+                      const ft = link.fissureT || 0;
+                      stroke(140, 200, 255, 22 + ft * 50);
+                      strokeWeight(0.42 + ft * 0.5);
+                      line(ox, oy, link.targetPt.x, link.targetPt.y);
                   }
 
                   if (leech.phase === 'rooted' || leech.phase === 'reach') {
@@ -28447,17 +28774,17 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           if (root.tipX == null) continue;
                           const pulse = sin(frameCount * 0.14 + creature.x * 0.008) * 0.5 + 0.5;
                           if (root.tail && root.tail !== root.head) {
-                              stroke(88, 28, 135, 32 + bulb * 35 + pulse * 16);
-                              strokeWeight(0.65 + bulb * 0.25);
+                              stroke(88, 28, 135, 28 + bulb * 28 + pulse * 12);
+                              strokeWeight(0.55 + bulb * 0.2);
                               noFill();
                               line(root.tail.x, root.tail.y, root.tipX, root.tipY);
                           }
-                          stroke(168, 120, 220, 38 + bulb * 45 + pulse * 20);
-                          strokeWeight(0.55 + bulb * 0.28);
+                          stroke(168, 120, 220, 32 + bulb * 35 + pulse * 16);
+                          strokeWeight(0.48 + bulb * 0.22);
                           line(ax, ay, root.tipX, root.tipY);
-                          fill(200, 170, 245, 90 + pulse * 50);
+                          fill(200, 170, 245, 75 + pulse * 40);
                           noStroke();
-                          circle(root.tipX, root.tipY, 2 + bulb * 1.2);
+                          circle(root.tipX, root.tipY, 1.8 + bulb);
                       }
                   }
 
