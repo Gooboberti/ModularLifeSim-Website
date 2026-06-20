@@ -4,7 +4,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-015-squid-lab-framework" />
+    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-016-bubble-absorb-weakest" />
     <title>MiniSimmy Orbital Ship v2</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2334d399'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%230a0a0f'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -8723,7 +8723,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'local-015-squid-lab-framework';
+              const MINISIMMY_BUILD = 'local-016-bubble-absorb-weakest';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -26550,6 +26550,68 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   return true;
               }
 
+              function canPullScoopCreatureTowardBubble(hunter, prey) {
+                  if (!isScoopableFeastCreature(hunter, prey)) return false;
+                  if (!isJellyfishScoopCreature(hunter)) return true;
+                  if (hunter._manualSuperPredator && hunter._manualControl) return true;
+                  if (prey._scoopBeingDragged === hunter) return true;
+                  if (prey === hunter._scoopProbePullTarget) return true;
+                  return (hunter._scoopProbeTags || []).some((t) => t.prey === prey);
+              }
+
+              function isCreatureInsideScoopBubble(hunter, prey, geo) {
+                  const bx = geo.bubbleX ?? hunter.x;
+                  const by = geo.bubbleY ?? hunter.y;
+                  const br = geo.bubbleR ?? CREATURE_BODY_RADIUS * 2.8;
+                  const dx = prey.x - bx;
+                  const dy = prey.y - by;
+                  const touch = br + CREATURE_BODY_RADIUS * 0.45;
+                  return dx * dx + dy * dy <= touch * touch;
+              }
+
+              function scoreScoopBubbleWeakness(prey, hunter, geo) {
+                  const bx = geo.bubbleX ?? hunter.x;
+                  const by = geo.bubbleY ?? hunter.y;
+                  const isFeast = hunter._manualSuperPredator && hunter._manualControl;
+                  if (isFeast) {
+                      return (prey.energy || 0) + dist(prey.x, prey.y, bx, by) * 0.05;
+                  }
+                  const gen = prey.generation || 1;
+                  const modN = prey.modules?.length || 0;
+                  const tiers = prey.getTotalTiers?.() || modN;
+                  const networkSize = prey._networkSize || 1;
+                  const symLevel = prey._symbiosisLevel || 0;
+                  const colonyAnchor = symLevel >= 1 ? networkSize * 3.5 : networkSize * 1.2;
+                  const distPenalty = dist(prey.x, prey.y, bx, by) * 0.015;
+                  const stress = prey._scoopProbeStress || 0;
+                  return gen * 14
+                      + modN * 5.5
+                      + tiers * 2.8
+                      + colonyAnchor
+                      - stress * 4
+                      + distPenalty
+                      + (prey.energy || 0) * 0.06;
+              }
+
+              function pickWeakestCreatureInScoopBubble(hunter, geo) {
+                  if (!canScoopMoreCreatures(hunter)) return null;
+                  const bx = geo.bubbleX ?? hunter.x;
+                  const by = geo.bubbleY ?? hunter.y;
+                  const br = geo.bubbleR ?? CREATURE_BODY_RADIUS * 2.8;
+                  const scan = SpatialGrid.cells
+                      ? SpatialGrid.queryRadius(bx, by, br + CREATURE_BODY_RADIUS, hunter)
+                      : creatures;
+                  let best = null;
+                  let weakest = Infinity;
+                  for (const c of scan) {
+                      if (!isScoopableFeastCreature(hunter, c)) continue;
+                      if (!isCreatureInsideScoopBubble(hunter, c, geo)) continue;
+                      const score = scoreScoopBubbleWeakness(c, hunter, geo);
+                      if (score < weakest) { weakest = score; best = c; }
+                  }
+                  return best;
+              }
+
               function pullTowardScoopBubble(entity, hunter, geo, pullScale = 1, isCreature = false) {
                   const bx = geo.bubbleX ?? hunter.x;
                   const by = geo.bubbleY ?? hunter.y;
@@ -26559,9 +26621,16 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   const d = sqrt(dx * dx + dy * dy) || 1;
                   const touchR = br * (isCreature ? 0.96 : 0.9);
                   if (d <= touchR) {
-                      return isCreature
-                          ? absorbScoopCreature(hunter, entity, geo)
-                          : captureScoopParticle(hunter, entity, geo);
+                      if (isCreature) {
+                          entity.x = bx + (dx / d) * touchR * 0.85;
+                          entity.y = by + (dy / d) * touchR * 0.85;
+                          entity.vx = 0;
+                          entity.vy = 0;
+                          entity._scoopBeingDragged = hunter;
+                          entity._scoopProbeStun = max(entity._scoopProbeStun || 0, 24);
+                          return true;
+                      }
+                      return captureScoopParticle(hunter, entity, geo);
                   }
                   const pull = (0.55 + geo.flex * 0.38) * pullScale * timeScale;
                   const step = pull * min(5.2, max(1.5, d * 0.14));
@@ -26576,14 +26645,6 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       entity._scoopSnared = hunter;
                   }
                   return false;
-              }
-
-              function canAbsorbScoopCreatureInBubble(hunter, prey) {
-                  if (!isScoopableFeastCreature(hunter, prey)) return false;
-                  if (!isJellyfishScoopCreature(hunter)) return true;
-                  if (hunter._manualSuperPredator && hunter._manualControl) return true;
-                  if (prey._scoopBeingDragged === hunter) return true;
-                  return (hunter._scoopProbeTags || []).some((t) => t.prey === prey);
               }
 
               function applyScoopBubbleAbsorption(creature, geo) {
@@ -26603,21 +26664,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       }
                   }
 
-                  if (canScoopMoreCreatures(creature)) {
-                      const scan = SpatialGrid.cells
-                          ? SpatialGrid.queryRadius(bx, by, br + CREATURE_BODY_RADIUS, creature)
-                          : creatures;
-                      for (const c of scan) {
-                          if (c === creature || isManualControlImmune(c)) continue;
-                          if (!canAbsorbScoopCreatureInBubble(creature, c)) continue;
-                          const dx = c.x - bx;
-                          const dy = c.y - by;
-                          const touch = br + CREATURE_BODY_RADIUS * 0.45;
-                          if (dx * dx + dy * dy <= touch * touch) {
-                              absorbScoopCreature(creature, c, geo);
-                          }
-                      }
-                  }
+                  const weakest = pickWeakestCreatureInScoopBubble(creature, geo);
+                  if (weakest) absorbScoopCreature(creature, weakest, geo);
               }
 
               function tickScoopBellyEnergy(creature) {
@@ -27606,7 +27654,6 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   }
 
                   if (isScoopTendrilsDeployed(creature)) applyScoopTentacleContacts(creature, geo);
-                  applyScoopBubbleAbsorption(creature, geo);
                   creature._scoopGeo = geo;
 
                   const reach2 = geo.bubbleR * geo.bubbleR * 2.8;
@@ -27650,7 +27697,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           ? SpatialGrid.queryRadius(creature.x, creature.y, geo.bubbleR + geo.stats.reach, creature)
                           : creatures;
                       for (const prey of preyScan) {
-                          if (!canAbsorbScoopCreatureInBubble(creature, prey)) continue;
+                          if (!canPullScoopCreatureTowardBubble(creature, prey)) continue;
                           if (prey === pullTarget) continue;
                           const dx = prey.x - geo.bubbleX;
                           const dy = prey.y - geo.bubbleY;
@@ -27659,6 +27706,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           }
                       }
                   }
+                  applyScoopBubbleAbsorption(creature, geo);
                   creature._scoopScanCursor = (scanCursor + MANUAL_SCOOP_SCAN_BUDGET) % max(1, vortexParticles.length);
 
                   candidates.sort((a, b) => (b.snared ? 1 : 0) - (a.snared ? 1 : 0) || a.d2 - b.d2);
