@@ -4,7 +4,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-lace-tendril-lattice" />
+    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-lace-lattice-connect" />
     <title>MiniSimmy Orbital Ship v2</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2334d399'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%230a0a0f'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -8006,7 +8006,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'orbital-ship-v2-2026-06-20-lace-tendril-lattice';
+              const MINISIMMY_BUILD = 'orbital-ship-v2-2026-06-20-lace-lattice-connect';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -8220,10 +8220,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
               const SCOOP_LACE_TUMOR_POP_MIN = 6;
               const SCOOP_LACE_TUMOR_POP_MAX = 14;
               const SCOOP_LACE_TENDRIL_RELATCH_FRAMES = 52;
-              const SCOOP_LACE_FEELER_LATCH_HIT = 22;
+              const SCOOP_LACE_FEELER_LATCH_HIT = 34;
+              const SCOOP_LACE_FEELER_APPROACH_FRAMES = 6;
               const SCOOP_LACE_LATTICE_CRYSTAL_GROW = 0.006;
               const SCOOP_LACE_FISSURE_DEPTH_RATE = 0.014;
-              const SCOOP_LACE_ROOT_MIN_LATCH = 2;
+              const SCOOP_LACE_ROOT_MIN_LATCH = 1;
               const SCOOP_LACE_LEECH_FX_MAX = 36;
               const TUMOR_RELEASE_CURRENCIES = ['score', 'dust', 'crystal', 'voidheart', 'sovereign'];
 
@@ -24780,6 +24781,49 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   };
               }
 
+              function laceRearHemisphereDot(anchor, x, y) {
+                  const rearX = -cos(anchor.facing);
+                  const rearY = -sin(anchor.facing);
+                  return (x - anchor.x) * rearX + (y - anchor.y) * rearY;
+              }
+
+              function closestPointOnLace(lace, px, py) {
+                  const ax = lace.ax, ay = lace.ay, bx = lace.bx, by = lace.by;
+                  const dx = bx - ax, dy = by - ay;
+                  const len2 = dx * dx + dy * dy;
+                  if (len2 < 1e-4) return { x: ax, y: ay, t: 0, d: dist(px, py, ax, ay) };
+                  const t = constrain(((px - ax) * dx + (py - ay) * dy) / len2, 0, 1);
+                  const x = ax + dx * t, y = ay + dy * t;
+                  return { x, y, t, d: dist(px, py, x, y) };
+              }
+
+              function tentacleTouchesLace(tent, lace, geo) {
+                  if (!tent || !lace) return false;
+                  const segs = [
+                      { x1: tent.baseX, y1: tent.baseY, x2: tent.midX, y2: tent.midY },
+                      { x1: tent.midX, y1: tent.midY, x2: tent.tipX, y2: tent.tipY }
+                  ];
+                  for (const seg of segs) {
+                      if (scoopTentacleTouchesLaceSegment(seg, lace.ax, lace.ay, lace.bx, lace.by)) return true;
+                  }
+                  const cp = closestPointOnLace(lace, tent.tipX ?? tent.baseX, tent.tipY ?? tent.baseY);
+                  return cp.d < SCOOP_LACE_FEELER_LATCH_HIT;
+              }
+
+              function buildLaceSegPool(creature, network, laceSegs, latchedN) {
+                  if (latchedN < 2 || !network?.edges?.length) return laceSegs;
+                  const pool = [...network.edges];
+                  const seen = new Set(pool.map((l) => l.key));
+                  for (const lace of laceSegs) {
+                      if (seen.has(lace.key)) continue;
+                      const nearNode = network.nodes?.has(lace.a) || network.nodes?.has(lace.b);
+                      if (!nearNode) continue;
+                      seen.add(lace.key);
+                      pool.push(lace);
+                  }
+                  return pool.length ? pool : laceSegs;
+              }
+
               function isLaceTentaclePhase(creature) {
                   const ph = creature?._laceLeechPhase;
                   return ph === 'seek' || ph === 'reach' || ph === 'rooted';
@@ -25094,10 +25138,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   return links;
               }
 
-              function scoreTendrilLatchCandidate(link, pt, lace, tent, links, anchor, i) {
+              function scoreTendrilLatchCandidate(link, pt, lace, tent, links, anchor, i, laceDist) {
                   const ox = tent.tipX ?? tent.baseX;
                   const oy = tent.tipY ?? tent.baseY;
-                  const d = dist(ox, oy, pt.x, pt.y);
+                  const d = laceDist ?? dist(ox, oy, pt.x, pt.y);
                   let spread = 0;
                   for (const other of links) {
                       if (other === link) continue;
@@ -25105,31 +25149,29 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       if (!op) continue;
                       spread += min(90, dist(pt.x, pt.y, op.x, op.y));
                   }
-                  const rearX = -cos(anchor.facing), rearY = -sin(anchor.facing);
-                  const rearDot = (pt.x - anchor.x) * rearX + (pt.y - anchor.y) * rearY;
-                  return spread * 0.55 + (lace.strong ? 28 : 12) - d * 0.12 + rearDot * 0.08 + i * 2.5;
+                  const rearDot = laceRearHemisphereDot(anchor, pt.x, pt.y);
+                  return spread * 0.55 + (lace.strong ? 32 : 14) - d * 0.14
+                      + rearDot * 0.12 + i * 2.5;
               }
 
               function pickRelatchSite(link, network, links, anchor) {
                   if (!network?.edges?.length || !link.targetPt) return null;
+                  const tent = link.tent;
+                  const ox = tent?.tipX ?? tent?.baseX ?? anchor.x;
+                  const oy = tent?.tipY ?? tent?.baseY ?? anchor.y;
                   let best = null, bestScore = -Infinity;
                   for (const lace of network.edges) {
-                      const pts = [
-                          { x: (lace.ax + lace.bx) * 0.5, y: (lace.ay + lace.by) * 0.5 },
-                          { x: lace.ax, y: lace.ay },
-                          { x: lace.bx, y: lace.by }
-                      ];
-                      for (const raw of pts) {
-                          const pt = clampPointToRearHemisphere(anchor, raw.x, raw.y);
-                          const spread = links.reduce((s, o) => {
-                              if (o === link) return s;
-                              const op = o.targetPt;
-                              return op ? s + min(85, dist(pt.x, pt.y, op.x, op.y)) : s;
-                          }, 0);
-                          const align = 40 - dist(pt.x, pt.y, link.targetPt.x, link.targetPt.y) * 0.08;
-                          const score = spread * 0.5 + align + (lace.strong ? 15 : 0);
-                          if (score > bestScore) { bestScore = score; best = { pt, lace }; }
-                      }
+                      const cp = closestPointOnLace(lace, ox, oy);
+                      const pt = { x: cp.x, y: cp.y };
+                      const spread = links.reduce((s, o) => {
+                          if (o === link) return s;
+                          const op = o.targetPt;
+                          return op ? s + min(85, dist(pt.x, pt.y, op.x, op.y)) : s;
+                      }, 0);
+                      const align = 40 - dist(pt.x, pt.y, link.targetPt.x, link.targetPt.y) * 0.08;
+                      const rearDot = laceRearHemisphereDot(anchor, pt.x, pt.y);
+                      const score = spread * 0.5 + align + (lace.strong ? 15 : 0) + rearDot * 0.06;
+                      if (score > bestScore) { bestScore = score; best = { pt, lace }; }
                   }
                   return best;
               }
@@ -25234,19 +25276,36 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   creature._laceCrystalFaces = faces.slice(0, 28);
               }
 
+              function latchLaceTendrilLink(creature, link, pt, lace) {
+                  link.phase = 'latched';
+                  link.targetPt = { x: pt.x, y: pt.y };
+                  link.targetLace = lace;
+                  link.feelTip = { x: pt.x, y: pt.y };
+                  link.candidatePt = { x: pt.x, y: pt.y };
+                  link.candidateLace = lace;
+                  link.latchFrames = 0;
+                  link.approachFrames = 0;
+                  if (!creature._lacePrimaryLatch) {
+                      creature._lacePrimaryLatch = link;
+                      creature._laceLeechAnchor = lace;
+                      creature._laceNetworkAudit = auditLaceNetworkFromLace(lace, creature);
+                  }
+              }
+
               function tickLaceTendrilNetwork(creature, geo, coneHits) {
                   const links = ensureLaceTendrilLinks(creature, geo);
                   const anchor = getLaceTumorRearAnchor(creature, geo);
                   const laceSegs = collectLaceSegmentsNearCreature(creature);
                   const seekHit = coneHits?.[0] || null;
+                  let latchedN = (links || []).filter((l) => l.phase === 'latched' || l.phase === 'fissure').length;
                   if (!creature._laceNetworkAudit && seekHit?.lace) {
                       creature._laceNetworkAudit = auditLaceNetworkFromLace(seekHit.lace, creature);
                   }
                   const network = creature._laceNetworkAudit;
-                  const segPool = network?.edges?.length ? network.edges : laceSegs;
-                  const extReach = geo.stats.reach * SCOOP_LACE_FEELER_REACH_MULT * 0.52
-                      + SCOOP_LACE_ROOT_SEEK_RANGE * 0.26;
-                  let latchedN = 0;
+                  const segPool = buildLaceSegPool(creature, network, laceSegs, latchedN);
+                  const extReach = geo.stats.reach * SCOOP_LACE_FEELER_REACH_MULT * 0.62
+                      + SCOOP_LACE_ROOT_SEEK_RANGE * 0.34;
+                  latchedN = 0;
 
                   for (let i = 0; i < links.length; i++) {
                       const link = links[i];
@@ -25258,46 +25317,44 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       if (link.phase === 'feel' || link.phase === 'seek') {
                           let best = null, bestScore = -Infinity;
                           for (const lace of segPool) {
-                              const rawPts = [
-                                  { x: (lace.ax + lace.bx) * 0.5, y: (lace.ay + lace.by) * 0.5 },
-                                  { x: lace.ax, y: lace.ay },
-                                  { x: lace.bx, y: lace.by }
-                              ];
-                              for (const raw of rawPts) {
-                                  const pt = clampPointToRearHemisphere(anchor, raw.x, raw.y);
-                                  const d = dist(ox, oy, pt.x, pt.y);
-                                  if (d > extReach) continue;
-                                  const score = scoreTendrilLatchCandidate(link, pt, lace, tent, links, anchor, i);
-                                  if (score > bestScore) { bestScore = score; best = { pt, lace, d }; }
-                              }
+                              const cp = closestPointOnLace(lace, ox, oy);
+                              if (cp.d > extReach) continue;
+                              const rearDot = laceRearHemisphereDot(anchor, cp.x, cp.y);
+                              if (rearDot < -CREATURE_BODY_RADIUS * 0.85) continue;
+                              const pt = { x: cp.x, y: cp.y };
+                              const score = scoreTendrilLatchCandidate(link, pt, lace, tent, links, anchor, i, cp.d);
+                              if (score > bestScore) { bestScore = score; best = { pt, lace, d: cp.d }; }
                           }
                           if (best) {
-                              const dx = best.pt.x - ox, dy = best.pt.y - oy;
-                              const fd = sqrt(dx * dx + dy * dy) || 1;
-                              link.feelTip = {
-                                  x: ox + (dx / fd) * min(extReach, fd * 0.95),
-                                  y: oy + (dy / fd) * min(extReach, fd * 0.95)
-                              };
+                              link.feelTip = { x: best.pt.x, y: best.pt.y };
                               link.candidatePt = best.pt;
                               link.candidateLace = best.lace;
-                              const touchSeg = { x1: ox, y1: oy, x2: link.feelTip.x, y2: link.feelTip.y };
-                              if (best.d < SCOOP_LACE_FEELER_LATCH_HIT
-                                  || scoopTentacleTouchesLaceSegment(touchSeg, best.lace.ax, best.lace.ay, best.lace.bx, best.lace.by)) {
-                                  link.phase = 'latched';
-                                  link.targetPt = { x: best.pt.x, y: best.pt.y };
-                                  link.targetLace = best.lace;
-                                  link.latchFrames = 0;
-                                  if (!creature._lacePrimaryLatch) {
-                                      creature._lacePrimaryLatch = link;
-                                      creature._laceLeechAnchor = best.lace;
-                                      creature._laceNetworkAudit = auditLaceNetworkFromLace(best.lace, creature);
+                              const touching = tentacleTouchesLace(tent, best.lace, geo);
+                              const closeEnough = best.d < SCOOP_LACE_FEELER_LATCH_HIT;
+                              if (touching || closeEnough) {
+                                  latchLaceTendrilLink(creature, link, best.pt, best.lace);
+                              } else {
+                                  link.approachFrames = (link.approachFrames || 0) + timeScale;
+                                  if (link.approachFrames >= SCOOP_LACE_FEELER_APPROACH_FRAMES
+                                      && best.d < extReach * 0.55) {
+                                      latchLaceTendrilLink(creature, link, best.pt, best.lace);
                                   }
                               }
+                          } else {
+                              link.approachFrames = max(0, (link.approachFrames || 0) - timeScale * 0.5);
+                              link.feelTip = null;
+                              link.candidatePt = null;
+                              link.candidateLace = null;
                           }
                       }
 
                       if (link.phase === 'latched' || link.phase === 'fissure') {
                           latchedN++;
+                          if (link.targetLace) {
+                              const cp = closestPointOnLace(link.targetLace, ox, oy);
+                              link.targetPt = { x: cp.x, y: cp.y };
+                              link.feelTip = { x: cp.x, y: cp.y };
+                          }
                           link.latchFrames = (link.latchFrames || 0) + timeScale;
                           link.fissureT = min(1, (link.fissureT || 0) + SCOOP_LACE_FISSURE_DEPTH_RATE * timeScale);
                           if (link.fissureT > 0.32) link.phase = 'fissure';
@@ -25317,6 +25374,20 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
                   applyLaceTendrilTargets(creature, geo, links);
                   updateScoopTentacleTips(creature, geo);
+
+                  for (const link of links) {
+                      if (link.phase !== 'feel' && link.phase !== 'seek') continue;
+                      if (!link.candidatePt || !link.candidateLace || !link.tent) continue;
+                      const cp = closestPointOnLace(link.candidateLace, link.tent.tipX, link.tent.tipY);
+                      link.feelTip = { x: cp.x, y: cp.y };
+                      link.candidatePt = { x: cp.x, y: cp.y };
+                      if (tentacleTouchesLace(link.tent, link.candidateLace, geo)
+                          || cp.d < SCOOP_LACE_FEELER_LATCH_HIT) {
+                          latchLaceTendrilLink(creature, link, link.candidatePt, link.candidateLace);
+                      }
+                  }
+                  latchedN = links.filter((l) => l.phase === 'latched' || l.phase === 'fissure').length;
+
                   updateLaceFeelersFromLinks(creature, links);
                   rebuildLaceCrystalLattice(creature, geo);
                   return latchedN;
@@ -25492,30 +25563,24 @@ body.is-map-fullscreen #map-fullscreen-btn {
               }
 
               function findColonyLaceInRearCone(creature, geo) {
-                  const facing = geo.facing;
-                  const rearX = -cos(facing);
-                  const rearY = -sin(facing);
+                  const anchor = getLaceTumorRearAnchor(creature, geo);
+                  const rearX = -cos(anchor.facing);
+                  const rearY = -sin(anchor.facing);
                   const seeking = creature._laceLeechPhase === 'seek' || creature._laceLeechPhase === 'reach'
                       || !creature._laceLeechRooted;
                   const seekRange = SCOOP_LACE_ROOT_SEEK_RANGE
-                      * (seeking ? SCOOP_LACE_FEELER_REACH_MULT * 0.72 : 1);
+                      * (seeking ? SCOOP_LACE_FEELER_REACH_MULT * 0.85 : 1);
                   const laceSegs = collectLaceSegmentsNearCreature(creature);
                   const hits = [];
                   for (const lace of laceSegs) {
-                      const pts = [
-                          { x: lace.ax, y: lace.ay },
-                          { x: lace.bx, y: lace.by },
-                          { x: (lace.ax + lace.bx) * 0.5, y: (lace.ay + lace.by) * 0.5 }
-                      ];
-                      for (const pt of pts) {
-                          const dx = pt.x - creature.x;
-                          const dy = pt.y - creature.y;
-                          const d = sqrt(dx * dx + dy * dy);
-                          if (d > seekRange) continue;
-                          const dot = dx * rearX + dy * rearY;
-                          if (dot < CREATURE_BODY_RADIUS * 0.35) continue;
-                          hits.push({ lace, pt, d, dot });
-                      }
+                      const cp = closestPointOnLace(lace, anchor.x, anchor.y);
+                      const dx = cp.x - anchor.x;
+                      const dy = cp.y - anchor.y;
+                      const d = sqrt(dx * dx + dy * dy);
+                      if (d > seekRange) continue;
+                      const dot = laceRearHemisphereDot(anchor, cp.x, cp.y);
+                      if (dot < -CREATURE_BODY_RADIUS * 0.55) continue;
+                      hits.push({ lace, pt: { x: cp.x, y: cp.y }, d, dot });
                   }
                   hits.sort((a, b) => b.dot - a.dot || a.d - b.d);
                   return hits;
@@ -27264,14 +27329,15 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           * (geo.rigid ? 3 : (6 + spd * 1.8 + spring.wave * 5) * gs);
                       const restX = tent.baseX + cos(tent.ang + idleBreath) * ext + cos(tent.phase) * wobble;
                       const restY = tent.baseY + sin(tent.ang + idleBreath) * ext + sin(tent.phase * 1.1) * wobble;
+                      const laceLerp = laceReach ? 0.74 : 0.48;
                       let tipX = tent.targetX != null
                           ? laceReach
-                              ? lerp(restX, tent.targetX, 0.48)
+                              ? lerp(restX, tent.targetX, laceLerp)
                               : lerp(tent.targetX, geo.bellyX, 0.18)
                           : restX;
                       let tipY = tent.targetY != null
                           ? laceReach
-                              ? lerp(restY, tent.targetY, 0.48)
+                              ? lerp(restY, tent.targetY, laceLerp)
                               : lerp(tent.targetY, geo.bellyY, 0.18)
                           : restY;
                       if (idleMix > 0.05 && tent.targetX == null) {
@@ -27856,6 +27922,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   tickScoopShardParticles(creature, geo);
                   tickScoopBellyEnergy(creature);
                   updateScoopTentacleTips(creature, geo);
+                  if ((isLaceTentaclePhase(creature) || creature._laceLeechActive)
+                      && creature._laceTendrilLinks?.length) {
+                      applyLaceTendrilTargets(creature, geo, creature._laceTendrilLinks);
+                      updateScoopTentacleTips(creature, geo);
+                  }
 
                   const pCount = getScoopParticleCount(creature);
                   const modN = getScoopModuleCount(creature);
