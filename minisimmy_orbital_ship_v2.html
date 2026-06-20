@@ -4,7 +4,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-019-squid-leak-dandruff" />
+    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-020-colony-squid-emergence" />
     <title>MiniSimmy Orbital Ship v2</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2334d399'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%230a0a0f'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -8207,7 +8207,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'local-019-squid-leak-dandruff';
+              const MINISIMMY_BUILD = 'local-020-colony-squid-emergence';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -8394,7 +8394,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
               const SCOOP_JELLYFISH_TIER_GEOM = [0.72, 0.84, 1.0, 1.12];
               const SCOOP_JELLYFISH_TIER_BODY = [0.68, 0.78, 1.0, 1.06];
               const SCOOP_JELLYFISH_CONSUME_POP = 9999;
-              const SCOOP_JELLYFISH_POP_MAX_SPAWNS = 24;
+              const SCOOP_JELLYFISH_POP_MAX_CREATURE_CLONES = 5;
+              const SCOOP_JELLYFISH_POP_MAX_SQUID_CLONES = 2;
+              const COLONY_SQUID_EMERGENCE_THRESHOLD = 100;
+              const COLONY_SQUID_MIN_LACE = 0.38;
+              const COLONY_SQUID_MIN_REJECTION = 0.44;
               const SCOOP_JELLYFISH_DRIFT_VALUE = 0.38;
               const SCOOP_JELLYFISH_MOD_VALUE = 1.0;
               const SCOOP_JELLYFISH_HELD_VALUE = 5.5;
@@ -19396,6 +19400,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           if ((c._soulOrganizePulse || 0) > 0) c._soulOrganizePulse -= timeScale;
                           if ((c._soulHostilityPulse || 0) > 0) c._soulHostilityPulse -= timeScale * 0.85;
                           if ((c._soulReproBoost || 0) > 0) c._soulReproBoost -= timeScale;
+                          tickColonySquidEmergencePressure(c, timeScale);
                       }
                   },
 
@@ -25035,6 +25040,139 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   return SCOOP_JELLYFISH_PHASE1_SPAWN_COST;
               }
 
+              function getSquidPopMaxSpawns(parentTier, spawnKind) {
+                  const pt = constrain(Math.floor(parentTier), 0, 3);
+                  if (spawnKind === 'creature' || pt === 0) return SCOOP_JELLYFISH_POP_MAX_CREATURE_CLONES;
+                  return SCOOP_JELLYFISH_POP_MAX_SQUID_CLONES;
+              }
+
+              function getCreatureSqueezePressure(creature) {
+                  if (!creature) return { sides: 0, overlapCount: 0, allSides: false };
+                  const neighbors = creature.getLocalGroup?.(CREATURE_SOCIAL_MAX) || [];
+                  const sectors = new Set();
+                  let overlapCount = 0;
+                  for (const o of neighbors) {
+                      if (o === creature || creatures.indexOf(o) < 0) continue;
+                      const dx = o.x - creature.x;
+                      const dy = o.y - creature.y;
+                      const d = sqrt(dx * dx + dy * dy) || 1;
+                      if (d >= CREATURE_SOCIAL_MAX) continue;
+                      if (d < CREATURE_MIN_SEP + 2.5) {
+                          overlapCount++;
+                          const sector = floor((atan2(dy, dx) + PI) / (PI / 4)) % 8;
+                          sectors.add(sector);
+                      }
+                  }
+                  return {
+                      sides: sectors.size,
+                      overlapCount,
+                      allSides: sectors.size >= 4 && overlapCount >= 4
+                  };
+              }
+
+              function getCreatureSocialRejection(creature) {
+                  if (!creature) return 0;
+                  const spacePain = 1 - constrain(creature._personalSpaceComfort || 0, 0, 1);
+                  const stressPain = constrain((creature._overlapStress || 0) / 5.5, 0, 1);
+                  const dissimilarPain = creature._overlapDissimilar ? 0.32 : 0;
+                  const alignPain = 1 - constrain(creature._alignmentComfort || 0, 0, 1);
+                  const burdenPain = constrain((creature._networkBurden || 0) / 1.1, 0, 1);
+                  const compPain = 1 - constrain(creature._complementarityComfort || 0, 0, 1);
+                  return constrain(
+                      spacePain * 0.3 + stressPain * 0.3 + dissimilarPain + alignPain * 0.14
+                      + burdenPain * 0.1 + compPain * 0.08,
+                      0, 1
+                  );
+              }
+
+              function creatureHasHighLatticeConnection(creature) {
+                  if (!creature) return false;
+                  const lace = getCreatureLaceConnectionStrength(creature);
+                  const meter = creature._scoopLatticeMeter || 0;
+                  const tier = creature._scoopLatticeTier || 0;
+                  const stats = ModuleIdentitySystem.getInspectorLaceStats?.(creature);
+                  const resonance = stats?.resonanceLinks || 0;
+                  return lace >= COLONY_SQUID_MIN_LACE
+                      && (meter >= SCOOP_LATTICE_TIER2 * 0.42 || tier >= 1 || resonance >= 2);
+              }
+
+              function emergeColonySquidFromCreature(creature) {
+                  if (!creature || creatures.indexOf(creature) < 0) return false;
+                  if (creature._colonySquidEmerged || creature._scoopActive) return false;
+                  if (creature.isPredator || isManualControlImmune(creature)) return false;
+
+                  creature._scoopLatticeMeter = max(creature._scoopLatticeMeter || 0, SCOOP_LATTICE_UNLOCK);
+                  creature._scoopLatticeTier = max(creature._scoopLatticeTier || 0, 1);
+                  creature._scoopStyleChoice = 'jellyfish';
+                  if (!creature._scoopGenome) creature._scoopGenome = { unlocked: true, tier: 1 };
+                  creature._scoopGenome.unlocked = true;
+
+                  ensureJellyfishTierState(creature);
+                  creature._jellyfishTier = SCOOP_JELLYFISH_DEFAULT_TIER;
+                  creature._jellyfishBodyScale = SCOOP_JELLYFISH_TIER_BODY[SCOOP_JELLYFISH_DEFAULT_TIER];
+
+                  if (!creature._scoopModuleBag) creature._scoopModuleBag = [];
+                  for (const m of creature.modules || []) {
+                      if (m.isCore) continue;
+                      const copy = ModuleIdentitySystem.copyModuleWithLayout(m);
+                      copy.isCore = false;
+                      markScoopModuleSpecial(copy);
+                      creature._scoopModuleBag.push(copy);
+                  }
+
+                  creature._colonySquidEmerged = true;
+                  creature._socialRejectionFeel = 0;
+                  creature._colonySquidEmergenceMeter = 0;
+                  activateJellyfishSquid(creature, { automated: true, force: true });
+                  creature.currentThought = 'Colony folded me into an auto squid — squeezed out as a bell';
+                  addFloatingText(creature.x, creature.y - 28, 'COLONY SQUID EMERGENCE', '#67e8f9');
+                  playTone(190, 'sine', 0.22, 0.52);
+                  setTimeout(() => playTone(360, 'triangle', 0.14, 0.42), 90);
+
+                  const allies = creature.getLocalGroup?.(CREATURE_SOCIAL_MAX) || [];
+                  for (const ally of allies) {
+                      if (ally === creature || (ally._networkSize || 1) < 2) continue;
+                      if (ModuleIdentitySystem.computeAlignment(creature, ally) >= 0.9) {
+                          ally._macroResonance = max(ally._macroResonance || 0, 42);
+                          if (frameCount % 40 === (ally._symSlot || 0) % 40) {
+                              ally.currentThought = `${creature.name || 'Kin'} emerged as a defense squid`;
+                          }
+                      }
+                  }
+                  updateInspectorScoopBar(creature);
+                  return true;
+              }
+
+              function tickColonySquidEmergencePressure(creature, timeScale) {
+                  if (!creature || creature._colonySquidEmerged) return;
+                  if (creature._scoopActive || creature.isPredator || isManualControlImmune(creature)) return;
+
+                  const netSize = creature._networkSize || 1;
+                  const symLevel = creature._symbiosisLevel || 0;
+                  if (netSize < 3 || symLevel < 1 || !creatureHasHighLatticeConnection(creature)) {
+                      creature._colonySquidEmergenceMeter = max(0, (creature._colonySquidEmergenceMeter || 0) - 0.7 * timeScale);
+                      return;
+                  }
+
+                  const squeeze = getCreatureSqueezePressure(creature);
+                  const rejection = getCreatureSocialRejection(creature);
+                  creature._socialRejectionFeel = rejection;
+
+                  if (!squeeze.allSides || rejection < COLONY_SQUID_MIN_REJECTION) {
+                      creature._colonySquidEmergenceMeter = max(0, (creature._colonySquidEmergenceMeter || 0) - 0.55 * timeScale);
+                      return;
+                  }
+
+                  const gain = (0.42 + rejection * 0.5 + squeeze.overlapCount * 0.06) * timeScale;
+                  creature._colonySquidEmergenceMeter = (creature._colonySquidEmergenceMeter || 0) + gain;
+
+                  if (creature._colonySquidEmergenceMeter >= COLONY_SQUID_EMERGENCE_THRESHOLD) {
+                      emergeColonySquidFromCreature(creature);
+                  } else if (frameCount % 48 === (creature._symSlot || 0) % 48) {
+                      creature.currentThought = 'Lace rejects me from all sides — folding into a bell…';
+                  }
+              }
+
               function getSquidBabySpawnPosition(parent, slotIndex = 0) {
                   const parentScale = getJellyfishBodyScale(parent);
                   const offset = CREATURE_BODY_RADIUS * parentScale * 2.15 + 8;
@@ -25063,14 +25201,15 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   const totalValue = computeSquidBellyTotalValue(creature);
                   const blueprint = getJellyfishCloneBlueprint(creature);
                   const costPerBaby = getSquidReservoirCostPerBaby(creature);
-                  const babyCount = min(Math.floor(totalValue / costPerBaby), SCOOP_JELLYFISH_POP_MAX_SPAWNS);
+                  const parentTier = getJellyfishTier(creature);
+                  const spawnOutcome = getSquidSpawnOutcome(parentTier);
+                  const maxSpawns = getSquidPopMaxSpawns(parentTier, spawnOutcome.kind);
+                  const babyCount = min(Math.floor(totalValue / costPerBaby), maxSpawns);
                   const progressPct = costPerBaby > 0
                       ? Math.round(((totalValue % costPerBaby) / costPerBaby) * 100)
                       : 0;
                   const pressure = creature._jellyfishLeakPressure || 0;
                   const pressurePct = min(100, Math.round((pressure / SCOOP_JELLYFISH_PRESSURE_POP) * 100));
-                  const parentTier = getJellyfishTier(creature);
-                  const spawnOutcome = getSquidSpawnOutcome(parentTier);
                   const childTier = spawnOutcome.childTier;
                   const have = countJellyfishBagModules(creature._scoopModuleBag || []);
                   const tally = blueprint.entries.map((entry) => ({
@@ -25078,12 +25217,13 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       have: have[entry.key] || 0
                   }));
                   const remainder = totalValue % costPerBaby;
-                  const valueToNext = babyCount >= SCOOP_JELLYFISH_POP_MAX_SPAWNS
+                  const valueToNext = babyCount >= maxSpawns
                       ? 0
                       : max(0, costPerBaby - (remainder || (babyCount > 0 ? 0 : costPerBaby)));
                   return {
                       totalValue, costPerBaby, babyCount, progressPct, pressure, pressurePct,
                       driftN, modN, heldN, blueprint, tally, childTier, parentTier, valueToNext,
+                      maxSpawns,
                       spawnKind: spawnOutcome.kind, spawnLabel: spawnOutcome.label, spawnPlural: spawnOutcome.plural
                   };
               }
@@ -25413,7 +25553,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   if (!parent || creatures.indexOf(parent) < 0) return 0;
                   ensureJellyfishTierState(parent);
                   const state = getSquidReservoirState(parent);
-                  const spawnCount = min(state.babyCount, SCOOP_JELLYFISH_POP_MAX_SPAWNS);
+                  const spawnCount = min(state.babyCount, state.maxSpawns || getSquidPopMaxSpawns(getJellyfishTier(parent), state.spawnKind));
                   if (spawnCount < 1) return 0;
                   const parentTier = getJellyfishTier(parent);
                   const spawnOutcome = getSquidSpawnOutcome(parentTier);
