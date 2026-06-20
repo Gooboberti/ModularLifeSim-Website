@@ -7935,7 +7935,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'orbital-ship-v2-2026-06-20-scoop-probe-prune-voice';
+              const MINISIMMY_BUILD = 'orbital-ship-v2-2026-06-20-scoop-mini-incubator';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -8076,6 +8076,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
               let fsCreatureCycleIndex = -1;
               let manualControlState = { pressed: false, x: 0, y: 0, grabDirect: false, tugStrength: 0 };
               let scoopSeedParticles = [];
+              let scoopLureParticles = [];
 
               const MANUAL_SCOOP_MAX_BAG = 10;
               const MANUAL_SCOOP_MAX_PARTICLES = 200;
@@ -8097,6 +8098,20 @@ body.is-map-fullscreen #map-fullscreen-btn {
               const SCOOP_DASH_COOLDOWN = 20;
               const SCOOP_CREATURE_SCAN_BUDGET = 14;
               const SCOOP_MODULE_FIRE_GAP = 110;
+              const SCOOP_INCUBATOR_MIN_MODULES = 3;
+              const SCOOP_INCUBATOR_MODULES_PER_SPAWN = 3;
+              const SCOOP_MODULE_LEAK_BASE_INTERVAL = 40;
+              const SCOOP_LURE_PARTICLE_MAX = 56;
+
+              const SCOOP_INCUBATOR_CORE_PERKS = {
+                  harvester: { leakMult: 1.38, spawnEnergy: 58, foodLure: 1.45, label: 'Feast lure brood' },
+                  sensor: { leakMult: 1.12, prunePull: 1.3, spawnEnergy: 54, label: 'Weak-sense brood' },
+                  mover: { leakMult: 0.92, scatter: 1.55, speedMult: 1.14, label: 'Burst scatter brood' },
+                  resistant: { leakMult: 1.0, lifespanSec: 7, spawnEnergy: 52, label: 'Hardy brood' },
+                  explorer: { leakMult: 1.18, hybridBonus: 0.32, scatter: 1.35, label: 'Hybrid drift brood' },
+                  communicator: { leakMult: 1.22, extraSpawn: 1, laceSeed: true, label: 'Chorus brood' },
+                  balanced: { leakMult: 1.0, spawnEnergy: 50, label: 'Even blend brood' }
+              };
 
               const SCOOP_JELLYFISH_PROFILE = {
                   id: 'jellyfish', label: 'Jellyfish',
@@ -8767,6 +8782,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       scoop_sprint: 14000,
                       scoop_melt: 18000,
                       scoop_prune: 15000,
+                      scoop_incubate: 20000,
+                      scoop_leak: 14000,
                       topic: 12000,
                       line: 18000
                   },
@@ -10090,7 +10107,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
                               : 'Melted module shards still glow in the belly — energy wall stays infinite until they fade.',
                           scoop_prune: tagN >= 2
                               ? `Prune doctrine: touch many, highlight the frailest, vent drift from the probe to clear dead weight.`
-                              : 'Prune doctrine: the tendril must touch before I judge — one candidate is not yet a cull list.'
+                              : 'Prune doctrine: the tendril must touch before I judge — one candidate is not yet a cull list.',
+                          scoop_incubate: `Ending scoop — ${options.extra || 'several'} brain-kin hatch from the module broth; they wear what I ate but think with my neural map.`,
+                          scoop_leak: `Module essence leaking from the bubble — lure spree pulls the shoal closer so pruning stays easy.`
                       };
                       return lines[topic] || '';
                   },
@@ -10134,6 +10153,13 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       if (c._scoopUsingLattice) {
                           push('scoop_lace', 6.8,
                               'Lattice memory stolen into tendrils — memory-line tentacles still snag distant drift while the probe sweeps.');
+                      }
+                      const perk = SCOOP_INCUBATOR_CORE_PERKS[getCreatureCoreType(c)] || SCOOP_INCUBATOR_CORE_PERKS.balanced;
+                      push('scoop_incubate', 7.5 + modN * 0.08,
+                          `Mini-incubator perk: ${perk.label} — end scoop with ${modN} modules and they fuse into new bodies carrying my brain, not my shell.`);
+                      if (modN >= 3) {
+                          push('scoop_leak', 7.2 + modN * 0.06,
+                              `${modN} modules churning — essence particles leak in a spree around the bubble, baiting kin for the prune pass.`);
                       }
                       return topics;
                   },
@@ -12505,7 +12531,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       if (!topics.length) return '';
                       topics.sort((a, b) => b.score - a.score);
                       const recent = this._creaturePerspectiveTopicHistory || [];
-                      const priorityIds = ['catchup', 'thought', 'desire', 'hazard', 'hunger', 'manual', 'scoop_weakest', 'scoop_candidates', 'scoop_prune', 'scoop_fire', 'scoop_bubble', 'scoop_scan', 'scoop_toggle', 'scoop_sprint', 'scoop_melt', 'scoop_digest', 'scoop_lace', 'synapse_grow', 'synapse_prune', 'identity_context', 'neighbors', 'surroundings', 'lace', 'laceMod', 'synapse_map', 'core_identity', 'subspec_identity', 'archetype_identity', 'role_class', 'prestige_core', 'operator_incubator', 'operator_eggs', 'operator_vault', 'operator_furnace', 'operator_furnace_fuel', 'operator_dust', 'operator_predators', 'operator_pop'];
+                      const priorityIds = ['catchup', 'thought', 'desire', 'hazard', 'hunger', 'manual', 'scoop_incubate', 'scoop_leak', 'scoop_weakest', 'scoop_candidates', 'scoop_prune', 'scoop_fire', 'scoop_bubble', 'scoop_scan', 'scoop_toggle', 'scoop_sprint', 'scoop_melt', 'scoop_digest', 'scoop_lace', 'synapse_grow', 'synapse_prune', 'identity_context', 'neighbors', 'surroundings', 'lace', 'laceMod', 'synapse_map', 'core_identity', 'subspec_identity', 'archetype_identity', 'role_class', 'prestige_core', 'operator_incubator', 'operator_eggs', 'operator_vault', 'operator_furnace', 'operator_furnace_fuel', 'operator_dust', 'operator_predators', 'operator_pop'];
                       const pool = topics.filter((t) => !recent.includes(t.id));
                       let candidates = pool.length ? pool : topics;
                       const freshPriority = candidates.filter((t) => priorityIds.includes(t.id));
@@ -21465,6 +21491,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           this.vx *= surge;
                           this.vy *= surge;
                       }
+                      if (!this._manualControl && !this._scoopActive) applyScoopLurePull(this, timeScale);
                       ModuleIdentitySystem.applyMechanics(this, { timeScale, effectiveHazardDist, envMods });
                       this.x += this.vx;
                       this.y += this.vy;
@@ -21780,7 +21807,24 @@ body.is-map-fullscreen #map-fullscreen-btn {
                               fill(255, 255, 255, isCoreMod ? 200 : 120);
                               circle(ox - size * 0.15, oy - size * 0.15, size * 0.28);
                           }
+                          if (m._scoopSpecialSheen === 'gold') {
+                              noFill();
+                              stroke(255, 210, 90, 95 + sin(frameCount * 0.2 + mi) * 60);
+                              strokeWeight(0.9);
+                              circle(ox, oy, size * 1.85);
+                          } else if (m._scoopSpecialSheen === 'silver') {
+                              noFill();
+                              stroke(210, 228, 255, 75 + sin(frameCount * 0.16 + mi) * 50);
+                              strokeWeight(0.7);
+                              circle(ox, oy, size * 1.55);
+                          }
                           drawn++;
+                      }
+                      if (this._scoopBrainKin) {
+                          noFill();
+                          stroke(180, 230, 255, 55 + sin(frameCount * 0.12) * 35);
+                          strokeWeight(0.85);
+                          circle(0, 0, s + 7 + sin(frameCount * 0.1) * 1.5);
                       }
                       if (this._coreShiftFlash > 0) {
                           noFill();
@@ -24969,15 +25013,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
               }
 
               function tickScoopModuleMelt(creature, geo) {
-                  const mods = creature._scoopModuleBag || [];
-                  for (let i = mods.length - 1; i >= 0; i--) {
-                      const m = mods[i];
-                      m._meltTimer = (m._meltTimer || 0) + timeScale;
-                      if (m._meltTimer >= SCOOP_MODULE_MELT_FRAMES) {
-                          spawnScoopModuleShard(creature, m, geo);
-                          mods.splice(i, 1);
-                      }
-                  }
+                  // Belly modules incubate on scoop release — they no longer auto-melt.
+                  // Essence leaks via tickScoopModuleLeak instead of destroying modules.
               }
 
               function tickScoopShardParticles(creature, geo) {
@@ -25008,25 +25045,58 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   }
               }
 
+              function getScoopSpecialModuleSheen(mod) {
+                  if (!mod) return null;
+                  if (mod.prestigeCore || mod.subSpecialization || mod.subSpecializationId || mod.subSpecializationName) return 'gold';
+                  if ((mod.tier || 1) >= 5) return 'gold';
+                  if (mod._wasCore || mod.isCore) return 'silver';
+                  if ((mod.tier || 1) >= 3) return 'silver';
+                  return null;
+              }
+
+              function markScoopModuleSpecial(mod) {
+                  const sheen = getScoopSpecialModuleSheen(mod);
+                  if (sheen) mod._scoopSpecialSheen = sheen;
+              }
+
               function digestPreyIntoLooseModules(hunter, prey) {
                   const out = [];
                   const core = prey._coreModule || prey.modules?.find((m) => m.isCore);
                   if (core) {
                       const copy = ModuleIdentitySystem.copyModuleWithLayout(core);
                       copy.isCore = false;
+                      copy._wasCore = true;
+                      if (prey._coreModule) {
+                          copy.prestigeCore = prey._coreModule.prestigeCore;
+                          copy.subSpecialization = prey._coreModule.subSpecialization;
+                          copy.subSpecializationId = prey._coreModule.subSpecializationId;
+                          copy.subSpecializationName = prey._coreModule.subSpecializationName;
+                      }
+                      markScoopModuleSpecial(copy);
                       out.push(copy);
                   }
                   for (const m of prey.modules || []) {
                       if (m.isCore) continue;
-                      out.push(ModuleIdentitySystem.copyModuleWithLayout(m));
+                      const copy = ModuleIdentitySystem.copyModuleWithLayout(m);
+                      copy.isCore = false;
+                      if (m.prestigeCore || m.subSpecialization) {
+                          copy.prestigeCore = m.prestigeCore;
+                          copy.subSpecialization = m.subSpecialization;
+                          copy.subSpecializationId = m.subSpecializationId;
+                          copy.subSpecializationName = m.subSpecializationName;
+                      }
+                      markScoopModuleSpecial(copy);
+                      out.push(copy);
                   }
                   if (!out.length) {
                       const t = getCreatureCoreType(prey) || 'communicator';
-                      out.push({
+                      const fallback = {
                           type: t, tier: 1,
                           color: MODULE_AMMO_COLORS[t] || '#a78bfa',
                           offsetX: random(-4, 4), offsetY: random(-4, 4)
-                      });
+                      };
+                      markScoopModuleSpecial(fallback);
+                      out.push(fallback);
                   }
                   return out;
               }
@@ -25054,7 +25124,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   hunter.killCount = (hunter.killCount || 0) + 1;
                   hunter._eatFlash = 18;
                   const modType = loose[0]?.type || 'module';
-                  hunter.currentThought = `Bubble absorbed ${prey.name || 'prey'} — ${loose.length} modules tumbling`;
+                  const specialN = loose.filter((m) => m._scoopSpecialSheen).length;
+                  hunter.currentThought = specialN
+                      ? `Absorbed ${prey.name || 'prey'} — ${loose.length} mods (${specialN} special)`
+                      : `Bubble absorbed ${prey.name || 'prey'} — ${loose.length} modules tumbling`;
                   addFloatingText(hunter.x, hunter.y - 22, `+${loose.length} mods`, MODULE_AMMO_COLORS[modType] || '#f87171');
                   playTone(95, 'sawtooth', 0.12, 0.45);
                   return true;
@@ -25790,6 +25863,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   }
                   tickScoopBellyModules(creature, geo);
                   tickScoopModuleMelt(creature, geo);
+                  tickScoopModuleLeak(creature, geo);
                   tickScoopShardParticles(creature, geo);
                   tickScoopBellyEnergy(creature);
                   updateScoopTentacleTips(creature, geo);
@@ -25821,8 +25895,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
                               : `Probe scanning for weak to prune (${(creature._scoopProbeTags || []).length} touched)`;
                       } else if (pullTarget) {
                           creature.currentThought = `Probe herding ${pullTarget.name || 'prey'} into bubble`;
-                      } else if (modN > 0 || shardN > 0) {
-                          creature.currentThought = `Modules melting (${modN}) · infinite energy · [Space] fire`;
+                      } else if (modN > 0) {
+                          creature.currentThought = `Incubator broth (${modN} mods) — essence leaking · [0] hatch brain-kin`;
+                      } else if (shardN > 0) {
+                          creature.currentThought = `Module shards tumbling · infinite energy · [Space] fire`;
                       } else {
                           creature.currentThought = `Bubble scoop ${pCount}/${MANUAL_SCOOP_MAX_PARTICLES} — touch bubble to absorb`;
                       }
@@ -25868,8 +25944,264 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   }
               }
 
+              function getScoopIncubatorPerk(creature) {
+                  const core = getCreatureCoreType(creature) || 'balanced';
+                  return SCOOP_INCUBATOR_CORE_PERKS[core] || SCOOP_INCUBATOR_CORE_PERKS.balanced;
+              }
+
+              function partitionScoopModulesForHatch(modules, spawnCount) {
+                  const pools = Array.from({ length: spawnCount }, () => []);
+                  const sorted = [...modules].sort((a, b) => {
+                      const rank = (m) => m._scoopSpecialSheen === 'gold' ? 2 : m._scoopSpecialSheen === 'silver' ? 1 : 0;
+                      return rank(b) - rank(a);
+                  });
+                  sorted.forEach((m, i) => pools[i % spawnCount].push(m));
+                  return pools.filter((p) => p.length > 0);
+              }
+
+              function buildScoopIncubatorSpawnModules(modulePool) {
+                  return modulePool.map((m) => {
+                      const copy = ModuleIdentitySystem.copyModuleWithLayout(m);
+                      copy.isCore = false;
+                      delete copy._bellyX;
+                      delete copy._bellyY;
+                      delete copy._bellySwirl;
+                      delete copy._meltTimer;
+                      if (m._scoopSpecialSheen) copy._scoopSpecialSheen = m._scoopSpecialSheen;
+                      return copy;
+                  });
+              }
+
+              function applyScoopIncubatorPerkToSpawn(spawn, parent, perk) {
+                  if (!spawn || !perk) return;
+                  if (perk.spawnEnergy) spawn.energy = min(100, perk.spawnEnergy + random(6, 14));
+                  if (perk.speedMult) spawn.speedMultiplier = (spawn.speedMultiplier || 1) * perk.speedMult;
+                  if (perk.lifespanSec) spawn.gainLifespan(perk.lifespanSec);
+                  if (perk.laceSeed) spawn._scoopIncubatorLace = true;
+                  spawn._scoopIncubatorPerk = perk.label;
+                  spawn._scoopIncubatorCore = getCreatureCoreType(parent);
+              }
+
+              function applyScoopIncubatorSpecialInheritance(spawn, modulePool) {
+                  const gold = modulePool.find((m) => m._scoopSpecialSheen === 'gold');
+                  const silver = modulePool.find((m) => m._scoopSpecialSheen === 'silver');
+                  const special = gold || silver;
+                  if (!special) return;
+                  if (special.subSpecializationName || special.subSpecialization || special.prestigeCore) {
+                      spawn._coreModule = {
+                          specialization: special.type || getCreatureCoreType(spawn),
+                          tier: special.tier || 2,
+                          prestigeCore: !!special.prestigeCore,
+                          subSpecialization: special.subSpecialization,
+                          subSpecializationId: special.subSpecializationId,
+                          subSpecializationName: special.subSpecializationName
+                      };
+                      spawn.role = special.subSpecializationName || spawn.role;
+                  }
+                  const targetMod = spawn.modules.find((m) =>
+                      m.type === special.type && (m.tier || 1) === (special.tier || 1)
+                  ) || spawn.modules[0];
+                  if (targetMod) {
+                      targetMod._scoopSpecialSheen = special._scoopSpecialSheen;
+                      if (special.prestigeCore) targetMod.prestigeCore = true;
+                      if (special.subSpecialization) targetMod.subSpecialization = special.subSpecialization;
+                  }
+              }
+
+              function maybeAddScoopHybridModule(spawn, modulePool, perk) {
+                  if (!perk?.hybridBonus || random() >= perk.hybridBonus) return;
+                  const counts = {};
+                  for (const m of modulePool) counts[m.type] = (counts[m.type] || 0) + (m.tier || 1);
+                  const ranked = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+                  const secondary = ranked[1]?.[0];
+                  if (!secondary || spawn.modules.some((m) => m.type === secondary)) return;
+                  const hybridMod = {
+                      type: secondary,
+                      tier: 1,
+                      color: MODULE_AMMO_COLORS[secondary] || MODULE_TYPE_COLORS[secondary] || '#fbbf24',
+                      _scoopHybridSeed: true
+                  };
+                  spawn.modules.push(hybridMod);
+                  ModuleIdentitySystem.assignModulePosition(spawn, hybridMod);
+              }
+
+              function inheritScoopIncubatorBrain(spawn, parent) {
+                  if (!parent?.brain) return;
+                  spawn.brain = parent.brain.copy();
+                  spawn.brain.mutate(0.045, 0.2);
+                  NeuralNet.applyEmbodiedStructure(spawn, spawn.brain, 0.62);
+                  spawn._scoopBrainKin = true;
+                  spawn._scoopBrainParentName = parent.name;
+                  if (parent._lineageMemory?.length) {
+                      spawn._lineageMemory = [{
+                          sourceName: parent.name,
+                          generation: parent.generation,
+                          coreMatch: getCreatureCoreType(spawn) === getCreatureCoreType(parent),
+                          inheritStrength: 0.88,
+                          source: 'scoop_incubator'
+                      }];
+                  }
+              }
+
+              function hatchScoopIncubatorCreatures(parent) {
+                  const mods = [...(parent._scoopModuleBag || [])];
+                  if (mods.length < SCOOP_INCUBATOR_MIN_MODULES) return 0;
+                  const perk = getScoopIncubatorPerk(parent);
+                  let spawnCount = max(1, floor(mods.length / SCOOP_INCUBATOR_MODULES_PER_SPAWN));
+                  if (perk.extraSpawn && mods.length >= 6) spawnCount += perk.extraSpawn;
+                  spawnCount = min(spawnCount, 8, mods.length);
+                  const pools = partitionScoopModulesForHatch(mods, spawnCount);
+                  const hatched = [];
+                  for (let si = 0; si < pools.length; si++) {
+                      const pool = pools[si];
+                      if (!pool.length) continue;
+                      const scatter = (perk.scatter || 1) * 34;
+                      const sx = constrain(parent.x + random(-scatter, scatter), 24, width - 24);
+                      const sy = constrain(parent.y + random(-scatter, scatter), 24, height - 24);
+                      const spawnMods = buildScoopIncubatorSpawnModules(pool);
+                      const spawn = new Creature(sx, sy, spawnMods, parent.generation + 1, null);
+                      spawn.originAeonNumber = parent.originAeonNumber ?? parent.birthAeonNumber ?? currentAeonNumber;
+                      inheritScoopIncubatorBrain(spawn, parent);
+                      applyScoopIncubatorSpecialInheritance(spawn, pool);
+                      ModuleIdentitySystem.normalizeLayout(spawn);
+                      ModuleIdentitySystem.updateCore(spawn);
+                      spawn.updateSpecialization();
+                      maybeAddScoopHybridModule(spawn, mods, perk);
+                      if (spawn.modules.length !== spawnMods.length) {
+                          ModuleIdentitySystem.normalizeLayout(spawn);
+                          spawn.updateSpecialization();
+                      }
+                      applyScoopIncubatorPerkToSpawn(spawn, parent, perk);
+                      spawn._scoopIncubated = true;
+                      spawn._scoopIncubatorParentName = parent.name;
+                      spawn.currentThought = `Incubated from ${parent.name}'s module broth — parent's brain, eaten body`;
+                      spawn.calculatePointValue();
+                      applyNewbornReproCooldown(spawn);
+                      creatures.push(spawn);
+                      registerCreatureOffspring(parent, spawn);
+                      hatched.push(spawn);
+                  }
+                  parent._scoopModuleBag = [];
+                  parent._scoopShards = [];
+                  if (hatched.length) {
+                      playTone(210, 'sine', 0.22, 0.5);
+                      setTimeout(() => playTone(420, 'triangle', 0.16, 0.42), 90);
+                      setTimeout(() => playTone(630, 'sine', 0.1, 0.28), 180);
+                      addFloatingText(parent.x, parent.y - 30, `INCUBATE ×${hatched.length}`, '#fcd34d');
+                      parent.currentThought = `Bubble hatched ${hatched.length} brain-kin from ${mods.length} eaten modules`;
+                      maybeSpeakScoopInnerVoice(parent, 'scoop_incubate', String(hatched.length));
+                  }
+                  return hatched.length;
+              }
+
+              function emitScoopModuleLeakParticle(creature, geo) {
+                  const mods = creature._scoopModuleBag || [];
+                  if (!mods.length || scoopLureParticles.length >= SCOOP_LURE_PARTICLE_MAX) return;
+                  const m = mods[floor(random(mods.length))];
+                  const col = m.color || MODULE_AMMO_COLORS[m.type] || '#a78bfa';
+                  const ang = random(TWO_PI);
+                  const bx = geo.bubbleX ?? creature.x;
+                  const by = geo.bubbleY ?? creature.y;
+                  const br = geo.bubbleR ?? CREATURE_BODY_RADIUS * 2.75;
+                  const speed = random(0.9, 2.4);
+                  scoopLureParticles.push({
+                      x: bx + cos(ang) * br * 0.9,
+                      y: by + sin(ang) * br * 0.9,
+                      vx: cos(ang) * speed,
+                      vy: sin(ang) * speed,
+                      life: 260 + random(0, 140),
+                      moduleType: m.type,
+                      tier: m.tier || 1,
+                      sheen: m._scoopSpecialSheen || null,
+                      owner: creature,
+                      cr: red(color(col)),
+                      cg: green(color(col)),
+                      cb: blue(color(col))
+                  });
+              }
+
+              function tickScoopModuleLeak(creature, geo) {
+                  const modN = getScoopModuleCount(creature);
+                  if (modN < 3) return;
+                  const perk = getScoopIncubatorPerk(creature);
+                  creature._scoopLeakTimer = (creature._scoopLeakTimer || 0) + timeScale;
+                  const interval = max(12, (SCOOP_MODULE_LEAK_BASE_INTERVAL - modN * 1.6) / (perk.leakMult || 1));
+                  const burst = modN >= 10 ? 3 : modN >= 6 ? 2 : 1;
+                  if (creature._scoopLeakTimer >= interval) {
+                      creature._scoopLeakTimer = 0;
+                      for (let b = 0; b < burst; b++) emitScoopModuleLeakParticle(creature, geo);
+                      if (burst >= 2 && frameCount % 120 === 0) maybeSpeakScoopInnerVoice(creature, 'scoop_leak');
+                  }
+              }
+
+              function tickScoopLureParticles() {
+                  for (let i = scoopLureParticles.length - 1; i >= 0; i--) {
+                      const p = scoopLureParticles[i];
+                      p.life -= timeScale;
+                      p.x += p.vx * timeScale;
+                      p.y += p.vy * timeScale;
+                      p.vx *= 0.991;
+                      p.vy *= 0.991;
+                      if (p.life <= 0 || !p.owner?._scoopActive) scoopLureParticles.splice(i, 1);
+                  }
+              }
+
+              function applyScoopLurePull(creature, timeScale) {
+                  if (!creature || isManualControlImmune(creature) || creature._scoopActive) return;
+                  const lureR = 118;
+                  let pullX = 0;
+                  let pullY = 0;
+                  let strength = 0;
+                  let foodBoost = 0;
+                  for (const p of scoopLureParticles) {
+                      if (!p.owner?._scoopActive || p.owner === creature) continue;
+                      const dx = p.x - creature.x;
+                      const dy = p.y - creature.y;
+                      const d2 = dx * dx + dy * dy;
+                      if (d2 > lureR * lureR) continue;
+                      const d = sqrt(d2) || 1;
+                      const t = 1 - d / lureR;
+                      pullX += (dx / d) * t;
+                      pullY += (dy / d) * t;
+                      strength += t;
+                      if (p.sheen) foodBoost += t * 0.35;
+                  }
+                  if (strength <= 0) return;
+                  const owner = scoopLureParticles.find((p) => p.owner?._scoopActive)?.owner;
+                  const perk = owner ? getScoopIncubatorPerk(owner) : null;
+                  const pull = (0.32 + (perk?.foodLure || 0) * 0.12 + foodBoost) * strength * timeScale;
+                  creature.vx += pullX * pull;
+                  creature.vy += pullY * pull;
+                  if (frameCount % 100 === 0 && strength > 0.35) {
+                      creature.currentThought = 'Drawn to bubble lure...';
+                  }
+              }
+
+              function drawScoopLureParticles() {
+                  if (!scoopLureParticles.length) return;
+                  noStroke();
+                  for (const p of scoopLureParticles) {
+                      const alpha = map(p.life, 0, 320, 0, p.sheen === 'gold' ? 220 : p.sheen === 'silver' ? 190 : 155);
+                      fill(p.cr, p.cg, p.cb, alpha);
+                      circle(p.x, p.y, 2.6 + (p.tier || 1) * 0.35);
+                      if (p.sheen === 'gold') {
+                          fill(255, 220, 120, alpha * 0.55);
+                          circle(p.x, p.y, 4.8 + sin(frameCount * 0.2 + p.x) * 0.8);
+                      } else if (p.sheen === 'silver') {
+                          fill(220, 235, 255, alpha * 0.45);
+                          circle(p.x, p.y, 4.2 + sin(frameCount * 0.16 + p.y) * 0.6);
+                      }
+                      fill(255, 255, 255, alpha * 0.35);
+                      circle(p.x - 0.3, p.y - 0.3, 1.1);
+                  }
+              }
+
               function releaseManualScoop(creature) {
                   if (!creature) return;
+                  if (getScoopModuleCount(creature) >= SCOOP_INCUBATOR_MIN_MODULES) {
+                      hatchScoopIncubatorCreatures(creature);
+                  }
+                  scoopLureParticles = scoopLureParticles.filter((p) => p.owner !== creature);
                   for (const p of creature._scoopBag || []) {
                       if (!p) continue;
                       p._scooped = false;
@@ -25912,10 +26244,13 @@ body.is-map-fullscreen #map-fullscreen-btn {
               function toggleManualScoop(creature = manualControlCreature) {
                   if (!creature || manualControlCreature !== creature) return;
                   if (creature._scoopActive) {
+                      const willHatch = getScoopModuleCount(creature) >= SCOOP_INCUBATOR_MIN_MODULES;
                       releaseManualScoop(creature);
                       creature._scoopUsingLattice = false;
                       creature._scoopStolenLinks = [];
-                      creature.currentThought = 'Scoop off — bubble retracted';
+                      creature.currentThought = willHatch
+                          ? 'Scoop off — module broth hatched brain-kin'
+                          : 'Scoop off — bubble retracted';
                       return;
                   }
                   if (!canCreatureUseScoop(creature)) {
@@ -25976,7 +26311,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           const fireNote = creature._manualSuperPredator
                               ? ' · [Space] fire modules'
                               : ' · [Space] probe muzzle';
-                          hint.textContent = `Bubble ${pN}/${MANUAL_SCOOP_MAX_PARTICLES} drift${mods ? ` · ${mods} mods` : ''}${shards ? ` · ${shards} shards` : ''}${laceNote} · [0] toggle · [F] sprint${fireNote}`;
+                          const incNote = mods >= SCOOP_INCUBATOR_MIN_MODULES
+                              ? ` · [0] hatch ${max(1, floor(mods / SCOOP_INCUBATOR_MODULES_PER_SPAWN))} kin`
+                              : mods ? ` · ${mods} mods brewing` : '';
+                          hint.textContent = `Bubble ${pN}/${MANUAL_SCOOP_MAX_PARTICLES} drift${mods ? ` · ${mods} mods` : ''}${incNote}${shards ? ` · ${shards} shards` : ''}${laceNote} · [0] toggle · [F] sprint${fireNote}`;
                       } else {
                           const tier = creature._scoopLatticeTier || creature._scoopGenome?.tier || 0;
                           hint.textContent = genome
@@ -26455,11 +26793,35 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   for (const m of modBag) {
                       if (m._bellyX == null) continue;
                       const col = m.color || MODULE_AMMO_COLORS[m.type] || '#a78bfa';
-                      fill(red(color(col)), green(color(col)), blue(color(col)), 195);
+                      const sheen = m._scoopSpecialSheen;
+                      const pulse = 0.5 + sin(frameCount * 0.18 + (m._bellySwirl || 0)) * 0.5;
+                      if (sheen === 'gold') {
+                          noFill();
+                          stroke(255, 210, 90, 80 + pulse * 100);
+                          strokeWeight(1.35);
+                          circle(m._bellyX, m._bellyY, 9 + (m.tier || 1) * 0.65 + pulse * 2);
+                          stroke(255, 236, 160, 120 + pulse * 80);
+                          strokeWeight(0.75);
+                          circle(m._bellyX, m._bellyY, 6.5 + (m.tier || 1) * 0.45);
+                      } else if (sheen === 'silver') {
+                          noFill();
+                          stroke(210, 228, 255, 70 + pulse * 90);
+                          strokeWeight(1.1);
+                          circle(m._bellyX, m._bellyY, 8 + (m.tier || 1) * 0.5);
+                      }
+                      fill(red(color(col)), green(color(col)), blue(color(col)), sheen ? 220 : 195);
                       noStroke();
                       circle(m._bellyX, m._bellyY, 4 + (m.tier || 1) * 0.55);
-                      fill(255, 255, 255, 120);
-                      circle(m._bellyX - 0.4, m._bellyY - 0.4, 1.8);
+                      if (sheen === 'gold') {
+                          fill(255, 230, 140, 150 + pulse * 80);
+                          circle(m._bellyX, m._bellyY, 2.8 + pulse);
+                      } else if (sheen === 'silver') {
+                          fill(235, 245, 255, 130 + pulse * 60);
+                          circle(m._bellyX - 0.5, m._bellyY - 0.5, 2.2);
+                      } else {
+                          fill(255, 255, 255, 120);
+                          circle(m._bellyX - 0.4, m._bellyY - 0.4, 1.8);
+                      }
                   }
                   if ((creature._scoopDashRipple || 0) > 0) {
                       noFill();
@@ -42098,6 +42460,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       }
                       updateScoopModuleBullets();
                       if (scoopSeedParticles.length) tickScoopSeedParticles();
+                      if (scoopLureParticles.length) tickScoopLureParticles();
                       ModuleIdentitySystem.propagateColonyNetwork();
                       ModuleIdentitySystem.drawResonanceLinks(PerfScale.lod);
                       ModuleIdentitySystem.drawMacroClusterHints(PerfScale.lod);
@@ -42262,6 +42625,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       }
                       drawScoopModuleBullets();
                       drawScoopSeedParticles();
+                      drawScoopLureParticles();
 
                       ModuleIdentitySystem.applyResonanceNetworkEnergy(timeScale);
                       ModuleIdentitySystem.resolveColonyPredatorPressure(timeScale);
@@ -42612,6 +42976,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   creatures = [];
                   vortexParticles = [];
                   scoopSeedParticles = [];
+                  scoopLureParticles = [];
                   pheromones = [];
                   foodBlooms = [];
                   staticFoodPatches = [];
