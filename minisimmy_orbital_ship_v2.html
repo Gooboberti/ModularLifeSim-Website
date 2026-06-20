@@ -4,7 +4,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-018-squid-predator-duel" />
+    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-019-squid-leak-dandruff" />
     <title>MiniSimmy Orbital Ship v2</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2334d399'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%230a0a0f'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -8207,7 +8207,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'local-018-squid-predator-duel';
+              const MINISIMMY_BUILD = 'local-019-squid-leak-dandruff';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -8385,6 +8385,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
               const SCOOP_SQUID_LEAK_SEEK_RADIUS = 520;
               const SCOOP_SQUID_LEAK_PULL = 2.55;
               const SCOOP_SQUID_LEAK_MODULE_MAX = 160;
+              const SCOOP_LEAK_DANDRUFF_MAX_SPEED = 0.42;
+              const SCOOP_LEAK_MODULE_SPAWN_CHANCE = 0.24;
               const SCOOP_PROBE_PULL_SCALE = 5.8;
               const SCOOP_FACING_LERP = 0.065;
               const SCOOP_PROBE_COLONY_TUG_RANGE = 96;
@@ -16399,9 +16401,12 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       this.fromAmmoBurst = !!opts.fromAmmoBurst;
                       this.fromAntimatterDissolve = !!opts.fromAntimatterDissolve;
                       this.fromPaintGun = !!opts.fromPaintGun;
+                      this.fromSquidLeak = !!opts.fromSquidLeak;
                       this.orbitGraceUntil = opts.orbitGraceUntil || 0;
                       this.orbitSwimPhase = opts.orbitSwimPhase ?? random(TWO_PI);
-                      if (this.fromPaintGun) {
+                      if (this.fromSquidLeak) {
+                          this.size = random(0.5, 0.88) + (this.tier - 1) * 0.06;
+                      } else if (this.fromPaintGun) {
                           this.size = random(2.2, 2.8) + (this.tier - 1) * 0.18;
                       } else if (this.fromAmmoBurst) {
                           this.size = random(0.95, 1.35) + (this.tier - 1) * 0.12;
@@ -16421,6 +16426,36 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       return !!this.orbitGraceUntil && Date.now() < this.orbitGraceUntil;
                   }
                   update(vortexDir = 1, vortexStrength = 1) {
+                      if (this._squidLeak || this.fromSquidLeak) {
+                          let dx = this.x - centerX;
+                          let dy = this.y - centerY;
+                          let distToCenter = sqrt(dx * dx + dy * dy) || 1;
+                          let tangentX = -dy;
+                          let tangentY = dx;
+                          let len = sqrt(tangentX * tangentX + tangentY * tangentY) || 1;
+                          const rotForce = 0.2 * vortexStrength * vortexDir;
+                          this.orbitSwimPhase += 0.04;
+                          const wobble = sin(this.orbitSwimPhase) * 0.08;
+                          this.vx += (tangentX / len) * rotForce * (0.012 + wobble * 0.006);
+                          this.vy += (tangentY / len) * rotForce * (0.012 + wobble * 0.006);
+                          const pull = 0.11 * vortexStrength;
+                          this.vx += (centerX - this.x) * pull / (distToCenter + 48);
+                          this.vy += (centerY - this.y) * pull / (distToCenter + 48);
+                          this.x += this.vx;
+                          this.y += this.vy;
+                          this.life--;
+                          this.twinkle += 0.06;
+                          this.vx *= 0.994;
+                          this.vy *= 0.994;
+                          const spd = sqrt(this.vx * this.vx + this.vy * this.vy);
+                          if (spd > SCOOP_LEAK_DANDRUFF_MAX_SPEED) {
+                              const scale = SCOOP_LEAK_DANDRUFF_MAX_SPEED / spd;
+                              this.vx *= scale;
+                              this.vy *= scale;
+                          }
+                          this.mergeGlow = max(0, this.mergeGlow - 0.04);
+                          return;
+                      }
                       const inGrace = this.isInOrbitGrace();
                       if (inGrace || this.isFloating) {
                           let dx = this.x - centerX;
@@ -16460,6 +16495,18 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   }
                   draw() {
                       noStroke();
+                      if (this._squidLeak || this.fromSquidLeak) {
+                          const pulse = sin(this.twinkle) * 0.25;
+                          const alpha = map(this.life, 0, 960, 0, this.mergeGlow > 0 ? 200 : 140);
+                          const c = color(this.color);
+                          fill(red(c), green(c), blue(c), alpha * 0.55);
+                          circle(this.x, this.y, this.size * 2.1 + pulse);
+                          fill(red(c), green(c), blue(c), alpha);
+                          circle(this.x, this.y, this.size * 1.15 + pulse * 0.3);
+                          fill(255, 255, 255, alpha * 0.45);
+                          circle(this.x - 0.15, this.y - 0.15, this.size * 0.45);
+                          return;
+                      }
                       let pulse = sin(this.twinkle) * 0.7;
                       const tierGlow = this.tier > 1 ? 1 + (this.tier - 1) * 0.14 : 1;
                       const tierShine = this.tier > 1 ? 0.35 + (this.tier - 1) * 0.08 : 0;
@@ -27644,23 +27691,25 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   return hatched.length;
               }
 
-              function emitSquidLeakFloatingModule(creature, geo, mod) {
+              function emitSquidLeakFloatingModule(creature, geo, mod, at = null) {
                   if (!mod || moduleParticles.length >= SCOOP_SQUID_LEAK_MODULE_MAX) return null;
                   const col = mod.color || MODULE_AMMO_COLORS[mod.type] || '#a78bfa';
                   const ang = random(TWO_PI);
                   const bx = geo.bubbleX ?? creature.x;
                   const by = geo.bubbleY ?? creature.y;
                   const br = geo.bubbleR ?? CREATURE_BODY_RADIUS * 2.75;
-                  const speed = random(1.4, 3.4);
+                  const shellR = br * random(0.94, 1.06);
+                  const drift = random(0.04, 0.18);
                   const mp = new ModuleParticle(true, {
                       type: moduleTypeForParticle(mod.type),
                       tier: mod.tier || 1,
                       color: col,
-                      x: bx + cos(ang) * br * random(0.55, 1.05),
-                      y: by + sin(ang) * br * random(0.55, 1.05),
-                      vx: cos(ang) * speed + random(-0.7, 0.7),
-                      vy: sin(ang) * speed + random(-0.7, 0.7),
-                      orbitGraceUntil: Date.now() + 820
+                      fromSquidLeak: true,
+                      x: at?.x ?? bx + cos(ang) * shellR,
+                      y: at?.y ?? by + sin(ang) * shellR,
+                      vx: cos(ang) * drift + random(-0.04, 0.04),
+                      vy: sin(ang) * drift + random(-0.04, 0.04),
+                      orbitGraceUntil: Date.now() + 2400
                   });
                   mp._squidLeak = true;
                   mp._squidLeakOwner = creature;
@@ -27673,20 +27722,25 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   const mods = creature._scoopModuleBag || [];
                   if (!mods.length) return;
                   const m = mods[floor(random(mods.length))];
-                  emitSquidLeakFloatingModule(creature, geo, m);
+                  if (random() < SCOOP_LEAK_MODULE_SPAWN_CHANCE) {
+                      emitSquidLeakFloatingModule(creature, geo, m);
+                  }
                   if (scoopLureParticles.length >= SCOOP_LURE_PARTICLE_MAX) return;
                   const col = m.color || MODULE_AMMO_COLORS[m.type] || '#a78bfa';
                   const ang = random(TWO_PI);
                   const bx = geo.bubbleX ?? creature.x;
                   const by = geo.bubbleY ?? creature.y;
                   const br = geo.bubbleR ?? CREATURE_BODY_RADIUS * 2.75;
-                  const speed = random(1.2, 3.1);
+                  const shellR = br * random(0.9, 1.08);
+                  const drift = random(0.05, 0.2);
                   scoopLureParticles.push({
-                      x: bx + cos(ang) * br * random(0.65, 1.05),
-                      y: by + sin(ang) * br * random(0.65, 1.05),
-                      vx: cos(ang) * speed,
-                      vy: sin(ang) * speed,
-                      life: 360 + random(0, 180),
+                      x: bx + cos(ang) * shellR + random(-1.2, 1.2),
+                      y: by + sin(ang) * shellR + random(-1.2, 1.2),
+                      vx: cos(ang) * drift + random(-0.05, 0.05),
+                      vy: sin(ang) * drift + random(-0.05, 0.05),
+                      life: 520 + random(0, 220),
+                      flakeSize: random(0.75, 1.35),
+                      dandruff: true,
                       moduleType: m.type,
                       tier: m.tier || 1,
                       sheen: m._scoopSpecialSheen || null,
@@ -27820,7 +27874,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       cr: red(col),
                       cg: green(col),
                       cb: blue(col),
-                      mergeGlow: 1.35
+                      mergeGlow: 1.2,
+                      dandruff: true,
+                      flakeSize: 1.2 + tier * 0.12
                   };
               }
 
@@ -27844,8 +27900,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           for (let j = i + 1; j < particles.length && cluster.length < 3; j++) {
                               const candidate = particles[j];
                               if (!scoopLureParticles.includes(candidate)) continue;
+                              const mergeR = (a.dandruff !== false) ? 9 : SCOOP_LURE_TRIPLE_MERGE_RADIUS * 1.4;
                               const nearAll = cluster.every((member) =>
-                                  dist(member.x, member.y, candidate.x, candidate.y) < SCOOP_LURE_TRIPLE_MERGE_RADIUS * 1.4
+                                  dist(member.x, member.y, candidate.x, candidate.y) < mergeR
                               );
                               if (nearAll) cluster.push(candidate);
                           }
@@ -27856,10 +27913,28 @@ body.is-map-fullscreen #map-fullscreen-btn {
                               if (idx >= 0) scoopLureParticles.splice(idx, 1);
                           }
                           scoopLureParticles.push(merged);
-                          addFloatingText(merged.x, merged.y - 14, `${merged.moduleType} ×3 → T${merged.tier}`, '#fde047');
-                          playTone(560 + merged.tier * 38, 'sine', 0.18, 0.45);
+                          const owner = merged.owner;
+                          const geo = owner?._scoopGeo || (owner ? buildManualScoopGeometry(owner) : null);
+                          if (owner && geo) {
+                              emitSquidLeakFloatingModule(owner, geo, {
+                                  type: merged.moduleType,
+                                  tier: merged.tier || 1,
+                                  color: MODULE_AMMO_COLORS[merged.moduleType] || '#a78bfa'
+                              }, { x: merged.x, y: merged.y });
+                          }
+                          addFloatingText(merged.x, merged.y - 10, `${merged.moduleType} T${merged.tier}`, '#fde047');
+                          playTone(560 + merged.tier * 38, 'sine', 0.12, 0.38);
                           return;
                       }
+                  }
+              }
+
+              function capScoopLeakDandruffSpeed(p) {
+                  const spd = sqrt(p.vx * p.vx + p.vy * p.vy);
+                  if (spd > SCOOP_LEAK_DANDRUFF_MAX_SPEED) {
+                      const scale = SCOOP_LEAK_DANDRUFF_MAX_SPEED / spd;
+                      p.vx *= scale;
+                      p.vy *= scale;
                   }
               }
 
@@ -27869,22 +27944,25 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   for (let i = scoopLureParticles.length - 1; i >= 0; i--) {
                       const p = scoopLureParticles[i];
                       p.life -= timeScale;
+                      const dandruff = p.dandruff !== false;
                       const dx = p.x - vcX;
                       const dy = p.y - vcY;
                       const distToCenter = sqrt(dx * dx + dy * dy) || 1;
                       const tangentX = -dy;
                       const tangentY = dx;
                       const tLen = sqrt(tangentX * tangentX + tangentY * tangentY) || 1;
-                      const rotForce = 0.95 * vortexStrength * vortexDir;
-                      p.vx += (tangentX / tLen) * rotForce * 0.044 * timeScale;
-                      p.vy += (tangentY / tLen) * rotForce * 0.044 * timeScale;
-                      const pull = 0.5 * vortexStrength;
-                      p.vx += (vcX - p.x) * pull / (distToCenter + 22) * timeScale;
-                      p.vy += (vcY - p.y) * pull / (distToCenter + 22) * timeScale;
+                      const rotForce = (dandruff ? 0.18 : 0.55) * vortexStrength * vortexDir;
+                      const rotScale = dandruff ? 0.011 : 0.028;
+                      p.vx += (tangentX / tLen) * rotForce * rotScale * timeScale;
+                      p.vy += (tangentY / tLen) * rotForce * rotScale * timeScale;
+                      const pull = (dandruff ? 0.1 : 0.32) * vortexStrength;
+                      p.vx += (vcX - p.x) * pull / (distToCenter + (dandruff ? 52 : 28)) * timeScale;
+                      p.vy += (vcY - p.y) * pull / (distToCenter + (dandruff ? 52 : 28)) * timeScale;
                       p.x += p.vx * timeScale;
                       p.y += p.vy * timeScale;
-                      p.vx *= 0.986;
-                      p.vy *= 0.986;
+                      p.vx *= dandruff ? 0.993 : 0.988;
+                      p.vy *= dandruff ? 0.993 : 0.988;
+                      if (dandruff) capScoopLeakDandruffSpeed(p);
                       if (p.mergeGlow > 0) p.mergeGlow = max(0, p.mergeGlow - 0.035);
                       if (p.life <= 0) scoopLureParticles.splice(i, 1);
                   }
@@ -27897,13 +27975,16 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           const dx = b.x - a.x;
                           const dy = b.y - a.y;
                           const d = sqrt(dx * dx + dy * dy) || 1;
-                          if (d > SCOOP_LURE_COHERE_RADIUS) continue;
-                          const t = 1 - d / SCOOP_LURE_COHERE_RADIUS;
-                          const pull = 0.16 * t * timeScale;
+                          const cohereR = (a.dandruff !== false) ? 22 : SCOOP_LURE_COHERE_RADIUS;
+                          if (d > cohereR) continue;
+                          const t = 1 - d / cohereR;
+                          const pull = (a.dandruff !== false ? 0.045 : 0.12) * t * timeScale;
                           a.vx += (dx / d) * pull;
                           a.vy += (dy / d) * pull;
                           b.vx -= (dx / d) * pull;
                           b.vy -= (dy / d) * pull;
+                          if (a.dandruff !== false) capScoopLeakDandruffSpeed(a);
+                          if (b.dandruff !== false) capScoopLeakDandruffSpeed(b);
                       }
                   }
                   if (frameCount % 6 === 0) tryTripleMergeScoopLureParticles();
@@ -28017,21 +28098,33 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   if (!scoopLureParticles.length) return;
                   noStroke();
                   for (const p of scoopLureParticles) {
-                      const alpha = map(p.life, 0, 320, 0, p.sheen === 'gold' ? 220 : p.sheen === 'silver' ? 190 : 155);
-                      const mergePulse = p.mergeGlow > 0 ? 1 + p.mergeGlow * 2.4 : 1;
-                      fill(p.cr, p.cg, p.cb, alpha * 0.35);
-                      circle(p.x, p.y, (4.2 + (p.tier || 1) * 0.55) * mergePulse);
-                      fill(p.cr, p.cg, p.cb, alpha);
-                      circle(p.x, p.y, (2.6 + (p.tier || 1) * 0.35) * mergePulse);
-                      if (p.sheen === 'gold') {
-                          fill(255, 220, 120, alpha * 0.55);
-                          circle(p.x, p.y, 4.8 + sin(frameCount * 0.2 + p.x) * 0.8);
-                      } else if (p.sheen === 'silver') {
-                          fill(220, 235, 255, alpha * 0.45);
-                          circle(p.x, p.y, 4.2 + sin(frameCount * 0.16 + p.y) * 0.6);
+                      const dandruff = p.dandruff !== false;
+                      const lifeMax = dandruff ? 520 : 320;
+                      const alpha = map(p.life, 0, lifeMax, 0, p.sheen === 'gold' ? 200 : p.sheen === 'silver' ? 175 : 130);
+                      const mergePulse = p.mergeGlow > 0 ? 1 + p.mergeGlow * 1.2 : 1;
+                      const flake = (p.flakeSize || (dandruff ? 1.05 : 2.6) + (p.tier || 1) * (dandruff ? 0.08 : 0.35)) * mergePulse;
+                      if (dandruff) {
+                          fill(p.cr, p.cg, p.cb, alpha * 0.42);
+                          circle(p.x, p.y, flake * 1.35);
+                          fill(p.cr, p.cg, p.cb, alpha);
+                          circle(p.x, p.y, flake);
+                          if (p.sheen === 'gold') {
+                              fill(255, 220, 120, alpha * 0.5);
+                              circle(p.x, p.y, flake * 1.2);
+                          } else if (p.sheen === 'silver') {
+                              fill(220, 235, 255, alpha * 0.4);
+                              circle(p.x, p.y, flake * 1.1);
+                          }
+                          fill(255, 255, 255, alpha * 0.38);
+                          circle(p.x - 0.15, p.y - 0.15, flake * 0.38);
+                      } else {
+                          fill(p.cr, p.cg, p.cb, alpha * 0.35);
+                          circle(p.x, p.y, flake * 1.6);
+                          fill(p.cr, p.cg, p.cb, alpha);
+                          circle(p.x, p.y, flake);
+                          fill(255, 255, 255, alpha * 0.35);
+                          circle(p.x - 0.3, p.y - 0.3, 1.1);
                       }
-                      fill(255, 255, 255, alpha * 0.35);
-                      circle(p.x - 0.3, p.y - 0.3, 1.1);
                   }
               }
 
@@ -30823,16 +30916,18 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           if (idx >= 0) moduleParticles.splice(idx, 1);
                       }
 
+                      const squidMerge = mergeSet.some((p) => p._squidLeak);
                       const merged = new ModuleParticle(true, {
                           type: sample.type,
                           tier: nextTier,
                           x: cx,
                           y: cy,
-                          vx: random(-0.4, 0.4),
-                          vy: random(-0.4, 0.4)
+                          vx: squidMerge ? random(-0.12, 0.12) : random(-0.4, 0.4),
+                          vy: squidMerge ? random(-0.12, 0.12) : random(-0.4, 0.4),
+                          fromSquidLeak: squidMerge
                       });
                       merged.mergeGlow = 1.2;
-                      if (mergeSet.some((p) => p._squidLeak)) {
+                      if (squidMerge) {
                           merged._squidLeak = true;
                           merged._squidLeakOwner = mergeSet.find((p) => p._squidLeakOwner)?._squidLeakOwner || null;
                       }
@@ -32929,7 +33024,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       if (mp && mp.isFloating && !mp.collected && mp._squidLeak) leaks.push(mp);
                   }
                   if (leaks.length < 2) return;
-                  const radius = 76;
+                  const radius = 28;
                   for (let i = 0; i < leaks.length; i++) {
                       for (let j = i + 1; j < leaks.length; j++) {
                           const a = leaks[i];
@@ -32941,11 +33036,13 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           const d = sqrt(dx * dx + dy * dy) || 1;
                           if (d > radius) continue;
                           const t = 1 - d / radius;
-                          const pull = 0.17 * t * timeScale;
+                          const pull = 0.035 * t * timeScale;
                           a.vx += (dx / d) * pull;
                           a.vy += (dy / d) * pull;
                           b.vx -= (dx / d) * pull;
                           b.vy -= (dy / d) * pull;
+                          capScoopLeakDandruffSpeed(a);
+                          capScoopLeakDandruffSpeed(b);
                       }
                   }
               }
