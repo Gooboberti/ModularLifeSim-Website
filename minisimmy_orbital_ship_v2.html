@@ -4,7 +4,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-010-squid-reservoir-modal" />
+    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-011-squid-soul-absorb" />
     <title>MiniSimmy Orbital Ship v2</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2334d399'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%230a0a0f'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -8200,7 +8200,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'local-010-squid-reservoir-modal';
+              const MINISIMMY_BUILD = 'local-011-squid-soul-absorb';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -26127,11 +26127,47 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   return out;
               }
 
+              function emitSquidAbsorbSoulOrbs(hunter, prey, geo) {
+                  if (!hunter || !prey || !isJellyfishScoopCreature(hunter)) return 0;
+                  const sx = geo?.bubbleX ?? hunter.x;
+                  const sy = geo?.bubbleY ?? hunter.y;
+                  const tier = getJellyfishTier(hunter);
+                  const releasedEnergy = max(8, floor((prey.energy || 0) * 0.45) + 10 + (prey._networkSize || 1) * 2);
+                  const orbN = min(4, 1 + floor((prey._networkSize || 1) / 3) + (tier >= 2 ? 1 : 0));
+                  let spawned = 0;
+                  for (let oi = 0; oi < orbN; oi++) {
+                      if (energyOrbs.length >= 35) break;
+                      const angle = random(TWO_PI);
+                      const spread = 10 + tier * 4;
+                      energyOrbs.push({
+                          x: sx + cos(angle) * random(3, spread),
+                          y: sy + sin(angle) * random(3, spread),
+                          radius: 9 + random(0, 4) + tier * 0.45,
+                          life: 280,
+                          energy: releasedEnergy / orbN,
+                          targetIsGreen: isDay,
+                          age: 0,
+                          vx: cos(angle) * random(0.5, 2.1),
+                          vy: sin(angle) * random(0.5, 2.1),
+                          sourceCore: getCreatureCoreType(prey),
+                          networkSize: prey._networkSize || 1,
+                          lineageImprint: NeuralNet.buildSoulLineageImprint(prey)
+                      });
+                      spawned++;
+                  }
+                  if (spawned > 0) {
+                      hunter._soulAbsorbPulse = max(hunter._soulAbsorbPulse || 0, 28);
+                      if (PerfScale.lod < 2) addFloatingText(sx, sy - 30, `+${spawned} soul${spawned === 1 ? '' : 's'}`, '#86efac');
+                  }
+                  return spawned;
+              }
+
               function absorbScoopCreature(hunter, prey, geo) {
                   if (!hunter || !prey || creatures.indexOf(prey) < 0) return false;
                   if (!canScoopMoreCreatures(hunter)) return false;
                   if (!hunter._scoopModuleBag) hunter._scoopModuleBag = [];
                   const loose = digestPreyIntoLooseModules(hunter, prey);
+                  emitSquidAbsorbSoulOrbs(hunter, prey, geo);
                   prey._scoopBeingDragged = 'captured';
                   prey._scoopProbeStun = 0;
                   prey._scoopProbeTaggedBy = null;
