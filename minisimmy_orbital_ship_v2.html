@@ -6256,7 +6256,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                                   <span id="inspect-life" class="font-mono font-semibold"></span>
                               </div>
                               <div id="inspect-extract-wrap" class="mt-2 space-y-1.5">
-                                  <button id="inspect-center-view-btn" type="button" onclick="playUIClick(); toggleCenterViewOnCreature()"
+                                  <button id="inspect-center-view-btn" type="button" onclick="playUIClick(); handleInspectorCenterViewClick()"
                                           class="inspect-center-view-btn">
                                       <i class="fa-solid fa-crosshairs text-[10px]"></i>
                                       <span id="inspect-center-view-label">Center View on Creature</span>
@@ -7936,7 +7936,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'orbital-ship-v2-2026-06-20-scoop-compact-orient';
+              const MINISIMMY_BUILD = 'orbital-ship-v2-2026-06-20-camera-orient-smooth';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -8089,7 +8089,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
               const MANUAL_SCOOP_SCAN_BUDGET = 160;
               const MANUAL_SCOOP_REACH = 78;
               const SCOOP_GEOMETRY_BASE_SCALE = 0.68;
-              const MANUAL_ORIENT_ROTATE_SPEED = 0.042;
+              const MANUAL_ORIENT_ROTATE_SPEED = 0.048;
+              const MANUAL_ORIENT_ACCEL = 0.16;
+              const MANUAL_ORIENT_DAMP = 0.78;
+              const MANUAL_ORIENT_TAP_IMPULSE = 0.09;
               const MANUAL_SCOOP_MAX_SEEDS = 24;
               const SCOOP_LATTICE_METER_MAX = 100;
               const SCOOP_LATTICE_UNLOCK = 1;
@@ -13946,24 +13949,41 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   }
               }
 
+              function releaseCenterViewOnCreature(creature) {
+                  if (!canUseMapCameraTools()) return;
+                  const target = creature || centerViewCreature || selectedCreature;
+                  if (mapCameraMode !== 'center') return;
+                  playUIClick();
+                  clearMapCameraMode();
+                  if (target && creatures.indexOf(target) >= 0) {
+                      addFloatingText(target.x, target.y - 22, 'Center follow released', '#fb923c');
+                  }
+                  syncMapCameraButtons();
+                  updateInspectorCenterViewButton(target || selectedCreature);
+              }
+
+              function handleInspectorCenterViewClick() {
+                  const target = selectedCreature || manualControlCreature;
+                  if (target && mapCameraMode === 'center' && centerViewCreature === target) {
+                      releaseCenterViewOnCreature(target);
+                      return;
+                  }
+                  toggleCenterViewOnCreature(target);
+              }
+
               function toggleCenterViewOnCreature(creature) {
                   if (!canUseMapCameraTools()) return;
                   const target = creature || manualControlCreature || selectedCreature;
                   if (!target || creatures.indexOf(target) < 0) return;
-                  if (mapCameraMode === 'center' && centerViewCreature === target) {
-                      clearMapCameraMode();
-                      addFloatingText(target.x, target.y - 22, 'Center follow OFF [3]', '#fb923c');
-                      syncMapCameraButtons();
-                      updateInspectorCenterViewButton(target);
-                      return;
-                  }
+                  const wasFollowing = mapCameraMode === 'center' && centerViewCreature === target;
                   playUIClick();
                   if (selectedCreature !== target) selectCreature(target);
                   trackAlpha = false;
                   mapCameraMode = 'center';
                   centerViewCreature = target;
-                  Viewport.centerOnWorld(target.x, target.y, 0.55);
-                  addFloatingText(target.x, target.y - 22, 'Center follow ON [3]', '#56d8f8');
+                  Viewport.centerOnWorld(target.x, target.y, 0.92);
+                  addFloatingText(target.x, target.y - 22,
+                      wasFollowing ? 'Recentered on creature [3]' : 'Camera on creature [3]', '#56d8f8');
                   syncMapCameraButtons();
                   updateInspectorCenterViewButton(target);
               }
@@ -15815,9 +15835,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   }
                   if ((key === 'q' || key === 'Q' || key === 'e' || key === 'E')
                       && manualControlCreature && manualControlState.pressed) {
-                      initManualCreatureOrient(manualControlCreature);
-                      manualControlCreature._manualOrient += (key === 'q' || key === 'Q') ? -0.16 : 0.16;
-                      manualControlCreature._scoopFacing = manualControlCreature._manualOrient;
+                      nudgeManualOrientImpulse(manualControlCreature,
+                          (key === 'q' || key === 'Q') ? -MANUAL_ORIENT_TAP_IMPULSE : MANUAL_ORIENT_TAP_IMPULSE);
                       return false;
                   }
                   if (key === 'Escape' && energyWallMode) {
@@ -23877,13 +23896,6 @@ body.is-map-fullscreen #map-fullscreen-btn {
               }
 
               function syncVortexWorldCenter() {
-                  if (isViewportCenterFollowActive()) {
-                      const c = getVortexWorldCenter();
-                      centerX = c.x;
-                      centerY = c.y;
-                      syncFoodZonesFromScreen();
-                      return;
-                  }
                   centerX = mapWorldVortexX;
                   centerY = mapWorldVortexY;
                   if (greenZone && blueZone) {
@@ -23976,11 +23988,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
               function drawWorld() {
                   background(12, 14, 22);
                   syncVortexWorldCenter();
-                  const centerFollowActive = isViewportCenterFollowActive();
-                  if (centerFollowActive) drawVortexBackdrop();
                   push();
                   Viewport.applyTransform();
-                  if (!centerFollowActive) drawVortexBackdropWorld();
+                  drawVortexBackdropWorld();
                   drawWorldMapContent();
                   pop();
               }
@@ -25354,14 +25364,32 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   creature._scoopFacing = creature._manualOrient;
               }
 
-              function tickManualOrientWhileDragging(creature, timeScale) {
-                  if (!creature?._manualControl || !manualControlState.pressed) return;
-                  let rot = 0;
-                  if (keyIsDown(81)) rot -= MANUAL_ORIENT_ROTATE_SPEED * timeScale;
-                  if (keyIsDown(69)) rot += MANUAL_ORIENT_ROTATE_SPEED * timeScale;
-                  if (rot === 0) return;
+              function nudgeManualOrientImpulse(creature, impulse) {
+                  if (!creature) return;
                   initManualCreatureOrient(creature);
-                  creature._manualOrient += rot;
+                  creature._manualOrientVel = (creature._manualOrientVel || 0) + impulse;
+              }
+
+              function tickManualOrientWhileDragging(creature, timeScale) {
+                  if (!creature?._manualControl) {
+                      if (creature) creature._manualOrientVel = (creature._manualOrientVel || 0) * MANUAL_ORIENT_DAMP;
+                      return;
+                  }
+                  let targetVel = 0;
+                  if (manualControlState.pressed) {
+                      if (keyIsDown(81)) targetVel -= MANUAL_ORIENT_ROTATE_SPEED;
+                      if (keyIsDown(69)) targetVel += MANUAL_ORIENT_ROTATE_SPEED;
+                  }
+                  const vel = creature._manualOrientVel || 0;
+                  creature._manualOrientVel = manualControlState.pressed
+                      ? lerp(vel, targetVel, MANUAL_ORIENT_ACCEL)
+                      : vel * MANUAL_ORIENT_DAMP;
+                  if (abs(creature._manualOrientVel) < 0.0004) {
+                      creature._manualOrientVel = 0;
+                      return;
+                  }
+                  initManualCreatureOrient(creature);
+                  creature._manualOrient += creature._manualOrientVel * timeScale;
                   creature._scoopFacing = creature._manualOrient;
               }
 
@@ -27641,6 +27669,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   creature._manualPause = 0;
                   creature._manualTugStrength = 0;
                   creature._manualOrient = null;
+                  creature._manualOrientVel = 0;
                   creature._laceSnapback = 0;
                   creature._laceTension = 0;
                   creature._laceRipple = 0;
@@ -41347,9 +41376,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   if (isKeyboardGameInput(e)
                       && (e.key === 'q' || e.key === 'Q' || e.key === 'e' || e.key === 'E')
                       && manualControlCreature && manualControlState.pressed) {
-                      initManualCreatureOrient(manualControlCreature);
-                      manualControlCreature._manualOrient += (e.key === 'q' || e.key === 'Q') ? -0.16 : 0.16;
-                      manualControlCreature._scoopFacing = manualControlCreature._manualOrient;
+                      nudgeManualOrientImpulse(manualControlCreature,
+                          (e.key === 'q' || e.key === 'Q') ? -MANUAL_ORIENT_TAP_IMPULSE : MANUAL_ORIENT_TAP_IMPULSE);
                       e.preventDefault();
                       return;
                   }
@@ -42008,7 +42036,6 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   tickFullscreenArrowPan();
                   tickMapCameraFollow();
 
-                  const centerFollowActive = isViewportCenterFollowActive();
                   const pulseG = sin(frameCount * 0.11) * 0.05 + 1;
                   const pulseB = sin(frameCount * 0.1 + 1.1) * 0.05 + 1;
 
@@ -42024,18 +42051,12 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       blueZone.minR * (environmentPhase === 2 ? 0.6 : 1),
                       blueZone.baseR * (blueZone.food / blueZone.maxFood) * pulseB * envSizeMult
                   );
-                  if (centerFollowActive) {
-                      drawVortexBackdrop();
-                      drawFoodZoneBackdrop(isDay, greenDisplayR, blueDisplayR);
-                  }
 
                   push();
                   Viewport.applyTransform();
 
-                  if (!centerFollowActive) {
-                      drawVortexBackdropWorld();
-                      drawFoodZoneBackdropWorld(isDay, greenDisplayR, blueDisplayR);
-                  }
+                  drawVortexBackdropWorld();
+                  drawFoodZoneBackdropWorld(isDay, greenDisplayR, blueDisplayR);
 
                   for (let i = redBeams.length - 1; i >= 0; i--) {
                       let b = redBeams[i];
@@ -43560,6 +43581,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
               window.toggleHandPanTool = toggleHandPanTool;
               window.recenterMapView = recenterMapView;
               window.toggleCenterViewOnCreature = toggleCenterViewOnCreature;
+              window.handleInspectorCenterViewClick = handleInspectorCenterViewClick;
+              window.releaseCenterViewOnCreature = releaseCenterViewOnCreature;
               window.onRedHazardsMenuToggle = onRedHazardsMenuToggle;
               window.toggleMapFullscreen = toggleMapFullscreen;
               window.EnvCycleDockToggle = EnvCycleDockToggle;
