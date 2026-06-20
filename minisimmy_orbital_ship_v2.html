@@ -4,7 +4,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-camera-center-restore" />
+    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-jelly-pop-fx" />
     <title>MiniSimmy Orbital Ship v2</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2334d399'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%230a0a0f'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -8006,7 +8006,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'orbital-ship-v2-2026-06-20-camera-center-restore';
+              const MINISIMMY_BUILD = 'orbital-ship-v2-2026-06-20-jelly-pop-fx';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -8148,6 +8148,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
               let manualControlState = { pressed: false, x: 0, y: 0, grabDirect: false, tugStrength: 0 };
               let scoopSeedParticles = [];
               let scoopLureParticles = [];
+              let jellyfishPopBursts = [];
 
               const MANUAL_SCOOP_MAX_BAG = 10;
               const MANUAL_SCOOP_MAX_PARTICLES = 200;
@@ -29565,6 +29566,183 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   spawn._jellyfishBodyScale = SCOOP_JELLYFISH_SIZE_0_BODY_SCALE;
               }
 
+              function spawnJellyfishPopBurst(creature, opts = {}) {
+                  if (!creature) return;
+                  const soft = !!opts.soft;
+                  const modN = opts.modN ?? getScoopModuleCount(creature);
+                  const cloneN = opts.cloneN ?? 0;
+                  const geo = creature._scoopGeo;
+                  const br = geo?.bubbleR ?? CREATURE_BODY_RADIUS * 2.75;
+                  const px = creature.x;
+                  const py = creature.y;
+                  const coreCol = MODULE_AMMO_COLORS[getCreatureCoreType(creature)] || '#a78bfa';
+                  const cr = red(color(coreCol));
+                  const cg = green(color(coreCol));
+                  const cb = blue(color(coreCol));
+                  const dropletN = soft ? 16 : 30 + min(26, modN * 2) + cloneN * 5;
+                  const droplets = [];
+                  for (let i = 0; i < dropletN; i++) {
+                      const ang = random(TWO_PI);
+                      const spd = soft ? random(1.4, 4.2) : random(2.8, 8.5);
+                      droplets.push({
+                          x: px + cos(ang) * br * random(0.04, 0.32),
+                          y: py + sin(ang) * br * random(0.04, 0.32),
+                          vx: cos(ang) * spd,
+                          vy: sin(ang) * spd,
+                          life: soft ? random(24, 42) : random(38, 64),
+                          size: soft ? random(2.4, 4.6) : random(3, 7.2),
+                          wobble: random(TWO_PI)
+                      });
+                  }
+                  const sparks = [];
+                  if (!soft) {
+                      const sparkN = min(22, 8 + modN);
+                      const modTypes = ['harvester', 'sensor', 'mover', 'communicator', 'resistant', 'explorer'];
+                      for (let i = 0; i < sparkN; i++) {
+                          const ang = random(TWO_PI);
+                          const modType = modTypes[i % modTypes.length];
+                          const col = MODULE_AMMO_COLORS[modType] || '#c4b5fd';
+                          sparks.push({
+                              x: px,
+                              y: py,
+                              vx: cos(ang) * random(4, 10.5),
+                              vy: sin(ang) * random(4, 10.5),
+                              life: random(32, 54),
+                              cr: red(color(col)),
+                              cg: green(color(col)),
+                              cb: blue(color(col))
+                          });
+                      }
+                  }
+                  const wispN = soft ? 7 : 14;
+                  const wisps = [];
+                  for (let i = 0; i < wispN; i++) {
+                      wisps.push({
+                          ang: (i / wispN) * TWO_PI + random(-0.28, 0.28),
+                          len: br * random(soft ? 0.85 : 1.15, soft ? 1.45 : 2.35),
+                          phase: random(TWO_PI)
+                      });
+                  }
+                  jellyfishPopBursts.push({
+                      x: px,
+                      y: py,
+                      life: 0,
+                      maxLife: soft ? 52 : 78 + min(28, cloneN * 7),
+                      soft,
+                      autoPop: !!opts.autoPop,
+                      br,
+                      cr, cg, cb,
+                      shock: 0,
+                      droplets,
+                      sparks,
+                      wisps
+                  });
+                  while (jellyfishPopBursts.length > 10) jellyfishPopBursts.shift();
+              }
+
+              function tickJellyfishPopBursts() {
+                  if (!jellyfishPopBursts.length) return;
+                  for (let i = jellyfishPopBursts.length - 1; i >= 0; i--) {
+                      const b = jellyfishPopBursts[i];
+                      b.life += timeScale;
+                      b.shock += timeScale * (b.soft ? 2.8 : 4.6);
+                      if (b.life >= b.maxLife) {
+                          jellyfishPopBursts.splice(i, 1);
+                          continue;
+                      }
+                      const drag = b.soft ? 0.965 : 0.972;
+                      for (const d of b.droplets) {
+                          d.life -= timeScale;
+                          d.x += d.vx * timeScale;
+                          d.y += d.vy * timeScale;
+                          d.vx *= drag;
+                          d.vy *= drag;
+                          d.vy += 0.04 * timeScale;
+                          d.wobble += 0.14 * timeScale;
+                      }
+                      for (const s of b.sparks) {
+                          s.life -= timeScale;
+                          s.x += s.vx * timeScale;
+                          s.y += s.vy * timeScale;
+                          s.vx *= 0.94;
+                          s.vy *= 0.94;
+                      }
+                  }
+              }
+
+              function drawJellyfishPopBursts() {
+                  if (!jellyfishPopBursts.length) return;
+                  for (const b of jellyfishPopBursts) {
+                      const t = constrain(b.life / b.maxLife, 0, 1);
+                      const fade = 1 - t * t;
+                      const pulse = 0.55 + sin(b.life * 0.22) * 0.45;
+                      const shockR = b.br * (0.55 + b.shock * 0.11);
+                      const coreA = (b.soft ? 95 : 165) * fade * pulse;
+
+                      noStroke();
+                      fill(56, 189, 248, coreA * 0.22);
+                      circle(b.x, b.y, shockR * 2.35);
+                      fill(b.cr, b.cg, b.cb, coreA * 0.35);
+                      circle(b.x, b.y, shockR * 1.65);
+                      fill(220, 245, 255, coreA * 0.55);
+                      circle(b.x, b.y, shockR * (b.soft ? 0.55 : 0.72));
+
+                      noFill();
+                      for (let ring = 0; ring < (b.soft ? 2 : 4); ring++) {
+                          const ringT = constrain(b.shock * 0.09 - ring * 0.22, 0, 1);
+                          if (ringT <= 0) continue;
+                          const ringR = b.br * (1.05 + ringT * (1.35 + ring * 0.45));
+                          stroke(103, 232, 249, (b.soft ? 55 : 88) * fade * (1 - ring * 0.18));
+                          strokeWeight(b.soft ? 1.1 : 1.5 - ring * 0.2);
+                          circle(b.x, b.y, ringR * 2);
+                          stroke(b.cr, b.cg, b.cb, 42 * fade * ringT);
+                          strokeWeight(0.65);
+                          circle(b.x, b.y, ringR * 1.82);
+                      }
+
+                      for (const w of b.wisps) {
+                          const wLen = w.len * (0.35 + min(1, b.shock * 0.14));
+                          const wobble = sin(b.life * 0.11 + w.phase) * 8;
+                          const ex = b.x + cos(w.ang) * wLen + cos(w.ang + HALF_PI) * wobble;
+                          const ey = b.y + sin(w.ang) * wLen + sin(w.ang + HALF_PI) * wobble;
+                          stroke(165, 225, 255, 75 * fade);
+                          strokeWeight(b.soft ? 0.55 : 0.85);
+                          line(b.x, b.y, ex, ey);
+                          stroke(192, 132, 252, 45 * fade);
+                          strokeWeight(0.45);
+                          line(ex, ey, ex + cos(w.ang) * 10, ey + sin(w.ang) * 10);
+                      }
+
+                      for (const d of b.droplets) {
+                          if (d.life <= 0) continue;
+                          const da = map(d.life, 0, 58, 0, 210) * fade;
+                          const ds = d.size * (0.85 + sin(d.wobble) * 0.15);
+                          fill(125, 211, 252, da * 0.75);
+                          noStroke();
+                          circle(d.x, d.y, ds * 2.1);
+                          fill(240, 252, 255, da);
+                          circle(d.x - ds * 0.15, d.y - ds * 0.15, ds);
+                      }
+
+                      for (const s of b.sparks) {
+                          if (s.life <= 0) continue;
+                          const sa = map(s.life, 0, 52, 0, 230) * fade;
+                          fill(s.cr, s.cg, s.cb, sa);
+                          noStroke();
+                          circle(s.x, s.y, 2.6 + sin(s.life * 0.3) * 0.8);
+                          fill(255, 255, 255, sa * 0.45);
+                          circle(s.x, s.y, 1.2);
+                      }
+
+                      if (!b.soft && t < 0.35) {
+                          const flash = (1 - t / 0.35) * 120;
+                          fill(255, 255, 255, flash);
+                          noStroke();
+                          circle(b.x, b.y, b.br * 1.1);
+                      }
+                  }
+              }
+
               function popJellyfishScoop(parent, opts = {}) {
                   if (!parent || creatures.indexOf(parent) < 0) return 0;
                   const parentSize = getJellyfishSize(parent);
@@ -29617,10 +29795,18 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   }
                   const looseN = spawnLooseScoopModuleParticles(parent, remainder, brainInherit);
                   const popLabel = opts.autoPop ? 'BONUS POP' : 'POP';
-                  playTone(165, 'sine', 0.3, 0.58);
-                  setTimeout(() => playTone(330, 'triangle', 0.22, 0.48), 80);
-                  setTimeout(() => playTone(520, 'sine', 0.16, 0.38), 160);
-                  explosions.push(new Explosion(px, py));
+                  spawnJellyfishPopBurst(parent, {
+                      autoPop: !!opts.autoPop,
+                      manual: !!opts.manual,
+                      modN: bag.length,
+                      cloneN: hatched.length
+                  });
+                  playJellyfishPopSound({
+                      autoPop: !!opts.autoPop,
+                      cloneN: hatched.length,
+                      modN: bag.length,
+                      looseN
+                  });
                   addFloatingText(px, py - 34, `${popLabel} ×${hatched.length} clone${hatched.length === 1 ? '' : 's'}`, '#67e8f9');
                   if (looseN > 0) {
                       addFloatingText(px, py - 48, `+${looseN} loose mods`, '#c4b5fd');
@@ -29939,6 +30125,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           creature._scoopUsingLattice = false;
                           creature._scoopStolenLinks = [];
                           return;
+                      }
+                      if (isJellyfishScoopCreature(creature)) {
+                          spawnJellyfishPopBurst(creature, { soft: true, manual: true });
+                          playJellyfishPopSound({ soft: true });
                       }
                       const willHatch = getScoopModuleCount(creature) >= SCOOP_INCUBATOR_MIN_MODULES;
                       releaseManualScoop(creature);
@@ -36783,6 +36973,87 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           try { osc2.stop(); noise.stop(); } catch (e) { }
                       }, 500);
                   }, 32);
+              }
+
+              function playJellyfishPopSound(opts = {}) {
+                  const soft = !!opts.soft;
+                  const cloneN = opts.cloneN || 0;
+                  const modN = opts.modN || 0;
+                  if (!canPlaySound('absorb') && !canPlaySound('birth')) return;
+                  if (activeVoices > MAX_VOICES - (soft ? 2 : 6)) return;
+                  const ctx = getAudioContext();
+                  const now = ctx.currentTime;
+                  const vol = soft ? 0.72 : 1;
+
+                  const toneBurst = (freq, type, dur, v, detune, delay, filterHz) => {
+                      if (!canPlaySound('absorb')) return;
+                      const osc = ctx.createOscillator();
+                      const gain = ctx.createGain();
+                      const filter = ctx.createBiquadFilter();
+                      osc.type = type;
+                      osc.frequency.setValueAtTime(freq * pitchShift, now + delay);
+                      if (type === 'triangle' && dur > 0.12) {
+                          osc.frequency.exponentialRampToValueAtTime(max(40, freq * 0.42) * pitchShift, now + delay + dur * 0.85);
+                      }
+                      osc.detune.value = detune || 0;
+                      filter.type = 'lowpass';
+                      filter.frequency.value = filterHz || 2400;
+                      gain.gain.setValueAtTime(0.0001, now + delay);
+                      gain.gain.linearRampToValueAtTime(v * vol, now + delay + 0.012);
+                      gain.gain.exponentialRampToValueAtTime(0.0001, now + delay + dur);
+                      osc.connect(filter);
+                      filter.connect(gain);
+                      gain.connect(getSfxOutputNode());
+                      osc.start(now + delay);
+                      osc.stop(now + delay + dur + 0.05);
+                  };
+
+                  const noisePop = (v, delay, dur) => {
+                      if (!canPlaySound('explosion')) return;
+                      const buffer = ctx.createBuffer(1, ctx.sampleRate * dur, ctx.sampleRate);
+                      const data = buffer.getChannelData(0);
+                      for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+                      const noise = ctx.createBufferSource();
+                      const filter = ctx.createBiquadFilter();
+                      const gain = ctx.createGain();
+                      noise.buffer = buffer;
+                      filter.type = 'bandpass';
+                      filter.frequency.setValueAtTime(soft ? 680 : 920, now + delay);
+                      filter.frequency.exponentialRampToValueAtTime(soft ? 320 : 240, now + delay + dur);
+                      filter.Q.value = soft ? 1.1 : 1.65;
+                      gain.gain.setValueAtTime(0.0001, now + delay);
+                      gain.gain.linearRampToValueAtTime(v * vol, now + delay + 0.006);
+                      gain.gain.exponentialRampToValueAtTime(0.0001, now + delay + dur);
+                      noise.connect(filter);
+                      filter.connect(gain);
+                      gain.connect(getSfxOutputNode());
+                      noise.start(now + delay);
+                      noise.stop(now + delay + dur + 0.04);
+                  };
+
+                  if (soft) {
+                      toneBurst(210, 'sine', 0.14, 0.1, -6, 0, 1200);
+                      noisePop(0.06, 0.02, 0.1);
+                      toneBurst(520, 'sine', 0.18, 0.06, 4, 0.06, 1800);
+                      return;
+                  }
+
+                  toneBurst(260, 'sine', 0.1, 0.14, 0, 0, 1600);
+                  toneBurst(120, 'triangle', 0.22, 0.2, -12, 0.04, 900);
+                  noisePop(0.14, 0.05, 0.16);
+                  toneBurst(420, 'sine', 0.28, 0.12, 0, 0.1, 2200);
+                  toneBurst(630, 'sine', 0.32, 0.1, 8, 0.14, 2600);
+                  toneBurst(840, 'triangle', 0.26, 0.08, -6, 0.2, 2800);
+                  toneBurst(1050, 'sine', 0.22, 0.06, 12, 0.28, 3000);
+                  if (opts.autoPop) {
+                      toneBurst(1180, 'sine', 0.24, 0.07, 18, 0.34, 3200);
+                  }
+                  if (cloneN > 0 && canPlaySound('birth')) {
+                      const p = soundParams.birth;
+                      setTimeout(() => playTone(988, 'sine', p.duration * 0.55, p.volume * 0.42, 6, p.attack * 0.5, p.release * 0.65), 180);
+                      setTimeout(() => playTone(1318, 'sine', p.duration * 0.45, p.volume * 0.34, -4, p.attack * 0.45, p.release * 0.6), 240);
+                  }
+                  if (modN >= 8) noisePop(0.05, 0.12, 0.08);
               }
 
               function playAbsorbSound() {
@@ -46826,6 +47097,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       updateScoopModuleBullets();
                       if (scoopSeedParticles.length) tickScoopSeedParticles();
                       if (scoopLureParticles.length) tickScoopLureParticles();
+                      tickJellyfishPopBursts();
                       if (moduleParticles.some((p) => p?._scoopLooseDecayAt)) tickScoopLooseModuleDecay();
                       ModuleIdentitySystem.propagateColonyNetwork();
                       ModuleIdentitySystem.drawResonanceLinks(PerfScale.lod);
@@ -47000,6 +47272,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       drawScoopModuleBullets();
                       drawScoopSeedParticles();
                       drawScoopLureParticles();
+                      drawJellyfishPopBursts();
 
                       ModuleIdentitySystem.applyResonanceNetworkEnergy(timeScale);
                       ModuleIdentitySystem.resolveColonyPredatorPressure(timeScale);
