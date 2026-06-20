@@ -4,7 +4,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-014-squid-clone-activate" />
+    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-015-squid-tier-spawn" />
     <title>MiniSimmy Orbital Ship v2</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2334d399'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%230a0a0f'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -8207,7 +8207,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'local-014-squid-clone-activate';
+              const MINISIMMY_BUILD = 'local-015-squid-tier-spawn';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -24966,7 +24966,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   const pressure = creature._jellyfishLeakPressure || 0;
                   const pressurePct = min(100, Math.round((pressure / SCOOP_JELLYFISH_PRESSURE_POP) * 100));
                   const parentTier = getJellyfishTier(creature);
-                  const childTier = getSquidSpawnChildTier(parentTier);
+                  const spawnOutcome = getSquidSpawnOutcome(parentTier);
+                  const childTier = spawnOutcome.childTier;
                   const have = countJellyfishBagModules(creature._scoopModuleBag || []);
                   const tally = blueprint.entries.map((entry) => ({
                       ...entry,
@@ -24978,7 +24979,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       : max(0, costPerBaby - (remainder || (babyCount > 0 ? 0 : costPerBaby)));
                   return {
                       totalValue, costPerBaby, babyCount, progressPct, pressure, pressurePct,
-                      driftN, modN, heldN, blueprint, tally, childTier, parentTier, valueToNext
+                      driftN, modN, heldN, blueprint, tally, childTier, parentTier, valueToNext,
+                      spawnKind: spawnOutcome.kind, spawnLabel: spawnOutcome.label, spawnPlural: spawnOutcome.plural
                   };
               }
 
@@ -25201,8 +25203,19 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
               function getSquidSpawnChildTier(parentTier) {
                   const pt = constrain(Math.floor(parentTier), 0, 3);
-                  if (pt <= 1) return 1;
-                  return pt - 1;
+                  if (pt === 1) return 0;
+                  if (pt >= 2) return pt - 1;
+                  return 0;
+              }
+
+              function getSquidSpawnOutcome(parentTier) {
+                  const pt = constrain(Math.floor(parentTier), 0, 3);
+                  if (pt === 0) {
+                      return { kind: 'creature', childTier: null, label: 'creature clone', plural: 'creature clones' };
+                  }
+                  const childTier = getSquidSpawnChildTier(pt);
+                  const label = `T${childTier} squid`;
+                  return { kind: 'squid', childTier, label, plural: `T${childTier} squids` };
               }
 
               function primeCreatureForSquidSpawn(spawn, parent) {
@@ -25246,7 +25259,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       if (!consumeBellyValue(parent, state.costPerBaby)) return null;
                   }
                   const parentTier = getJellyfishTier(parent);
-                  const childTier = getSquidSpawnChildTier(parentTier);
+                  const spawnOutcome = getSquidSpawnOutcome(parentTier);
                   const bodyMods = getJellyfishBodyPlanModules(parent);
                   const spawnMods = buildScoopIncubatorSpawnModules(bodyMods);
                   const coreType = getCreatureCoreType(parent);
@@ -25275,10 +25288,17 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   applyNewbornReproCooldown(spawn);
                   creatures.push(spawn);
                   registerCreatureOffspring(parent, spawn);
-                  finalizeJellyfishSquidSpawn(spawn, parent, childTier);
+                  if (spawnOutcome.kind === 'squid') {
+                      finalizeJellyfishSquidSpawn(spawn, parent, spawnOutcome.childTier);
+                  } else {
+                      spawn.currentThought = `Normal clone — brood from T0 squid`;
+                  }
                   if (!opts.silent) {
                       playTone(220, 'sine', 0.14, 0.42);
-                      addFloatingText(parent.x, parent.y - 20, `+1 T${childTier} squid`, '#67e8f9');
+                      const spawnNote = spawnOutcome.kind === 'squid'
+                          ? `+1 ${spawnOutcome.label}`
+                          : '+1 creature clone';
+                      addFloatingText(parent.x, parent.y - 20, spawnNote, spawnOutcome.kind === 'squid' ? '#67e8f9' : '#a78bfa');
                       updateInspectorScoopBar(parent);
                       if (SquidSpawnModal?.open) SquidSpawnModal.render(parent);
                   }
@@ -25292,7 +25312,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   const spawnCount = min(state.babyCount, SCOOP_JELLYFISH_POP_MAX_SPAWNS);
                   if (spawnCount < 1) return 0;
                   const parentTier = getJellyfishTier(parent);
-                  const childTier = getSquidSpawnChildTier(parentTier);
+                  const spawnOutcome = getSquidSpawnOutcome(parentTier);
                   const wasManual = manualControlCreature === parent;
                   const wasAutomated = !!parent._squidAutomated;
                   const px = parent.x;
@@ -25310,8 +25330,12 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   setTimeout(() => playTone(330, 'triangle', 0.22, 0.48), 80);
                   setTimeout(() => playTone(520, 'sine', 0.16, 0.38), 160);
                   explosions.push(new Explosion(px, py));
-                  addFloatingText(px, py - 34, `${popLabel} ×${hatched.length} T${childTier} squid${hatched.length === 1 ? '' : 's'}`, '#67e8f9');
-                  maybeSpeakScoopInnerVoice(parent, 'scoop_jellyfish_pop', `${hatched.length} tier-${childTier} squid clone${hatched.length === 1 ? '' : 's'}`);
+                  const popColor = spawnOutcome.kind === 'squid' ? '#67e8f9' : '#a78bfa';
+                  const popDetail = spawnOutcome.kind === 'squid'
+                      ? `T${spawnOutcome.childTier} squid${hatched.length === 1 ? '' : 's'}`
+                      : `creature clone${hatched.length === 1 ? '' : 's'}`;
+                  addFloatingText(px, py - 34, `${popLabel} ×${hatched.length} ${popDetail}`, popColor);
+                  maybeSpeakScoopInnerVoice(parent, 'scoop_jellyfish_pop', `${hatched.length} ${spawnOutcome.plural}`);
                   SquidSpawnModal?.close?.();
                   releaseManualScoop(parent, { skipHatch: true, jellyfishPop: true });
                   const pIdx = creatures.indexOf(parent);
@@ -25420,7 +25444,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       if (totalEl) totalEl.innerHTML = `Total belly value: <span>${state.totalValue.toFixed(1)}</span>`;
                       if (readyEl) {
                           readyEl.textContent = state.babyCount > 0
-                              ? `${state.babyCount} T${state.childTier} squid${state.babyCount === 1 ? '' : 's'} ready`
+                              ? `${state.babyCount} ${state.spawnPlural} ready`
                               : '0 spawnable — need more value';
                           readyEl.classList.toggle('is-empty', state.babyCount < 1);
                       }
@@ -25435,14 +25459,20 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           linesEl.innerHTML = lines;
                       }
                       if (noteEl) {
-                          noteEl.textContent = state.babyCount > 0
-                              ? `Spawns one automated T${state.childTier} squid beside parent T${state.parentTier}. Parent keeps hunting.`
-                              : `Absorb white drift and prey modules into the belly. Each ${state.costPerBaby.toFixed(1)} value = one lower-tier squid.`;
+                          if (state.babyCount > 0) {
+                              noteEl.textContent = state.spawnKind === 'squid'
+                                  ? `Spawns one automated ${state.spawnLabel} beside parent T${state.parentTier}. Parent keeps hunting.`
+                                  : `T0 squid releases normal creature clones (no scoop). Parent keeps hunting.`;
+                          } else {
+                              noteEl.textContent = state.parentTier === 1
+                                  ? `T1 squids spawn T0 squids. Each ${state.costPerBaby.toFixed(1)} belly value = one spawn.`
+                                  : `Each ${state.costPerBaby.toFixed(1)} belly value = one ${state.spawnLabel}.`;
+                          }
                       }
                       if (spawnBtn) {
                           spawnBtn.disabled = state.babyCount < 1;
                           spawnBtn.textContent = state.babyCount > 0
-                              ? `Spawn T${state.childTier} squid (−${state.costPerBaby.toFixed(1)} value)`
+                              ? `Spawn ${state.spawnLabel} (−${state.costPerBaby.toFixed(1)} value)`
                               : 'Not enough belly value';
                       }
                   }
