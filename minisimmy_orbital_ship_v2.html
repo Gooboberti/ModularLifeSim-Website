@@ -8002,7 +8002,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'orbital-ship-v2-2026-06-20-lace-leech-bulb';
+              const MINISIMMY_BUILD = 'orbital-ship-v2-2026-06-20-scoop-bubble-fix';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -25662,6 +25662,32 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   return false;
               }
 
+              function canAutoJoinScoopBubble(hunter, prey) {
+                  if (!hunter || !prey || prey === hunter) return false;
+                  const isFeast = hunter._manualSuperPredator && hunter._manualControl;
+                  if (isFeast) return true;
+                  return prey._scoopBeingDragged === hunter
+                      || prey._scoopInBubble === hunter
+                      || prey._scoopProbeTaggedBy === hunter;
+              }
+
+              function repelUntaggedScoopBubbleIntruders(hunter, geo) {
+                  if (!hunter?._scoopActive) return;
+                  if (hunter._manualSuperPredator && hunter._manualControl) return;
+                  const occupants = new Set(hunter._scoopBubbleOccupants || []);
+                  const scan = SpatialGrid.cells
+                      ? SpatialGrid.queryRadius(geo.bubbleX, geo.bubbleY, geo.bubbleR + CREATURE_BODY_RADIUS * 0.65, hunter)
+                      : creatures;
+                  for (const c of scan) {
+                      if (c === hunter || occupants.has(c) || isManualControlImmune(c)) continue;
+                      if (!isCreatureInsideScoopBubble(c, hunter, geo)) continue;
+                      if (canAutoJoinScoopBubble(hunter, c)) continue;
+                      repelCreatureFromScoopBubble(c, hunter, geo, 7.2);
+                      c._scoopInBubble = null;
+                      if (c._scoopBeingDragged === hunter) c._scoopBeingDragged = false;
+                  }
+              }
+
               function syncScoopBubbleOccupants(hunter, geo) {
                   hunter._scoopBubbleOccupants = (hunter._scoopBubbleOccupants || []).filter((c) =>
                       c && creatures.indexOf(c) >= 0 && (c.energy || 0) > 0
@@ -25673,6 +25699,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   for (const c of scan) {
                       if (!isScoopableFeastCreature(hunter, c)) continue;
                       if (!isCreatureInsideScoopBubble(c, hunter, geo)) continue;
+                      if (!canAutoJoinScoopBubble(hunter, c)) continue;
                       if (hunter._scoopBubbleOccupants.includes(c)) continue;
                       if (hunter._scoopBubbleOccupants.length >= MANUAL_SCOOP_MAX_CREATURES) {
                           repelCreatureFromScoopBubble(c, hunter, geo, 4.8);
@@ -25683,6 +25710,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       c._scoopBeingDragged = hunter;
                       c._scoopProbeStun = max(c._scoopProbeStun || 0, 20);
                   }
+                  repelUntaggedScoopBubbleIntruders(hunter, geo);
               }
 
               function tickScoopBubbleFocus(hunter, geo) {
@@ -26544,7 +26572,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
               function applyScoopTailEjection(creature, geo) {
                   const spring = geo.spring;
-                  const eject = 5.5 + spring.propel * 9 + spring.recoil * 6 + spring.wave * 4;
+                  const motion = max(spring.propel || 0, spring.recoil || 0, spring.wave || 0);
+                  if (motion < 0.1) return;
+                  const eject = (5.5 + spring.propel * 9 + spring.recoil * 6 + spring.wave * 4) * min(1, motion / 0.32);
+                  if (eject < 1.8) return;
                   const facing = geo.facing;
                   const rearX = -cos(facing);
                   const rearY = -sin(facing);
@@ -26832,14 +26863,14 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   if (particleRoom > 0) {
                       for (const p of vortexParticles) {
                           if (p._scoopSnared === creature && isScoopableWhiteParticle(p)) {
-                          const dx = p.x - geo.bubbleX;
-                          const dy = p.y - geo.bubbleY;
-                          candidates.push({ p, d2: dx * dx + dy * dy, snared: true });
-                          snaredSet.add(p);
+                              const dx = p.x - geo.bubbleX;
+                              const dy = p.y - geo.bubbleY;
+                              candidates.push({ p, d2: dx * dx + dy * dy, snared: true });
+                              snaredSet.add(p);
+                          }
                       }
-                  }
 
-                  for (let n = 0; n < vortexParticles.length && scanned < MANUAL_SCOOP_SCAN_BUDGET; n++) {
+                      for (let n = 0; n < vortexParticles.length && scanned < MANUAL_SCOOP_SCAN_BUDGET; n++) {
                       const idx = (scanCursor + n) % vortexParticles.length;
                       const p = vortexParticles[idx];
                       if (!isScoopableWhiteParticle(p) || snaredSet.has(p)) continue;
@@ -26854,7 +26885,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       if (nearTent || d2 < geo.bubbleR * geo.bubbleR * 1.6) {
                           candidates.push({ p, d2, snared: false });
                       }
-                  }
+                      }
 
                       creature._scoopScanCursor = (scanCursor + MANUAL_SCOOP_SCAN_BUDGET) % max(1, vortexParticles.length);
                   }
