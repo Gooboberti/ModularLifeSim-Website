@@ -4,7 +4,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-034-fix-draw-flicker" />
+    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-035-fix-phantom-lines-jerky-move" />
     <title>MiniSimmy Orbital Ship v2</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2334d399'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%230a0a0f'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -8207,7 +8207,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'local-034-fix-draw-flicker';
+              const MINISIMMY_BUILD = 'local-035-fix-phantom-lines-jerky-move';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -20874,6 +20874,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
                               const st = this._linkFeedState[key];
                               const bond = st ? (st.laceWeakBond || 0) : 0;
                               if (bond < 0.06) continue;
+                              const d = dist(a.x, a.y, b.x, b.y);
+                              if (d < CREATURE_MIN_SEP || d > CREATURE_SOCIAL_MAX) continue;
                               weakDrawn.add(key);
                               const soulGlow = st ? (st.soulAbsorbGlow || 0) : 0;
                               const tightenPulse = st ? (st.laceTightenPulse || 0) : 0;
@@ -21275,7 +21277,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
                   getLocalGroup(radius) {
                       if (SpatialGrid.cells) {
-                          return SpatialGrid.queryRadius(this.x, this.y, radius, this);
+                          return SpatialGrid.queryRadius(this.x, this.y, radius, this).slice();
                       }
                       let group = [];
                       const r2 = radius * radius;
@@ -22247,8 +22249,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       }
                       if (!this.isPredator) applyScoopLurePull(this, timeScale);
                       ModuleIdentitySystem.applyMechanics(this, { timeScale, effectiveHazardDist, envMods });
+                      const framePrevX = this.x;
+                      const framePrevY = this.y;
                       this.x += this.vx;
                       this.y += this.vy;
+                      capCreatureDisplacement(this, framePrevX, framePrevY, timeScale);
                       this.vx *= 0.90;
                       this.vy *= 0.90;
                       stabilizeCreatureBounds(this, timeScale);
@@ -26947,17 +26952,19 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   if ((creature._scoopDashRipple || 0) > 0) creature._scoopDashRipple--;
                   if ((creature._scoopDashBoost || 0) > 0) creature._scoopDashBoost--;
                   if ((creature._scoopSpeedSurge || 0) > 0) creature._scoopSpeedSurge--;
-                  const memLinks = creature._scoopStolenLinks;
+                  let memLinks = creature._scoopStolenLinks;
                   if (memLinks?.length) {
+                      const live = [];
                       for (const sl of memLinks) {
-                          if (sl.otherRef && creatures.indexOf(sl.otherRef) >= 0) {
-                              sl.ox = sl.otherRef.x;
-                              sl.oy = sl.otherRef.y;
-                          }
+                          if (!sl.otherRef || creatures.indexOf(sl.otherRef) < 0) continue;
+                          sl.ox = sl.otherRef.x;
+                          sl.oy = sl.otherRef.y;
                           sl.tx = creature.x;
                           sl.ty = creature.y;
                           sl.pulse = max(0, (sl.pulse || 0) - 0.35);
+                          live.push(sl);
                       }
+                      creature._scoopStolenLinks = live;
                   }
               }
 
@@ -27078,9 +27085,12 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           : captureScoopParticle(hunter, entity, geo);
                   }
                   const pull = (0.55 + geo.flex * 0.38) * pullScale * timeScale;
-                  const step = pull * min(5.2, max(1.5, d * 0.14));
+                  const step = pull * min(4.8, max(1.2, min(d * 0.14, CREATURE_SOCIAL_MAX * 0.12)));
+                  const prevX = entity.x;
+                  const prevY = entity.y;
                   entity.x += (dx / d) * step;
                   entity.y += (dy / d) * step;
+                  if (isCreature) capCreatureDisplacement(entity, prevX, prevY, timeScale);
                   entity.vx = 0;
                   entity.vy = 0;
                   if (isCreature) {
@@ -29417,11 +29427,13 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   const trailLen = CREATURE_SOCIAL_MAX * (0.32 + min(1, spd * 0.22)
                       + (creature._scoopPowerMult || 0) * 0.12) * spring.stretch;
 
-                  const drawMemLinks = getScoopActiveMemoryLinks(creature);
+                  const drawMemLinks = isScoopTendrilsDeployed(creature) ? getScoopActiveMemoryLinks(creature) : [];
                   if (drawMemLinks.length) {
                       for (let li = 0; li < drawMemLinks.length; li++) {
                           const sl = drawMemLinks[li];
                           if ((sl.pulse || 0) <= 0 && !sl.phantom) continue;
+                          const linkDist = dist(sl.ox, sl.oy, sl.tx, sl.ty);
+                          if (!sl.phantom && linkDist > CREATURE_SOCIAL_MAX * 1.08) continue;
                           const lcr = sl.cr ?? laceCol[0], lcg = sl.cg ?? laceCol[1], lcb = sl.cb ?? laceCol[2];
                           const mx = lerp(sl.ox, sl.tx, 0.45) + sin(frameCount * 0.08 + li) * 6;
                           const my = lerp(sl.oy, sl.ty, 0.45) + cos(frameCount * 0.07 + li) * 5;
@@ -29553,8 +29565,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       circle(tipX, tipY, 3 + spring.burst * 2.5);
                   }
 
-                  const showTrail = geo.usingLattice || (creature._symbiosisLevel || 0) >= 1
-                      || (creature._scoopBag?.length || 0) >= 1;
+                  const showTrail = isScoopTendrilsDeployed(creature)
+                      && (geo.usingLattice || (creature._symbiosisLevel || 0) >= 1
+                          || (creature._scoopBag?.length || 0) >= 1);
                   if (showTrail) {
                       const trailN = profile.tendrilStyle === 'jellyfish' ? 5
                           : profile.tendrilStyle === 'radial' ? 5
@@ -29961,6 +29974,31 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   const spd = sqrt(creature.vx * creature.vx + creature.vy * creature.vy);
                   if (spd > maxSpd && spd > 0.001) {
                       const scale = maxSpd / spd;
+                      creature.vx *= scale;
+                      creature.vy *= scale;
+                  }
+              }
+
+              function getCreatureMaxFrameStep(creature, timeScale = 1) {
+                  if (!creature) return 14;
+                  const ts = constrain(timeScale || 1, 0.25, 2.5);
+                  let step = 11 + (creature.getTieredModuleCount('mover') || 0) * 1.1;
+                  if (creature._manualControl) step += 5;
+                  if ((creature._scoopDashPhase || 0) > 0) step += 12;
+                  if ((creature._scoopSpeedSurge || 0) > 0) step += 4;
+                  return min(creature._manualControl ? 30 : 26, step * ts);
+              }
+
+              function capCreatureDisplacement(creature, prevX, prevY, timeScale = 1) {
+                  if (!creature || prevX == null || prevY == null) return;
+                  const dx = creature.x - prevX;
+                  const dy = creature.y - prevY;
+                  const d = sqrt(dx * dx + dy * dy);
+                  const maxStep = getCreatureMaxFrameStep(creature, timeScale);
+                  if (d > maxStep && d > 0.001) {
+                      const scale = maxStep / d;
+                      creature.x = prevX + dx * scale;
+                      creature.y = prevY + dy * scale;
                       creature.vx *= scale;
                       creature.vy *= scale;
                   }
@@ -31323,6 +31361,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       const weak = c._manualSuperPredWeakTarget;
                       for (const t of targets) {
                           if (creatures.indexOf(t) < 0 || t.energy <= 0) continue;
+                          if (dist(c.x, c.y, t.x, t.y) > CREATURE_SOCIAL_MAX * 1.05) continue;
                           const pulse = 0.55 + sin(frameCount * 0.14) * 0.22;
                           const isWeak = t === weak;
                           stroke(239, 68, 68, isWeak ? 215 * pulse : 125 * pulse);
