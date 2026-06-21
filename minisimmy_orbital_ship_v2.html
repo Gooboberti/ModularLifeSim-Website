@@ -4,7 +4,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-037-restore-vortex-particles" />
+    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-038-inspector-squid-roster" />
     <title>MiniSimmy Orbital Ship v2</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2334d399'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%230a0a0f'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -3355,6 +3355,59 @@ body.is-mobile #incubator-slots-scroll {
     border: 1px solid rgba(249, 115, 22, 0.28);
 }
 .inspector-rank-btn--bottom:hover { background: rgba(249, 115, 22, 0.28); }
+.inspector-rank-btn--alpha {
+    background: rgba(234, 179, 8, 0.2);
+    color: #facc15;
+    padding: 0 7px;
+}
+.inspector-rank-btn--alpha:hover { background: rgba(234, 179, 8, 0.3); }
+
+.inspect-squid-roster {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    margin-left: 2px;
+    max-width: min(168px, 38vw);
+    overflow-x: auto;
+    flex: 1;
+    min-width: 0;
+    scrollbar-width: thin;
+}
+.inspect-squid-roster::-webkit-scrollbar { height: 3px; }
+.inspect-squid-empty {
+    font-size: 9px;
+    font-weight: 600;
+    color: rgba(103, 232, 249, 0.45);
+    padding: 0 4px;
+}
+.inspect-squid-chip {
+    flex-shrink: 0;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 6px;
+    font-size: 9px;
+    font-weight: 600;
+    line-height: 18px;
+    background: rgba(103, 232, 249, 0.1);
+    border: 1px solid rgba(103, 232, 249, 0.26);
+    color: #67e8f9;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.12s, border-color 0.12s;
+}
+.inspect-squid-chip:hover {
+    background: rgba(103, 232, 249, 0.2);
+    border-color: rgba(103, 232, 249, 0.42);
+}
+.inspect-squid-chip.is-selected {
+    background: rgba(103, 232, 249, 0.28);
+    border-color: rgba(103, 232, 249, 0.55);
+    color: #cffafe;
+}
+.inspect-squid-chip.is-feast {
+    border-color: rgba(248, 113, 113, 0.45);
+    color: #fca5a5;
+}
 
 .creature-rank-tabs {
     display: flex;
@@ -6426,18 +6479,21 @@ body.is-map-fullscreen #map-fullscreen-btn {
                               <i class="fa-solid fa-star text-[10px]"></i>
                           </button>
                           <button type="button" onclick="playUIClick(); trackAlpha = true; selectCurrentAlpha()"
-                                  class="inspector-rank-btn flex items-center gap-x-1 rounded bg-yellow-500/20 px-2 text-xs text-yellow-400 hover:bg-yellow-500/30">
-                              <i class="fa-solid fa-crown text-[10px]"></i><span>Alpha</span>
+                                  class="inspector-rank-btn inspector-rank-btn--alpha inspector-rank-btn--icon"
+                                  title="Alpha — highest score">
+                              <i class="fa-solid fa-crown text-[10px]"></i>
                           </button>
                           <button type="button" onclick="playUIClick(); showCreatureRankModal('top')"
-                                  class="inspector-rank-btn inspector-rank-btn--top">
-                              <i class="fa-solid fa-arrow-trend-up text-[10px]"></i><span>Top 10</span>
+                                  class="inspector-rank-btn inspector-rank-btn--top inspector-rank-btn--icon"
+                                  title="Top 10">
+                              <i class="fa-solid fa-arrow-trend-up text-[10px]"></i>
                           </button>
                           <button type="button" onclick="playUIClick(); showCreatureRankModal('bottom')"
                                   class="inspector-rank-btn inspector-rank-btn--bottom inspector-rank-btn--icon"
                                   title="Bottom 10 — Ammo Factory culling">
                               <i class="fa-solid fa-industry text-[10px]"></i>
                           </button>
+                          <div id="inspect-squid-roster" class="inspect-squid-roster" title="Active jellyfish squids"></div>
                       </div>
                   </div>
                   <div id="inspect-hotkey-legend" class="inspect-hotkey-legend" role="region" aria-label="Fullscreen inspector hotkeys">
@@ -8207,7 +8263,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'local-037-restore-vortex-particles';
+              const MINISIMMY_BUILD = 'local-038-inspector-squid-roster';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -38875,7 +38931,50 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   }
               }
 
+              function updateInspectorSquidRoster() {
+                  const el = document.getElementById('inspect-squid-roster');
+                  if (!el) return;
+                  const squids = [];
+                  for (let i = 0; i < creatures.length; i++) {
+                      const c = creatures[i];
+                      if (c?._scoopActive && isJellyfishScoopCreature(c) && c.energy > 0) squids.push(c);
+                  }
+                  squids.sort((a, b) => (b.getFinalAwardedScore?.() || 0) - (a.getFinalAwardedScore?.() || 0));
+                  const sig = squids.map((s) => {
+                      const feast = isSquidFeastMode(s) ? 'F' : '';
+                      const sel = selectedCreature === s ? '*' : '';
+                      return `${s.name}|${getJellyfishTier(s)}|${feast}|${sel}`;
+                  }).join(';');
+                  if (el.dataset.sig === sig) return;
+                  el.dataset.sig = sig;
+                  el.textContent = '';
+                  if (!squids.length) {
+                      const empty = document.createElement('span');
+                      empty.className = 'inspect-squid-empty';
+                      empty.textContent = '0 squid';
+                      el.appendChild(empty);
+                      return;
+                  }
+                  for (const s of squids) {
+                      const chip = document.createElement('button');
+                      chip.type = 'button';
+                      const feast = isSquidFeastMode(s);
+                      chip.className = 'inspect-squid-chip'
+                          + (selectedCreature === s ? ' is-selected' : '')
+                          + (feast ? ' is-feast' : '');
+                      const shortName = (s.name || 'Squid').replace(/\s+/g, ' ').trim();
+                      chip.textContent = `T${getJellyfishTier(s)} ${shortName.length > 9 ? shortName.slice(0, 8) + '…' : shortName}`;
+                      chip.title = `${s.name} · Tier ${getJellyfishTier(s)}${feast ? ' · Feast' : ''}`;
+                      chip.addEventListener('click', () => {
+                          playUIClick();
+                          selectCreature(s);
+                      });
+                      el.appendChild(chip);
+                  }
+              }
+
               function updateInspector() {
+                  updateInspectorSquidRoster();
                   if (selectedCreature && creatures.indexOf(selectedCreature) < 0) {
                       deselectCreature();
                       return;
