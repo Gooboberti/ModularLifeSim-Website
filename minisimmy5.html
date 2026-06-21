@@ -839,10 +839,14 @@
         .sculpt-hud__btn:hover { background: rgba(167,139,250,0.22); border-color: rgba(167,139,250,0.45); }
         .sculpt-hud__btn.is-active { background: rgba(52,211,153,0.25); border-color: rgba(52,211,153,0.5); color: #d1fae5; }
         .sculpt-hud__label { font-size: 9px; color: rgba(255,255,255,0.45); text-align: center; margin-top: 6px; }
+        #sculpt-hud-readout { font-size: 11px; line-height: 1.35; color: rgba(255,255,255,0.82); }
         .sculpt-test-readout {
-            font-size: 10px; color: rgba(255,255,255,0.75); text-align: center; min-height: 14px;
+            margin-top: 6px; border-radius: 12px; border: 1px solid rgba(167,139,250,0.22);
+            background: rgba(10,10,15,0.72); padding: 8px 10px;
+            font-size: 11px; line-height: 1.35; color: rgba(255,255,255,0.86); text-align: center; min-height: 0;
             font-family: ui-monospace, monospace;
         }
+        .sculpt-test-readout:empty { display: none; }
         .squid-control-stat-grid {
             display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.45rem;
         }
@@ -8134,20 +8138,27 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       <div class="flex flex-wrap gap-2">
                           <button type="button" class="sculpt-hud__btn" onclick="playUIClick(); SculptShadowSystem.toggleSculptMode()">Enter Sculpt</button>
                           <button type="button" class="sculpt-hud__btn" onclick="playUIClick(); SculptShadowSystem.toggleEnergyView()">Energy View</button>
+                          <button type="button" id="sculpt-modal-shadow-btn" class="sculpt-hud__btn" onclick="playUIClick(); SculptShadowSystem.toggleShadowOverlay()">Show Shadows</button>
+                          <button type="button" id="sculpt-modal-pick-btn" class="sculpt-hud__btn" onclick="playUIClick(); SculptShadowSystem.togglePickMode()">Cluster Pick</button>
                           <button type="button" class="sculpt-hud__btn" onclick="playUIClick(); SculptShadowSystem.runLayoutTest(true)">Test Layout</button>
+                          <button type="button" class="sculpt-hud__btn" onclick="playUIClick(); SculptShadowSystem.configureToPattern()">Configure to Pattern</button>
                       </div>
-                      <div id="sculpt-test-readout" class="sculpt-test-readout">—</div>
+                      <div id="sculpt-test-readout" class="sculpt-test-readout"></div>
                       <div>
                           <label class="text-[10px] text-white/50">Template grid</label>
-                          <select id="sculpt-template-select" class="mt-1 w-full rounded-lg border border-white/10 bg-[#0a0a0f] px-2 py-1.5 text-xs text-white">
+                          <select id="sculpt-template-select" class="mt-1 w-full rounded-lg border border-white/10 bg-[#0a0a0f] px-2 py-1.5 text-xs text-white" onchange="SculptShadowSystem.onTemplateSelectChange()">
+                              <option value="">— select template —</option>
                               <option value="flower6">Flower of Life (6)</option>
                               <option value="flower12">Flower of Life (12)</option>
                               <option value="ring8">Ring (8)</option>
                               <option value="donut12">Layered donut (12)</option>
+                              <option value="turbine16">Layered turbine (16)</option>
                               <option value="spiral10">Spiral (10)</option>
+                              <option value="sierpinski10">Sierpinski seed (10)</option>
+                              <option value="golden12">Golden fractal spiral (12)</option>
                               <option value="cluster7">Loose cluster (7)</option>
                           </select>
-                          <button type="button" class="sculpt-hud__btn mt-2 w-full" onclick="playUIClick(); SculptShadowSystem.applySelectedTemplate()">Load template at vortex center</button>
+                          <button type="button" class="sculpt-hud__btn mt-2 w-full" onclick="playUIClick(); SculptShadowSystem.applySelectedTemplate()">Load template at view center</button>
                       </div>
                       <div>
                           <label class="text-[10px] text-white/50">Save Shadow Weave</label>
@@ -8158,6 +8169,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           <label class="text-[10px] text-white/50">Load / edit weave</label>
                           <select id="sculpt-weave-select" class="mt-1 w-full rounded-lg border border-white/10 bg-[#0a0a0f] px-2 py-1.5 text-xs text-white" onchange="SculptShadowSystem.onWeaveSelectChange()"></select>
                           <button type="button" class="sculpt-hud__btn mt-2 w-full" onclick="playUIClick(); SculptShadowSystem.loadSelectedWeave()">Load for editing</button>
+                          <button type="button" class="sculpt-hud__btn mt-2 w-full" onclick="playUIClick(); SculptShadowSystem.loadAllWeaves()">Load all saved patterns</button>
+                          <button type="button" class="sculpt-hud__btn mt-2 w-full" onclick="playUIClick(); SculptShadowSystem.configureToPattern()">Configure selected pattern</button>
                       </div>
                       <div>
                           <label class="text-[10px] text-white/50">Preferred core on selected slot</label>
@@ -8171,7 +8184,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                               <option value="communicator">Communicator (purple)</option>
                           </select>
                       </div>
-                      <p class="text-[10px] leading-snug text-white/45">Drag creatures while paused. Hold <span class="code">[</span> / <span class="code">]</span> to rotate selection. Click a creature then assign a preferred core. Shadow pulls decay slowly over time — re-save to refresh.</p>
+                      <p class="text-[10px] leading-snug text-white/45">Drag creatures while paused. Tap to select; toggle <b>Solo</b> / <b>Cluster</b> pick. Templates load at your current viewport center; saved weaves remember their map position. Hide shadow ghosts with <b>Shadows</b>. Moved creatures pause movement briefly on resume so they can orient and link.</p>
                   </div>
               </div>
           </div>
@@ -8180,9 +8193,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
               <div class="sculpt-hud__row">
                   <button type="button" class="sculpt-hud__btn" onclick="playUIClick(); SculptShadowSystem.showPanel()">Weaves</button>
                   <button type="button" id="sculpt-hud-energy-btn" class="sculpt-hud__btn" onclick="playUIClick(); SculptShadowSystem.toggleEnergyView()">Energy</button>
-                  <button type="button" class="sculpt-hud__btn" onclick="playUIClick(); SculptShadowSystem.rotateSelection(-0.1)">↺ Rotate</button>
-                  <button type="button" class="sculpt-hud__btn" onclick="playUIClick(); SculptShadowSystem.rotateSelection(0.1)">Rotate ↻</button>
+                  <button type="button" id="sculpt-hud-shadow-btn" class="sculpt-hud__btn" onclick="playUIClick(); SculptShadowSystem.toggleShadowOverlay()">Shadows</button>
+                  <button type="button" id="sculpt-hud-pick-btn" class="sculpt-hud__btn" onclick="playUIClick(); SculptShadowSystem.togglePickMode()">Cluster</button>
                   <button type="button" class="sculpt-hud__btn" onclick="playUIClick(); SculptShadowSystem.runLayoutTest(true)">Test</button>
+                  <button type="button" class="sculpt-hud__btn" onclick="playUIClick(); SculptShadowSystem.configureToPattern()">Configure</button>
                   <button type="button" class="sculpt-hud__btn" onclick="playUIClick(); SculptShadowSystem.saveCurrentWeave()">Save Weave</button>
                   <button type="button" class="sculpt-hud__btn" onclick="playUIClick(); SculptShadowSystem.exitSculptMode()">Exit</button>
               </div>
@@ -16640,10 +16654,6 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       triggerScoopDash(manualControlCreature);
                       return false;
                   }
-                  if (paused && SculptShadowSystem.sculptActive) {
-                      if (key === '[') { SculptShadowSystem.rotateSelection(-0.1); return false; }
-                      if (key === ']') { SculptShadowSystem.rotateSelection(0.1); return false; }
-                  }
                   if (key === ' ' && isManualGardenSquid(manualControlCreature)) {
                       fireSquidGardenSprayShot(manualControlCreature);
                       return false;
@@ -21567,56 +21577,130 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   STORAGE_KEY: 'minisimmyShadowWeaves',
                   sculptActive: false,
                   energyViewOn: false,
+                  shadowOverlayVisible: false,
+                  pickMode: 'cluster',
                   activeWeaveId: null,
                   weaves: [],
-                  drag: { active: false, creatures: [], offsets: [], pivotX: 0, pivotY: 0 },
+                  drag: { active: false, creatures: [], offsets: [], pivotX: 0, pivotY: 0, moved: false },
                   selectionUid: null,
-                  clusterRotation: 0,
+                  selectionGroup: [],
+                  touchedUids: new Set(),
                   lastTest: null,
+                  configureJob: null,
+                  ORIENT_PAUSE_FRAMES: 60,
 
                   TEMPLATES: {
                       flower6: { count: 6, layout(r) { const pts = []; for (let i = 0; i < 6; i++) { const a = i * (TWO_PI / 6); pts.push({ x: cos(a) * r, y: sin(a) * r }); } return pts; } },
                       flower12: { count: 12, layout(r) { const pts = []; for (let i = 0; i < 6; i++) { const a = i * (TWO_PI / 6); pts.push({ x: cos(a) * r, y: sin(a) * r }); } for (let i = 0; i < 6; i++) { const a = i * (TWO_PI / 6) + PI / 6; pts.push({ x: cos(a) * r * SOUL_FLOWER_RING_RATIO, y: sin(a) * r * SOUL_FLOWER_RING_RATIO }); } return pts; } },
                       ring8: { count: 8, layout(r) { const pts = []; for (let i = 0; i < 8; i++) { const a = i * (TWO_PI / 8); pts.push({ x: cos(a) * r * 1.35, y: sin(a) * r * 1.35 }); } return pts; } },
                       donut12: { count: 12, layout(r) { const pts = []; for (let i = 0; i < 6; i++) { const a = i * (TWO_PI / 6); pts.push({ x: cos(a) * r, y: sin(a) * r }); } for (let i = 0; i < 6; i++) { const a = i * (TWO_PI / 6) + PI / 6; pts.push({ x: cos(a) * r * 1.85, y: sin(a) * r * 1.85 }); } return pts; } },
+                      turbine16: { count: 16, layout(r) { const pts = []; for (let i = 0; i < 8; i++) { const a = i * (TWO_PI / 8); pts.push({ x: cos(a) * r * 0.95, y: sin(a) * r * 0.95 }); pts.push({ x: cos(a + PI / 8) * r * 1.85, y: sin(a + PI / 8) * r * 1.85 }); } return pts; } },
                       spiral10: { count: 10, layout(r) { const pts = []; for (let i = 0; i < 10; i++) { const t = i / 9; const a = i * 0.92; pts.push({ x: cos(a) * r * (0.45 + t * 1.1), y: sin(a) * r * (0.45 + t * 1.1) }); } return pts; } },
+                      sierpinski10: { count: 10, layout(r) { const pts = [{ x: 0, y: -r * 1.35 }, { x: -r * 1.45, y: r * 1.15 }, { x: r * 1.45, y: r * 1.15 }]; for (let s = 0.45; s <= 0.9; s += 0.45) { pts.push({ x: -r * 1.45 * s, y: r * 1.15 * s }); pts.push({ x: r * 1.45 * s, y: r * 1.15 * s }); pts.push({ x: 0, y: -r * 1.35 * s }); } pts.push({ x: 0, y: r * 0.15 }); return pts; } },
+                      golden12: { count: 12, layout(r) { const pts = []; const ga = PI * (3 - sqrt(5)); for (let i = 0; i < 12; i++) { const rr = r * (0.35 + sqrt(i + 1) * 0.38); const a = i * ga; pts.push({ x: cos(a) * rr, y: sin(a) * rr }); } return pts; } },
                       cluster7: { count: 7, layout(r) { const pts = [{ x: 0, y: 0 }]; for (let i = 0; i < 6; i++) { const a = i * (TWO_PI / 6) + random(-0.12, 0.12); pts.push({ x: cos(a) * r * random(0.85, 1.15), y: sin(a) * r * random(0.85, 1.15) }); } return pts; } }
+                  },
+
+                  normalizeWeaves(list) {
+                      // Saved weave lists can be polluted by repeated UI saves; keep only valid, unique pattern entries.
+                      const seenGeometry = new Set();
+                      const seenLabels = new Set();
+                      const clean = [];
+                      for (const raw of Array.isArray(list) ? list : []) {
+                          if (!raw || !Array.isArray(raw.slots) || raw.slots.length < 1) continue;
+                          const slots = raw.slots
+                              .filter((s) => s && isFinite(s.rx) && isFinite(s.ry))
+                              .map((s, i) => ({
+                                  uid: s.uid || null,
+                                  rx: Number(s.rx) || 0,
+                                  ry: Number(s.ry) || 0,
+                                  preferredCore: s.preferredCore || null,
+                                  order: i
+                              }));
+                          if (!slots.length) continue;
+                          const name = String(raw.name || 'Shadow Weave').trim() || 'Shadow Weave';
+                          const labelKey = `${name.toLowerCase()}|${slots.length}`;
+                          const geometryKey = slots
+                              .map((s) => `${Math.round(s.rx)}:${Math.round(s.ry)}:${s.preferredCore || ''}`)
+                              .sort()
+                              .join('|');
+                          if (seenGeometry.has(geometryKey) || seenLabels.has(labelKey)) continue;
+                          seenGeometry.add(geometryKey);
+                          seenLabels.add(labelKey);
+                          clean.push({
+                              id: raw.id || ('weave_' + Date.now() + '_' + clean.length),
+                              name,
+                              centerX: isFinite(raw.centerX) ? raw.centerX : this.getSculptCenter().x,
+                              centerY: isFinite(raw.centerY) ? raw.centerY : this.getSculptCenter().y,
+                              rotation: 0,
+                              pullStrength: raw.pullStrength || 1,
+                              savedAt: raw.savedAt || Date.now(),
+                              slots
+                          });
+                      }
+                      return clean.slice(0, 12);
+                  },
+
+                  clearTestReadout() {
+                      // The test panel should stay silent until the player asks to evaluate a pattern.
+                      const a = document.getElementById('sculpt-test-readout');
+                      const b = document.getElementById('sculpt-hud-readout');
+                      if (a) a.textContent = '';
+                      if (b) b.textContent = 'Sculpt Mode - drag creatures into sacred geometry';
                   },
 
                   init() {
                       try {
                           const raw = localStorage.getItem(this.STORAGE_KEY);
                           if (raw) {
-                              const data = JSON.parse(raw);
-                              this.weaves = data.weaves || [];
-                              this.activeWeaveId = data.activeWeaveId || null;
+                          const data = JSON.parse(raw);
+                              this.weaves = this.normalizeWeaves(data.weaves || []);
+                              this.activeWeaveId = this.weaves.some((w) => w.id === data.activeWeaveId) ? data.activeWeaveId : null;
                               this.energyViewOn = !!data.energyViewOn;
+                              this.shadowOverlayVisible = false;
+                              this.pickMode = data.pickMode === 'individual' ? 'individual' : 'cluster';
                           }
                       } catch (e) { /* ignore */ }
+                      this.configureJob = null;
                       this.refreshWeaveSelect();
+                      this.persist();
+                      this.clearTestReadout();
+                      this.syncHud();
                   },
 
                   persist() {
                       try {
                           localStorage.setItem(this.STORAGE_KEY, JSON.stringify({
-                              weaves: this.weaves,
-                              activeWeaveId: this.activeWeaveId,
-                              energyViewOn: this.energyViewOn
-                          }));
+                          weaves: this.weaves,
+                          activeWeaveId: this.activeWeaveId,
+                          energyViewOn: this.energyViewOn,
+                              shadowOverlayVisible: false,
+                          pickMode: this.pickMode
+                      }));
                       } catch (e) { /* ignore */ }
                   },
 
                   getSnapshot() {
-                      return { weaves: JSON.parse(JSON.stringify(this.weaves || [])), activeWeaveId: this.activeWeaveId, energyViewOn: this.energyViewOn };
+                      return {
+                          weaves: JSON.parse(JSON.stringify(this.weaves || [])),
+                          activeWeaveId: this.activeWeaveId,
+                          energyViewOn: this.energyViewOn,
+                          shadowOverlayVisible: false,
+                          pickMode: this.pickMode
+                      };
                   },
 
                   applySnapshot(data) {
                       if (!data) return;
-                      this.weaves = data.weaves || [];
-                      this.activeWeaveId = data.activeWeaveId || null;
+                      this.weaves = this.normalizeWeaves(data.weaves || []);
+                      this.activeWeaveId = this.weaves.some((w) => w.id === data.activeWeaveId) ? data.activeWeaveId : null;
                       this.energyViewOn = !!data.energyViewOn;
+                      this.shadowOverlayVisible = false;
+                      this.pickMode = data.pickMode === 'individual' ? 'individual' : 'cluster';
+                      this.configureJob = null;
                       this.persist();
                       this.refreshWeaveSelect();
+                      this.clearTestReadout();
                       this.syncHud();
                   },
 
@@ -21625,18 +21709,83 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   },
 
                   showPanel() { showModal('sculpt-shadow-modal'); this.refreshWeaveSelect(); },
-                  hidePanel() { hideModal('sculpt-shadow-modal', { force: true }); },
+                  hidePanel() {
+                      // Closing the panel should not leave stale test copy or half-running pattern motion behind.
+                      this.configureJob = null;
+                      this.clearTestReadout();
+                      hideModal('sculpt-shadow-modal', { force: true });
+                  },
 
                   syncHud() {
                       const hud = document.getElementById('sculpt-hud');
                       const btn = document.getElementById('sculpt-mode-btn');
                       const eBtn = document.getElementById('sculpt-hud-energy-btn');
+                      const shadowBtns = [
+                          document.getElementById('sculpt-hud-shadow-btn'),
+                          document.getElementById('sculpt-modal-shadow-btn')
+                      ];
+                      const pickBtns = [
+                          document.getElementById('sculpt-hud-pick-btn'),
+                          document.getElementById('sculpt-modal-pick-btn')
+                      ];
                       if (hud) hud.classList.toggle('is-hidden', !this.sculptActive);
                       if (btn) {
                           btn.classList.toggle('bg-violet-500/45', this.sculptActive);
                           btn.classList.toggle('text-white', this.sculptActive);
                       }
                       if (eBtn) eBtn.classList.toggle('is-active', this.energyViewOn);
+                      const shadowLabel = this.shadowOverlayVisible ? 'Hide Shadows' : 'Show Shadows';
+                      for (const b of shadowBtns) {
+                          if (!b) continue;
+                          b.textContent = b.id === 'sculpt-hud-shadow-btn'
+                              ? (this.shadowOverlayVisible ? 'Hide' : 'Shadows')
+                              : shadowLabel;
+                          b.classList.toggle('is-active', this.shadowOverlayVisible);
+                      }
+                      const pickLabel = this.pickMode === 'individual' ? 'Solo Pick' : 'Cluster Pick';
+                      for (const b of pickBtns) {
+                          if (!b) continue;
+                          b.textContent = b.id === 'sculpt-hud-pick-btn'
+                              ? (this.pickMode === 'individual' ? 'Solo' : 'Cluster')
+                              : pickLabel;
+                          b.classList.toggle('is-active', this.pickMode === 'individual');
+                      }
+                  },
+
+                  toggleShadowOverlay() {
+                      this.shadowOverlayVisible = !this.shadowOverlayVisible;
+                      this.persist();
+                      this.syncHud();
+                  },
+
+                  togglePickMode() {
+                      this.pickMode = this.pickMode === 'individual' ? 'cluster' : 'individual';
+                      this.persist();
+                      this.syncHud();
+                      addFloatingText(width / 2, 88, this.pickMode === 'individual' ? 'Solo pick — one creature' : 'Cluster pick — linked group', '#c4b5fd');
+                  },
+
+                  markTouched(creature) {
+                      if (!creature) return;
+                      ensureCreatureWeaveUid(creature);
+                      creature._sculptTouched = true;
+                      this.touchedUids.add(creature._weaveUid);
+                  },
+
+                  markTouchedGroup(group) {
+                      for (const c of group || []) this.markTouched(c);
+                  },
+
+                  commitOrientPause() {
+                      for (const c of creatures) {
+                          if (!c._sculptTouched && !this.touchedUids.has(c._weaveUid)) continue;
+                          c._sculptOrientPause = max(c._sculptOrientPause || 0, this.ORIENT_PAUSE_FRAMES);
+                          c._sculptParalyzeFrames = max(c._sculptParalyzeFrames || 0, this.ORIENT_PAUSE_FRAMES);
+                          c.vx = 0;
+                          c.vy = 0;
+                          c._sculptTouched = false;
+                      }
+                      this.touchedUids.clear();
                   },
 
                   toggleSculptMode() {
@@ -21650,17 +21799,24 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       this.sculptActive = !this.sculptActive;
                       if (this.sculptActive) {
                           syncAllCreatureWeaveUids();
-                          this.clusterRotation = 0;
                           addFloatingText(width / 2, 72, 'Sculpt Mode — drag creatures into formation', '#c4b5fd');
                       } else {
                           this.endDrag();
+                          this.shadowOverlayVisible = false;
+                          this.configureJob = null;
+                          this.commitOrientPause();
                       }
+                      this.clearTestReadout();
                       this.syncHud();
                   },
 
                   exitSculptMode() {
                       this.sculptActive = false;
                       this.endDrag();
+                      this.shadowOverlayVisible = false;
+                      this.configureJob = null;
+                      this.clearTestReadout();
+                      this.commitOrientPause();
                       this.syncHud();
                   },
 
@@ -21682,7 +21838,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       const group = [primary];
                       for (const c of creatures) {
                           if (c === primary || c.isPredator) continue;
-                          if (dist(px, py, c.x, c.y) < radius + 36 && dist(primary.x, primary.y, c.x, c.y) < 52) {
+                          if (dist(px, py, c.x, c.y) < radius + 36 && dist(primary.x, primary.y, c.x, c.y) < 14) {
                               ensureCreatureWeaveUid(c);
                               group.push(c);
                           }
@@ -21700,6 +21856,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       pivotY /= group.length;
                       const offsets = group.map((c) => ({ c, ox: c.x - pivotX, oy: c.y - pivotY }));
                       this.drag = { active: true, creatures: group, offsets, pivotX, pivotY, lastX: px, lastY: py };
+                      this.markTouchedGroup(group);
                       this.selectionUid = ensureCreatureWeaveUid(group[0]);
                       this.syncSlotCoreSelect();
                       return true;
@@ -21713,12 +21870,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       this.drag.lastY = py;
                       this.drag.pivotX += dx;
                       this.drag.pivotY += dy;
-                      const cosR = cos(this.clusterRotation), sinR = sin(this.clusterRotation);
                       for (const o of this.drag.offsets) {
-                          const rx = o.ox * cosR - o.oy * sinR;
-                          const ry = o.ox * sinR + o.oy * cosR;
-                          let tx = this.drag.pivotX + rx;
-                          let ty = this.drag.pivotY + ry;
+                          let tx = this.drag.pivotX + o.ox;
+                          let ty = this.drag.pivotY + o.oy;
                           for (const other of creatures) {
                               if (other === o.c || this.drag.creatures.indexOf(other) >= 0) continue;
                               const ddx = tx - other.x, ddy = ty - other.y;
@@ -21737,6 +21891,14 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           o.c.y = constrain(ty, 12, height - 12);
                           o.c.vx = 0;
                           o.c.vy = 0;
+                          this.markTouched(o.c);
+                          const weave = this.getActiveWeave();
+                          const slot = weave && (weave.slots || []).find((s) => s.uid === o.c._weaveUid);
+                          if (slot) {
+                              // Moving a loaded member edits its target slot, so saved world placement remains player-movable.
+                              slot.rx = o.c.x - weave.centerX;
+                              slot.ry = o.c.y - weave.centerY;
+                          }
                       }
                   },
 
@@ -21744,61 +21906,209 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       this.drag.active = false;
                       this.drag.creatures = [];
                       this.drag.offsets = [];
-                  },
-
-                  rotateSelection(delta) {
-                      if (!this.sculptActive || !paused) return;
-                      this.clusterRotation += delta;
-                      if (this.drag.active && this.drag.offsets.length) {
-                          const px = this.drag.pivotX, py = this.drag.pivotY;
-                          const cosR = cos(this.clusterRotation), sinR = sin(this.clusterRotation);
-                          for (const o of this.drag.offsets) {
-                              const rx = o.ox * cosR - o.oy * sinR;
-                              const ry = o.ox * sinR + o.oy * cosR;
-                              o.c.x = constrain(px + rx, 12, width - 12);
-                              o.c.y = constrain(py + ry, 12, height - 12);
-                          }
-                      } else {
-                          const picked = creatures.find((c) => c._weaveUid === this.selectionUid);
-                          if (picked) {
-                              const group = this.pickCreaturesNear(picked.x, picked.y, 40);
-                              let cx = 0, cy = 0;
-                              for (const c of group) { cx += c.x; cy += c.y; }
-                              cx /= group.length; cy /= group.length;
-                              for (const c of group) {
-                                  const dx = c.x - cx, dy = c.y - cy;
-                                  const rx = dx * cos(delta) - dy * sin(delta);
-                                  const ry = dx * sin(delta) + dy * cos(delta);
-                                  c.x = constrain(cx + rx, 12, width - 12);
-                                  c.y = constrain(cy + ry, 12, height - 12);
-                              }
-                          }
-                      }
+                      // Slot edits made by dragging remain at their new world positions across reloads.
+                      this.persist();
                   },
 
                   applySelectedTemplate() {
                       const sel = document.getElementById('sculpt-template-select');
-                      const id = sel ? sel.value : 'flower6';
+                      const id = sel ? sel.value : '';
+                      if (!id) { this.showPatternFeedback(null, 0); return; }
                       this.applyTemplate(id);
+                  },
+
+                  onTemplateSelectChange() {
+                      const sel = document.getElementById('sculpt-template-select');
+                      if (!sel || !sel.value) return;
+                      this.activeWeaveId = null;
+                      this.configureJob = null;
+                      this.clearTestReadout();
+                      this.refreshWeaveSelect();
                   },
 
                   applyTemplate(templateId) {
                       if (!paused) { addFloatingText(width / 2, 72, 'Pause to apply templates', '#c4b5fd'); return; }
+                      const weave = this.createTemplateWeave(templateId);
+                      if (!weave) return;
+                      this.snapWeaveToCreatures(weave, true);
+                      const filled = (weave.slots || []).filter((s) => s.uid).length;
+                      addFloatingText(weave.centerX, weave.centerY - 24, `Pattern loaded - ${filled}/${weave.slots.length} slots filled`, '#a78bfa');
+                  },
+
+                  createTemplateWeave(templateId) {
                       const tpl = this.TEMPLATES[templateId] || this.TEMPLATES.flower6;
                       const center = this.getSculptCenter();
-                      const pts = tpl.layout(CREATURE_IDEAL_DIST);
-                      const pool = creatures.filter((c) => !c.isPredator).slice()
-                          .sort((a, b) => dist(a.x, a.y, center.x, center.y) - dist(b.x, b.y, center.x, center.y));
-                      const n = min(pts.length, pool.length);
-                      for (let i = 0; i < n; i++) {
-                          pool[i].x = center.x + pts[i].x;
-                          pool[i].y = center.y + pts[i].y;
-                          pool[i].vx = 0;
-                          pool[i].vy = 0;
-                          ensureCreatureWeaveUid(pool[i]);
+                      const pts = tpl.layout(CREATURE_IDEAL_DIST * 1.18);
+                      const slots = pts.map((p, i) => ({
+                          uid: null,
+                          rx: p.x,
+                          ry: p.y,
+                          preferredCore: MODULE_TYPE_KEYS[i % MODULE_TYPE_KEYS.length]
+                      }));
+                      // Templates become temporary live weaves so ghosts, testing, and configure all target the same pattern.
+                      const weave = {
+                          id: 'template_' + templateId + '_' + Date.now(),
+                          name: tpl.name || templateId,
+                          centerX: center.x,
+                          centerY: center.y,
+                          rotation: 0,
+                          pullStrength: 1,
+                          savedAt: Date.now(),
+                          temporary: true,
+                          slots
+                      };
+                      this.weaves = [weave, ...this.weaves.filter((w) => !w.temporary)].slice(0, 12);
+                      this.activeWeaveId = weave.id;
+                      this.snapWeaveToCreatures(weave, true);
+                      this.shadowOverlayVisible = true;
+                      this.configureJob = null;
+                      this.refreshWeaveSelect();
+                      this.syncHud();
+                      return weave;
+                  },
+
+                  getSelectedPattern() {
+                      const weave = this.getActiveWeave();
+                      if (weave) return weave;
+                      const sel = document.getElementById('sculpt-template-select');
+                      if (!sel || !sel.value) return null;
+                      const tpl = this.TEMPLATES[sel.value];
+                      if (!tpl) return null;
+                      const center = this.getSculptCenter();
+                      return {
+                          id: 'preview_' + sel.value,
+                          name: sel.value,
+                          centerX: center.x,
+                          centerY: center.y,
+                          rotation: 0,
+                          pullStrength: 1,
+                          savedAt: Date.now(),
+                          temporary: true,
+                          slots: tpl.layout(CREATURE_IDEAL_DIST * 1.18).map((p, i) => ({
+                              uid: null,
+                              rx: p.x,
+                              ry: p.y,
+                              preferredCore: MODULE_TYPE_KEYS[i % MODULE_TYPE_KEYS.length]
+                          }))
+                      };
+                  },
+
+                  buildSlotAssignments(weave, reservedUids = null) {
+                      // Assign slots to existing saved UIDs first, then fill empty slots by nearest available creatures.
+                      if (!weave || !Array.isArray(weave.slots)) return [];
+                      syncAllCreatureWeaveUids();
+                      const available = creatures.filter((c) => !c.isPredator);
+                      const used = reservedUids || new Set();
+                      const assignments = [];
+                      for (const slot of weave.slots) {
+                          let creature = slot.uid ? available.find((c) => c._weaveUid === slot.uid && !used.has(c._weaveUid)) : null;
+                          const pos = this.getSlotWorldPos(weave, slot);
+                          if (!creature) {
+                              creature = available
+                                  .filter((c) => !used.has(c._weaveUid))
+                                  .sort((a, b) => dist(a.x, a.y, pos.x, pos.y) - dist(b.x, b.y, pos.x, pos.y))[0] || null;
+                          }
+                          if (!creature) continue;
+                          const uid = ensureCreatureWeaveUid(creature);
+                          used.add(uid);
+                          slot.uid = uid;
+                          if (!slot.preferredCore) slot.preferredCore = normalizeModuleTypeKey(getCreatureCoreType(creature) || 'balanced');
+                          assignments.push({ slot, creature, target: pos, locked: false });
                       }
-                      this.clusterRotation = 0;
-                      addFloatingText(center.x, center.y - 24, `Template: ${templateId}`, '#a78bfa');
+                      return assignments;
+                  },
+
+                  snapWeaveToCreatures(weave, showFeedback = false) {
+                      const assignments = this.buildSlotAssignments(weave);
+                      for (const a of assignments) {
+                          a.creature.x = constrain(a.target.x, 12, width - 12);
+                          a.creature.y = constrain(a.target.y, 12, height - 12);
+                          a.creature.vx = 0;
+                          a.creature.vy = 0;
+                          a.creature._shadowWeaveGlow = max(a.creature._shadowWeaveGlow || 0, 28);
+                          if (a.slot.preferredCore) a.creature._weavePreferredCore = a.slot.preferredCore;
+                          this.markTouched(a.creature);
+                      }
+                      if (showFeedback) this.showPatternFeedback(weave, assignments.length);
+                      return assignments;
+                  },
+
+                  showPatternFeedback(weave, filled) {
+                      // Clear fill feedback is more useful than a silent partial apply.
+                      const total = weave && weave.slots ? weave.slots.length : 0;
+                      const text = total ? `Pattern applied - ${filled}/${total} slots filled` : 'Select a pattern first';
+                      const a = document.getElementById('sculpt-test-readout');
+                      const b = document.getElementById('sculpt-hud-readout');
+                      if (a) a.textContent = text;
+                      if (b) b.textContent = text;
+                      addFloatingText(width / 2, 84, text, filled >= total ? '#86efac' : '#fbbf24');
+                  },
+
+                  configureToPattern() {
+                      if (!paused) togglePause();
+                      this.sculptActive = true;
+                      let weave = this.getActiveWeave();
+                      if (!weave) {
+                          const sel = document.getElementById('sculpt-template-select');
+                          if (!sel || !sel.value) { this.showPatternFeedback(null, 0); return; }
+                          weave = this.createTemplateWeave(sel.value);
+                      }
+                      if (!weave) { this.showPatternFeedback(null, 0); return; }
+                      const assignments = this.buildSlotAssignments(weave);
+                      this.configureJob = {
+                          weaveId: weave.id,
+                          startedAt: Date.now(),
+                          durationMs: 4200,
+                          assignments
+                      };
+                      this.shadowOverlayVisible = true;
+                      this.syncHud();
+                      this.showPatternFeedback(weave, assignments.length);
+                  },
+
+                  tickConfigureToPattern() {
+                      if (!this.configureJob || !this.sculptActive || !paused) return;
+                      const weave = this.getActiveWeave();
+                      if (!weave || weave.id !== this.configureJob.weaveId) { this.configureJob = null; return; }
+                      const elapsed = Date.now() - this.configureJob.startedAt;
+                      const ease = constrain(elapsed / this.configureJob.durationMs, 0, 1);
+                      let lockedCount = 0;
+                      for (const a of this.configureJob.assignments) {
+                          if (!a.creature || creatures.indexOf(a.creature) < 0) continue;
+                          a.target = this.getSlotWorldPos(weave, a.slot);
+                          const dx = a.target.x - a.creature.x;
+                          const dy = a.target.y - a.creature.y;
+                          const d = sqrt(dx * dx + dy * dy) || 1;
+                          if (d < 2.5 || ease >= 1) {
+                              a.creature.x = constrain(a.target.x, 12, width - 12);
+                              a.creature.y = constrain(a.target.y, 12, height - 12);
+                              a.locked = true;
+                          } else {
+                              const step = constrain(0.045 + ease * 0.13, 0.045, 0.18);
+                              a.creature.x += dx * step;
+                              a.creature.y += dy * step;
+                          }
+                          for (const other of creatures) {
+                              if (other === a.creature || other.isPredator) continue;
+                              const ox = a.creature.x - other.x, oy = a.creature.y - other.y;
+                              const od = sqrt(ox * ox + oy * oy) || 1;
+                              if (od < CREATURE_IDEAL_DIST * 0.82) {
+                                  const push = (CREATURE_IDEAL_DIST * 0.82 - od) * 0.045;
+                                  a.creature.x += (ox / od) * push;
+                                  a.creature.y += (oy / od) * push;
+                              }
+                          }
+                          a.creature.vx = 0;
+                          a.creature.vy = 0;
+                          a.creature._shadowWeaveGlow = max(a.creature._shadowWeaveGlow || 0, a.locked ? 32 : 18);
+                          this.markTouched(a.creature);
+                          if (a.locked) lockedCount++;
+                      }
+                      if (elapsed >= this.configureJob.durationMs || lockedCount >= this.configureJob.assignments.length) {
+                          const filled = this.configureJob.assignments.length;
+                          this.configureJob = null;
+                          this.showPatternFeedback(weave, filled);
+                      }
                   },
 
                   captureWeaveFromWorld(name) {
@@ -21820,7 +22130,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           name: name || 'Shadow Weave',
                           centerX: cx,
                           centerY: cy,
-                          rotation: this.clusterRotation || 0,
+                          rotation: 0,
                           pullStrength: 1,
                           savedAt: Date.now(),
                           slots
@@ -21832,8 +22142,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       const name = nameInput && nameInput.value.trim() ? nameInput.value.trim() : 'Shadow Weave';
                       const weave = this.captureWeaveFromWorld(name);
                       if (!weave) return;
-                      this.weaves.unshift(weave);
-                      if (this.weaves.length > 12) this.weaves = this.weaves.slice(0, 12);
+                      this.weaves = this.normalizeWeaves([weave, ...this.weaves.filter((w) => !w.temporary)]);
                       this.activeWeaveId = weave.id;
                       this.persist();
                       this.refreshWeaveSelect();
@@ -21844,6 +22153,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   refreshWeaveSelect() {
                       const sel = document.getElementById('sculpt-weave-select');
                       if (!sel) return;
+                      // Normalize every refresh so legacy duplicate storage cannot repopulate the dropdown.
+                      this.weaves = this.normalizeWeaves(this.weaves);
+                      if (!this.weaves.some((w) => w.id === this.activeWeaveId)) this.activeWeaveId = null;
                       sel.innerHTML = '<option value="">— select weave —</option>';
                       for (const w of this.weaves) {
                           const opt = document.createElement('option');
@@ -21856,7 +22168,12 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
                   onWeaveSelectChange() {
                       const sel = document.getElementById('sculpt-weave-select');
-                      if (sel && sel.value) this.activeWeaveId = sel.value;
+                      this.activeWeaveId = sel && sel.value ? sel.value : null;
+                      const templateSel = document.getElementById('sculpt-template-select');
+                      if (this.activeWeaveId && templateSel) templateSel.value = '';
+                      this.configureJob = null;
+                      this.clearTestReadout();
+                      this.persist();
                   },
 
                   loadSelectedWeave() {
@@ -21867,19 +22184,39 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       }
                       if (!paused) togglePause();
                       this.sculptActive = true;
+                      this.shadowOverlayVisible = true;
+                      this.configureJob = null;
                       this.syncHud();
-                      const cosR = cos(weave.rotation || 0), sinR = sin(weave.rotation || 0);
-                      for (const slot of weave.slots || []) {
-                          const c = creatures.find((cr) => cr._weaveUid === slot.uid);
-                          if (!c) continue;
-                          c.x = weave.centerX + slot.rx * cosR - slot.ry * sinR;
-                          c.y = weave.centerY + slot.rx * sinR + slot.ry * cosR;
-                          c.vx = 0;
-                          c.vy = 0;
-                          if (slot.preferredCore) c._weavePreferredCore = slot.preferredCore;
-                      }
-                      this.clusterRotation = weave.rotation || 0;
+                      const assignments = this.snapWeaveToCreatures(weave, false);
+                      this.showPatternFeedback(weave, assignments.length);
                       addFloatingText(weave.centerX, weave.centerY - 20, `Loaded: ${weave.name}`, '#c4b5fd');
+                  },
+
+                  loadAllWeaves() {
+                      const patterns = this.weaves.filter((w) => w && !w.temporary && Array.isArray(w.slots));
+                      if (!patterns.length) { this.showPatternFeedback(null, 0); return; }
+                      if (!paused) togglePause();
+                      this.sculptActive = true;
+                      this.shadowOverlayVisible = true;
+                      this.configureJob = null;
+                      const reserved = new Set();
+                      let filled = 0, total = 0;
+                      for (const weave of patterns) {
+                          total += weave.slots.length;
+                          const assignments = this.buildSlotAssignments(weave, reserved);
+                          filled += assignments.length;
+                          for (const a of assignments) {
+                              a.creature.x = constrain(a.target.x, 12, width - 12);
+                              a.creature.y = constrain(a.target.y, 12, height - 12);
+                              a.creature.vx = 0;
+                              a.creature.vy = 0;
+                              a.creature._shadowWeaveGlow = max(a.creature._shadowWeaveGlow || 0, 28);
+                              this.markTouched(a.creature);
+                          }
+                      }
+                      this.syncHud();
+                      this.writePatternReadout(`All patterns loaded: ${filled}/${total} slots filled`);
+                      addFloatingText(width / 2, 84, `All patterns - ${filled}/${total} slots filled`, filled >= total ? '#86efac' : '#fbbf24');
                   },
 
                   syncSlotCoreSelect() {
@@ -21982,6 +22319,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   },
 
                   runLayoutTest(showUi) {
+                      return this.evaluateSelectedPattern(showUi);
                       syncAllCreatureWeaveUids();
                       const members = creatures.filter((c) => !c.isPredator);
                       if (members.length < 3) {
@@ -22020,6 +22358,65 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       return this.lastTest;
                   },
 
+                  evaluateSelectedPattern(showUi) {
+                      // Test the selected weave/template itself, not the unrelated whole-world creature cloud.
+                      const weave = this.getSelectedPattern();
+                      if (!weave) {
+                          this.lastTest = null;
+                          if (showUi) this.writePatternReadout('Select a weave or template to test');
+                          return null;
+                      }
+                      const assignments = this.buildSlotAssignments(weave);
+                      if (!assignments.length) {
+                          this.lastTest = null;
+                          if (showUi) this.writePatternReadout('No available creatures for this pattern');
+                          return null;
+                      }
+                      let proximitySum = 0, coreMatches = 0, alignSum = 0, pairs = 0;
+                      for (let i = 0; i < assignments.length; i++) {
+                          const a = assignments[i];
+                          const d = dist(a.creature.x, a.creature.y, a.target.x, a.target.y);
+                          proximitySum += constrain(1 - d / (CREATURE_IDEAL_DIST * 2.5), 0, 1);
+                          const actualCore = normalizeModuleTypeKey(getCreatureCoreType(a.creature) || 'balanced');
+                          if (!a.slot.preferredCore || actualCore === a.slot.preferredCore) coreMatches++;
+                          for (let j = i + 1; j < assignments.length; j++) {
+                              alignSum += ModuleIdentitySystem.computeAlignment(a.creature, assignments[j].creature);
+                              pairs++;
+                          }
+                      }
+                      const fillScore = assignments.length / max(1, weave.slots.length);
+                      const proximity = proximitySum / assignments.length;
+                      const coreMatch = coreMatches / assignments.length;
+                      const alignment = pairs ? alignSum / pairs : 0.5;
+                      const energyEfficiency = constrain(proximity * 0.45 + alignment * 0.35 + coreMatch * 0.2, 0, 1);
+                      const overall = constrain(energyEfficiency * 0.75 + fillScore * 0.25, 0, 1);
+                      this.lastTest = {
+                          name: weave.name || 'Pattern',
+                          overall,
+                          energyEfficiency,
+                          alignment,
+                          coreMatch,
+                          proximity,
+                          filled: assignments.length,
+                          total: weave.slots.length,
+                          note: overall > 0.82 ? 'Locked and efficient'
+                              : overall > 0.58 ? 'Good - a few slots need tuning'
+                              : 'Loose - configure creatures closer to their targets'
+                      };
+                      if (showUi) {
+                          const t = this.lastTest;
+                          this.writePatternReadout(`${t.name}: Energy ${(t.energyEfficiency * 100).toFixed(0)}% | Alignment ${(t.alignment * 100).toFixed(0)}% | Core match ${(t.coreMatch * 100).toFixed(0)}% | Filled ${t.filled}/${t.total} - ${t.note}`);
+                      }
+                      return this.lastTest;
+                  },
+
+                  writePatternReadout(text) {
+                      const a = document.getElementById('sculpt-test-readout');
+                      const b = document.getElementById('sculpt-hud-readout');
+                      if (a) a.textContent = text || '';
+                      if (b) b.textContent = text || 'Sculpt Mode - drag creatures into sacred geometry';
+                  },
+
                   showTestReadout() {
                       const t = this.lastTest;
                       const text = t ? `Eff ${(t.overall * 100).toFixed(0)}% · Res ${(t.resonancePotential * 100).toFixed(0)}% · Slip ${(t.slipstreamScore * 100).toFixed(0)}% — ${t.note}` : '—';
@@ -22030,25 +22427,32 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   },
 
                   drawOverlay() {
-                      if (!this.sculptActive && !this.getActiveWeave() && !this.energyViewOn) return;
-                      const weave = this.getActiveWeave();
-                      if (weave && (this.sculptActive || !paused)) {
+                      this.tickConfigureToPattern();
+                      if (!this.sculptActive && !this.energyViewOn) return;
+                      // Ghost targets are transient Sculpt UI only; they never render after Sculpt Mode closes.
+                      const visibleWeaves = this.sculptActive && this.shadowOverlayVisible
+                          ? this.weaves.filter((w) => w && Array.isArray(w.slots))
+                          : [];
+                      const screenScale = 1 / max(0.55, zoomLevel || 1);
+                      for (const weave of visibleWeaves) {
+                          const isActive = weave.id === this.activeWeaveId;
                           for (const slot of weave.slots || []) {
                               const pos = this.getSlotWorldPos(weave, slot);
                               const core = slot.preferredCore || 'communicator';
                               const col = MODULE_AMMO_COLORS[core] || '#a78bfa';
                               const [cr, cg, cb] = parseAmmoHexColor(col);
+                              drawingContext.shadowBlur = (isActive ? 8 : 4) * screenScale;
+                              drawingContext.shadowColor = col;
                               noFill();
-                              stroke(cr, cg, cb, this.sculptActive ? 48 : 22);
-                              strokeWeight(0.7);
-                              circle(pos.x, pos.y, CREATURE_BODY_RADIUS * 1.6);
-                              if (slot.preferredCore) {
-                                  fill(cr, cg, cb, 30);
-                                  noStroke();
-                                  circle(pos.x, pos.y, 3.5);
-                              }
+                              stroke(cr, cg, cb, isActive ? 88 : 34);
+                              strokeWeight((isActive ? 1.1 : 0.7) * screenScale);
+                              circle(pos.x, pos.y, (isActive ? 15 : 11) * screenScale);
+                              fill(cr, cg, cb, isActive ? 180 : 80);
+                              noStroke();
+                              circle(pos.x, pos.y, (isActive ? 4.5 : 3) * screenScale);
                           }
                       }
+                      drawingContext.shadowBlur = 0;
                       if (this.energyViewOn) this.drawEnergyView();
                       if (this.drag.active) {
                           noFill();
@@ -23277,6 +23681,14 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       if (!this.isPredator) applyScoopLurePull(this, timeScale);
                       SculptShadowSystem.applyWeaveAttraction(this, timeScale);
                       ModuleIdentitySystem.applyMechanics(this, { timeScale, effectiveHazardDist, envMods });
+                      if ((this._sculptParalyzeFrames || 0) > 0) {
+                          this._sculptParalyzeFrames = max(0, this._sculptParalyzeFrames - timeScale);
+                          this.vx = 0;
+                          this.vy = 0;
+                          if (frameCount % 30 === (this._symSlot || 0) % 30) {
+                              this.currentThought = 'Re-orienting after sculpt';
+                          }
+                      }
                       this.x += this.vx;
                       this.y += this.vy;
                       this.vx *= 0.90;
