@@ -4,7 +4,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-21-local-034-squid-garden-spray" />
+    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-21-local-036-sculpt-shadow-weaves" />
     <title>MiniSimmy Orbital Ship v2</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2334d399'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%230a0a0f'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -823,6 +823,26 @@
         .squid-control-toggle-row__text { min-width: 0; }
         .squid-control-toggle-row__title { font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.9); }
         .squid-control-toggle-row__sub { font-size: 9px; color: rgba(255,255,255,0.42); line-height: 1.35; margin-top: 2px; }
+        .sculpt-hud {
+            position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%);
+            z-index: 95; max-width: min(96vw, 720px); width: 100%;
+            border-radius: 16px; border: 1px solid rgba(167,139,250,0.35);
+            background: rgba(10,10,15,0.92); backdrop-filter: blur(8px);
+            padding: 10px 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.45);
+        }
+        .sculpt-hud.is-hidden { display: none; }
+        .sculpt-hud__row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: center; }
+        .sculpt-hud__btn {
+            font-size: 10px; font-weight: 600; padding: 5px 10px; border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.14); background: rgba(255,255,255,0.06); color: #e9e5ff;
+        }
+        .sculpt-hud__btn:hover { background: rgba(167,139,250,0.22); border-color: rgba(167,139,250,0.45); }
+        .sculpt-hud__btn.is-active { background: rgba(52,211,153,0.25); border-color: rgba(52,211,153,0.5); color: #d1fae5; }
+        .sculpt-hud__label { font-size: 9px; color: rgba(255,255,255,0.45); text-align: center; margin-top: 6px; }
+        .sculpt-test-readout {
+            font-size: 10px; color: rgba(255,255,255,0.75); text-align: center; min-height: 14px;
+            font-family: ui-monospace, monospace;
+        }
         .squid-control-stat-grid {
             display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.45rem;
         }
@@ -6085,6 +6105,12 @@ body.is-map-fullscreen #map-fullscreen-btn {
                                   <i class="fa-solid fa-pause text-xs"></i>
                                   <span id="pause-text" class="text-xs">Pause</span>
                               </button>
+                              <button onclick="playUIClick(); SculptShadowSystem.toggleSculptMode()" id="sculpt-mode-btn"
+                                      class="time-btn flex items-center gap-x-1 rounded-xl bg-violet-500/15 px-2 py-1 text-violet-200 hover:bg-violet-500/30"
+                                      title="Sculpt Mode — arrange colonies while paused">
+                                  <i class="fa-solid fa-compass-drafting text-[10px]"></i>
+                                  <span class="text-[10px]">Sculpt</span>
+                              </button>
                               <div class="mx-1 h-4 w-px bg-white/20"></div>
                               <button onclick="playUIClick(); handleSpeedClick(0.1)" id="speed-0.1" class="time-btn active rounded-xl bg-emerald-500 px-1.5 py-1 font-semibold text-[#0a0a0f]">0.1×</button>
                               <button onclick="playUIClick(); handleSpeedClick(0.25)" id="speed-0.25" class="time-btn rounded-xl px-1.5 py-1 hover:bg-white/10">0.25×</button>
@@ -8091,6 +8117,78 @@ body.is-map-fullscreen #map-fullscreen-btn {
               </div>
           </div>
 
+          <!-- Sculpt Mode + Shadow Weaves -->
+          <div id="sculpt-shadow-modal" onclick="SculptShadowSystem.hidePanel()" class="fixed inset-0 z-[112] flex hidden items-center justify-center bg-black/82 p-3">
+              <div onclick="event.stopImmediatePropagation()" class="modal meta-modal-shell mx-auto w-full max-w-lg rounded-3xl border border-violet-500/25 bg-[#121218] p-4 sm:p-5">
+                  <div class="meta-modal-header meta-modal-header--violet" style="--meta-header-accent:#a78bfa">
+                      <div class="meta-modal-header__main">
+                          <div class="meta-modal-header__icon"><i class="fa-solid fa-compass-drafting"></i></div>
+                          <div class="meta-modal-header__text">
+                              <h3>Sculpt Mode &amp; Shadow Weaves</h3>
+                              <p class="meta-modal-header__sub">Pause, arrange sacred geometry, save soft memory fields. Creatures drift gently toward weaves when unpaused.</p>
+                          </div>
+                      </div>
+                      <button type="button" onclick="playUIClick(); SculptShadowSystem.hidePanel()" class="meta-modal-close">&times;</button>
+                  </div>
+                  <div class="meta-modal-body space-y-3 text-sm">
+                      <div class="flex flex-wrap gap-2">
+                          <button type="button" class="sculpt-hud__btn" onclick="playUIClick(); SculptShadowSystem.toggleSculptMode()">Enter Sculpt</button>
+                          <button type="button" class="sculpt-hud__btn" onclick="playUIClick(); SculptShadowSystem.toggleEnergyView()">Energy View</button>
+                          <button type="button" class="sculpt-hud__btn" onclick="playUIClick(); SculptShadowSystem.runLayoutTest(true)">Test Layout</button>
+                      </div>
+                      <div id="sculpt-test-readout" class="sculpt-test-readout">—</div>
+                      <div>
+                          <label class="text-[10px] text-white/50">Template grid</label>
+                          <select id="sculpt-template-select" class="mt-1 w-full rounded-lg border border-white/10 bg-[#0a0a0f] px-2 py-1.5 text-xs text-white">
+                              <option value="flower6">Flower of Life (6)</option>
+                              <option value="flower12">Flower of Life (12)</option>
+                              <option value="ring8">Ring (8)</option>
+                              <option value="donut12">Layered donut (12)</option>
+                              <option value="spiral10">Spiral (10)</option>
+                              <option value="cluster7">Loose cluster (7)</option>
+                          </select>
+                          <button type="button" class="sculpt-hud__btn mt-2 w-full" onclick="playUIClick(); SculptShadowSystem.applySelectedTemplate()">Load template at vortex center</button>
+                      </div>
+                      <div>
+                          <label class="text-[10px] text-white/50">Save Shadow Weave</label>
+                          <input id="sculpt-weave-name" type="text" placeholder="Weave name…" class="mt-1 w-full rounded-lg border border-white/10 bg-[#0a0a0f] px-2 py-1.5 text-xs text-white" />
+                          <button type="button" class="sculpt-hud__btn mt-2 w-full" onclick="playUIClick(); SculptShadowSystem.saveCurrentWeave()">Save current layout</button>
+                      </div>
+                      <div>
+                          <label class="text-[10px] text-white/50">Load / edit weave</label>
+                          <select id="sculpt-weave-select" class="mt-1 w-full rounded-lg border border-white/10 bg-[#0a0a0f] px-2 py-1.5 text-xs text-white" onchange="SculptShadowSystem.onWeaveSelectChange()"></select>
+                          <button type="button" class="sculpt-hud__btn mt-2 w-full" onclick="playUIClick(); SculptShadowSystem.loadSelectedWeave()">Load for editing</button>
+                      </div>
+                      <div>
+                          <label class="text-[10px] text-white/50">Preferred core on selected slot</label>
+                          <select id="sculpt-slot-core-select" class="mt-1 w-full rounded-lg border border-white/10 bg-[#0a0a0f] px-2 py-1.5 text-xs text-white" onchange="SculptShadowSystem.onSlotCoreChange()">
+                              <option value="">— none —</option>
+                              <option value="harvester">Harvester (emerald)</option>
+                              <option value="sensor">Sensor (sky)</option>
+                              <option value="mover">Mover (violet)</option>
+                              <option value="resistant">Resistant (pink)</option>
+                              <option value="explorer">Explorer (amber)</option>
+                              <option value="communicator">Communicator (purple)</option>
+                          </select>
+                      </div>
+                      <p class="text-[10px] leading-snug text-white/45">Drag creatures while paused. Hold <span class="code">[</span> / <span class="code">]</span> to rotate selection. Click a creature then assign a preferred core. Shadow pulls decay slowly over time — re-save to refresh.</p>
+                  </div>
+              </div>
+          </div>
+
+          <div id="sculpt-hud" class="sculpt-hud is-hidden">
+              <div class="sculpt-hud__row">
+                  <button type="button" class="sculpt-hud__btn" onclick="playUIClick(); SculptShadowSystem.showPanel()">Weaves</button>
+                  <button type="button" id="sculpt-hud-energy-btn" class="sculpt-hud__btn" onclick="playUIClick(); SculptShadowSystem.toggleEnergyView()">Energy</button>
+                  <button type="button" class="sculpt-hud__btn" onclick="playUIClick(); SculptShadowSystem.rotateSelection(-0.1)">↺ Rotate</button>
+                  <button type="button" class="sculpt-hud__btn" onclick="playUIClick(); SculptShadowSystem.rotateSelection(0.1)">Rotate ↻</button>
+                  <button type="button" class="sculpt-hud__btn" onclick="playUIClick(); SculptShadowSystem.runLayoutTest(true)">Test</button>
+                  <button type="button" class="sculpt-hud__btn" onclick="playUIClick(); SculptShadowSystem.saveCurrentWeave()">Save Weave</button>
+                  <button type="button" class="sculpt-hud__btn" onclick="playUIClick(); SculptShadowSystem.exitSculptMode()">Exit</button>
+              </div>
+              <div id="sculpt-hud-readout" class="sculpt-hud__label">Sculpt Mode — drag creatures into sacred geometry</div>
+          </div>
+
           <!-- Squid Control Panel -->
           <div id="squid-control-modal" onclick="hideSquidControlPanel()" class="fixed inset-0 z-[112] flex hidden items-center justify-center bg-black/82 p-3">
               <div onclick="event.stopImmediatePropagation()" class="modal meta-modal-shell mx-auto w-full max-w-md rounded-3xl border border-rose-500/25 bg-[#121218] p-4 sm:p-5">
@@ -8334,7 +8432,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'local-034-squid-garden-spray';
+              const MINISIMMY_BUILD = 'local-036-sculpt-shadow-weaves';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -8512,12 +8610,13 @@ body.is-map-fullscreen #map-fullscreen-btn {
               const SCOOP_MODULE_FIRE_GAP = 110;
               const SQUID_GARDEN_SPRAY_GAP = 130;
               const SQUID_GARDEN_SPRAY_SPEED = 14;
-              const SQUID_GARDEN_SPRAY_SPREAD = 0.48;
-              const SQUID_GARDEN_SPRAY_STRAIGHT_FRAMES = 78;
-              const SQUID_GARDEN_SPRAY_VORTEX_BLEND = 42;
-              const SQUID_GARDEN_SPRAY_BOUNCE_COOLDOWN = 420;
-              const SQUID_GARDEN_SPRAY_NEWBORN_IMMUNE = 210;
-              const SQUID_GARDEN_SPRAY_ENERGY_PER_HIT = 22;
+              const SQUID_GARDEN_SPRAY_SPREAD = 0.22;
+              const SQUID_GARDEN_SPRAY_DECAY_FRAMES = 210;
+              const SQUID_GARDEN_SPRAY_KNOCKBACK = 5.4;
+              const RESONANCE_CYCLE_MIN_MEMBERS = 6;
+              const RESONANCE_CYCLE_MIN_ALIGN = 1.1;
+              const RESONANCE_CYCLE_STABLE_FRAMES = 720;
+              const RESONANCE_CYCLE_EVAL_EVERY = 9;
               const SCOOP_INCUBATOR_MIN_MODULES = 3;
               const SCOOP_INCUBATOR_MODULES_PER_SPAWN = 3;
               const SCOOP_MODULE_LEAK_BASE_INTERVAL = 15;
@@ -16541,6 +16640,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       triggerScoopDash(manualControlCreature);
                       return false;
                   }
+                  if (paused && SculptShadowSystem.sculptActive) {
+                      if (key === '[') { SculptShadowSystem.rotateSelection(-0.1); return false; }
+                      if (key === ']') { SculptShadowSystem.rotateSelection(0.1); return false; }
+                  }
                   if (key === ' ' && isManualGardenSquid(manualControlCreature)) {
                       fireSquidGardenSprayShot(manualControlCreature);
                       return false;
@@ -20765,6 +20868,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       if (creature._coreShiftFlash > 0) creature._coreShiftFlash--;
                       if (creature._macroResonance > 0) creature._macroResonance--;
                       if (creature._macroClusterPulse > 0) creature._macroClusterPulse--;
+                      if (creature._resonanceCycleGlow > 0) creature._resonanceCycleGlow--;
+                      SculptShadowSystem.applyMovementEconomics(creature, timeScale);
+                      SculptShadowSystem.tickDecorDecay(creature);
                       this.applyLegacyAnchorField(creature, timeScale);
                   },
 
@@ -20840,12 +20946,15 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           circle(creature.x, creature.y, 14 + symCount * 0.35);
                       }
                       const macroPulse = creature._macroClusterPulse || 0;
-                      if (shouldDrawEffect('macroResonance') && (creature._macroResonance > 0 || macroPulse > 0)) {
+                      const cycleGlow = creature._resonanceCycleGlow || 0;
+                      if (shouldDrawEffect('macroResonance') && (creature._macroResonance > 0 || macroPulse > 0 || cycleGlow > 0)) {
                           noFill();
-                          const pulseA = max(creature._macroResonance || 0, macroPulse) * 1.4;
-                          stroke(52, 211, 153, pulseA);
-                          strokeWeight(0.65);
-                          circle(creature.x, creature.y, 18 + sin(frameCount * 0.08) * 2);
+                          const pulseA = max(creature._macroResonance || 0, macroPulse, cycleGlow) * 1.35;
+                          const coreCol = MODULE_AMMO_COLORS[getCreatureCoreType(creature)] || '#34d399';
+                          const [cr, cg, cb] = parseAmmoHexColor(coreCol);
+                          stroke(cr, cg, cb, pulseA);
+                          strokeWeight(0.55 + (cycleGlow > 0 ? 0.15 : 0));
+                          circle(creature.x, creature.y, 18 + sin(frameCount * 0.08) * 2 + (cycleGlow > 0 ? 2 : 0));
                       }
                       const anchorStr = creature._legacyAnchorStrength || 0;
                       if (shouldDrawEffect('symbiosisRing') && anchorStr > 0.12) {
@@ -21196,6 +21305,786 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   }
               };
 
+              const ResonanceCycleSystem = {
+                  clusters: new Map(),
+                  resonanceHumOsc: null,
+                  resonanceHumGain: null,
+                  resonanceHumFilter: null,
+                  lastAnnounceFrame: 0,
+
+                  clusterKey(members) {
+                      return members.map((c) => creatures.indexOf(c)).filter((i) => i >= 0).sort((a, b) => a - b).join(':');
+                  },
+
+                  computeClusterMetrics(members) {
+                      let cx = 0, cy = 0, flowerComfort = 0;
+                      const coreCounts = {};
+                      for (const c of members) {
+                          cx += c.x;
+                          cy += c.y;
+                          flowerComfort += c._flowerWeaveComfort || 0;
+                          const core = normalizeModuleTypeKey(getCreatureCoreType(c) || 'balanced');
+                          coreCounts[core] = (coreCounts[core] || 0) + 1;
+                      }
+                      cx /= members.length;
+                      cy /= members.length;
+                      let totalAlign = 0, alignPairs = 0;
+                      for (let i = 0; i < members.length; i++) {
+                          for (let j = i + 1; j < members.length; j++) {
+                              const s = ModuleIdentitySystem.computeAlignment(members[i], members[j]);
+                              if (s >= 0.85) {
+                                  totalAlign += s;
+                                  alignPairs++;
+                              }
+                          }
+                      }
+                      const avgAlign = alignPairs ? totalAlign / alignPairs : 0;
+                      const omegas = [];
+                      let spinDir = 0;
+                      for (const c of members) {
+                          const dx = c.x - cx, dy = c.y - cy;
+                          const r = sqrt(dx * dx + dy * dy) || 1;
+                          const tangVx = -dy / r, tangVy = dx / r;
+                          const vTan = (c.vx || 0) * tangVx + (c.vy || 0) * tangVy;
+                          const omega = vTan / max(8, r);
+                          omegas.push(omega);
+                          spinDir += omega;
+                      }
+                      const meanOmega = omegas.reduce((a, b) => a + b, 0) / omegas.length;
+                      let variance = 0;
+                      for (const o of omegas) variance += (o - meanOmega) * (o - meanOmega);
+                      variance /= omegas.length;
+                      const spinConsistency = max(0, 1 - sqrt(variance) * 4.8);
+                      const spinMagnitude = min(1, abs(meanOmega) * 11);
+                      let dominantCore = 'communicator';
+                      let maxC = 0;
+                      for (const k of Object.keys(coreCounts)) {
+                          if (coreCounts[k] > maxC) { maxC = coreCounts[k]; dominantCore = k; }
+                      }
+                      const flowerAvg = flowerComfort / members.length;
+                      const efficiency = constrain(
+                          (avgAlign >= RESONANCE_CYCLE_MIN_ALIGN ? (avgAlign - 1.0) * 1.75 : 0)
+                          * spinConsistency
+                          * (0.5 + spinMagnitude * 0.5)
+                          * (0.58 + flowerAvg * 0.42),
+                          0, 1
+                      );
+                      return {
+                          cx, cy, avgAlign, meanOmega, spinConsistency, efficiency, flowerAvg, dominantCore
+                      };
+                  },
+
+                  findCandidateClusters() {
+                      const seen = new Set();
+                      const results = [];
+                      for (const c of creatures) {
+                          if (!c || c.isPredator) continue;
+                          if ((c._symbiosisCount || 0) < RESONANCE_CYCLE_MIN_MEMBERS
+                              && (c._alignmentComfort || 0) < 0.55) continue;
+                          const cluster = ModuleIdentitySystem.getAlignedCluster(c);
+                          if (cluster.count < RESONANCE_CYCLE_MIN_MEMBERS) continue;
+                          const avgNeighborAlign = cluster.score / max(1, cluster.count - 1);
+                          if (avgNeighborAlign < RESONANCE_CYCLE_MIN_ALIGN) continue;
+                          const key = this.clusterKey(cluster.members);
+                          if (!key || seen.has(key)) continue;
+                          seen.add(key);
+                          results.push({ key, members: cluster.members.slice() });
+                      }
+                      return results;
+                  },
+
+                  tick(timeScale) {
+                      if (frameCount % RESONANCE_CYCLE_EVAL_EVERY !== 0) return;
+                      const candidates = this.findCandidateClusters();
+                      const activeKeys = new Set();
+                      for (const { key, members } of candidates) {
+                          activeKeys.add(key);
+                          const metrics = this.computeClusterMetrics(members);
+                          if (metrics.avgAlign < RESONANCE_CYCLE_MIN_ALIGN || metrics.efficiency < 0.18) {
+                              this.clusters.delete(key);
+                              continue;
+                          }
+                          let state = this.clusters.get(key);
+                          const wasActive = state && state.active;
+                          if (!state) {
+                              state = { members, stableFrames: 0, active: false, spinPhase: 0, ...metrics };
+                              this.clusters.set(key, state);
+                          } else {
+                              if (abs(state.members.length - members.length) > 2) {
+                                  state.stableFrames = max(0, state.stableFrames - 36);
+                              } else if (metrics.spinConsistency >= 0.42) {
+                                  state.stableFrames += RESONANCE_CYCLE_EVAL_EVERY;
+                              } else {
+                                  state.stableFrames = max(0, state.stableFrames - 6);
+                              }
+                              Object.assign(state, metrics, { members });
+                          }
+                          const mature = (members[0] && (members[0]._symbiosisLevel || 0) >= 2);
+                          const activateAt = mature ? RESONANCE_CYCLE_STABLE_FRAMES * 0.82 : RESONANCE_CYCLE_STABLE_FRAMES;
+                          state.active = state.stableFrames >= activateAt && metrics.efficiency >= 0.3;
+                          state.spinPhase = (state.spinPhase || 0) + metrics.meanOmega * timeScale * 0.85;
+                          if (state.active) {
+                              this.applyEnergyGain(state, timeScale);
+                              if (!wasActive && frameCount - this.lastAnnounceFrame > 420) {
+                                  this.lastAnnounceFrame = frameCount;
+                                  const cycleLines = [
+                                      'Sacred geometry cycle forming — the colony breathes in rotation.',
+                                      'Resonance turbine online. Stable spin is generating direct energy.',
+                                      'A living resonance cycle has awakened in the lace.'
+                                  ];
+                                  AnnouncerSystem.say(cycleLines[Math.floor(random() * cycleLines.length)], {
+                                      category: 'ecology',
+                                      priority: 'low',
+                                      eventKey: 'resonance_cycle'
+                                  });
+                              }
+                          }
+                      }
+                      for (const key of [...this.clusters.keys()]) {
+                          if (!activeKeys.has(key)) {
+                              const st = this.clusters.get(key);
+                              st.stableFrames = max(0, st.stableFrames - 15);
+                              if (st.stableFrames <= 0) this.clusters.delete(key);
+                          }
+                      }
+                      this.updateResonanceHum();
+                  },
+
+                  applyEnergyGain(state, timeScale) {
+                      const eff = state.efficiency;
+                      const base = 0.013 * eff * timeScale * (0.65 + state.members.length * 0.038);
+                      const memberSet = new Set(state.members);
+                      for (const c of state.members) {
+                          if (!c || creatures.indexOf(c) < 0) continue;
+                          const share = base * (0.82 + (c._alignmentComfort || 0) * 0.22);
+                          c.energy = min(ModuleIdentitySystem.getMaxEnergy(c), c.energy + share);
+                          c._resonanceCycleGlow = max(c._resonanceCycleGlow || 0, 16 + eff * 24);
+                      }
+                      const links = ModuleIdentitySystem._linkCache || [];
+                      for (const link of links) {
+                          const a = link.a, b = link.b;
+                          if (memberSet.has(a) && !memberSet.has(b) && creatures.indexOf(b) >= 0) {
+                              if (ModuleIdentitySystem.computeAlignment(a, b) >= 1.0) {
+                                  b.energy = min(ModuleIdentitySystem.getMaxEnergy(b), b.energy + base * 0.2);
+                              }
+                          } else if (memberSet.has(b) && !memberSet.has(a) && creatures.indexOf(a) >= 0) {
+                              if (ModuleIdentitySystem.computeAlignment(a, b) >= 1.0) {
+                                  a.energy = min(ModuleIdentitySystem.getMaxEnergy(a), a.energy + base * 0.2);
+                              }
+                          }
+                      }
+                  },
+
+                  draw() {
+                      if (!shouldDrawEffect('macroResonance')) return;
+                      for (const state of this.clusters.values()) {
+                          if (!state.active) continue;
+                          const eff = state.efficiency;
+                          const col = MODULE_AMMO_COLORS[state.dominantCore] || '#a78bfa';
+                          const [cr, cg, cb] = parseAmmoHexColor(col);
+                          const pulse = sin((state.spinPhase || 0) * 2.1 + frameCount * 0.04) * 0.5 + 0.5;
+                          const baseR = 20 + state.members.length * 2.6 + eff * 42;
+                          noFill();
+                          for (let ring = 0; ring < 3; ring++) {
+                              const expand = ring * (10 + pulse * 9);
+                              const a = (24 + eff * 44 - ring * 10) * (0.62 + pulse * 0.38);
+                              stroke(cr, cg, cb, a);
+                              strokeWeight(1.05 - ring * 0.2);
+                              circle(state.cx, state.cy, baseR + expand + sin(frameCount * 0.05 + ring * 1.2) * 3.5);
+                          }
+                          fill(cr, cg, cb, 10 + eff * 22);
+                          noStroke();
+                          circle(state.cx, state.cy, 7 + pulse * 5);
+                      }
+                  },
+
+                  updateResonanceHum() {
+                      let bestEff = 0;
+                      for (const st of this.clusters.values()) {
+                          if (st.active && st.efficiency > bestEff) bestEff = st.efficiency;
+                      }
+                      if (bestEff < 0.28) {
+                          this.stopResonanceHum();
+                          return;
+                      }
+                      if (!canPlaySound('ambient')) return;
+                      const ctx = getAudioContext();
+                      if (!this.resonanceHumOsc) {
+                          this.resonanceHumOsc = ctx.createOscillator();
+                          this.resonanceHumGain = ctx.createGain();
+                          this.resonanceHumFilter = ctx.createBiquadFilter();
+                          this.resonanceHumOsc.type = 'sine';
+                          this.resonanceHumFilter.type = 'lowpass';
+                          this.resonanceHumFilter.frequency.value = 720;
+                          this.resonanceHumOsc.connect(this.resonanceHumFilter);
+                          this.resonanceHumFilter.connect(this.resonanceHumGain);
+                          this.resonanceHumGain.connect(getSfxOutputNode());
+                          this.resonanceHumOsc.start();
+                          this.resonanceHumGain.gain.value = 0;
+                      }
+                      const freq = 132 + bestEff * 96 + sin(frameCount * 0.018) * 2.5;
+                      this.resonanceHumOsc.frequency.linearRampToValueAtTime(freq * pitchShift, ctx.currentTime + 0.1);
+                      const vol = (0.0035 + bestEff * 0.0085) * ambientVolume;
+                      this.resonanceHumGain.gain.linearRampToValueAtTime(vol, ctx.currentTime + 0.14);
+                  },
+
+                  stopResonanceHum() {
+                      if (!this.resonanceHumOsc || !this.resonanceHumGain) return;
+                      const ctx = getAudioContext();
+                      const osc = this.resonanceHumOsc;
+                      this.resonanceHumGain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.55);
+                      setTimeout(() => { try { osc.stop(); } catch (e) { } }, 620);
+                      this.resonanceHumOsc = null;
+                      this.resonanceHumGain = null;
+                      this.resonanceHumFilter = null;
+                  },
+
+                  isCreatureInActiveCycle(creature) {
+                      if (!creature) return false;
+                      for (const st of this.clusters.values()) {
+                          if (st.active && st.members.indexOf(creature) >= 0) return true;
+                      }
+                      return false;
+                  }
+              };
+
+              let nextCreatureWeaveUid = 1;
+
+              function ensureCreatureWeaveUid(creature) {
+                  if (!creature) return 0;
+                  if (!creature._weaveUid) creature._weaveUid = nextCreatureWeaveUid++;
+                  return creature._weaveUid;
+              }
+
+              function syncAllCreatureWeaveUids() {
+                  for (const c of creatures) ensureCreatureWeaveUid(c);
+                  let maxId = 0;
+                  for (const c of creatures) maxId = max(maxId, c._weaveUid || 0);
+                  nextCreatureWeaveUid = max(nextCreatureWeaveUid, maxId + 1);
+              }
+
+              const SculptShadowSystem = {
+                  STORAGE_KEY: 'minisimmyShadowWeaves',
+                  sculptActive: false,
+                  energyViewOn: false,
+                  activeWeaveId: null,
+                  weaves: [],
+                  drag: { active: false, creatures: [], offsets: [], pivotX: 0, pivotY: 0 },
+                  selectionUid: null,
+                  clusterRotation: 0,
+                  lastTest: null,
+
+                  TEMPLATES: {
+                      flower6: { count: 6, layout(r) { const pts = []; for (let i = 0; i < 6; i++) { const a = i * (TWO_PI / 6); pts.push({ x: cos(a) * r, y: sin(a) * r }); } return pts; } },
+                      flower12: { count: 12, layout(r) { const pts = []; for (let i = 0; i < 6; i++) { const a = i * (TWO_PI / 6); pts.push({ x: cos(a) * r, y: sin(a) * r }); } for (let i = 0; i < 6; i++) { const a = i * (TWO_PI / 6) + PI / 6; pts.push({ x: cos(a) * r * SOUL_FLOWER_RING_RATIO, y: sin(a) * r * SOUL_FLOWER_RING_RATIO }); } return pts; } },
+                      ring8: { count: 8, layout(r) { const pts = []; for (let i = 0; i < 8; i++) { const a = i * (TWO_PI / 8); pts.push({ x: cos(a) * r * 1.35, y: sin(a) * r * 1.35 }); } return pts; } },
+                      donut12: { count: 12, layout(r) { const pts = []; for (let i = 0; i < 6; i++) { const a = i * (TWO_PI / 6); pts.push({ x: cos(a) * r, y: sin(a) * r }); } for (let i = 0; i < 6; i++) { const a = i * (TWO_PI / 6) + PI / 6; pts.push({ x: cos(a) * r * 1.85, y: sin(a) * r * 1.85 }); } return pts; } },
+                      spiral10: { count: 10, layout(r) { const pts = []; for (let i = 0; i < 10; i++) { const t = i / 9; const a = i * 0.92; pts.push({ x: cos(a) * r * (0.45 + t * 1.1), y: sin(a) * r * (0.45 + t * 1.1) }); } return pts; } },
+                      cluster7: { count: 7, layout(r) { const pts = [{ x: 0, y: 0 }]; for (let i = 0; i < 6; i++) { const a = i * (TWO_PI / 6) + random(-0.12, 0.12); pts.push({ x: cos(a) * r * random(0.85, 1.15), y: sin(a) * r * random(0.85, 1.15) }); } return pts; } }
+                  },
+
+                  init() {
+                      try {
+                          const raw = localStorage.getItem(this.STORAGE_KEY);
+                          if (raw) {
+                              const data = JSON.parse(raw);
+                              this.weaves = data.weaves || [];
+                              this.activeWeaveId = data.activeWeaveId || null;
+                              this.energyViewOn = !!data.energyViewOn;
+                          }
+                      } catch (e) { /* ignore */ }
+                      this.refreshWeaveSelect();
+                  },
+
+                  persist() {
+                      try {
+                          localStorage.setItem(this.STORAGE_KEY, JSON.stringify({
+                              weaves: this.weaves,
+                              activeWeaveId: this.activeWeaveId,
+                              energyViewOn: this.energyViewOn
+                          }));
+                      } catch (e) { /* ignore */ }
+                  },
+
+                  getSnapshot() {
+                      return { weaves: JSON.parse(JSON.stringify(this.weaves || [])), activeWeaveId: this.activeWeaveId, energyViewOn: this.energyViewOn };
+                  },
+
+                  applySnapshot(data) {
+                      if (!data) return;
+                      this.weaves = data.weaves || [];
+                      this.activeWeaveId = data.activeWeaveId || null;
+                      this.energyViewOn = !!data.energyViewOn;
+                      this.persist();
+                      this.refreshWeaveSelect();
+                      this.syncHud();
+                  },
+
+                  getActiveWeave() {
+                      return this.weaves.find((w) => w.id === this.activeWeaveId) || null;
+                  },
+
+                  showPanel() { showModal('sculpt-shadow-modal'); this.refreshWeaveSelect(); },
+                  hidePanel() { hideModal('sculpt-shadow-modal', { force: true }); },
+
+                  syncHud() {
+                      const hud = document.getElementById('sculpt-hud');
+                      const btn = document.getElementById('sculpt-mode-btn');
+                      const eBtn = document.getElementById('sculpt-hud-energy-btn');
+                      if (hud) hud.classList.toggle('is-hidden', !this.sculptActive);
+                      if (btn) {
+                          btn.classList.toggle('bg-violet-500/45', this.sculptActive);
+                          btn.classList.toggle('text-white', this.sculptActive);
+                      }
+                      if (eBtn) eBtn.classList.toggle('is-active', this.energyViewOn);
+                  },
+
+                  toggleSculptMode() {
+                      if (!this.sculptActive && !paused) {
+                          togglePause();
+                      }
+                      if (!paused) {
+                          addFloatingText(width / 2, 72, 'Pause first to enter Sculpt Mode', '#c4b5fd');
+                          return;
+                      }
+                      this.sculptActive = !this.sculptActive;
+                      if (this.sculptActive) {
+                          syncAllCreatureWeaveUids();
+                          this.clusterRotation = 0;
+                          addFloatingText(width / 2, 72, 'Sculpt Mode — drag creatures into formation', '#c4b5fd');
+                      } else {
+                          this.endDrag();
+                      }
+                      this.syncHud();
+                  },
+
+                  exitSculptMode() {
+                      this.sculptActive = false;
+                      this.endDrag();
+                      this.syncHud();
+                  },
+
+                  toggleEnergyView() {
+                      this.energyViewOn = !this.energyViewOn;
+                      this.persist();
+                      this.syncHud();
+                  },
+
+                  getSculptCenter() {
+                      syncVortexWorldCenter();
+                      return { x: centerX, y: centerY };
+                  },
+
+                  pickCreaturesNear(px, py, radius = getCreaturePickRadius() * 1.2) {
+                      const primary = pickCreatureAtWorld(px, py);
+                      if (!primary) return [];
+                      ensureCreatureWeaveUid(primary);
+                      const group = [primary];
+                      for (const c of creatures) {
+                          if (c === primary || c.isPredator) continue;
+                          if (dist(px, py, c.x, c.y) < radius + 36 && dist(primary.x, primary.y, c.x, c.y) < 52) {
+                              ensureCreatureWeaveUid(c);
+                              group.push(c);
+                          }
+                      }
+                      return group;
+                  },
+
+                  beginDrag(px, py) {
+                      if (!this.sculptActive || !paused) return false;
+                      const group = this.pickCreaturesNear(px, py);
+                      if (!group.length) return false;
+                      let pivotX = 0, pivotY = 0;
+                      for (const c of group) { pivotX += c.x; pivotY += c.y; }
+                      pivotX /= group.length;
+                      pivotY /= group.length;
+                      const offsets = group.map((c) => ({ c, ox: c.x - pivotX, oy: c.y - pivotY }));
+                      this.drag = { active: true, creatures: group, offsets, pivotX, pivotY, lastX: px, lastY: py };
+                      this.selectionUid = ensureCreatureWeaveUid(group[0]);
+                      this.syncSlotCoreSelect();
+                      return true;
+                  },
+
+                  updateDrag(px, py) {
+                      if (!this.drag.active) return;
+                      const dx = px - this.drag.lastX;
+                      const dy = py - this.drag.lastY;
+                      this.drag.lastX = px;
+                      this.drag.lastY = py;
+                      this.drag.pivotX += dx;
+                      this.drag.pivotY += dy;
+                      const cosR = cos(this.clusterRotation), sinR = sin(this.clusterRotation);
+                      for (const o of this.drag.offsets) {
+                          const rx = o.ox * cosR - o.oy * sinR;
+                          const ry = o.ox * sinR + o.oy * cosR;
+                          let tx = this.drag.pivotX + rx;
+                          let ty = this.drag.pivotY + ry;
+                          for (const other of creatures) {
+                              if (other === o.c || this.drag.creatures.indexOf(other) >= 0) continue;
+                              const ddx = tx - other.x, ddy = ty - other.y;
+                              const d = sqrt(ddx * ddx + ddy * ddy) || 1;
+                              if (d < CREATURE_IDEAL_DIST * 0.92) {
+                                  const push = (CREATURE_IDEAL_DIST * 0.92 - d) * 0.42;
+                                  tx += (ddx / d) * push;
+                                  ty += (ddy / d) * push;
+                              } else if (d < CREATURE_IDEAL_DIST * 1.08) {
+                                  const pull = (CREATURE_IDEAL_DIST * 1.02 - d) * 0.18;
+                                  tx -= (ddx / d) * pull;
+                                  ty -= (ddy / d) * pull;
+                              }
+                          }
+                          o.c.x = constrain(tx, 12, width - 12);
+                          o.c.y = constrain(ty, 12, height - 12);
+                          o.c.vx = 0;
+                          o.c.vy = 0;
+                      }
+                  },
+
+                  endDrag() {
+                      this.drag.active = false;
+                      this.drag.creatures = [];
+                      this.drag.offsets = [];
+                  },
+
+                  rotateSelection(delta) {
+                      if (!this.sculptActive || !paused) return;
+                      this.clusterRotation += delta;
+                      if (this.drag.active && this.drag.offsets.length) {
+                          const px = this.drag.pivotX, py = this.drag.pivotY;
+                          const cosR = cos(this.clusterRotation), sinR = sin(this.clusterRotation);
+                          for (const o of this.drag.offsets) {
+                              const rx = o.ox * cosR - o.oy * sinR;
+                              const ry = o.ox * sinR + o.oy * cosR;
+                              o.c.x = constrain(px + rx, 12, width - 12);
+                              o.c.y = constrain(py + ry, 12, height - 12);
+                          }
+                      } else {
+                          const picked = creatures.find((c) => c._weaveUid === this.selectionUid);
+                          if (picked) {
+                              const group = this.pickCreaturesNear(picked.x, picked.y, 40);
+                              let cx = 0, cy = 0;
+                              for (const c of group) { cx += c.x; cy += c.y; }
+                              cx /= group.length; cy /= group.length;
+                              for (const c of group) {
+                                  const dx = c.x - cx, dy = c.y - cy;
+                                  const rx = dx * cos(delta) - dy * sin(delta);
+                                  const ry = dx * sin(delta) + dy * cos(delta);
+                                  c.x = constrain(cx + rx, 12, width - 12);
+                                  c.y = constrain(cy + ry, 12, height - 12);
+                              }
+                          }
+                      }
+                  },
+
+                  applySelectedTemplate() {
+                      const sel = document.getElementById('sculpt-template-select');
+                      const id = sel ? sel.value : 'flower6';
+                      this.applyTemplate(id);
+                  },
+
+                  applyTemplate(templateId) {
+                      if (!paused) { addFloatingText(width / 2, 72, 'Pause to apply templates', '#c4b5fd'); return; }
+                      const tpl = this.TEMPLATES[templateId] || this.TEMPLATES.flower6;
+                      const center = this.getSculptCenter();
+                      const pts = tpl.layout(CREATURE_IDEAL_DIST);
+                      const pool = creatures.filter((c) => !c.isPredator).slice()
+                          .sort((a, b) => dist(a.x, a.y, center.x, center.y) - dist(b.x, b.y, center.x, center.y));
+                      const n = min(pts.length, pool.length);
+                      for (let i = 0; i < n; i++) {
+                          pool[i].x = center.x + pts[i].x;
+                          pool[i].y = center.y + pts[i].y;
+                          pool[i].vx = 0;
+                          pool[i].vy = 0;
+                          ensureCreatureWeaveUid(pool[i]);
+                      }
+                      this.clusterRotation = 0;
+                      addFloatingText(center.x, center.y - 24, `Template: ${templateId}`, '#a78bfa');
+                  },
+
+                  captureWeaveFromWorld(name) {
+                      syncAllCreatureWeaveUids();
+                      const center = this.getSculptCenter();
+                      let cx = 0, cy = 0, n = 0;
+                      const members = creatures.filter((c) => !c.isPredator);
+                      for (const c of members) { cx += c.x; cy += c.y; n++; }
+                      if (!n) return null;
+                      cx /= n; cy /= n;
+                      const slots = members.map((c) => ({
+                          uid: c._weaveUid,
+                          rx: c.x - cx,
+                          ry: c.y - cy,
+                          preferredCore: c._weavePreferredCore || normalizeModuleTypeKey(getCreatureCoreType(c) || 'balanced')
+                      }));
+                      return {
+                          id: 'weave_' + Date.now(),
+                          name: name || 'Shadow Weave',
+                          centerX: cx,
+                          centerY: cy,
+                          rotation: this.clusterRotation || 0,
+                          pullStrength: 1,
+                          savedAt: Date.now(),
+                          slots
+                      };
+                  },
+
+                  saveCurrentWeave() {
+                      const nameInput = document.getElementById('sculpt-weave-name');
+                      const name = nameInput && nameInput.value.trim() ? nameInput.value.trim() : 'Shadow Weave';
+                      const weave = this.captureWeaveFromWorld(name);
+                      if (!weave) return;
+                      this.weaves.unshift(weave);
+                      if (this.weaves.length > 12) this.weaves = this.weaves.slice(0, 12);
+                      this.activeWeaveId = weave.id;
+                      this.persist();
+                      this.refreshWeaveSelect();
+                      if (nameInput) nameInput.value = '';
+                      addFloatingText(width / 2, 80, `Saved weave: ${name}`, '#86efac');
+                  },
+
+                  refreshWeaveSelect() {
+                      const sel = document.getElementById('sculpt-weave-select');
+                      if (!sel) return;
+                      sel.innerHTML = '<option value="">— select weave —</option>';
+                      for (const w of this.weaves) {
+                          const opt = document.createElement('option');
+                          opt.value = w.id;
+                          opt.textContent = w.name + ' (' + (w.slots ? w.slots.length : 0) + ' slots)';
+                          if (w.id === this.activeWeaveId) opt.selected = true;
+                          sel.appendChild(opt);
+                      }
+                  },
+
+                  onWeaveSelectChange() {
+                      const sel = document.getElementById('sculpt-weave-select');
+                      if (sel && sel.value) this.activeWeaveId = sel.value;
+                  },
+
+                  loadSelectedWeave() {
+                      const weave = this.getActiveWeave();
+                      if (!weave) {
+                          addFloatingText(width / 2, 72, 'Select a weave to load', '#fb923c');
+                          return;
+                      }
+                      if (!paused) togglePause();
+                      this.sculptActive = true;
+                      this.syncHud();
+                      const cosR = cos(weave.rotation || 0), sinR = sin(weave.rotation || 0);
+                      for (const slot of weave.slots || []) {
+                          const c = creatures.find((cr) => cr._weaveUid === slot.uid);
+                          if (!c) continue;
+                          c.x = weave.centerX + slot.rx * cosR - slot.ry * sinR;
+                          c.y = weave.centerY + slot.rx * sinR + slot.ry * cosR;
+                          c.vx = 0;
+                          c.vy = 0;
+                          if (slot.preferredCore) c._weavePreferredCore = slot.preferredCore;
+                      }
+                      this.clusterRotation = weave.rotation || 0;
+                      addFloatingText(weave.centerX, weave.centerY - 20, `Loaded: ${weave.name}`, '#c4b5fd');
+                  },
+
+                  syncSlotCoreSelect() {
+                      const sel = document.getElementById('sculpt-slot-core-select');
+                      if (!sel || !this.selectionUid) return;
+                      const c = creatures.find((cr) => cr._weaveUid === this.selectionUid);
+                      sel.value = c && c._weavePreferredCore ? c._weavePreferredCore : '';
+                  },
+
+                  onSlotCoreChange() {
+                      const sel = document.getElementById('sculpt-slot-core-select');
+                      if (!sel || !this.selectionUid) return;
+                      const c = creatures.find((cr) => cr._weaveUid === this.selectionUid);
+                      if (!c) return;
+                      c._weavePreferredCore = sel.value || null;
+                  },
+
+                  getWeavePullDecay(weave) {
+                      const ageSec = (Date.now() - (weave.savedAt || Date.now())) / 1000;
+                      return max(0.18, 1 - ageSec / (60 * 45));
+                  },
+
+                  getSlotWorldPos(weave, slot) {
+                      const decay = 1;
+                      const cosR = cos(weave.rotation || 0), sinR = sin(weave.rotation || 0);
+                      return {
+                          x: weave.centerX + slot.rx * cosR - slot.ry * sinR,
+                          y: weave.centerY + slot.rx * sinR + slot.ry * cosR,
+                          decay
+                      };
+                  },
+
+                  creatureOnWeave(creature) {
+                      const weave = this.getActiveWeave();
+                      if (!weave || !creature) return false;
+                      return (weave.slots || []).some((s) => s.uid === creature._weaveUid);
+                  },
+
+                  applyWeaveAttraction(creature, timeScale) {
+                      const weave = this.getActiveWeave();
+                      if (!weave || creature.isPredator || creature._manualControl) return;
+                      const slot = (weave.slots || []).find((s) => s.uid === creature._weaveUid);
+                      if (!slot) return;
+                      const pos = this.getSlotWorldPos(weave, slot);
+                      const dx = pos.x - creature.x, dy = pos.y - creature.y;
+                      const d = sqrt(dx * dx + dy * dy) || 1;
+                      if (d < 1.5) return;
+                      const decay = this.getWeavePullDecay(weave) * (weave.pullStrength || 1);
+                      const align = creature._alignmentComfort || 0;
+                      const pull = 0.0075 * decay * timeScale * (0.35 + align * 0.45);
+                      creature.vx += (dx / d) * pull;
+                      creature.vy += (dy / d) * pull;
+                      if (d < CREATURE_IDEAL_DIST * 1.5) creature._shadowWeaveGlow = max(creature._shadowWeaveGlow || 0, 12 + decay * 14);
+                  },
+
+                  computeSlipstreamBonus(creature, timeScale) {
+                      const neighbors = creature.getLocalGroup(CREATURE_SOCIAL_MAX + 18);
+                      let bestStability = 0;
+                      let nearColony = false;
+                      for (const o of neighbors) {
+                          if (o === creature || o.isPredator) continue;
+                          const d = dist(creature.x, creature.y, o.x, o.y);
+                          if (d > CREATURE_SOCIAL_MAX * 1.15) continue;
+                          const oSpeed = sqrt((o.vx || 0) * (o.vx || 0) + (o.vy || 0) * (o.vy || 0));
+                          if (oSpeed > 0.75) continue;
+                          const align = ModuleIdentitySystem.computeAlignment(creature, o);
+                          const sym = o._symbiosisLevel || 0;
+                          if (align < 0.82 && sym < 1) continue;
+                          nearColony = true;
+                          const resonance = ResonanceCycleSystem.isCreatureInActiveCycle(o) ? 0.38 : 0;
+                          const stab = align * 0.32 + sym * 0.14 + (o._alignmentComfort || 0) * 0.28 + resonance;
+                          bestStability = max(bestStability, stab);
+                      }
+                      const strength = constrain(bestStability, 0, 1);
+                      return {
+                          nearColony,
+                          strength,
+                          efficiencyMult: nearColony ? max(0.5, 1 - strength * 0.44) : 1,
+                          energyReturn: nearColony ? 0.0055 * strength * timeScale : 0
+                      };
+                  },
+
+                  applyMovementEconomics(creature, timeScale) {
+                      if (!creature || creature.isPredator || creature._manualControl || creature._scoopActive) return;
+                      const vx = creature.vx || 0, vy = creature.vy || 0;
+                      const speed = sqrt(vx * vx + vy * vy);
+                      if (speed < 0.06) return;
+                      let drain = 0.0038 * speed * timeScale;
+                      const slip = this.computeSlipstreamBonus(creature, timeScale);
+                      if (slip.nearColony) {
+                          creature.energy = min(ModuleIdentitySystem.getMaxEnergy(creature), creature.energy + slip.energyReturn);
+                          drain *= slip.efficiencyMult;
+                          creature._slipstreamGlow = max(creature._slipstreamGlow || 0, slip.strength * 24);
+                      } else if (speed > 1.65) {
+                          drain *= 1.55 + speed * 0.22;
+                          creature._soloDashStress = max(creature._soloDashStress || 0, 8);
+                      }
+                      if (this.creatureOnWeave(creature) && slip.nearColony) drain *= 0.78;
+                      creature.energy = max(0, creature.energy - drain);
+                  },
+
+                  runLayoutTest(showUi) {
+                      syncAllCreatureWeaveUids();
+                      const members = creatures.filter((c) => !c.isPredator);
+                      if (members.length < 3) {
+                          this.lastTest = { overall: 0, note: 'Need more creatures' };
+                          if (showUi) this.showTestReadout();
+                          return this.lastTest;
+                      }
+                      let cx = 0, cy = 0;
+                      for (const c of members) { cx += c.x; cy += c.y; }
+                      cx /= members.length; cy /= members.length;
+                      let alignSum = 0, pairs = 0, spacing = 0, flower = 0;
+                      for (let i = 0; i < members.length; i++) {
+                          flower += members[i]._flowerWeaveComfort || 0;
+                          for (let j = i + 1; j < members.length; j++) {
+                              const s = ModuleIdentitySystem.computeAlignment(members[i], members[j]);
+                              if (s >= 0.75) { alignSum += s; pairs++; }
+                              const d = dist(members[i].x, members[i].y, members[j].x, members[j].y);
+                              const ideal = CREATURE_IDEAL_DIST;
+                              spacing += max(0, 1 - abs(d - ideal) / ideal);
+                          }
+                      }
+                      const avgAlign = pairs ? alignSum / pairs : 0;
+                      const avgSpace = pairs ? spacing / pairs : 0;
+                      const avgFlower = flower / members.length;
+                      const resonancePotential = constrain((avgAlign - 0.9) * 0.9 + avgFlower * 0.35 + (members.length >= 6 ? 0.15 : 0), 0, 1);
+                      const slipstreamScore = constrain(avgAlign * 0.4 + avgSpace * 0.35 + avgFlower * 0.25, 0, 1);
+                      const overall = constrain(resonancePotential * 0.52 + slipstreamScore * 0.48, 0, 1);
+                      this.lastTest = {
+                          overall, resonancePotential, slipstreamScore,
+                          avgAlign, avgFlower, avgSpace, count: members.length,
+                          note: overall > 0.72 ? 'Excellent sacred geometry potential'
+                              : overall > 0.48 ? 'Good — refine spacing for resonance'
+                              : 'Loose — tighten alignment rings'
+                      };
+                      if (showUi) this.showTestReadout();
+                      return this.lastTest;
+                  },
+
+                  showTestReadout() {
+                      const t = this.lastTest;
+                      const text = t ? `Eff ${(t.overall * 100).toFixed(0)}% · Res ${(t.resonancePotential * 100).toFixed(0)}% · Slip ${(t.slipstreamScore * 100).toFixed(0)}% — ${t.note}` : '—';
+                      const a = document.getElementById('sculpt-test-readout');
+                      const b = document.getElementById('sculpt-hud-readout');
+                      if (a) a.textContent = text;
+                      if (b) b.textContent = text;
+                  },
+
+                  drawOverlay() {
+                      if (!this.sculptActive && !this.getActiveWeave() && !this.energyViewOn) return;
+                      const weave = this.getActiveWeave();
+                      if (weave && (this.sculptActive || !paused)) {
+                          for (const slot of weave.slots || []) {
+                              const pos = this.getSlotWorldPos(weave, slot);
+                              const core = slot.preferredCore || 'communicator';
+                              const col = MODULE_AMMO_COLORS[core] || '#a78bfa';
+                              const [cr, cg, cb] = parseAmmoHexColor(col);
+                              noFill();
+                              stroke(cr, cg, cb, this.sculptActive ? 48 : 22);
+                              strokeWeight(0.7);
+                              circle(pos.x, pos.y, CREATURE_BODY_RADIUS * 1.6);
+                              if (slot.preferredCore) {
+                                  fill(cr, cg, cb, 30);
+                                  noStroke();
+                                  circle(pos.x, pos.y, 3.5);
+                              }
+                          }
+                      }
+                      if (this.energyViewOn) this.drawEnergyView();
+                      if (this.drag.active) {
+                          noFill();
+                          stroke(167, 139, 250, 60);
+                          strokeWeight(0.8);
+                          circle(this.drag.pivotX, this.drag.pivotY, 12);
+                      }
+                  },
+
+                  drawEnergyView() {
+                      for (const c of creatures) {
+                          if (c.isPredator) continue;
+                          const slip = (c._slipstreamGlow || 0) > 0;
+                          const shadow = (c._shadowWeaveGlow || 0) > 0;
+                          if (!slip && !shadow) continue;
+                          noFill();
+                          if (slip) {
+                              stroke(52, 211, 153, c._slipstreamGlow * 1.8);
+                              strokeWeight(0.55);
+                              const spd = sqrt((c.vx || 0) ** 2 + (c.vy || 0) ** 2);
+                              if (spd > 0.2) line(c.x - c.vx * 3, c.y - c.vy * 3, c.x, c.y);
+                          }
+                          if (shadow) {
+                              stroke(196, 181, 253, c._shadowWeaveGlow * 1.6);
+                              circle(c.x, c.y, 10 + shadow * 0.2);
+                          }
+                      }
+                  },
+
+                  tickDecorDecay(creature) {
+                      if (creature._slipstreamGlow > 0) creature._slipstreamGlow--;
+                      if (creature._shadowWeaveGlow > 0) creature._shadowWeaveGlow--;
+                      if (creature._soloDashStress > 0) creature._soloDashStress--;
+                  }
+              };
+
               class Creature {
                   constructor(x, y, parentModules = null, generation = 1, parentTraits = null) {
                       this.x = x; this.y = y;
@@ -21225,6 +22114,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       this.role = 'Balanced';
                       this.brain = new NeuralNet();
                       this.wrigglePhase = random(TWO_PI);
+                      this._weaveUid = nextCreatureWeaveUid++;
                       if (parentTraits) {
                           this.traits = {
                               pheromoneSensitivity: constrain(parentTraits.pheromoneSensitivity + random(-0.07, 0.07), 0.62, 1.55),
@@ -22385,6 +23275,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           this.vy *= surge;
                       }
                       if (!this.isPredator) applyScoopLurePull(this, timeScale);
+                      SculptShadowSystem.applyWeaveAttraction(this, timeScale);
                       ModuleIdentitySystem.applyMechanics(this, { timeScale, effectiveHazardDist, envMods });
                       this.x += this.vx;
                       this.y += this.vy;
@@ -24568,10 +25459,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   const endRamp = Math.pow(phaseT, 1.55);
                   return {
                       active: true,
-                      targetCount: Math.round(7 + endRamp * 22),
-                      spawnMult: 0.09 + endRamp * 0.32,
-                      intensityMult: 1.0 + endRamp * 3.1,
-                      roughnessMult: 1.05 + endRamp * 3.4
+                      targetCount: Math.round(1 + endRamp * 3),
+                      spawnMult: 0.006 + endRamp * 0.018,
+                      maxSpawnPerTick: 1,
+                      intensityMult: 0.5 + endRamp * 1.05,
+                      roughnessMult: 0.7 + endRamp * 1.15
                   };
               }
 
@@ -27584,8 +28476,19 @@ body.is-map-fullscreen #map-fullscreen-btn {
               let lastSquidGardenSprayTime = 0;
 
               function isManualGardenSquid(creature) {
-                  return !!(creature?._manualControl && creature._scoopActive
+                  return !!(creature && creature._manualControl && creature._scoopActive
                       && isJellyfishScoopCreature(creature));
+              }
+
+              function getSquidCoreModuleProfile(creature) {
+                  const typeKey = normalizeModuleTypeKey(getCreatureCoreType(creature) || 'communicator');
+                  const capType = typeKey.charAt(0).toUpperCase() + typeKey.slice(1);
+                  return {
+                      type: capType,
+                      typeKey,
+                      tier: 1,
+                      color: MODULE_AMMO_COLORS[typeKey] || '#a78bfa'
+                  };
               }
 
               function getSquidGardenSprayAim(creature) {
@@ -27597,59 +28500,25 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   return atan2(creature.vy || 0, creature.vx || 0) || 0;
               }
 
-              function canGardenSprayTargetCreature(creature, shooter) {
-                  if (!creature || !shooter || creature === shooter) return false;
-                  if (creatures.indexOf(creature) < 0) return false;
-                  if (isManualControlImmune(creature)) return false;
-                  if ((creature._gardenSprayImmuneUntil || 0) > frameCount) return false;
-                  return true;
+              function gardenSprayBulletToModule(b) {
+                  const typeKey = normalizeModuleTypeKey(b.moduleType);
+                  const capType = typeKey.charAt(0).toUpperCase() + typeKey.slice(1);
+                  const mp = new ModuleParticle(true, {
+                      type: capType,
+                      tier: b.tier || 1,
+                      color: b.color || MODULE_AMMO_COLORS[typeKey],
+                      x: b.x,
+                      y: b.y,
+                      vx: (b.vx || 0) * 0.35,
+                      vy: (b.vy || 0) * 0.35,
+                      orbitGraceUntil: Date.now() + 120000
+                  });
+                  mp.size = random(2.1, 2.8) + (mp.tier - 1) * 0.2;
+                  moduleParticles.push(mp);
               }
 
-              function bounceGardenSprayOffCreature(ent, creature) {
-                  const dx = ent.x - creature.x;
-                  const dy = ent.y - creature.y;
-                  const len = sqrt(dx * dx + dy * dy) || 1;
-                  const bounce = SQUID_GARDEN_SPRAY_SPEED * 0.62;
-                  ent.vx = (dx / len) * bounce + random(-0.9, 0.9);
-                  ent.vy = (dy / len) * bounce + random(-0.9, 0.9);
-                  ent._gardenSprayStraightUntil = frameCount + 22;
-                  ent._gardenSprayBallistic = true;
-              }
-
-              function updateGardenSprayBallistic(ent, vortexDir, vortexStrength) {
-                  if (!ent._gardenSprayBallistic) return false;
-                  if (frameCount < ent._gardenSprayStraightUntil) {
-                      ent.x += (ent.vx || 0) * timeScale;
-                      ent.y += (ent.vy || 0) * timeScale;
-                      if (ent.x < -40 || ent.x > width + 40 || ent.y < -40 || ent.y > height + 40) {
-                          ent._gardenSprayBallistic = false;
-                          ent._gardenSpray = false;
-                          if (ent.fromGardenSpray) ent.fromGardenSpray = false;
-                          return false;
-                      }
-                      return true;
-                  }
-                  if (frameCount < ent._gardenSprayStraightUntil + SQUID_GARDEN_SPRAY_VORTEX_BLEND) {
-                      ent.x += (ent.vx || 0) * timeScale * 0.55;
-                      ent.y += (ent.vy || 0) * timeScale * 0.55;
-                      const dx = centerX - ent.x;
-                      const dy = centerY - ent.y;
-                      const d = sqrt(dx * dx + dy * dy) || 1;
-                      ent.vx = (ent.vx || 0) * 0.9 + (dx / d) * 0.42 * vortexStrength;
-                      ent.vy = (ent.vy || 0) * 0.9 + (dy / d) * 0.42 * vortexStrength;
-                      const tLen = sqrt((-dy) * (-dy) + dx * dx) || 1;
-                      ent.vx += (-dy / tLen) * 0.18 * vortexDir * vortexStrength;
-                      ent.vy += (dx / tLen) * 0.18 * vortexDir * vortexStrength;
-                      return true;
-                  }
-                  ent._gardenSprayBallistic = false;
-                  ent._gardenSpray = false;
-                  if (ent.fromGardenSpray) ent.fromGardenSpray = false;
-                  return false;
-              }
-
-              function forceGardenSprayModuleGraft(creature, mp) {
-                  if (!creature || !mp) return false;
+              function forceGardenSprayModuleGraft(creature, bullet) {
+                  if (!creature || !bullet) return false;
                   if (creature.modules.length >= 14) {
                       const nonCore = creature.modules.filter((m) => !m.isCore);
                       if (nonCore.length) {
@@ -27658,11 +28527,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           if (idx >= 0) creature.modules.splice(idx, 1);
                       }
                   }
-                  const typeKey = normalizeModuleTypeKey(mp.type);
+                  const typeKey = normalizeModuleTypeKey(bullet.moduleType);
                   const newMod = {
                       type: typeKey,
-                      tier: mp.tier || 1,
-                      color: mp.color || MODULE_AMMO_COLORS[typeKey] || '#a78bfa'
+                      tier: bullet.tier || 1,
+                      color: bullet.color || MODULE_AMMO_COLORS[typeKey] || '#a78bfa'
                   };
                   creature.modules.push(newMod);
                   ModuleIdentitySystem.assignModulePosition(creature, newMod, { outer: true });
@@ -27671,143 +28540,93 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   return true;
               }
 
-              function tryGardenSprayModuleHit(mp, shooter) {
-                  if (!mp || mp.collected || !shooter || creatures.indexOf(shooter) < 0) return false;
-                  if (!mp.fromGardenSpray && !mp._gardenSprayBallistic) return false;
-                  const hits = SpatialGrid.cells
-                      ? SpatialGrid.queryRadius(mp.x, mp.y, CREATURE_BODY_RADIUS + 10)
-                      : creatures;
-                  for (let i = 0; i < hits.length; i++) {
-                      const c = hits[i];
-                      if (!canGardenSprayTargetCreature(c, shooter)) continue;
-                      const d = dist(c.x, c.y, mp.x, mp.y);
-                      if (d > CREATURE_BODY_RADIUS + (mp.size || 2) + 4) continue;
-                      if (c._gardenSprayFedBy === shooter && (c._gardenSprayBounceUntil || 0) > frameCount) {
-                          bounceGardenSprayOffCreature(mp, c);
-                          return false;
-                      }
-                      forceGardenSprayModuleGraft(c, mp);
-                      mp.collected = true;
-                      const graftType = normalizeModuleTypeKey(mp.type);
-                      addFloatingText(c.x, c.y - 18, `+${MODULE_TYPE_LABELS[graftType] || graftType}`, mp.color || '#a78bfa');
-                      playAbsorbSound();
-                      return true;
-                  }
-                  return false;
-              }
-
-              function tryGardenSprayFertilizeCreature(creature, shooter, px, py) {
-                  if (!canGardenSprayTargetCreature(creature, shooter)) return 'skip';
-                  if (creature._gardenSprayFedBy === shooter && (creature._gardenSprayBounceUntil || 0) > frameCount) {
-                      return 'bounce';
-                  }
-                  applyParticleEnergyGain(creature, SQUID_GARDEN_SPRAY_ENERGY_PER_HIT, {
-                      px, py, isWhite: true, skipKnockback: true
-                  });
-                  triggerParticleReproUrge(creature);
-                  if (creature.energy >= 94 || (creature.particleReproUrge || 0) > PARTICLE_REPRO_URGE_FRAMES * 0.55) {
-                      creature.energy = 100;
-                      if (creature.mustEatWhite) {
-                          creature.ateWhiteParticle = true;
-                          creature.mustEatWhite = false;
-                          creature.purpleFlash = max(0, (creature.purpleFlash || 0) - 30);
-                      }
-                      const baby = trySpawnWhiteParticleBaby(creature);
-                      if (baby) {
-                          baby._gardenSprayImmuneUntil = frameCount + SQUID_GARDEN_SPRAY_NEWBORN_IMMUNE;
-                          creature._gardenSprayFedBy = shooter;
-                          creature._gardenSprayBounceUntil = frameCount + SQUID_GARDEN_SPRAY_BOUNCE_COOLDOWN;
-                          addFloatingText(creature.x, creature.y - 22, 'SPRAY BLOOM', '#86efac');
-                          return 'bloom';
-                      }
-                  }
-                  creature._eatFlash = max(creature._eatFlash || 0, 10);
-                  addFloatingText(creature.x, creature.y - 14, 'FED', '#a3e635');
-                  return 'fed';
-              }
-
-              function tryGardenSprayEnergyHit(p, shooter) {
-                  if (!p?._gardenSpray || !shooter || creatures.indexOf(shooter) < 0) return false;
-                  const hits = SpatialGrid.cells
-                      ? SpatialGrid.queryRadius(p.x, p.y, getParticleContactRadius(p) + CREATURE_BODY_RADIUS + 6)
-                      : creatures;
-                  for (let i = 0; i < hits.length; i++) {
-                      const c = hits[i];
-                      if (!particleTouchesCreature(c, p.x, p.y, p)) continue;
-                      const result = tryGardenSprayFertilizeCreature(c, shooter, p.x, p.y);
-                      if (result === 'skip') continue;
-                      if (result === 'bounce') {
-                          bounceGardenSprayOffCreature(p, c);
-                          return false;
-                      }
-                      p.life = 0;
-                      return true;
-                  }
-                  return false;
-              }
-
               function fireSquidGardenSprayShot(creature) {
                   if (!isManualGardenSquid(creature)) return false;
-                  const bag = creature._scoopBag || [];
                   const modBag = creature._scoopModuleBag || [];
-                  const total = bag.length + modBag.length;
-                  if (!total) {
+                  if (!modBag.length) {
                       if (Date.now() - lastSquidGardenSprayTime > 480) {
-                          addFloatingText(creature.x, creature.y - 18, 'Belly empty — scoop drift or modules first', '#fb923c');
+                          addFloatingText(creature.x, creature.y - 18, 'Belly empty — scoop modules first', '#fb923c');
                       }
                       return false;
                   }
-                  const pickMod = modBag.length > 0 && (bag.length === 0 || random() < modBag.length / total);
+                  modBag.shift();
+                  const core = getSquidCoreModuleProfile(creature);
                   const aim = getSquidGardenSprayAim(creature);
                   const spread = random(-SQUID_GARDEN_SPRAY_SPREAD, SQUID_GARDEN_SPRAY_SPREAD);
                   const ang = aim + spread;
-                  const speed = SQUID_GARDEN_SPRAY_SPEED + random(-1.4, 1.4);
-                  const vx = cos(ang) * speed;
-                  const vy = sin(ang) * speed;
+                  const speed = SQUID_GARDEN_SPRAY_SPEED + random(-0.8, 0.8);
                   const geo = creature._scoopGeo || buildManualScoopGeometry(creature);
-                  const muzzleX = (geo.bubbleX ?? geo.bellyX ?? creature.x) + random(-7, 7);
-                  const muzzleY = (geo.bubbleY ?? geo.bellyY ?? creature.y) + random(-7, 7);
-
-                  if (pickMod) {
-                      const mod = modBag.shift();
-                      const typeKey = normalizeModuleTypeKey(mod.type);
-                      const capType = typeKey.charAt(0).toUpperCase() + typeKey.slice(1);
-                      const mp = new ModuleParticle(true, {
-                          type: capType,
-                          tier: mod.tier || 1,
-                          color: mod.color || MODULE_AMMO_COLORS[typeKey],
-                          x: muzzleX,
-                          y: muzzleY,
-                          vx,
-                          vy,
-                          fromGardenSpray: true,
-                          orbitGraceUntil: Date.now() + 120000
-                      });
-                      mp.size = random(1.8, 2.6) + (mp.tier - 1) * 0.2;
-                      mp._gardenSprayOwner = creature;
-                      mp._gardenSprayStraightUntil = frameCount + SQUID_GARDEN_SPRAY_STRAIGHT_FRAMES;
-                      mp._gardenSprayBallistic = true;
-                      moduleParticles.push(mp);
-                  } else {
-                      const p = bag.pop();
-                      p._scooped = false;
-                      p._scoopOwner = null;
-                      p._scoopSnared = null;
-                      p.x = muzzleX;
-                      p.y = muzzleY;
-                      p.vx = vx;
-                      p.vy = vy;
-                      p._gardenSpray = true;
-                      p._gardenSprayOwner = creature;
-                      p._gardenSprayStraightUntil = frameCount + SQUID_GARDEN_SPRAY_STRAIGHT_FRAMES;
-                      p._gardenSprayBallistic = true;
-                      if (vortexParticles.indexOf(p) < 0) vortexParticles.push(p);
-                  }
-
+                  const muzzleX = (geo.bubbleX != null ? geo.bubbleX : geo.bellyX) + random(-4, 4);
+                  const muzzleY = (geo.bubbleY != null ? geo.bubbleY : geo.bellyY) + random(-4, 4);
+                  bullets.push({
+                      x: muzzleX,
+                      y: muzzleY,
+                      vx: cos(ang) * speed,
+                      vy: sin(ang) * speed,
+                      kind: 'garden-spray-module',
+                      moduleType: core.type,
+                      tier: core.tier,
+                      color: core.color,
+                      _firedBy: creature,
+                      _spawnFrame: frameCount
+                  });
                   creature._scoopMuzzleFlash = max(creature._scoopMuzzleFlash || 0, 12);
                   lastSquidGardenSprayTime = Date.now();
-                  if (frameCount % 2 === 0) playTone(260 + random(0, 140), 'square', 0.045, 0.34);
+                  if (canPlaySound('bullet')) playTone(300 + random(0, 90), 'square', 0.04, 0.28);
                   return true;
+              }
+
+              function updateGardenSprayBullets() {
+                  for (let i = bullets.length - 1; i >= 0; i--) {
+                      const b = bullets[i];
+                      if (b.kind !== 'garden-spray-module') continue;
+                      b.x += (b.vx || 0) * timeScale;
+                      b.y += (b.vy || 0) * timeScale;
+                      if (b.x < -30 || b.x > width + 30 || b.y < -30 || b.y > height + 30) {
+                          bullets.splice(i, 1);
+                          continue;
+                      }
+                      const hits = SpatialGrid.cells
+                          ? SpatialGrid.queryRadius(b.x, b.y, CREATURE_BODY_RADIUS + 8)
+                          : creatures;
+                      let consumed = false;
+                      for (let h = 0; h < hits.length; h++) {
+                          const c = hits[h];
+                          if (!c || c === b._firedBy || isManualControlImmune(c)) continue;
+                          if (dist(c.x, c.y, b.x, b.y) > CREATURE_BODY_RADIUS + 5) continue;
+                          forceGardenSprayModuleGraft(c, b);
+                          const graftType = normalizeModuleTypeKey(b.moduleType);
+                          addFloatingText(c.x, c.y - 18, `+${MODULE_TYPE_LABELS[graftType] || graftType}`, b.color || '#a78bfa');
+                          const dx = c.x - b.x, dy = c.y - b.y;
+                          const len = sqrt(dx * dx + dy * dy) || 1;
+                          const knock = SQUID_GARDEN_SPRAY_KNOCKBACK + (b.tier || 1) * 0.35;
+                          c.vx += (dx / len) * knock;
+                          c.vy += (dy / len) * knock;
+                          playAbsorbSound();
+                          bullets.splice(i, 1);
+                          consumed = true;
+                          break;
+                      }
+                      if (consumed) continue;
+                      if (frameCount - (b._spawnFrame || 0) >= SQUID_GARDEN_SPRAY_DECAY_FRAMES) {
+                          gardenSprayBulletToModule(b);
+                          bullets.splice(i, 1);
+                      }
+                  }
+              }
+
+              function drawGardenSprayBullets() {
+                  if (!shouldDrawEffect('honey')) return;
+                  for (const b of bullets) {
+                      if (b.kind !== 'garden-spray-module') continue;
+                      const [cr, cg, cb] = parseAmmoHexColor(b.color || '#a78bfa');
+                      const r = 4.2 + (b.tier || 1) * 0.35;
+                      noStroke();
+                      fill(cr, cg, cb, 215);
+                      circle(b.x, b.y, r);
+                      fill(255, 255, 255, 120);
+                      circle(b.x - r * 0.18, b.y - r * 0.18, r * 0.38);
+                  }
               }
 
               function tickSquidGardenSprayHeld() {
@@ -34561,15 +35380,6 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       }
                       if (!mp.isFloating || mp.collected) continue;
                       if (mp._squidLeak) squidLeakN++;
-                      if (mp._gardenSprayBallistic) {
-                          const stillBallistic = updateGardenSprayBallistic(mp, vortexDir, vortexStrength);
-                          if (tryGardenSprayModuleHit(mp, mp._gardenSprayOwner)) {
-                              moduleParticles.splice(i, 1);
-                              continue;
-                          }
-                          mp.draw();
-                          if (stillBallistic) continue;
-                      }
                       mp.update(vortexDir, vortexStrength);
                       mp.draw();
 
@@ -43991,7 +44801,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       currentDayNumber,
                       aeonStartSimTime,
                       aeonDaySeenNight,
-                      aeonHistory: JSON.parse(JSON.stringify(aeonHistory || []))
+                      aeonHistory: JSON.parse(JSON.stringify(aeonHistory || [])),
+                      shadowWeaves: typeof SculptShadowSystem !== 'undefined'
+                          ? SculptShadowSystem.getSnapshot() : null
                   };
 
                   let saves = JSON.parse(localStorage.getItem('minisimmy_saves') || '[]');
@@ -44212,6 +45024,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       AnnouncerSystem.saveConfig();
                       AnnouncerSystem.syncUI();
                       if (typeof AudioSettingsSystem !== 'undefined') AudioSettingsSystem.syncUI();
+                  }
+                  if (save.shadowWeaves && typeof SculptShadowSystem !== 'undefined') {
+                      SculptShadowSystem.applySnapshot(save.shadowWeaves);
                   }
                   updateAeonDayUI();
                   normalizeEggAmmoSlots();
@@ -44469,6 +45284,13 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           this._touchMode = null;
                           this._shipDragging = false;
 
+                          if (paused && SculptShadowSystem.sculptActive) {
+                              if (SculptShadowSystem.beginDrag(PointerInput.x, PointerInput.y)) {
+                                  e.preventDefault();
+                                  return;
+                              }
+                          }
+
                           if (manualControlCreature) {
                               const picked = pickCreatureAtWorld(PointerInput.x, PointerInput.y);
                               if (!picked || picked === manualControlCreature) {
@@ -44530,6 +45352,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           if (manualControlCreature && manualControlState.pressed) {
                               syncManualControlPointer();
                           }
+                          if (paused && SculptShadowSystem.drag.active && e.buttons > 0) {
+                              SculptShadowSystem.updateDrag(PointerInput.x, PointerInput.y);
+                              e.preventDefault();
+                              return;
+                          }
                           if (!this._touchStart || !this._lastClient) return;
 
                           const dx = e.clientX - this._lastClient.x;
@@ -44575,6 +45402,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
                       const endPointer = (e) => {
                           PointerInput._buttonsDown = e?.buttons || 0;
+                          if (SculptShadowSystem.drag.active) SculptShadowSystem.endDrag();
                           if (manualControlCreature && manualControlState.pressed && !PointerInput._buttonsDown) {
                               endManualCreatureTug();
                           }
@@ -45258,6 +46086,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       updateDayNightBadge(true);
                       updateAeonDayUI();
                       TutorialSystem.init();
+                      if (typeof SculptShadowSystem !== 'undefined') SculptShadowSystem.init();
+                      syncAllCreatureWeaveUids();
                       setTimeout(() => AnnouncerSystem.onGameWelcome(true), 1400);
                       updateMusicRentalUI();
                       updateSpeedButtonStyles();
@@ -45358,6 +46188,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       try {
                           tickMapCameraFollow();
                           drawWorld();
+                          SculptShadowSystem.drawOverlay();
                           updateMainStats();
                           AnalyticsInspector.drawThumb();
                       } catch (e) {
@@ -45872,15 +46703,6 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   for (let i = vortexParticles.length - 1; i >= 0; i--) {
                       let p = vortexParticles[i];
                       if (p._scooped) continue;
-                      if (p._gardenSprayBallistic) {
-                          const stillBallistic = updateGardenSprayBallistic(p, vortexDir, vortexStrength);
-                          if (tryGardenSprayEnergyHit(p, p._gardenSprayOwner)) {
-                              vortexParticles.splice(i, 1);
-                              continue;
-                          }
-                          if (shouldDrawVortexParticle(p)) p.show();
-                          if (stillBallistic) continue;
-                      }
                       p.update(vortexDir, vortexStrength);
                       if (shouldDrawVortexParticle(p)) p.show();
 
@@ -45911,10 +46733,6 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           ? resolveWhiteParticleContact(p.x, p.y, p, pickupHits)
                           : { relay: null, absorber: findCreatureAbsorbingParticle(p.x, p.y, p, pickupHits) };
                       if (whiteContact.relay) applyWhiteParticleColonyRelay(whiteContact.relay, p);
-                      if (p._gardenSprayOwner && (p._gardenSpray || p._gardenSprayBallistic)) {
-                          if (p._relayBoost > 0) p._relayBoost = max(0, p._relayBoost - 0.004);
-                          continue;
-                      }
                       if (whiteContact.absorber && absorbVortexParticle(whiteContact.absorber, p)) {
                           p.life = 0;
                           vortexParticles.splice(i, 1);
@@ -46247,11 +47065,14 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       }
                       resolveSquidBubbleOverlapPredation();
                       updateScoopModuleBullets();
+                      updateGardenSprayBullets();
+                      ResonanceCycleSystem.tick(timeScale);
                       if (scoopSeedParticles.length) tickScoopSeedParticles();
                       if (scoopLureParticles.length) tickScoopLureParticles(vortexDir, vortexStrength);
                       ModuleIdentitySystem.propagateColonyNetwork();
                       ModuleIdentitySystem.drawResonanceLinks(PerfScale.lod);
                       ModuleIdentitySystem.drawMacroClusterHints(PerfScale.lod);
+                      ResonanceCycleSystem.draw();
                       for (let i = creatures.length - 1; i >= 0; i--) {
                           let c = creatures[i];
                           if (!c || typeof c.update !== 'function') {
@@ -46422,6 +47243,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           drawManualScoop(manualControlCreature);
                       }
                       drawScoopModuleBullets();
+                      drawGardenSprayBullets();
+                      SculptShadowSystem.drawOverlay();
                       drawScoopSeedParticles();
                       drawScoopLureParticles();
 
@@ -46556,6 +47379,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       // Update and draw bullets
                       for (let i = bullets.length - 1; i >= 0; i--) {
                           let b = bullets[i];
+                          if (b.kind === 'scoop-module' || b.kind === 'garden-spray-module') continue;
                           b.x += b.vx;
                           b.y += b.vy;
 
@@ -46934,6 +47758,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       }
 
                   } else {
+                      if (SculptShadowSystem.sculptActive) SculptShadowSystem.exitSculptMode();
                       // Resume the simulation
                       if (pauseBtn) {
                           pauseBtn.classList.remove('bg-red-500/80', 'text-white');
