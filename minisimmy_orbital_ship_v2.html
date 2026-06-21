@@ -4,7 +4,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-028-squid-shed-tune" />
+    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-029-squid-bubble-clash-predators" />
     <title>MiniSimmy Orbital Ship v2</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2334d399'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%230a0a0f'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -8207,7 +8207,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'local-028-squid-shed-tune';
+              const MINISIMMY_BUILD = 'local-029-squid-bubble-clash-predators';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -8411,6 +8411,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
               const SCOOP_JELLYFISH_LEAK_START = 6;
               const SCOOP_JELLYFISH_LEAK_MULT = 1.28;
               const SQUID_DUEL_STEAL_COOLDOWN = 42;
+              const SQUID_BUBBLE_CLASH_OVERLAP = 0.96;
               const SCOOP_JELLYFISH_PRESSURE_POP = 1400;
               const SCOOP_JELLYFISH_AUTO_SILVER_CHANCE = 0.14;
               const SCOOP_JELLYFISH_AUTO_GOLD_CHANCE = 0.05;
@@ -26246,6 +26247,66 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           : `Stripped rival — bump to burst!`;
                   if (frameCount % 96 === (attacker._symSlot || 0) % 96) {
                       maybeSpeakSquidContextVoice(attacker, 'scoop_predator_duel', victim.name || 'rival');
+                  }
+              }
+
+              function squidBubblesOverlap(geoA, geoB) {
+                  if (!geoA || !geoB) return false;
+                  const dx = geoA.bubbleX - geoB.bubbleX;
+                  const dy = geoA.bubbleY - geoB.bubbleY;
+                  const sumR = (geoA.bubbleR || 0) + (geoB.bubbleR || 0);
+                  if (sumR <= 0) return false;
+                  const overlapR = sumR * SQUID_BUBBLE_CLASH_OVERLAP;
+                  return dx * dx + dy * dy < overlapR * overlapR;
+              }
+
+              function armSquidFromBubbleClash(creature, rival) {
+                  if (!creature || !rival || creatures.indexOf(creature) < 0 || creatures.indexOf(rival) < 0) return false;
+                  const wasFeastPred = !!(creature._manualSuperPredator && creature.isPredator);
+                  creature.isPredator = true;
+                  creature._manualSuperPredator = true;
+                  creature.socialPredator = false;
+                  creature._manualFeastLock = rival;
+                  creature._manualSuperPredWeakTarget = rival;
+                  creature._huntTarget = rival;
+                  creature._scoopProbeDeployed = true;
+                  creature._scoopTendrilsDeployed = true;
+                  ensureSquidEquipmentState(creature);
+                  if (!wasFeastPred) {
+                      creature._predatorHitFlash = max(creature._predatorHitFlash || 0, 28);
+                      creature._squidBubbleClashFlash = max(creature._squidBubbleClashFlash || 0, 34);
+                      creature.currentThought = `Bubble overlap — ${rival.name || 'rival'} bell collided with mine`;
+                  }
+                  return !wasFeastPred;
+              }
+
+              function resolveSquidBubbleOverlapPredation() {
+                  const squids = [];
+                  for (const c of creatures) {
+                      if (!c?._scoopActive || !isJellyfishScoopCreature(c) || c.energy <= 0) continue;
+                      const geo = c._scoopGeo;
+                      if (!geo?.bubbleR) continue;
+                      squids.push(c);
+                  }
+                  for (let i = 0; i < squids.length; i++) {
+                      for (let j = i + 1; j < squids.length; j++) {
+                          const a = squids[i];
+                          const b = squids[j];
+                          if (!squidBubblesOverlap(a._scoopGeo, b._scoopGeo)) continue;
+                          const aNew = armSquidFromBubbleClash(a, b);
+                          const bNew = armSquidFromBubbleClash(b, a);
+                          if (aNew || bNew) {
+                              const mx = (a.x + b.x) * 0.5;
+                              const my = (a.y + b.y) * 0.5 - 28;
+                              addFloatingText(mx, my, 'BUBBLE CLASH — FEAST DUEL', '#f87171');
+                              playTone(78, 'sawtooth', 0.24, 0.52, 0, 0.03, 0.3);
+                              setTimeout(() => playTone(156, 'triangle', 0.16, 0.44), 70);
+                              AnnouncerSystem?.announce?.('squid_predator_duel', {}, {
+                                  dedupeKey: `squid-bubble-clash-${a.name || i}-${b.name || j}`,
+                                  dedupeMs: 45000
+                              });
+                          }
+                      }
                   }
               }
 
@@ -45474,6 +45535,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           const scoopC = creatures[si];
                           if (scoopC?._scoopActive) updateManualScoop(scoopC);
                       }
+                      resolveSquidBubbleOverlapPredation();
                       updateScoopModuleBullets();
                       if (scoopSeedParticles.length) tickScoopSeedParticles();
                       if (scoopLureParticles.length) tickScoopLureParticles(vortexDir, vortexStrength);
