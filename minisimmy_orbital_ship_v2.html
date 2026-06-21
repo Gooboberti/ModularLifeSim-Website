@@ -4,7 +4,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-035-fix-phantom-lines-jerky-move" />
+    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-036-fix-pop-whites-squid-lattice" />
     <title>MiniSimmy Orbital Ship v2</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2334d399'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%230a0a0f'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -8207,7 +8207,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'local-035-fix-phantom-lines-jerky-move';
+              const MINISIMMY_BUILD = 'local-036-fix-pop-whites-squid-lattice';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -8332,6 +8332,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
               let aeonHistory = [];
               let globalReproCooldown = 0;
               let centerX, centerY;
+              let frameVortexDir = 1;
+              let frameVortexStrength = 1;
               let mapWorldVortexX = 0;
               let mapWorldVortexY = 0;
               let mapWorldGreenX = 0;
@@ -8421,6 +8423,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
               const SQUID_DUEL_STEAL_COOLDOWN = 42;
               const SQUID_BUBBLE_CLASH_OVERLAP = 0.96;
               const SQUID_POP_BURST_WHITE_MAX = 58;
+              const SQUID_LATTICE_SEP = 44;
+              const SQUID_LATTICE_MAX_LINK = 118;
+              const SQUID_LATTICE_SOUL_COOLDOWN = 28;
               const SQUID_POP_MODULE_CAP = 220;
               const SCOOP_JELLYFISH_PRESSURE_POP = 1400;
               const SCOOP_JELLYFISH_AUTO_SILVER_CHANCE = 0.14;
@@ -13414,6 +13419,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
               function shouldDrawVortexParticle(p) {
                   if (!p) return false;
+                  if (p._squidBurstDrift || (p._burstAbsorbGraceUntil || 0) > Date.now()) return true;
                   if (!shouldDrawEffect('whiteParticles')) {
                       return !!(p.isSpecial && p.specialType !== 'white');
                   }
@@ -16507,6 +16513,33 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   }
 
                   update(vortexDir, vortexStrength) {
+                      if (this._squidBurstDrift) {
+                          let dx = this.x - centerX;
+                          let dy = this.y - centerY;
+                          let distToCenter = sqrt(dx * dx + dy * dy) || 1;
+                          if (distToCenter < 24) {
+                              this.vx -= (dx / distToCenter) * 0.42 * vortexStrength;
+                              this.vy -= (dy / distToCenter) * 0.42 * vortexStrength;
+                          }
+                          let tangentX = -dy, tangentY = dx;
+                          let len = sqrt(tangentX * tangentX + tangentY * tangentY) || 1;
+                          const spin = 1.05 * vortexStrength * vortexDir;
+                          this.vx += (tangentX / len) * spin * 0.09;
+                          this.vy += (tangentY / len) * spin * 0.09;
+                          const pull = 0.2 * vortexStrength;
+                          this.vx += (centerX - this.x) * pull / (distToCenter + 46);
+                          this.vy += (centerY - this.y) * pull / (distToCenter + 46);
+                          this.x += this.vx;
+                          this.y += this.vy;
+                          this.vx *= 0.984;
+                          this.vy *= 0.984;
+                          if (this.isSpecial) this.pulse = (this.pulse || 0) + 0.08;
+                          if ((this._burstAbsorbGraceUntil || 0) < Date.now() && distToCenter > 18) {
+                              this._squidBurstDrift = false;
+                          }
+                          return;
+                      }
+
                       let dx = this.x - centerX;
                       let dy = this.y - centerY;
                       let distToCenter = sqrt(dx * dx + dy * dy) || 1;
@@ -26188,7 +26221,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   }
               }
 
-              function impartVortexBurstVelocity(ent, originX, originY, strength = 1) {
+              function impartVortexBurstVelocity(ent, originX, originY, strength = 1, vDir = null, vStr = null) {
                   if (!ent) return;
                   const ex = ent.x ?? originX;
                   const ey = ent.y ?? originY;
@@ -26197,7 +26230,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   const tLen = sqrt(toCenterX * toCenterX + toCenterY * toCenterY) || 1;
                   const tangentX = -toCenterY / tLen;
                   const tangentY = toCenterX / tLen;
-                  const spin = (4.8 + random(0, 3.8)) * strength * max(0.7, vortexStrength || 1) * vortexDir;
+                  const vortexStr = vStr != null ? vStr : frameVortexStrength;
+                  const vortexDirUse = vDir != null ? vDir : frameVortexDir;
+                  const spin = (4.8 + random(0, 3.8)) * strength * max(0.7, vortexStr || 1) * vortexDirUse;
                   const radialX = ex - originX;
                   const radialY = ey - originY;
                   const rLen = sqrt(radialX * radialX + radialY * radialY) || 1;
@@ -26446,6 +26481,150 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
               function resolveSquidBubbleOverlapPredation() {
                   // Predator feast mode is operator-only — bubble overlap no longer auto-arms squids.
+              }
+
+              function emitSquidLatticeSoulOrb(ax, ay, bx, by) {
+                  const mx = (ax + bx) * 0.5;
+                  const my = (ay + by) * 0.5;
+                  energyOrbs.push({
+                      x: mx + random(-8, 8),
+                      y: my + random(-8, 8),
+                      radius: 7 + random(0, 4),
+                      life: 210,
+                      energy: 9 + random(0, 7),
+                      targetIsGreen: lastIsDay,
+                      age: 0,
+                      vx: random(-0.9, 0.9),
+                      vy: random(-0.9, 0.9),
+                      sourceCore: 'communicator',
+                      networkSize: 2,
+                      lineageImprint: NeuralNet.buildMinimalSoulImprint('communicator', 'squid lattice'),
+                      _squidLatticeSoul: true
+                  });
+                  if (shouldDrawEffect('whiteParticles') && vortexParticles.length < DeviceProfile.vortexMax) {
+                      const spark = new VortexParticle(false);
+                      spark.x = mx + random(-5, 5);
+                      spark.y = my + random(-5, 5);
+                      spark.isSpecial = true;
+                      spark.specialType = 'white';
+                      spark.size = random(2.8, 4.1);
+                      spark.pulse = random(TWO_PI);
+                      impartVortexBurstVelocity(spark, mx, my, 0.85);
+                      vortexParticles.push(spark);
+                  }
+              }
+
+              function tickSquidSquidLattice(timeScale) {
+                  if (!SpatialGrid.cells) return;
+                  const squids = [];
+                  for (let i = 0; i < creatures.length; i++) {
+                      const c = creatures[i];
+                      if (c?._scoopActive && isJellyfishScoopCreature(c) && c.energy > 0) squids.push(c);
+                  }
+                  if (squids.length < 2) return;
+
+                  const linkSeen = new Set();
+                  for (let i = 0; i < squids.length; i++) {
+                      const a = squids[i];
+                      a._squidLatticeLinks = a._squidLatticeLinks || [];
+                      a._squidLatticeLinks.length = 0;
+                  }
+
+                  for (let i = 0; i < squids.length; i++) {
+                      const a = squids[i];
+                      const hits = SpatialGrid.queryRadius(a.x, a.y, SQUID_LATTICE_MAX_LINK, a).slice();
+                      for (let j = 0; j < hits.length; j++) {
+                          const b = hits[j];
+                          if (b === a || !b?._scoopActive || !isJellyfishScoopCreature(b) || b.energy <= 0) continue;
+                          const key = a.name < b.name ? a.name + '|' + b.name : b.name + '|' + a.name;
+                          if (linkSeen.has(key)) continue;
+                          const d = dist(a.x, a.y, b.x, b.y);
+                          if (d < CREATURE_MIN_SEP * 0.5 || d > SQUID_LATTICE_MAX_LINK) continue;
+                          linkSeen.add(key);
+
+                          const nx = (a.x - b.x) / d;
+                          const ny = (a.y - b.y) / d;
+                          const overlap = max(0, SQUID_LATTICE_SEP - d);
+                          const sepPush = overlap * 0.11 * timeScale;
+                          const springErr = d - SQUID_LATTICE_SEP;
+                          const springK = abs(springErr) < 10 ? springErr * 0.0042 * timeScale : 0;
+
+                          a.vx += nx * (sepPush + springK);
+                          a.vy += ny * (sepPush + springK);
+                          b.vx -= nx * (sepPush + springK);
+                          b.vy -= ny * (sepPush + springK);
+
+                          if (overlap > 2) {
+                              a._squidLatticeOverlap = max(a._squidLatticeOverlap || 0, overlap * 2.2);
+                              b._squidLatticeOverlap = max(b._squidLatticeOverlap || 0, overlap * 2.2);
+                              const cdA = a._squidLatticeSoulCd || 0;
+                              const cdB = b._squidLatticeSoulCd || 0;
+                              if (cdA <= 0 && cdB <= 0) {
+                                  emitSquidLatticeSoulOrb(a.x, a.y, b.x, b.y);
+                                  a._squidLatticeSoulCd = SQUID_LATTICE_SOUL_COOLDOWN;
+                                  b._squidLatticeSoulCd = SQUID_LATTICE_SOUL_COOLDOWN;
+                              }
+                          }
+
+                          const linkEntry = { other: b, dist: d, overlap, key };
+                          a._squidLatticeLinks.push(linkEntry);
+                          if (!b._squidLatticeLinks) b._squidLatticeLinks = [];
+                          b._squidLatticeLinks.push({ other: a, dist: d, overlap, key });
+                      }
+                      capCreatureVelocity(a, getCreatureMaxSpeed(a, timeScale) * 1.15);
+                      if ((a._squidLatticeSoulCd || 0) > 0) a._squidLatticeSoulCd -= timeScale;
+                      if ((a._squidLatticeOverlap || 0) > 0) a._squidLatticeOverlap = max(0, a._squidLatticeOverlap - 0.85 * timeScale);
+                  }
+              }
+
+              function drawSquidSquidLatticeLinks() {
+                  if (!shouldDrawEffect('links')) return;
+                  const drawn = new Set();
+                  push();
+                  noFill();
+                  for (const c of creatures) {
+                      if (!c?._scoopActive || !isJellyfishScoopCreature(c)) continue;
+                      const links = c._squidLatticeLinks;
+                      if (!links?.length) continue;
+                      for (const link of links) {
+                          const other = link.other;
+                          if (!other || creatures.indexOf(other) < 0) continue;
+                          if (drawn.has(link.key)) continue;
+                          drawn.add(link.key);
+                          const d = link.dist || dist(c.x, c.y, other.x, other.y);
+                          if (d > SQUID_LATTICE_MAX_LINK) continue;
+                          const overlap = link.overlap || 0;
+                          const pulse = 0.5 + sin(frameCount * 0.11 + (c._symSlot || 0) * 0.7) * 0.22;
+                          const mx = (c.x + other.x) * 0.5 + sin(frameCount * 0.06) * 4;
+                          const my = (c.y + other.y) * 0.5 + cos(frameCount * 0.05) * 4;
+                          const idealT = constrain(1 - abs(d - SQUID_LATTICE_SEP) / SQUID_LATTICE_SEP, 0, 1);
+                          const alpha = 18 + idealT * 34 + overlap * 5 + (c._squidLatticeOverlap || 0) * 1.8;
+                          stroke(110, 231, 183, alpha * pulse);
+                          strokeWeight(1.05);
+                          beginShape();
+                          vertex(c.x, c.y);
+                          quadraticVertex(mx, my, other.x, other.y);
+                          endShape();
+                          stroke(52, 211, 153, 10 + idealT * 22 + overlap * 4);
+                          strokeWeight(2.8);
+                          beginShape();
+                          vertex(c.x, c.y);
+                          quadraticVertex(mx, my, other.x, other.y);
+                          endShape();
+                          if (overlap > 1.5 || (c._squidLatticeOverlap || 0) > 4) {
+                              const t = ((frameCount * 0.05) % 1);
+                              const px = lerp(c.x, other.x, t);
+                              const py = lerp(c.y, other.y, t);
+                              stroke(200, 250, 220, 55 + overlap * 12);
+                              strokeWeight(1.2);
+                              point(px, py);
+                              stroke(167, 243, 208, 35);
+                              strokeWeight(0.7);
+                              point(lerp(c.x, other.x, (t + 0.38) % 1), lerp(c.y, other.y, (t + 0.38) % 1));
+                          }
+                      }
+                  }
+                  pop();
               }
 
               const SquidSpawnModal = {
@@ -45055,6 +45234,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   }
 
                   let vortexDir = vortexDyn.dir;
+                  frameVortexDir = vortexDir;
+                  frameVortexStrength = vortexStrength;
 
                   syncVortexWorldCenter();
                   tickFullscreenArrowPan();
@@ -45447,7 +45628,6 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
                           if (dist(p.x, p.y, centerX, centerY) < 4) {
                               if (isSquidBurstDriftParticle(p)) {
-                                  vortexParticles.splice(i, 1);
                                   continue;
                               }
                               if (p.isSpecial) {
@@ -45809,6 +45989,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           if (scoopC?._scoopActive) updateManualScoop(scoopC);
                       }
                       resolveSquidBubbleOverlapPredation();
+                      tickSquidSquidLattice(timeScale);
                       updateScoopModuleBullets();
                       if (scoopSeedParticles.length) tickScoopSeedParticles();
                       if (scoopLureParticles.length) tickScoopLureParticles(vortexDir, vortexStrength);
@@ -45977,6 +46158,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       applyManualTugNetworkPass(timeScale);
                       processPostTugFeastKills();
                       drawManualControlTether();
+                      drawSquidSquidLatticeLinks();
                       drawManualSuperPredatorLinks();
                       for (const c of creatures) {
                           if (c._scoopActive && c !== manualControlCreature) drawManualScoop(c);
