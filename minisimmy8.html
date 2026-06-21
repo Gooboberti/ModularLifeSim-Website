@@ -4,7 +4,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-032-squid-direct-damage-pop" />
+    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-21-local-034-squid-garden-spray" />
     <title>MiniSimmy Orbital Ship v2</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2334d399'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%230a0a0f'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -812,6 +812,27 @@
         .env-combat-btn--cursor { border-color: rgba(251, 146, 60, 0.45); color: #fb923c; box-shadow: 0 0 12px rgba(251, 146, 60, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.14); }
         .env-combat-btn--wall { border-color: rgba(167, 139, 250, 0.45); color: #a78bfa; box-shadow: 0 0 12px rgba(167, 139, 250, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.14); }
         .env-combat-btn--ship { border-color: rgba(52, 211, 153, 0.45); color: #34d399; box-shadow: 0 0 12px rgba(52, 211, 153, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.14); }
+        .env-combat-btn--squid { border-color: rgba(244, 114, 182, 0.45); color: #f472b6; box-shadow: 0 0 12px rgba(244, 114, 182, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.14); }
+        .env-combat-btn--squid.is-off { opacity: 0.55; filter: grayscale(0.35); }
+        .squid-control-toggle-row {
+            display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+            padding: 0.55rem 0.65rem; border-radius: 0.85rem;
+            border: 1px solid rgba(255,255,255,0.08); background: rgba(10,10,15,0.72);
+        }
+        .squid-control-toggle-row.is-disabled { opacity: 0.45; pointer-events: none; }
+        .squid-control-toggle-row__text { min-width: 0; }
+        .squid-control-toggle-row__title { font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.9); }
+        .squid-control-toggle-row__sub { font-size: 9px; color: rgba(255,255,255,0.42); line-height: 1.35; margin-top: 2px; }
+        .squid-control-stat-grid {
+            display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.45rem;
+        }
+        .squid-control-stat {
+            border-radius: 0.75rem; border: 1px solid rgba(255,255,255,0.08);
+            background: rgba(10,10,15,0.65); padding: 0.45rem 0.5rem; text-align: center;
+        }
+        .squid-control-stat__val { font-family: ui-monospace, monospace; font-size: 14px; font-weight: 700; color: #67e8f9; }
+        .squid-control-stat__lbl { font-size: 8px; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(255,255,255,0.42); }
+        #tool-card-squid .tool-weapon-main-btn.is-off { opacity: 0.55; }
         body.is-map-fullscreen .fs-float-close-btn {
             display: inline-flex;
             align-items: center;
@@ -6154,6 +6175,15 @@ body.is-map-fullscreen #map-fullscreen-btn {
                                       class="tool-rental-action-btn flex-1 rounded-lg bg-white/10 font-medium text-white/70 hover:bg-white/20">Cancel</button>
                           </div>
                       </div>
+                      <div id="tool-card-squid" class="tool-rental-card flex flex-col items-stretch gap-1.5 rounded-2xl border border-white/10 bg-[#0a0a0f]/80 px-2.5 py-2">
+                          <button type="button" onclick="playUIClick(); showSquidControlPanel()" id="quick-squid-btn"
+                                  class="tool-weapon-main-btn flex items-center justify-center gap-x-2 rounded-xl font-medium transition-all hover:bg-white/10 active:scale-[0.98]"
+                                  title="Squid Control — toggle automated spawns, duels, and burst pops">
+                              <i class="fa-solid fa-jar text-rose-400"></i>
+                              <span class="text-white/85">Squids</span>
+                          </button>
+                          <div id="quick-squid-status" class="min-h-[12px] text-center font-mono text-[9px] leading-tight text-white/40">Gen on · duels on</div>
+                      </div>
                   </div>
               </div>
 
@@ -6452,7 +6482,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           <span class="inspect-hotkey-legend__key">7</span><span>Cycle all creatures — strongest first</span>
                           <span class="inspect-hotkey-legend__key">0</span><span>Toggle scoop — belly bubble absorbs drift &amp; prey</span>
                           <span class="inspect-hotkey-legend__key">F</span><span>Sprint — jellyfish bell pulse while scoop is on</span>
-                          <span class="inspect-hotkey-legend__key">Space</span><span>Fire ammo — drift from probe muzzle (scoop) or modules from bubble (feast [1])</span>
+                          <span class="inspect-hotkey-legend__key">Space</span><span>Garden spray — machine-gun belly drift &amp; modules at colonies (manual squid); feast [1] fires modules</span>
                           <span class="inspect-hotkey-legend__key">V</span><span>Inner voice — announcer narrates this creature's perspective</span>
                       </div>
                       <div class="inspect-hotkey-legend__note">Keys 1–5 and V need a selected creature. Key 7 walks the full roster by rank.</div>
@@ -6476,6 +6506,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
                                   <i class="fa-solid fa-jar text-[9px]"></i>
                                   <span>Belly</span>
                                   <span id="inspect-belly-badge" class="belly-badge">0</span>
+                              </button>
+                              <button type="button" id="inspect-squid-control-btn" class="inspect-belly-launch-btn"
+                                      onclick="playUIClick(); showSquidControlPanel()" title="Squid generation &amp; duel settings">
+                                  <i class="fa-solid fa-sliders text-[9px]"></i>
+                                  <span>Squids</span>
                               </button>
                           </div>
                           <div class="min-w-0 flex-1">
@@ -6580,8 +6615,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
                               <div class="text-xs text-white/60">Thought</div>
                               <button type="button" id="inspect-thought-voice-btn"
                                       class="inspect-thought-voice-btn"
-                                      onclick="toggleCreatureThoughtVoice()"
-                                      title="Announcer speaks this creature's inner voice — press V to toggle"
+                                      onclick="toggleCreatureThoughtVoice({ speak: true })"
+                                      title="Click to hear a single current-state inner voice line — does not auto-repeat"
                                       aria-pressed="false">
                                   <i class="fa-solid fa-brain text-[8px]"></i>
                                   <span>Inner voice</span>
@@ -8056,6 +8091,98 @@ body.is-map-fullscreen #map-fullscreen-btn {
               </div>
           </div>
 
+          <!-- Squid Control Panel -->
+          <div id="squid-control-modal" onclick="hideSquidControlPanel()" class="fixed inset-0 z-[112] flex hidden items-center justify-center bg-black/82 p-3">
+              <div onclick="event.stopImmediatePropagation()" class="modal meta-modal-shell mx-auto w-full max-w-md rounded-3xl border border-rose-500/25 bg-[#121218] p-4 sm:p-5">
+                  <div class="meta-modal-header meta-modal-header--rose" style="--meta-header-accent:#f472b6">
+                      <div class="meta-modal-header__main">
+                          <div class="meta-modal-header__icon"><i class="fa-solid fa-jar"></i></div>
+                          <div class="meta-modal-header__text">
+                              <h3>Squid Control</h3>
+                              <p class="meta-modal-header__sub">Toggle automated jellyfish spawns and duel behavior. Manual scoop and Belly modal are unaffected.</p>
+                          </div>
+                      </div>
+                      <div class="meta-modal-toolbar">
+                          <button type="button" onclick="playUIClick(); openModalGameGuide()" class="meta-modal-chip meta-modal-chip--guide"><i class="fa-solid fa-book-open text-[9px]"></i><span>Game Guide</span></button>
+                          <button type="button" onclick="playUIClick(); hideSquidControlPanel()" class="meta-modal-close">&times;</button>
+                      </div>
+                  </div>
+
+                  <div class="meta-modal-body space-y-3">
+                      <div id="squid-control-stat-grid" class="squid-control-stat-grid">
+                          <div class="squid-control-stat"><div id="squid-control-stat-active" class="squid-control-stat__val">0</div><div class="squid-control-stat__lbl">Active</div></div>
+                          <div class="squid-control-stat"><div id="squid-control-stat-auto" class="squid-control-stat__val">0</div><div class="squid-control-stat__lbl">Automated</div></div>
+                          <div class="squid-control-stat"><div id="squid-control-stat-duel" class="squid-control-stat__val">0</div><div class="squid-control-stat__lbl">Feast duel</div></div>
+                      </div>
+
+                      <div class="squid-control-toggle-row">
+                          <div class="squid-control-toggle-row__text">
+                              <div class="squid-control-toggle-row__title">Automated generation</div>
+                              <div class="squid-control-toggle-row__sub">Master gate for colony emergence and lace special-white hatches.</div>
+                          </div>
+                          <label class="announcer-filter-chip shrink-0" title="Master automated squid spawn toggle">
+                              <input type="checkbox" id="squid-ctrl-generation" checked onchange="SquidControlSettings.onToggle('generationEnabled', this.checked)"> On
+                          </label>
+                      </div>
+
+                      <div id="squid-ctrl-colony-row" class="squid-control-toggle-row">
+                          <div class="squid-control-toggle-row__text">
+                              <div class="squid-control-toggle-row__title">Colony emergence</div>
+                              <div class="squid-control-toggle-row__sub">Crowded lace colonies fold rejected kin into defense bells.</div>
+                          </div>
+                          <label class="announcer-filter-chip shrink-0">
+                              <input type="checkbox" id="squid-ctrl-colony" checked onchange="SquidControlSettings.onToggle('colonyEmergence', this.checked)"> On
+                          </label>
+                      </div>
+
+                      <div id="squid-ctrl-lace-row" class="squid-control-toggle-row">
+                          <div class="squid-control-toggle-row__text">
+                              <div class="squid-control-toggle-row__title">Lace special-white spawn</div>
+                              <div class="squid-control-toggle-row__sub">Special whites on resonance links hatch bare vault/wild bells.</div>
+                          </div>
+                          <label class="announcer-filter-chip shrink-0">
+                              <input type="checkbox" id="squid-ctrl-lace" checked onchange="SquidControlSettings.onToggle('laceWhiteSpawn', this.checked)"> On
+                          </label>
+                      </div>
+
+                      <div class="squid-control-toggle-row">
+                          <div class="squid-control-toggle-row__text">
+                              <div class="squid-control-toggle-row__title">Squid duels</div>
+                              <div class="squid-control-toggle-row__sub">Overlapping bells clash, steal tendrils/probes, chase rivals — no squid-to-squid lattice links.</div>
+                          </div>
+                          <label class="announcer-filter-chip shrink-0">
+                              <input type="checkbox" id="squid-ctrl-duels" checked onchange="SquidControlSettings.onToggle('squidDuels', this.checked)"> On
+                          </label>
+                      </div>
+
+                      <div class="squid-control-toggle-row">
+                          <div class="squid-control-toggle-row__text">
+                              <div class="squid-control-toggle-row__title">Direct burst pop</div>
+                              <div class="squid-control-toggle-row__sub">Hazards, ship fire, duel bump-pops, and direct scoop hits burst stripped bells.</div>
+                          </div>
+                          <label class="announcer-filter-chip shrink-0">
+                              <input type="checkbox" id="squid-ctrl-burst" checked onchange="SquidControlSettings.onToggle('directBurstPop', this.checked)"> On
+                          </label>
+                      </div>
+
+                      <div class="squid-control-toggle-row">
+                          <div class="squid-control-toggle-row__text">
+                              <div class="squid-control-toggle-row__title">Default gear on auto squids</div>
+                              <div class="squid-control-toggle-row__sub">When off (032 default), only feast/predator bells deploy probe + tendrils at spawn.</div>
+                          </div>
+                          <label class="announcer-filter-chip shrink-0">
+                              <input type="checkbox" id="squid-ctrl-gear" onchange="SquidControlSettings.onToggle('autoSquidGear', this.checked)"> On
+                          </label>
+                      </div>
+                  </div>
+
+                  <div class="meta-modal-footer">
+                      <span>Squids duel and loot gear — they do not weave lattice links to each other.</span>
+                      <span class="meta-modal-stat-pill"><i class="fa-solid fa-jar text-[8px] text-rose-400"></i> <span id="squid-control-build-tag">local-033</span></span>
+                  </div>
+              </div>
+          </div>
+
           <!-- Ammo Factory Modal -->
           <div id="egg-ammo-modal" onclick="if (!isAmmoSorterLocked()) hideEggAmmoBay()" class="fixed inset-0 z-[115] flex hidden items-center justify-center bg-black/82 p-3">
               <div onclick="event.stopImmediatePropagation()" class="ammo-factory-panel inventory-modal-panel modal meta-modal-shell meta-modal-header--amber-theme mx-auto w-full rounded-3xl border border-amber-500/25 bg-[#121218] p-4 sm:p-5">
@@ -8207,7 +8334,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'local-032-squid-direct-damage-pop';
+              const MINISIMMY_BUILD = 'local-034-squid-garden-spray';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -8332,6 +8459,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
               let aeonHistory = [];
               let globalReproCooldown = 0;
               let centerX, centerY;
+              let frameVortexStrength = 1;
+              let frameVortexDir = 1;
               let mapWorldVortexX = 0;
               let mapWorldVortexY = 0;
               let mapWorldGreenX = 0;
@@ -8381,6 +8510,14 @@ body.is-map-fullscreen #map-fullscreen-btn {
               const SCOOP_DASH_COOLDOWN = 20;
               const SCOOP_CREATURE_SCAN_BUDGET = 14;
               const SCOOP_MODULE_FIRE_GAP = 110;
+              const SQUID_GARDEN_SPRAY_GAP = 130;
+              const SQUID_GARDEN_SPRAY_SPEED = 14;
+              const SQUID_GARDEN_SPRAY_SPREAD = 0.48;
+              const SQUID_GARDEN_SPRAY_STRAIGHT_FRAMES = 78;
+              const SQUID_GARDEN_SPRAY_VORTEX_BLEND = 42;
+              const SQUID_GARDEN_SPRAY_BOUNCE_COOLDOWN = 420;
+              const SQUID_GARDEN_SPRAY_NEWBORN_IMMUNE = 210;
+              const SQUID_GARDEN_SPRAY_ENERGY_PER_HIT = 22;
               const SCOOP_INCUBATOR_MIN_MODULES = 3;
               const SCOOP_INCUBATOR_MODULES_PER_SPAWN = 3;
               const SCOOP_MODULE_LEAK_BASE_INTERVAL = 15;
@@ -10881,9 +11018,6 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           }
                           const gap = this._creatureThoughtVoiceActive ? 80 : 120;
                           setTimeout(() => this.drain(), gap);
-                          if (this._creatureThoughtVoiceActive && selectedCreature) {
-                              setTimeout(() => this.tickCreaturePerspective(true), gap + 40);
-                          }
                       };
                       utter.onerror = () => {
                           this._speaking = false;
@@ -11968,55 +12102,73 @@ body.is-map-fullscreen #map-fullscreen-btn {
                               try { speechSynthesis?.cancel(); } catch (e) { /* ignore */ }
                               this._speaking = false;
                               this._speakingCreatureVoice = false;
+                              this._queue = this._queue.filter((q) => !this.isCreatureVoiceLine(q.opts || {}));
                           }
                           this._creatureThoughtVoiceId = id;
-                          this._lastCreaturePerspectiveAt = 0;
+                          this._lastCreaturePerspectiveAt = Date.now();
                           this._creatureVoiceWatch = null;
                           if (switched) {
                               this._creaturePerspectiveTopicHistory = [];
                               delete this._lastPerspectiveSynSnapshot[id];
                           }
-                          if (options.speakOnSwitch && (switched || fresh)) {
-                              const speakCatchup = () => {
-                                  if (!this._creatureThoughtVoiceActive || selectedCreature !== creature) return;
-                                  this.speakCreaturePerspective(creature, {
-                                      forceTopic: 'catchup',
-                                      dedupeKey: `catchup-${id}`,
-                                      preempt: true,
-                                      force: true,
-                                      minGapMs: 0
-                                  });
-                              };
-                              if (typeof requestAnimationFrame === 'function') {
-                                  requestAnimationFrame(() => requestAnimationFrame(speakCatchup));
-                              } else {
-                                  setTimeout(speakCatchup, 0);
-                              }
-                          }
                       } else {
                           this._creatureThoughtVoiceId = null;
-                          if (wasActive) this.resumeNarratorAfterInnerVoice();
+                          if (wasActive) {
+                              try { speechSynthesis?.cancel(); } catch (e) { /* ignore */ }
+                              this._speaking = false;
+                              this._speakingCreatureVoice = false;
+                              this._queue = this._queue.filter((q) => !this.isCreatureVoiceLine(q.opts || {}));
+                              this.resumeNarratorAfterInnerVoice();
+                          }
                       }
                       if (typeof updateInspectorThoughtVoiceButton === 'function') {
                           updateInspectorThoughtVoiceButton(creature || selectedCreature);
                       }
                   },
 
-                  toggleCreatureThoughtVoice(creature) {
+                  flushStaleCreatureVoiceQueue() {
+                      try { speechSynthesis?.cancel(); } catch (e) { /* ignore */ }
+                      this._speaking = false;
+                      this._speakingCreatureVoice = false;
+                      this._queue = this._queue.filter((q) => !this.isCreatureVoiceLine(q.opts || {}));
+                      this._lastCreaturePerspectiveAt = Date.now();
+                      if (selectedCreature) {
+                          this._creatureVoiceWatch = this.snapshotCreatureVoiceWatch(
+                              this.getCreaturePerspectiveContext(selectedCreature)
+                          );
+                      }
+                  },
+
+                  toggleCreatureThoughtVoice(creature, options = {}) {
                       const c = creature || selectedCreature;
                       if (!c) return false;
+                      const speakNow = options.speak !== false;
                       const id = this.getCreatureVoiceId(c);
                       const isSameActive = this._creatureThoughtVoiceActive && this._creatureThoughtVoiceId === id;
                       if (isSameActive) {
+                          if (speakNow) {
+                              this.flushStaleCreatureVoiceQueue();
+                              this._creaturePerspectiveTopicHistory = [];
+                              this.speakCreaturePerspective(c, {
+                                  forceTopic: 'catchup',
+                                  dedupeKey: `voice-refresh-${id}-${Date.now()}`,
+                                  preempt: true,
+                                  minGapMs: 0
+                              });
+                              return true;
+                          }
                           this.setCreatureThoughtVoice(false, c);
                           return false;
                       }
                       this.setCreatureThoughtVoice(true, c);
+                      if (!speakNow) return true;
+                      this.flushStaleCreatureVoiceQueue();
+                      this._creaturePerspectiveTopicHistory = [];
+                      delete this._lastPerspectiveSynSnapshot[id];
                       this.speakCreaturePerspective(c, {
                           forceTopic: 'catchup',
-                          dedupeKey: `voice-on-${id}`,
+                          dedupeKey: `voice-on-${id}-${Date.now()}`,
                           preempt: true,
-                          force: true,
                           minGapMs: 0
                       });
                       return true;
@@ -13254,7 +13406,6 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           }
                       }
 
-                      this.tickCreaturePerspective();
                       if (this._creatureThoughtVoiceActive) return;
                       this.tickNeuralColonyAmbient();
                       this.tickOperatorBriefings();
@@ -13490,7 +13641,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   tools: [
                       { id: 'cursor', icon: 'fa-hand-pointer', cls: 'env-combat-btn--cursor', label: 'Cursor Hazard', action: () => showCursorHazardMenu() },
                       { id: 'wall', icon: 'fa-shield-alt', cls: 'env-combat-btn--wall', label: 'Energy Wall', action: () => { playUIClick(); showEnergyWallPlacementMenu(); } },
-                      { id: 'ship', icon: 'fa-rocket', cls: 'env-combat-btn--ship', label: 'Ship Command', action: () => showShipCommandHub() }
+                      { id: 'ship', icon: 'fa-rocket', cls: 'env-combat-btn--ship', label: 'Ship Command', action: () => showShipCommandHub() },
+                      { id: 'squid', icon: 'fa-jar', cls: 'env-combat-btn--squid', label: 'Squid Control', action: () => { playUIClick(); showSquidControlPanel(); } }
                   ],
 
                   build() {
@@ -13501,6 +13653,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           const btn = document.createElement('button');
                           btn.type = 'button';
                           btn.className = `env-combat-btn ${t.cls}`;
+                          btn.id = t.id === 'squid' ? 'env-combat-squid-btn' : `env-combat-${t.id}-btn`;
                           btn.title = t.label;
                           btn.innerHTML = `<i class="fa-solid ${t.icon}"></i>`;
                           btn.addEventListener('click', (e) => {
@@ -16388,6 +16541,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       triggerScoopDash(manualControlCreature);
                       return false;
                   }
+                  if (key === ' ' && isManualGardenSquid(manualControlCreature)) {
+                      fireSquidGardenSprayShot(manualControlCreature);
+                      return false;
+                  }
                   if (key === ' ' && manualControlCreature?._scoopActive) {
                       fireScoopBellyShot(manualControlCreature);
                       return false;
@@ -16677,6 +16834,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       this.fromAntimatterDissolve = !!opts.fromAntimatterDissolve;
                       this.fromPaintGun = !!opts.fromPaintGun;
                       this.fromSquidLeak = !!opts.fromSquidLeak;
+                      this.fromGardenSpray = !!opts.fromGardenSpray;
                       this.orbitGraceUntil = opts.orbitGraceUntil || 0;
                       this.orbitSwimPhase = opts.orbitSwimPhase ?? random(TWO_PI);
                       if (this.fromSquidLeak) {
@@ -16701,6 +16859,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       return !!this.orbitGraceUntil && Date.now() < this.orbitGraceUntil;
                   }
                   update(vortexDir = 1, vortexStrength = 1) {
+                      if (this._gardenSprayBallistic) return;
                       if (this._squidLeak || this.fromSquidLeak) {
                           let dx = this.x - centerX;
                           let dy = this.y - centerY;
@@ -25275,6 +25434,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
               }
 
               function isSquidPredatorDuelTarget(attacker, victim) {
+                  if (!isSquidDuelsEnabled()) return false;
                   return isSquidPredatorDuelist(attacker) && isSquidPredatorDuelist(victim) && victim !== attacker;
               }
 
@@ -25464,7 +25624,138 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       && (meter >= SCOOP_LATTICE_TIER2 * 0.42 || tier >= 1 || resonance >= 2);
               }
 
+              const SquidControlSettings = {
+                  STORAGE_KEY: 'minisimmySquidControlSettings',
+                  defaults: {
+                      generationEnabled: true,
+                      colonyEmergence: true,
+                      laceWhiteSpawn: true,
+                      squidDuels: true,
+                      directBurstPop: true,
+                      autoSquidGear: false
+                  },
+                  config: null,
+
+                  load() {
+                      if (this.config) return this.config;
+                      let parsed = null;
+                      try {
+                          const raw = localStorage.getItem(this.STORAGE_KEY);
+                          if (raw) parsed = JSON.parse(raw);
+                      } catch (e) { /* ignore */ }
+                      this.config = { ...this.defaults, ...(parsed || {}) };
+                      return this.config;
+                  },
+
+                  save() {
+                      try { localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.config)); } catch (e) { /* ignore */ }
+                  },
+
+                  isOn(key) {
+                      this.load();
+                      return this.config[key] !== false;
+                  },
+
+                  onToggle(key, checked) {
+                      playUIClick();
+                      this.load();
+                      this.config[key] = !!checked;
+                      this.save();
+                      this.syncUI();
+                  },
+
+                  countSquids() {
+                      let active = 0;
+                      let automated = 0;
+                      let duel = 0;
+                      for (const c of creatures) {
+                          if (!c?._scoopActive || !isJellyfishScoopCreature(c)) continue;
+                          active++;
+                          if (c._squidAutomated) automated++;
+                          if (isSquidPredatorDuelist(c)) duel++;
+                      }
+                      return { active, automated, duel };
+                  },
+
+                  syncUI() {
+                      this.load();
+                      const cfg = this.config;
+                      const genOn = cfg.generationEnabled !== false;
+                      const set = (id, val) => {
+                          const el = document.getElementById(id);
+                          if (el) el.checked = !!val;
+                      };
+                      set('squid-ctrl-generation', genOn);
+                      set('squid-ctrl-colony', genOn && cfg.colonyEmergence !== false);
+                      set('squid-ctrl-lace', genOn && cfg.laceWhiteSpawn !== false);
+                      set('squid-ctrl-duels', cfg.squidDuels !== false);
+                      set('squid-ctrl-burst', cfg.directBurstPop !== false);
+                      set('squid-ctrl-gear', cfg.autoSquidGear === true);
+                      for (const rowId of ['squid-ctrl-colony-row', 'squid-ctrl-lace-row']) {
+                          const row = document.getElementById(rowId);
+                          if (row) row.classList.toggle('is-disabled', !genOn);
+                      }
+                      const counts = this.countSquids();
+                      const setText = (id, val) => {
+                          const el = document.getElementById(id);
+                          if (el) el.textContent = String(val);
+                      };
+                      setText('squid-control-stat-active', counts.active);
+                      setText('squid-control-stat-auto', counts.automated);
+                      setText('squid-control-stat-duel', counts.duel);
+                      const buildTag = document.getElementById('squid-control-build-tag');
+                      if (buildTag) buildTag.textContent = MINISIMMY_BUILD;
+                      const quickBtn = document.getElementById('quick-squid-btn');
+                      if (quickBtn) quickBtn.classList.toggle('is-off', !genOn);
+                      const envBtn = document.getElementById('env-combat-squid-btn');
+                      if (envBtn) envBtn.classList.toggle('is-off', !genOn);
+                      const status = document.getElementById('quick-squid-status');
+                      if (status) {
+                          const parts = [
+                              genOn ? 'Gen on' : 'Gen off',
+                              cfg.squidDuels !== false ? 'duels on' : 'duels off'
+                          ];
+                          status.textContent = parts.join(' · ');
+                      }
+                  },
+
+                  init() {
+                      this.load();
+                      this.syncUI();
+                  }
+              };
+
+              function isSquidGenerationEnabled() {
+                  return SquidControlSettings.isOn('generationEnabled');
+              }
+
+              function isSquidColonyEmergenceEnabled() {
+                  return isSquidGenerationEnabled() && SquidControlSettings.isOn('colonyEmergence');
+              }
+
+              function isSquidLaceWhiteSpawnEnabled() {
+                  return isSquidGenerationEnabled() && SquidControlSettings.isOn('laceWhiteSpawn');
+              }
+
+              function isSquidDuelsEnabled() {
+                  return SquidControlSettings.isOn('squidDuels');
+              }
+
+              function isSquidDirectBurstPopEnabled() {
+                  return SquidControlSettings.isOn('directBurstPop');
+              }
+
+              function showSquidControlPanel() {
+                  SquidControlSettings.syncUI();
+                  showModal('squid-control-modal');
+              }
+
+              function hideSquidControlPanel() {
+                  hideModal('squid-control-modal');
+              }
+
               function emergeColonySquidFromCreature(creature) {
+                  if (!isSquidColonyEmergenceEnabled()) return false;
                   if (!creature || creatures.indexOf(creature) < 0) return false;
                   if (creature._colonySquidEmerged || creature._scoopActive) return false;
                   if (creature.isPredator || isManualControlImmune(creature)) return false;
@@ -25548,6 +25839,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
               }
 
               function tickColonySquidEmergencePressure(creature, timeScale) {
+                  if (!isSquidColonyEmergenceEnabled()) return;
                   if (!creature || creature._colonySquidEmerged) return;
                   if (creature._scoopActive || creature.isPredator || isManualControlImmune(creature)) return;
 
@@ -26110,7 +26402,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   const tLen = sqrt(toCenterX * toCenterX + toCenterY * toCenterY) || 1;
                   const tangentX = -toCenterY / tLen;
                   const tangentY = toCenterX / tLen;
-                  const spin = (4.8 + random(0, 3.8)) * strength * max(0.7, vortexStrength || 1) * vortexDir;
+                  const spin = (4.8 + random(0, 3.8)) * strength * max(0.7, frameVortexStrength || 1) * frameVortexDir;
                   const radialX = ex - originX;
                   const radialY = ey - originY;
                   const rLen = sqrt(radialX * radialX + radialY * radialY) || 1;
@@ -26125,6 +26417,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
               }
 
               function popSquidFromDirectDamage(creature, source = null, opts = {}) {
+                  if (!isSquidDirectBurstPopEnabled()) return false;
                   if (!creature || creatures.indexOf(creature) < 0) return false;
                   if (!creature._scoopActive || !isJellyfishScoopCreature(creature)) return false;
                   if (creature._squidPopping) return false;
@@ -26351,6 +26644,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
               }
 
               function resolveSquidBubbleOverlapPredation() {
+                  if (!isSquidDuelsEnabled()) return;
                   const squids = [];
                   for (const c of creatures) {
                       if (!c?._scoopActive || !isJellyfishScoopCreature(c) || c.energy <= 0) continue;
@@ -27287,6 +27581,244 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
               let lastScoopModuleFireTime = 0;
               let lastScoopParticleFireTime = 0;
+              let lastSquidGardenSprayTime = 0;
+
+              function isManualGardenSquid(creature) {
+                  return !!(creature?._manualControl && creature._scoopActive
+                      && isJellyfishScoopCreature(creature));
+              }
+
+              function getSquidGardenSprayAim(creature) {
+                  const mx = manualControlState.x - creature.x;
+                  const my = manualControlState.y - creature.y;
+                  if (sqrt(mx * mx + my * my) > 12) return atan2(my, mx);
+                  const geo = creature._scoopGeo || buildManualScoopGeometry(creature);
+                  if (geo && geo.facing != null) return geo.facing;
+                  return atan2(creature.vy || 0, creature.vx || 0) || 0;
+              }
+
+              function canGardenSprayTargetCreature(creature, shooter) {
+                  if (!creature || !shooter || creature === shooter) return false;
+                  if (creatures.indexOf(creature) < 0) return false;
+                  if (isManualControlImmune(creature)) return false;
+                  if ((creature._gardenSprayImmuneUntil || 0) > frameCount) return false;
+                  return true;
+              }
+
+              function bounceGardenSprayOffCreature(ent, creature) {
+                  const dx = ent.x - creature.x;
+                  const dy = ent.y - creature.y;
+                  const len = sqrt(dx * dx + dy * dy) || 1;
+                  const bounce = SQUID_GARDEN_SPRAY_SPEED * 0.62;
+                  ent.vx = (dx / len) * bounce + random(-0.9, 0.9);
+                  ent.vy = (dy / len) * bounce + random(-0.9, 0.9);
+                  ent._gardenSprayStraightUntil = frameCount + 22;
+                  ent._gardenSprayBallistic = true;
+              }
+
+              function updateGardenSprayBallistic(ent, vortexDir, vortexStrength) {
+                  if (!ent._gardenSprayBallistic) return false;
+                  if (frameCount < ent._gardenSprayStraightUntil) {
+                      ent.x += (ent.vx || 0) * timeScale;
+                      ent.y += (ent.vy || 0) * timeScale;
+                      if (ent.x < -40 || ent.x > width + 40 || ent.y < -40 || ent.y > height + 40) {
+                          ent._gardenSprayBallistic = false;
+                          ent._gardenSpray = false;
+                          if (ent.fromGardenSpray) ent.fromGardenSpray = false;
+                          return false;
+                      }
+                      return true;
+                  }
+                  if (frameCount < ent._gardenSprayStraightUntil + SQUID_GARDEN_SPRAY_VORTEX_BLEND) {
+                      ent.x += (ent.vx || 0) * timeScale * 0.55;
+                      ent.y += (ent.vy || 0) * timeScale * 0.55;
+                      const dx = centerX - ent.x;
+                      const dy = centerY - ent.y;
+                      const d = sqrt(dx * dx + dy * dy) || 1;
+                      ent.vx = (ent.vx || 0) * 0.9 + (dx / d) * 0.42 * vortexStrength;
+                      ent.vy = (ent.vy || 0) * 0.9 + (dy / d) * 0.42 * vortexStrength;
+                      const tLen = sqrt((-dy) * (-dy) + dx * dx) || 1;
+                      ent.vx += (-dy / tLen) * 0.18 * vortexDir * vortexStrength;
+                      ent.vy += (dx / tLen) * 0.18 * vortexDir * vortexStrength;
+                      return true;
+                  }
+                  ent._gardenSprayBallistic = false;
+                  ent._gardenSpray = false;
+                  if (ent.fromGardenSpray) ent.fromGardenSpray = false;
+                  return false;
+              }
+
+              function forceGardenSprayModuleGraft(creature, mp) {
+                  if (!creature || !mp) return false;
+                  if (creature.modules.length >= 14) {
+                      const nonCore = creature.modules.filter((m) => !m.isCore);
+                      if (nonCore.length) {
+                          const weakest = nonCore.slice().sort((a, b) => (a.tier || 1) - (b.tier || 1))[0];
+                          const idx = creature.modules.indexOf(weakest);
+                          if (idx >= 0) creature.modules.splice(idx, 1);
+                      }
+                  }
+                  const typeKey = normalizeModuleTypeKey(mp.type);
+                  const newMod = {
+                      type: typeKey,
+                      tier: mp.tier || 1,
+                      color: mp.color || MODULE_AMMO_COLORS[typeKey] || '#a78bfa'
+                  };
+                  creature.modules.push(newMod);
+                  ModuleIdentitySystem.assignModulePosition(creature, newMod, { outer: true });
+                  creature.updateSpecialization();
+                  creature._eatFlash = max(creature._eatFlash || 0, 12);
+                  return true;
+              }
+
+              function tryGardenSprayModuleHit(mp, shooter) {
+                  if (!mp || mp.collected || !shooter || creatures.indexOf(shooter) < 0) return false;
+                  if (!mp.fromGardenSpray && !mp._gardenSprayBallistic) return false;
+                  const hits = SpatialGrid.cells
+                      ? SpatialGrid.queryRadius(mp.x, mp.y, CREATURE_BODY_RADIUS + 10)
+                      : creatures;
+                  for (let i = 0; i < hits.length; i++) {
+                      const c = hits[i];
+                      if (!canGardenSprayTargetCreature(c, shooter)) continue;
+                      const d = dist(c.x, c.y, mp.x, mp.y);
+                      if (d > CREATURE_BODY_RADIUS + (mp.size || 2) + 4) continue;
+                      if (c._gardenSprayFedBy === shooter && (c._gardenSprayBounceUntil || 0) > frameCount) {
+                          bounceGardenSprayOffCreature(mp, c);
+                          return false;
+                      }
+                      forceGardenSprayModuleGraft(c, mp);
+                      mp.collected = true;
+                      const graftType = normalizeModuleTypeKey(mp.type);
+                      addFloatingText(c.x, c.y - 18, `+${MODULE_TYPE_LABELS[graftType] || graftType}`, mp.color || '#a78bfa');
+                      playAbsorbSound();
+                      return true;
+                  }
+                  return false;
+              }
+
+              function tryGardenSprayFertilizeCreature(creature, shooter, px, py) {
+                  if (!canGardenSprayTargetCreature(creature, shooter)) return 'skip';
+                  if (creature._gardenSprayFedBy === shooter && (creature._gardenSprayBounceUntil || 0) > frameCount) {
+                      return 'bounce';
+                  }
+                  applyParticleEnergyGain(creature, SQUID_GARDEN_SPRAY_ENERGY_PER_HIT, {
+                      px, py, isWhite: true, skipKnockback: true
+                  });
+                  triggerParticleReproUrge(creature);
+                  if (creature.energy >= 94 || (creature.particleReproUrge || 0) > PARTICLE_REPRO_URGE_FRAMES * 0.55) {
+                      creature.energy = 100;
+                      if (creature.mustEatWhite) {
+                          creature.ateWhiteParticle = true;
+                          creature.mustEatWhite = false;
+                          creature.purpleFlash = max(0, (creature.purpleFlash || 0) - 30);
+                      }
+                      const baby = trySpawnWhiteParticleBaby(creature);
+                      if (baby) {
+                          baby._gardenSprayImmuneUntil = frameCount + SQUID_GARDEN_SPRAY_NEWBORN_IMMUNE;
+                          creature._gardenSprayFedBy = shooter;
+                          creature._gardenSprayBounceUntil = frameCount + SQUID_GARDEN_SPRAY_BOUNCE_COOLDOWN;
+                          addFloatingText(creature.x, creature.y - 22, 'SPRAY BLOOM', '#86efac');
+                          return 'bloom';
+                      }
+                  }
+                  creature._eatFlash = max(creature._eatFlash || 0, 10);
+                  addFloatingText(creature.x, creature.y - 14, 'FED', '#a3e635');
+                  return 'fed';
+              }
+
+              function tryGardenSprayEnergyHit(p, shooter) {
+                  if (!p?._gardenSpray || !shooter || creatures.indexOf(shooter) < 0) return false;
+                  const hits = SpatialGrid.cells
+                      ? SpatialGrid.queryRadius(p.x, p.y, getParticleContactRadius(p) + CREATURE_BODY_RADIUS + 6)
+                      : creatures;
+                  for (let i = 0; i < hits.length; i++) {
+                      const c = hits[i];
+                      if (!particleTouchesCreature(c, p.x, p.y, p)) continue;
+                      const result = tryGardenSprayFertilizeCreature(c, shooter, p.x, p.y);
+                      if (result === 'skip') continue;
+                      if (result === 'bounce') {
+                          bounceGardenSprayOffCreature(p, c);
+                          return false;
+                      }
+                      p.life = 0;
+                      return true;
+                  }
+                  return false;
+              }
+
+              function fireSquidGardenSprayShot(creature) {
+                  if (!isManualGardenSquid(creature)) return false;
+                  const bag = creature._scoopBag || [];
+                  const modBag = creature._scoopModuleBag || [];
+                  const total = bag.length + modBag.length;
+                  if (!total) {
+                      if (Date.now() - lastSquidGardenSprayTime > 480) {
+                          addFloatingText(creature.x, creature.y - 18, 'Belly empty — scoop drift or modules first', '#fb923c');
+                      }
+                      return false;
+                  }
+                  const pickMod = modBag.length > 0 && (bag.length === 0 || random() < modBag.length / total);
+                  const aim = getSquidGardenSprayAim(creature);
+                  const spread = random(-SQUID_GARDEN_SPRAY_SPREAD, SQUID_GARDEN_SPRAY_SPREAD);
+                  const ang = aim + spread;
+                  const speed = SQUID_GARDEN_SPRAY_SPEED + random(-1.4, 1.4);
+                  const vx = cos(ang) * speed;
+                  const vy = sin(ang) * speed;
+                  const geo = creature._scoopGeo || buildManualScoopGeometry(creature);
+                  const muzzleX = (geo.bubbleX ?? geo.bellyX ?? creature.x) + random(-7, 7);
+                  const muzzleY = (geo.bubbleY ?? geo.bellyY ?? creature.y) + random(-7, 7);
+
+                  if (pickMod) {
+                      const mod = modBag.shift();
+                      const typeKey = normalizeModuleTypeKey(mod.type);
+                      const capType = typeKey.charAt(0).toUpperCase() + typeKey.slice(1);
+                      const mp = new ModuleParticle(true, {
+                          type: capType,
+                          tier: mod.tier || 1,
+                          color: mod.color || MODULE_AMMO_COLORS[typeKey],
+                          x: muzzleX,
+                          y: muzzleY,
+                          vx,
+                          vy,
+                          fromGardenSpray: true,
+                          orbitGraceUntil: Date.now() + 120000
+                      });
+                      mp.size = random(1.8, 2.6) + (mp.tier - 1) * 0.2;
+                      mp._gardenSprayOwner = creature;
+                      mp._gardenSprayStraightUntil = frameCount + SQUID_GARDEN_SPRAY_STRAIGHT_FRAMES;
+                      mp._gardenSprayBallistic = true;
+                      moduleParticles.push(mp);
+                  } else {
+                      const p = bag.pop();
+                      p._scooped = false;
+                      p._scoopOwner = null;
+                      p._scoopSnared = null;
+                      p.x = muzzleX;
+                      p.y = muzzleY;
+                      p.vx = vx;
+                      p.vy = vy;
+                      p._gardenSpray = true;
+                      p._gardenSprayOwner = creature;
+                      p._gardenSprayStraightUntil = frameCount + SQUID_GARDEN_SPRAY_STRAIGHT_FRAMES;
+                      p._gardenSprayBallistic = true;
+                      if (vortexParticles.indexOf(p) < 0) vortexParticles.push(p);
+                  }
+
+                  creature._scoopMuzzleFlash = max(creature._scoopMuzzleFlash || 0, 12);
+                  lastSquidGardenSprayTime = Date.now();
+                  if (frameCount % 2 === 0) playTone(260 + random(0, 140), 'square', 0.045, 0.34);
+                  return true;
+              }
+
+              function tickSquidGardenSprayHeld() {
+                  const c = manualControlCreature;
+                  if (!isManualGardenSquid(c)) return;
+                  if (typeof keyIsDown !== 'function' || !keyIsDown(32)) return;
+                  if (spaceshipActive) return;
+                  const now = Date.now();
+                  if (now - lastSquidGardenSprayTime < SQUID_GARDEN_SPRAY_GAP) return;
+                  fireSquidGardenSprayShot(c);
+              }
 
               function fireScoopBellyParticle(creature) {
                   if (!creature) return false;
@@ -27682,19 +28214,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
               }
 
               function maybeSpeakSquidContextVoice(creature, topic, extra = '') {
-                  if (!creature || typeof AnnouncerSystem === 'undefined') return;
-                  const colonyTopics = ['scoop_colony_emergence', 'scoop_colony_emergence_pressure', 'scoop_social_rejection'];
-                  const scoopTopics = topic.startsWith('scoop_') && !colonyTopics.includes(topic);
-                  if (scoopTopics && !creature._scoopActive) return;
-                  const voiceOn = AnnouncerSystem.hadInnerVoiceForCreature(creature);
-                  const maySpeak = voiceOn || creature._manualControl || creature._squidAutomated;
-                  if (!maySpeak) return;
-                  AnnouncerSystem.speakCreaturePerspective(creature, {
-                      forceTopic: topic,
-                      dedupeKey: `squid-${topic}-${AnnouncerSystem.getCreatureVoiceId(creature)}-${extra}`,
-                      extra,
-                      force: colonyTopics.includes(topic)
-                  });
+                  // Inner voice is click-only — no automatic scoop/colony narration.
               }
 
               function maybeSpeakScoopInnerVoice(creature, topic, extra = '') {
@@ -29060,6 +29580,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   if (opts.predatorSquid === false) return false;
                   if (creature._manualSuperPredator && (creature._squidAutomated || creature._scoopActive)) return true;
                   if (isSquidFeastMode(creature)) return true;
+                  if (SquidControlSettings.isOn('autoSquidGear') && creature._squidAutomated && isJellyfishScoopCreature(creature)) return true;
                   return !!(creature.isPredator && creature._squidAutomated && isJellyfishScoopCreature(creature));
               }
 
@@ -29070,6 +29591,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   if (opts.predatorSquid === false) return false;
                   if (creature._manualSuperPredator && (creature._squidAutomated || creature._scoopActive)) return true;
                   if (isSquidFeastMode(creature)) return true;
+                  if (SquidControlSettings.isOn('autoSquidGear') && creature._squidAutomated && isJellyfishScoopCreature(creature)) return true;
                   return !!(creature.isPredator && creature._squidAutomated && isJellyfishScoopCreature(creature));
               }
 
@@ -31286,25 +31808,28 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
               let innerVoiceToggleGuard = { at: 0 };
 
-              function toggleCreatureThoughtVoice() {
+              function toggleCreatureThoughtVoice(options = {}) {
                   const now = performance.now();
                   if (now - innerVoiceToggleGuard.at < 140) return;
                   innerVoiceToggleGuard.at = now;
 
                   const target = getControlledCreatureForHotkeys?.() || selectedCreature;
                   if (!target || creatures.indexOf(target) < 0) {
-                      addFloatingText(typeof width === 'number' ? width / 2 : 320, 72, 'Select a creature for inner voice [V]', '#c4b5fd');
+                      addFloatingText(typeof width === 'number' ? width / 2 : 320, 72, 'Select a creature for inner voice', '#c4b5fd');
                       return;
                   }
                   if (selectedCreature !== target) selectCreature(target);
                   if (typeof AnnouncerSystem === 'undefined' || !AnnouncerSystem.toggleCreatureThoughtVoice) return;
-                  const on = AnnouncerSystem.toggleCreatureThoughtVoice(target);
-                  playInnerVoiceToggleSound(on);
+                  const speakNow = options.speak !== false;
+                  const on = AnnouncerSystem.toggleCreatureThoughtVoice(target, { speak: speakNow });
+                  if (speakNow) playInnerVoiceToggleSound(on);
                   addFloatingText(
                       target.x,
                       target.y - 22,
-                      on ? 'Inner voice ON [V]' : 'Inner voice off [V]',
-                      on ? '#6ee7b7' : '#94a3b8'
+                      speakNow
+                          ? (AnnouncerSystem._creatureThoughtVoiceActive ? 'Inner voice — current state' : 'Inner voice off')
+                          : (AnnouncerSystem._creatureThoughtVoiceActive ? 'Inner voice armed — click brain button' : 'Inner voice off'),
+                      AnnouncerSystem._creatureThoughtVoiceActive ? '#6ee7b7' : '#94a3b8'
                   );
               }
 
@@ -31341,7 +31866,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   updateInspectorDustUpgradeUI(creature);
                   syncMapCameraButtons();
                   if (creatureThoughtVoiceActive && typeof AnnouncerSystem !== 'undefined') {
-                      AnnouncerSystem.setCreatureThoughtVoice(true, creature, { speakOnSwitch: true });
+                      AnnouncerSystem.setCreatureThoughtVoice(true, creature);
                   } else if (typeof updateInspectorThoughtVoiceButton === 'function') {
                       updateInspectorThoughtVoiceButton(creature);
                   }
@@ -31610,6 +32135,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
               }
 
               function spawnLaceSpecialWhiteSquid(x, y, link) {
+                  if (!isSquidLaceWhiteSpawnEnabled()) return null;
                   if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
                   if (creatures.length >= 220) return null;
                   const sx = constrain(x + random(-4, 4), 24, width - 24);
@@ -34035,11 +34561,20 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       }
                       if (!mp.isFloating || mp.collected) continue;
                       if (mp._squidLeak) squidLeakN++;
+                      if (mp._gardenSprayBallistic) {
+                          const stillBallistic = updateGardenSprayBallistic(mp, vortexDir, vortexStrength);
+                          if (tryGardenSprayModuleHit(mp, mp._gardenSprayOwner)) {
+                              moduleParticles.splice(i, 1);
+                              continue;
+                          }
+                          mp.draw();
+                          if (stillBallistic) continue;
+                      }
                       mp.update(vortexDir, vortexStrength);
                       mp.draw();
 
                       const harvestable = mp.isHarvestable();
-                      if (harvestable && !mp.collected) {
+                      if (harvestable && !mp.collected && !mp.fromGardenSpray) {
                           const absorber = findCreatureAbsorbingParticle(mp.x, mp.y, mp);
                           if (absorber) absorbModuleParticleIntoCreature(absorber, mp);
                       }
@@ -44295,7 +44830,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       }
                   }
                   if (isKeyboardGameInput(e) && (e.key === 'v' || e.key === 'V')) {
-                      toggleCreatureThoughtVoice();
+                      toggleCreatureThoughtVoice({ speak: false });
                       e.preventDefault();
                       return;
                   }
@@ -44624,6 +45159,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   initFullscreenInspectorDrawer();
                   FullscreenPullDowns.init();
                   SquidSpawnModal.init();
+                  SquidControlSettings.init();
                   loadPerformanceConfig();
                   loadViewFilters();
                   syncViewFilterButtons();
@@ -44947,6 +45483,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   }
 
                   let vortexDir = vortexDyn.dir;
+                  frameVortexStrength = vortexStrength;
+                  frameVortexDir = vortexDir;
 
                   syncVortexWorldCenter();
                   tickFullscreenArrowPan();
@@ -45329,9 +45867,20 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
                   ModuleIdentitySystem.refreshResonanceLinkCache();
 
+                  tickSquidGardenSprayHeld();
+
                   for (let i = vortexParticles.length - 1; i >= 0; i--) {
                       let p = vortexParticles[i];
                       if (p._scooped) continue;
+                      if (p._gardenSprayBallistic) {
+                          const stillBallistic = updateGardenSprayBallistic(p, vortexDir, vortexStrength);
+                          if (tryGardenSprayEnergyHit(p, p._gardenSprayOwner)) {
+                              vortexParticles.splice(i, 1);
+                              continue;
+                          }
+                          if (shouldDrawVortexParticle(p)) p.show();
+                          if (stillBallistic) continue;
+                      }
                       p.update(vortexDir, vortexStrength);
                       if (shouldDrawVortexParticle(p)) p.show();
 
@@ -45362,6 +45911,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           ? resolveWhiteParticleContact(p.x, p.y, p, pickupHits)
                           : { relay: null, absorber: findCreatureAbsorbingParticle(p.x, p.y, p, pickupHits) };
                       if (whiteContact.relay) applyWhiteParticleColonyRelay(whiteContact.relay, p);
+                      if (p._gardenSprayOwner && (p._gardenSpray || p._gardenSprayBallistic)) {
+                          if (p._relayBoost > 0) p._relayBoost = max(0, p._relayBoost - 0.004);
+                          continue;
+                      }
                       if (whiteContact.absorber && absorbVortexParticle(whiteContact.absorber, p)) {
                           p.life = 0;
                           vortexParticles.splice(i, 1);
@@ -46174,9 +46727,6 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   }
 
                   ScoreEngine.tickPassive();
-                  if (creatureThoughtVoiceActive && frameCount % 12 === 0) {
-                      AnnouncerSystem.tickCreaturePerspective();
-                  }
                   AnnouncerSystem.tick();
                   if (frameCount % UI_UPDATE_INTERVAL === 0) {
                       updateMainStats();
@@ -46518,6 +47068,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
               window.EnvCycleDockToggle = EnvCycleDockToggle;
               window.openCompleteGameGuide = openCompleteGameGuide;
               window.MINISIMMY_BUILD = MINISIMMY_BUILD;
+              window.SquidControlSettings = SquidControlSettings;
+              window.showSquidControlPanel = showSquidControlPanel;
+              window.hideSquidControlPanel = hideSquidControlPanel;
               window.showGameAlert = showGameAlert;
               window.showGameConfirm = showGameConfirm;
               window.goToMainMenu = function goToMainMenuFromGame() {
