@@ -4,7 +4,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-025-flower-pressure-predators" />
+    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-026-squid-tendrils-default-off" />
     <title>MiniSimmy Orbital Ship v2</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2334d399'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%230a0a0f'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -8207,7 +8207,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'local-025-flower-pressure-predators';
+              const MINISIMMY_BUILD = 'local-026-squid-tendrils-default-off';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -25559,7 +25559,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   creature._socialRejectionFeel = 0;
                   creature._colonySquidEmergenceMeter = 0;
                   creature._socialAggressionPeak = 0;
-                  activateJellyfishSquid(creature, { automated: true, force: true });
+                  activateJellyfishSquid(creature, { automated: true, force: true, predatorSquid: becomeFeastSquid });
                   if (becomeFeastSquid) {
                       creature._manualSuperPredator = true;
                       creature.isPredator = true;
@@ -25984,7 +25984,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   if (!spawn || !parent || !isJellyfishScoopCreature(parent)) return false;
                   primeCreatureForSquidSpawn(spawn, parent);
                   applyJellyfishTierToSpawn(spawn, childTier);
-                  if (!activateJellyfishSquid(spawn, { automated: true, force: true })) return false;
+                  if (!activateJellyfishSquid(spawn, {
+                      automated: true,
+                      force: true,
+                      predatorSquid: isSquidFeastMode(parent)
+                  })) return false;
                   if (isSquidFeastMode(parent)) {
                       spawn._manualSuperPredator = true;
                       spawn.isPredator = true;
@@ -28920,6 +28924,16 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   return true;
               }
 
+              function shouldSpawnSquidWithTendrils(creature, opts = {}) {
+                  if (opts.tendrilsOn === true) return true;
+                  if (opts.tendrilsOn === false) return false;
+                  if (opts.predatorSquid === true) return true;
+                  if (opts.predatorSquid === false) return false;
+                  if (creature._manualSuperPredator && (creature._squidAutomated || creature._scoopActive)) return true;
+                  if (isSquidFeastMode(creature)) return true;
+                  return !!(creature.isPredator && creature._squidAutomated && isJellyfishScoopCreature(creature));
+              }
+
               function activateJellyfishSquid(creature, opts = {}) {
                   if (!creature || creatures.indexOf(creature) < 0) return false;
                   if (!opts.force && !canCreatureUseScoop(creature)) return false;
@@ -28928,9 +28942,13 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   if (opts.automated !== false && isJellyfishScoopCreature(creature)) {
                       creature._squidAutomated = true;
                   }
-                  const gearOn = opts.gearOff !== true;
-                  creature._scoopProbeDeployed = gearOn;
-                  creature._scoopTendrilsDeployed = gearOn;
+                  if (opts.gearOff === true) {
+                      creature._scoopProbeDeployed = false;
+                      creature._scoopTendrilsDeployed = false;
+                  } else {
+                      creature._scoopProbeDeployed = opts.probeOn !== false;
+                      creature._scoopTendrilsDeployed = shouldSpawnSquidWithTendrils(creature, opts);
+                  }
                   ensureSquidEquipmentState(creature);
                   ensureJellyfishTierState(creature);
                   if (!creature._scoopBag) creature._scoopBag = [];
