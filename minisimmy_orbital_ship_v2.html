@@ -4,7 +4,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-030-squid-predator-standdown-gear" />
+    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-031-squid-bubble-probe-dmg" />
     <title>MiniSimmy Orbital Ship v2</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2334d399'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%230a0a0f'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -8207,7 +8207,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'local-030-squid-predator-standdown-gear';
+              const MINISIMMY_BUILD = 'local-031-squid-bubble-probe-dmg';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -8356,6 +8356,14 @@ body.is-map-fullscreen #map-fullscreen-btn {
               const MANUAL_SCOOP_CREATURE_COOLDOWN = 18;
               const SCOOP_PROBE_STUN_FRAMES = 150;
               const SCOOP_PROBE_MIN_TAGS = 2;
+              const SCOOP_BUBBLE_PREY_DMG = 0.78;
+              const SCOOP_BUBBLE_PREY_DMG_FEAST = 1.28;
+              const SCOOP_BUBBLE_DRAG_DMG = 1.05;
+              const SCOOP_PROBE_TOUCH_DMG = 14;
+              const SCOOP_PROBE_TAG_DMG_PER_FRAME = 0.62;
+              const SCOOP_PROBE_TAG_DMG_FEAST_PER_FRAME = 1.05;
+              const SCOOP_TENDRIL_INFECT_FLASH = 480;
+              const SCOOP_TENDRIL_INFECT_DMG = 22;
               const SCOOP_MODULE_MELT_FRAMES = 220;
               const MANUAL_SCOOP_SCAN_BUDGET = 160;
               const MANUAL_SCOOP_REACH = 78;
@@ -26953,10 +26961,54 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   if (isCreature) {
                       entity._scoopBeingDragged = hunter;
                       entity._scoopProbeStun = max(entity._scoopProbeStun || 0, 24);
+                      const dragDmg = (isSquidFeastMode(hunter) ? SCOOP_BUBBLE_PREY_DMG_FEAST : SCOOP_BUBBLE_DRAG_DMG) * timeScale;
+                      entity.energy = max(0, entity.energy - dragDmg);
+                      entity.damageFlash = max(entity.damageFlash || 0, 22);
                   } else {
                       entity._scoopSnared = hunter;
                   }
                   return false;
+              }
+
+              function applyScoopBubblePreyDamage(hunter, geo) {
+                  if (!hunter?._scoopActive || !geo?.bubbleR) return;
+                  const bx = geo.bubbleX;
+                  const by = geo.bubbleY;
+                  const br = geo.bubbleR;
+                  const br2 = br * br * 0.9;
+                  const isFeast = isSquidFeastMode(hunter);
+                  const dmg = (isFeast ? SCOOP_BUBBLE_PREY_DMG_FEAST : SCOOP_BUBBLE_PREY_DMG) * timeScale;
+                  const scan = SpatialGrid.cells
+                      ? SpatialGrid.queryRadius(bx, by, br + CREATURE_BODY_RADIUS, hunter)
+                      : creatures;
+                  for (const prey of scan) {
+                      if (!isScoopableFeastCreature(hunter, prey)) continue;
+                      const dx = prey.x - bx;
+                      const dy = prey.y - by;
+                      if (dx * dx + dy * dy > br2) continue;
+                      prey.energy = max(0, prey.energy - dmg);
+                      prey.damageFlash = max(prey.damageFlash || 0, isFeast ? 34 : 26);
+                      if (isFeast) prey.purpleFlash = max(prey.purpleFlash || 0, 42);
+                      if (frameCount % 44 === (prey._symSlot || 0) % 44) {
+                          prey.currentThought = isFeast
+                              ? 'Bubble crushing me — purple burn inside the bell'
+                              : 'Trapped in the scoop bubble — energy draining';
+                      }
+                  }
+              }
+
+              function applyScoopProbeTouchDamage(prey, hunter, opts = {}) {
+                  if (!prey || !hunter || isManualControlImmune(prey)) return;
+                  const isFeast = isSquidFeastMode(hunter);
+                  let dmg = 0;
+                  if (opts.instant) dmg += isFeast ? SCOOP_PROBE_TOUCH_DMG * 1.4 : SCOOP_PROBE_TOUCH_DMG;
+                  if (opts.perFrame) {
+                      dmg += (isFeast ? SCOOP_PROBE_TAG_DMG_FEAST_PER_FRAME : SCOOP_PROBE_TAG_DMG_PER_FRAME) * timeScale;
+                  }
+                  if (dmg <= 0) return;
+                  prey.energy = max(0, prey.energy - dmg);
+                  prey.damageFlash = max(prey.damageFlash || 0, isFeast ? 40 : 30);
+                  if (isFeast) prey.purpleFlash = max(prey.purpleFlash || 0, 52);
               }
 
               function applyScoopBubbleAbsorption(creature, geo) {
@@ -27552,10 +27604,15 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   if (!target || isManualControlImmune(target)) return;
                   if (target._scoopBeingDragged === hunter) return;
                   const wasInfected = (target.purpleFlash || 0) > 24 || target.mustEatWhite;
-                  target.purpleFlash = max(target.purpleFlash || 0, 260);
+                  target.purpleFlash = max(target.purpleFlash || 0, SCOOP_TENDRIL_INFECT_FLASH);
                   target.mustEatWhite = true;
-                  if (!wasInfected && frameCount % 30 === 0) {
-                      target.currentThought = 'Infected...';
+                  target.damageFlash = max(target.damageFlash || 0, 78);
+                  target.energy = max(0, target.energy - SCOOP_TENDRIL_INFECT_DMG * timeScale);
+                  if (!target.isPredator && target.energy < 48 && random() < 0.08 * timeScale) {
+                      target.isPredator = true;
+                      target.currentThought = 'Tendril spores — turned predator';
+                  } else if (!wasInfected && frameCount % 30 === 0) {
+                      target.currentThought = 'Purple tendril burn — infected!';
                   }
               }
 
@@ -27583,13 +27640,14 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   if (!hunter || !prey || prey === hunter || isManualControlImmune(prey)) return;
                   if (prey._scoopBeingDragged === hunter) return;
                   const isFeast = isSquidFeastMode(hunter);
-                  prey._scoopProbeStun = max(prey._scoopProbeStun || 0, SCOOP_PROBE_STUN_FRAMES);
-                  prey._scoopProbeTaggedBy = hunter;
-                  prey._scoopProbeFlash = max(prey._scoopProbeFlash || 0, 28);
-                  prey.vx = 0;
-                  prey.vy = 0;
                   hunter._scoopProbeTags = hunter._scoopProbeTags || [];
                   const existing = hunter._scoopProbeTags.find((t) => t.prey === prey);
+                  prey._scoopProbeStun = max(prey._scoopProbeStun || 0, SCOOP_PROBE_STUN_FRAMES);
+                  prey._scoopProbeTaggedBy = hunter;
+                  prey._scoopProbeFlash = max(prey._scoopProbeFlash || 0, isFeast ? 36 : 28);
+                  applyScoopProbeTouchDamage(prey, hunter, { instant: !existing });
+                  prey.vx = 0;
+                  prey.vy = 0;
                   if (existing) {
                       existing.energy = prey.energy;
                       existing.gen = prey.generation || 1;
@@ -27629,6 +27687,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
                               } else {
                                   c.vx = 0;
                                   c.vy = 0;
+                              }
+                              if (c._scoopProbeTaggedBy && creatures.indexOf(c._scoopProbeTaggedBy) >= 0) {
+                                  applyScoopProbeTouchDamage(c, c._scoopProbeTaggedBy, { perFrame: true });
                               }
                           }
                       }
@@ -28026,6 +28087,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           }
                       }
                   }
+                  applyScoopBubblePreyDamage(creature, geo);
                   applyScoopBubbleAbsorption(creature, geo);
                   creature._scoopGeo = geo;
 
