@@ -4,7 +4,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-024-lace-white-squid" />
+    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-025-flower-pressure-predators" />
     <title>MiniSimmy Orbital Ship v2</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2334d399'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%230a0a0f'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -8207,7 +8207,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'local-024-lace-white-squid';
+              const MINISIMMY_BUILD = 'local-025-flower-pressure-predators';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -8396,9 +8396,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
               const SCOOP_JELLYFISH_CONSUME_POP = 9999;
               const SCOOP_JELLYFISH_POP_MAX_CREATURE_CLONES = 5;
               const SCOOP_JELLYFISH_POP_MAX_SQUID_CLONES = 2;
-              const COLONY_SQUID_EMERGENCE_THRESHOLD = 100;
+              const COLONY_SQUID_EMERGENCE_THRESHOLD = 82;
               const COLONY_SQUID_MIN_LACE = 0.38;
-              const COLONY_SQUID_MIN_REJECTION = 0.44;
+              const COLONY_SQUID_MIN_REJECTION = 0.38;
+              const COLONY_SQUID_FEAST_AGGRESSION = 0.48;
+              const COLONY_FLOWER_MISALIGN_THRESHOLD = 0.42;
               const SCOOP_JELLYFISH_DRIFT_VALUE = 0.38;
               const SCOOP_JELLYFISH_MOD_VALUE = 1.0;
               const SCOOP_JELLYFISH_HELD_VALUE = 5.5;
@@ -9403,6 +9405,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           'The controlled predator feasted and returned to normal life.'
                       ],
                       colony_squid_emergence: [
+                          'Feast squid emergence — social aggression peaked before the bell hatched. Predator feast mode armed from the crush.',
                           'Colony defense fold — {name} squeezed from every side and rejected by the lace. Auto squid emergence complete.',
                           'Social rejection peaked. {name} bell-folded into an automated defense squid — the colony exhaled them outward.',
                           'Operator note: high lattice connection plus all-side crowding triggered colony squid emergence for {name}.',
@@ -18797,6 +18800,42 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       return { speedMult, frozen, inRange: true, depth, paralysis };
                   },
 
+                  computeFlowerWeaveComfort(creature) {
+                      const neighbors = creature.getLocalGroup(CREATURE_SOCIAL_MAX);
+                      if (neighbors.length < 2) return 1;
+                      let aligned = 0, spacingScore = 0, overlapPenalty = 0, compPairs = 0;
+                      const slot = creature._symSlot || 0;
+                      for (const o of neighbors) {
+                          const dx = o.x - creature.x, dy = o.y - creature.y;
+                          const d = sqrt(dx * dx + dy * dy) || 1;
+                          if (d < CREATURE_MIN_SEP + 1.5) {
+                              overlapPenalty += (CREATURE_MIN_SEP + 1.5 - d) / CREATURE_MIN_SEP;
+                          }
+                          const align = this.computeAlignment(creature, o);
+                          if (align < 0.72) continue;
+                          aligned++;
+                          const comp = this.getPairComplementarity(creature, o);
+                          const ideal = comp >= 0.48 ? CREATURE_IDEAL_DIST
+                              : comp >= 0.34 ? CREATURE_IDEAL_DIST * SOUL_FLOWER_RING_RATIO * 0.94
+                              : CREATURE_IDEAL_DIST + 4;
+                          const err = abs(d - ideal) / max(1, ideal);
+                          spacingScore += max(0, 1 - err * 1.4) * (0.55 + comp * 0.45);
+                          if (comp >= 0.34) compPairs++;
+                      }
+                      if (aligned < 1) return max(0, 0.18 - overlapPenalty * 0.4);
+                      let comfort = (spacingScore / aligned) * (0.5 + min(1, compPairs / 3) * 0.5)
+                          - min(1, overlapPenalty * 0.5);
+                      if ((creature._soulOrganizePulse || 0) > 6 && creature._soulWeaveOriginX != null) {
+                          const petalSlot = slot % SOUL_FLOWER_PETALS;
+                          const tAngle = petalSlot * (TWO_PI / SOUL_FLOWER_PETALS);
+                          const tx = creature._soulWeaveOriginX + cos(tAngle) * CREATURE_IDEAL_DIST;
+                          const ty = creature._soulWeaveOriginY + sin(tAngle) * CREATURE_IDEAL_DIST;
+                          const slotErr = dist(creature.x, creature.y, tx, ty) / CREATURE_IDEAL_DIST;
+                          comfort += max(0, 1 - slotErr) * 0.2;
+                      }
+                      return constrain(comfort, 0, 1);
+                  },
+
                   applySoulFlowerWeaveForces(creature, soulOrganize, slot, orbitPhase, timeScale) {
                       if (soulOrganize < 0.05 || creature._soulWeaveOriginX == null) return { vx: 0, vy: 0 };
                       const wx = creature._soulWeaveOriginX, wy = creature._soulWeaveOriginY;
@@ -18996,8 +19035,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
                       spaceComfort = Math.min(1, spaceComfort / 3);
                       creature._personalSpaceComfort = spaceComfort;
+                      creature._flowerWeaveComfort = this.computeFlowerWeaveComfort(creature);
                       if (!hadOverlap) stress *= 0.93;
                       else stress = Math.min(9, stress);
+                      const flowerPain = 1 - (creature._flowerWeaveComfort || 0.5);
+                      if (flowerPain > 0.38 && hadOverlap) stress = min(9, stress + flowerPain * 0.22);
                       creature._overlapStress = stress;
                       if (!hadOverlap) creature._overlapDissimilar = false;
                       if (stress > 0.12) creature._crowdedFlash = Math.max(creature._crowdedFlash || 0, 10 + stress * 2.2);
@@ -22119,7 +22161,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           }
                           // Social Conversion Pressure
                           let localGroup = this.getLocalGroup(55);
-                          if (localGroup.length >= 5) {
+                          const flowerComfort = this._flowerWeaveComfort ?? 0.5;
+                          const flowerMisalign = flowerComfort < COLONY_FLOWER_MISALIGN_THRESHOLD;
+                          const crowdStress = this._overlapStress || 0;
+                          const minCluster = flowerMisalign || crowdStress > 0.45 ? 4 : 5;
+                          if (localGroup.length >= minCluster) {
                               let rarity = this.getLocalSpecializationRarity();
                               let mySpec = this.specialization;
                               let specCounts = {};
@@ -22127,19 +22173,31 @@ body.is-map-fullscreen #map-fullscreen-btn {
                               let myCount = specCounts[mySpec] || 1;
                               let groupSize = localGroup.length;
                               let myRatio = myCount / groupSize;
-                              let pressureChance = (0.0036 + (groupSize * 0.0007)) * timeScale;
+                              let pressureChance = (0.0042 + (groupSize * 0.00085)) * timeScale;
                               if (envMods && envMods.socialHostilityMult) pressureChance *= envMods.socialHostilityMult;
                               if (rarity > 0.65) pressureChance *= (1.7 + (rarity - 0.65) * 2.3);
                               else if (rarity > 0.45) pressureChance *= 1.28;
                               if (myRatio < 0.22) pressureChance *= 2.55;
                               if (groupSize > 12) pressureChance *= 1.32;
                               if (brainPredatorTend > 0.65) pressureChance *= 1.55;
+                              if (flowerMisalign) {
+                                  pressureChance *= 1.42 + (COLONY_FLOWER_MISALIGN_THRESHOLD - flowerComfort) * 2.6;
+                              }
+                              if (crowdStress > 0.35) pressureChance *= 1.28 + crowdStress * 0.55;
+                              if ((this._personalSpaceComfort || 0) < 0.22) pressureChance *= 1.45;
+                              if (this._overlapDissimilar) pressureChance *= 1.22;
                               if (random() < pressureChance) {
-                                  if (!this.isPredator && this.energy > 17) {
+                                  if (!this.isPredator && this.energy > 15) {
+                                      const flipAggression = typeof getCreatureSocialAggression === 'function'
+                                          ? getCreatureSocialAggression(this) : 0.5;
+                                      this._socialAggressionPeak = max(this._socialAggressionPeak || 0, flipAggression);
+                                      this._wasSocialPredatorFlip = true;
                                       this.isPredator = true;
                                       this.socialPredator = true;
                                       playTone(180, 'sawtooth', 0.35, 0.6, 0, 0.03, 0.25);
-                                      this.currentThought = (rarity > 0.6) ? "Felt out of place..." : "Internal pressure";
+                                      this.currentThought = flowerMisalign
+                                          ? 'Crushed out of flower spacing — turned hunter'
+                                          : (rarity > 0.6) ? 'Felt out of place...' : 'Internal pressure';
                                   }
                               }
                           }
@@ -25431,9 +25489,23 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   const alignPain = 1 - constrain(creature._alignmentComfort || 0, 0, 1);
                   const burdenPain = constrain((creature._networkBurden || 0) / 1.1, 0, 1);
                   const compPain = 1 - constrain(creature._complementarityComfort || 0, 0, 1);
+                  const flowerPain = 1 - constrain(creature._flowerWeaveComfort ?? 0.5, 0, 1);
                   return constrain(
-                      spacePain * 0.3 + stressPain * 0.3 + dissimilarPain + alignPain * 0.14
-                      + burdenPain * 0.1 + compPain * 0.08,
+                      spacePain * 0.26 + stressPain * 0.28 + dissimilarPain + alignPain * 0.12
+                      + burdenPain * 0.09 + compPain * 0.07 + flowerPain * 0.26,
+                      0, 1
+                  );
+              }
+
+              function getCreatureSocialAggression(creature) {
+                  if (!creature) return 0;
+                  const rejection = getCreatureSocialRejection(creature);
+                  const stress = constrain((creature._overlapStress || 0) / 4.2, 0, 1);
+                  const flowerPain = 1 - constrain(creature._flowerWeaveComfort ?? 0.5, 0, 1);
+                  const squeeze = getCreatureSqueezePressure(creature);
+                  const squeezePain = constrain(squeeze.overlapCount * 0.14 + squeeze.sides * 0.06, 0, 1);
+                  return constrain(
+                      rejection * 0.48 + stress * 0.26 + flowerPain * 0.32 + squeezePain * 0.18,
                       0, 1
                   );
               }
@@ -25473,12 +25545,33 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       creature._scoopModuleBag.push(copy);
                   }
 
+                  const preAggression = max(
+                      creature._socialAggressionPeak || 0,
+                      creature._socialRejectionFeel || 0,
+                      (creature._overlapStress || 0) / 5,
+                      creature._wasSocialPredatorFlip ? 0.62 : 0
+                  );
+                  const feastRoll = constrain((preAggression - COLONY_SQUID_FEAST_AGGRESSION) / 0.4, 0, 1);
+                  const becomeFeastSquid = preAggression >= COLONY_SQUID_FEAST_AGGRESSION
+                      && random() < 0.32 + feastRoll * 0.58;
+
                   creature._colonySquidEmerged = true;
                   creature._socialRejectionFeel = 0;
                   creature._colonySquidEmergenceMeter = 0;
+                  creature._socialAggressionPeak = 0;
                   activateJellyfishSquid(creature, { automated: true, force: true });
-                  creature.currentThought = 'Colony folded me into an auto squid — squeezed out as a bell';
-                  addFloatingText(creature.x, creature.y - 28, 'COLONY SQUID EMERGENCE', '#67e8f9');
+                  if (becomeFeastSquid) {
+                      creature._manualSuperPredator = true;
+                      creature.isPredator = true;
+                      creature.socialPredator = true;
+                      creature._colonySquidFeastBorn = true;
+                      creature.currentThought = `Aggression ${Math.round(preAggression * 100)}% — feast bell hatched from the crush`;
+                  } else {
+                      creature.currentThought = 'Colony folded me into an auto squid — squeezed out as a bell';
+                  }
+                  const emergeLabel = becomeFeastSquid ? 'FEAST SQUID EMERGENCE' : 'COLONY SQUID EMERGENCE';
+                  const emergeColor = becomeFeastSquid ? '#f87171' : '#67e8f9';
+                  addFloatingText(creature.x, creature.y - 28, emergeLabel, emergeColor);
                   playTone(190, 'sine', 0.22, 0.52);
                   setTimeout(() => playTone(360, 'triangle', 0.14, 0.42), 90);
                   AnnouncerSystem?.announce?.('colony_squid_emergence', { name: creature.name || 'Kin' }, {
@@ -25489,11 +25582,21 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
                   const allies = creature.getLocalGroup?.(CREATURE_SOCIAL_MAX) || [];
                   for (const ally of allies) {
-                      if (ally === creature || (ally._networkSize || 1) < 2) continue;
+                      if (ally === creature || ally._colonySquidEmerged || (ally._networkSize || 1) < 2) continue;
+                      const allyAg = getCreatureSocialAggression(ally);
+                      if (allyAg >= 0.36) {
+                          ally._colonySquidEmergenceMeter = min(
+                              COLONY_SQUID_EMERGENCE_THRESHOLD,
+                              (ally._colonySquidEmergenceMeter || 0) + 14 + allyAg * 24
+                          );
+                          ally._socialAggressionPeak = max(ally._socialAggressionPeak || 0, allyAg);
+                      }
                       if (ModuleIdentitySystem.computeAlignment(creature, ally) >= 0.9) {
                           ally._macroResonance = max(ally._macroResonance || 0, 42);
                           if (frameCount % 40 === (ally._symSlot || 0) % 40) {
-                              ally.currentThought = `${creature.name || 'Kin'} emerged as a defense squid — lace rejected them outward`;
+                              ally.currentThought = becomeFeastSquid
+                                  ? `${creature.name || 'Kin'} burst into a feast bell — the crush turned hostile`
+                                  : `${creature.name || 'Kin'} emerged as a defense squid — lace rejected them outward`;
                           }
                       }
                   }
@@ -25514,14 +25617,23 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
                   const squeeze = getCreatureSqueezePressure(creature);
                   const rejection = getCreatureSocialRejection(creature);
+                  const aggression = getCreatureSocialAggression(creature);
+                  const flowerComfort = creature._flowerWeaveComfort ?? 0.5;
+                  const flowerMisalign = flowerComfort < COLONY_FLOWER_MISALIGN_THRESHOLD;
                   creature._socialRejectionFeel = rejection;
+                  creature._socialAggressionPeak = max(creature._socialAggressionPeak || 0, aggression);
 
-                  if (!squeeze.allSides || rejection < COLONY_SQUID_MIN_REJECTION) {
+                  const squeezeOk = squeeze.allSides
+                      || (flowerMisalign && squeeze.sides >= 3 && squeeze.overlapCount >= 3);
+                  const rejectionMin = flowerMisalign ? COLONY_SQUID_MIN_REJECTION * 0.86 : COLONY_SQUID_MIN_REJECTION;
+                  if (!squeezeOk || rejection < rejectionMin) {
                       creature._colonySquidEmergenceMeter = max(0, (creature._colonySquidEmergenceMeter || 0) - 0.55 * timeScale);
                       return;
                   }
 
-                  const gain = (0.42 + rejection * 0.5 + squeeze.overlapCount * 0.06) * timeScale;
+                  const flowerBoost = 1 + (1 - flowerComfort) * 1.75;
+                  const gain = (0.5 + rejection * 0.58 + squeeze.overlapCount * 0.09 + aggression * 0.22)
+                      * flowerBoost * timeScale;
                   creature._colonySquidEmergenceMeter = (creature._colonySquidEmergenceMeter || 0) + gain;
 
                   if (creature._colonySquidEmergenceMeter >= COLONY_SQUID_EMERGENCE_THRESHOLD) {
