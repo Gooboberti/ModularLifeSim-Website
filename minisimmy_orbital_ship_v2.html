@@ -4,7 +4,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-031-squid-bubble-probe-dmg" />
+    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-032-squid-direct-damage-pop" />
     <title>MiniSimmy Orbital Ship v2</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2334d399'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%230a0a0f'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -8207,7 +8207,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'local-031-squid-bubble-probe-dmg';
+              const MINISIMMY_BUILD = 'local-032-squid-direct-damage-pop';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -8420,6 +8420,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
               const SCOOP_JELLYFISH_LEAK_MULT = 1.28;
               const SQUID_DUEL_STEAL_COOLDOWN = 42;
               const SQUID_BUBBLE_CLASH_OVERLAP = 0.96;
+              const SQUID_POP_BURST_WHITE_MAX = 58;
+              const SQUID_POP_MODULE_CAP = 220;
               const SCOOP_JELLYFISH_PRESSURE_POP = 1400;
               const SCOOP_JELLYFISH_AUTO_SILVER_CHANCE = 0.14;
               const SCOOP_JELLYFISH_AUTO_GOLD_CHANCE = 0.05;
@@ -24481,6 +24483,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           c.damageFlash = 50;
                           c.purpleFlash = max(c.purpleFlash || 0, 48);
                           c.hazardDamageTaken = (c.hazardDamageTaken || 0) + baseDamage;
+                          tryPopSquidFromDirectHit(c, null, { hazard: true });
 
                           let dx = c.x - h.x;
                           let dy = c.y - h.y;
@@ -24497,8 +24500,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
                               let oSensor = other.getModuleCount('sensor') * 0.32;
                               let oDamage = (12 + random(2, 5) - oSensor) * intensityMult;
                               other.energy = max(0, other.energy - oDamage);
+                              other._killedByHazard = true;
                               other.damageFlash = max(other.damageFlash || 0, 35);
                               other.hazardDamageTaken = (other.hazardDamageTaken || 0) + oDamage;
+                              tryPopSquidFromDirectHit(other, null, { hazard: true });
 
                               let odx = other.x - h.x;
                               let ody = other.y - h.y;
@@ -24871,6 +24876,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       creature.damageFlash = 75;
                       creature.purpleFlash = Math.max(creature.purpleFlash || 0, 95);
                       if (creature.energy <= 0) creature._killedByAntimatter = true;
+                      tryPopSquidFromDirectHit(creature, null, { bullet: true });
                       playAntimatterBurstSound();
                       explosions.push(new Explosion(bx, by));
                       addFloatingText(creature.x, creature.y - 24, MODULE_PARTICLE_NAMES[targetCore] || targetCore, MODULE_AMMO_COLORS[targetCore] || '#e879f9');
@@ -25831,25 +25837,30 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   const decayAt = Date.now() + SCOOP_JELLYFISH_LOOSE_DECAY_MS;
                   const geo = parent?._scoopGeo || (parent ? buildManualScoopGeometry(parent) : null);
                   const fromSquid = opts.fromSquidBurst !== false && isJellyfishScoopCreature(parent);
+                  const burstPop = !!opts.burstPop;
+                  const originX = opts.originX ?? parent?.x ?? centerX;
+                  const originY = opts.originY ?? parent?.y ?? centerY;
+                  const modCap = burstPop ? SQUID_POP_MODULE_CAP : 140;
                   for (const m of mods) {
-                      if (moduleParticles.length >= 140) break;
-                      const shell = fromSquid ? getSquidLeakShellPoint(parent, geo) : null;
+                      if (moduleParticles.length >= modCap) break;
+                      const shell = fromSquid ? getSquidLeakShellPoint(parent, geo, { x: originX, y: originY }) : null;
                       const mp = new ModuleParticle(true, {
                           type: moduleTypeForParticle(m.type),
                           tier: m.tier || 1,
                           color: m.color || MODULE_AMMO_COLORS[m.type] || '#a78bfa',
-                          x: shell?.x ?? parent.x + random(-18, 18),
-                          y: shell?.y ?? parent.y + random(-18, 18),
-                          vx: fromSquid ? random(-0.14, 0.14) : random(-2.8, 2.8),
-                          vy: fromSquid ? random(-0.14, 0.14) : random(-2.8, 2.8),
-                          fromSquidLeak: fromSquid,
+                          x: shell?.x ?? originX + random(-28, 28),
+                          y: shell?.y ?? originY + random(-28, 28),
+                          vx: burstPop ? random(-2.4, 2.4) : (fromSquid ? random(-0.14, 0.14) : random(-2.8, 2.8)),
+                          vy: burstPop ? random(-2.4, 2.4) : (fromSquid ? random(-0.14, 0.14) : random(-2.8, 2.8)),
+                          fromSquidLeak: fromSquid || burstPop,
                           owner: fromSquid ? parent : null,
-                          orbitGraceUntil: Date.now() + (fromSquid ? 1800 : 900)
+                          orbitGraceUntil: Date.now() + (burstPop ? 4200 : (fromSquid ? 1800 : 900))
                       });
-                      if (fromSquid) {
+                      if (fromSquid || burstPop) {
                           mp._squidLeak = true;
                           mp._squidLeakOwner = parent;
                       }
+                      if (burstPop) impartVortexBurstVelocity(mp, originX, originY, 1.55);
                       mp._scoopLooseDecayAt = decayAt;
                       mp._scoopBrainInherit = inherit;
                       if (m._scoopSpecialSheen) mp._scoopSpecialSheen = m._scoopSpecialSheen;
@@ -26085,6 +26096,34 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   return mods;
               }
 
+              function isPopableJellyfishSquid(creature) {
+                  return !!(creature && creature._scoopActive && isJellyfishScoopCreature(creature)
+                      && !creature._squidPopping && creatures.indexOf(creature) >= 0);
+              }
+
+              function impartVortexBurstVelocity(ent, originX, originY, strength = 1) {
+                  if (!ent) return;
+                  const ex = ent.x ?? originX;
+                  const ey = ent.y ?? originY;
+                  const toCenterX = centerX - ex;
+                  const toCenterY = centerY - ey;
+                  const tLen = sqrt(toCenterX * toCenterX + toCenterY * toCenterY) || 1;
+                  const tangentX = -toCenterY / tLen;
+                  const tangentY = toCenterX / tLen;
+                  const spin = (4.8 + random(0, 3.8)) * strength * max(0.7, vortexStrength || 1) * vortexDir;
+                  const radialX = ex - originX;
+                  const radialY = ey - originY;
+                  const rLen = sqrt(radialX * radialX + radialY * radialY) || 1;
+                  const outward = random(0.8, 2.8) * strength;
+                  ent.vx = (ent.vx || 0) + tangentX * spin + (radialX / rLen) * outward;
+                  ent.vy = (ent.vy || 0) + tangentY * spin + (radialY / rLen) * outward;
+              }
+
+              function tryPopSquidFromDirectHit(creature, source = null, opts = {}) {
+                  if (!isPopableJellyfishSquid(creature)) return false;
+                  return popSquidFromDirectDamage(creature, source, { ...opts, burstPop: true });
+              }
+
               function popSquidFromDirectDamage(creature, source = null, opts = {}) {
                   if (!creature || creatures.indexOf(creature) < 0) return false;
                   if (!creature._scoopActive || !isJellyfishScoopCreature(creature)) return false;
@@ -26095,34 +26134,56 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
                   const px = creature.x;
                   const py = creature.y;
-                  const mods = collectSquidPopModules(creature);
-                  spawnLooseScoopModuleParticles(creature, mods);
+                  const burstPop = opts.burstPop !== false;
+                  let mods = collectSquidPopModules(creature);
+                  for (const held of creature._scoopHeldCreatures || []) {
+                      if (!held || creatures.indexOf(held) < 0) continue;
+                      mods = mods.concat(digestPreyIntoLooseModules(creature, held));
+                      held._claimedByPredator = true;
+                      const heldIdx = creatures.indexOf(held);
+                      if (heldIdx >= 0) {
+                          ModuleIdentitySystem.unregisterCreature(held);
+                          creatures.splice(heldIdx, 1);
+                          if (selectedCreature === held) deselectCreature();
+                      }
+                  }
+                  creature._scoopHeldCreatures = [];
+                  spawnLooseScoopModuleParticles(creature, mods, null, {
+                      fromSquidBurst: true,
+                      burstPop,
+                      originX: px,
+                      originY: py
+                  });
                   const bag = creature._scoopBag || [];
                   for (const p of bag) {
                       if (!p) continue;
                       p._scooped = false;
                       p._scoopOwner = null;
                       p._scoopSnared = null;
-                      p.x = px + random(-38, 38);
-                      p.y = py + random(-38, 38);
-                      p.vx = random(-4.2, 4.2);
-                      p.vy = random(-4.2, 4.2);
+                      p.x = px + random(-52, 52);
+                      p.y = py + random(-52, 52);
+                      p.vx = random(-5.5, 5.5);
+                      p.vy = random(-5.5, 5.5);
+                      if (burstPop) impartVortexBurstVelocity(p, px, py, 1.35);
                       if (vortexParticles.indexOf(p) < 0) vortexParticles.push(p);
                   }
-                  const whiteBurst = min(22, 7 + floor(mods.length * 0.45) + floor(bag.length * 0.35));
+                  const whiteBurst = burstPop
+                      ? min(SQUID_POP_BURST_WHITE_MAX, 14 + floor(mods.length * 0.9) + floor(bag.length * 0.75))
+                      : min(22, 7 + floor(mods.length * 0.45) + floor(bag.length * 0.35));
                   for (let wi = 0; wi < whiteBurst; wi++) {
-                      const vp = new VortexParticle(random() < 0.18);
-                      vp.x = px + random(-44, 44);
-                      vp.y = py + random(-44, 44);
-                      vp.vx = random(-3.6, 3.6);
-                      vp.vy = random(-3.6, 3.6);
+                      const vp = new VortexParticle(random() < 0.22);
+                      vp.x = px + random(-58, 58);
+                      vp.y = py + random(-58, 58);
+                      vp.vx = random(-4.8, 4.8);
+                      vp.vy = random(-4.8, 4.8);
+                      if (burstPop) impartVortexBurstVelocity(vp, px, py, 1.2);
                       vortexParticles.push(vp);
                   }
                   explosions.push(new Explosion(px, py));
                   playExplosionSound();
                   triggerModuleFeedFrenzy(px, py);
-                  const label = opts.bumpPop ? 'RIVAL POP' : 'SQUID BURST';
-                  addFloatingText(px, py - 34, `${label} ×${mods.length} mods`, '#f87171');
+                  const label = opts.bumpPop ? 'RIVAL POP' : (opts.infection || opts.purple ? 'INFECT POP' : 'SQUID BURST');
+                  addFloatingText(px, py - 34, `${label} ×${mods.length} mods +${whiteBurst} drift`, '#f87171');
                   AnnouncerSystem?.announce?.('squid_burst', { name: creature.name || 'Squid' }, {
                       dedupeKey: `squid-burst-${creature.name || px}-${py}`,
                       dedupeMs: 45000
@@ -26989,6 +27050,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       prey.energy = max(0, prey.energy - dmg);
                       prey.damageFlash = max(prey.damageFlash || 0, isFeast ? 34 : 26);
                       if (isFeast) prey.purpleFlash = max(prey.purpleFlash || 0, 42);
+                      if (tryPopSquidFromDirectHit(prey, hunter, { scoopBubble: true, infection: isFeast })) continue;
                       if (frameCount % 44 === (prey._symSlot || 0) % 44) {
                           prey.currentThought = isFeast
                               ? 'Bubble crushing me — purple burn inside the bell'
@@ -27009,6 +27071,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   prey.energy = max(0, prey.energy - dmg);
                   prey.damageFlash = max(prey.damageFlash || 0, isFeast ? 40 : 30);
                   if (isFeast) prey.purpleFlash = max(prey.purpleFlash || 0, 52);
+                  tryPopSquidFromDirectHit(prey, hunter, { scoopProbe: true, infection: isFeast });
               }
 
               function applyScoopBubbleAbsorption(creature, geo) {
@@ -27331,6 +27394,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           const len = sqrt(dx * dx + dy * dy) || 1;
                           c.vx += (dx / len) * (4.5 + b.tier * 0.5);
                           c.vy += (dy / len) * (4.5 + b.tier * 0.5);
+                          tryPopSquidFromDirectHit(c, b._firedBy || null, { scoopModule: true });
                           playBulletImpactSound?.();
                           addFloatingText(c.x, c.y - 14, MODULE_TYPE_LABELS[b.moduleType] || b.moduleType, b.color);
                           bullets.splice(i, 1);
@@ -27614,6 +27678,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   } else if (!wasInfected && frameCount % 30 === 0) {
                       target.currentThought = 'Purple tendril burn — infected!';
                   }
+                  tryPopSquidFromDirectHit(target, hunter, { infection: true, purple: true });
               }
 
               function maybeSpeakSquidContextVoice(creature, topic, extra = '') {
@@ -31714,6 +31779,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       addFloatingText(creature.x, creature.y - 28, "INFECTED", '#c026ff');
                       playTone(420, 'sawtooth', 0.22, 0.5);
                   }
+                  tryPopSquidFromDirectHit(creature, null, { infection: true, purple: true });
               }
 
               function applyCoreModuleToCreature(creature, eggData) {
@@ -32403,6 +32469,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       creature.currentThought = 'Infected - Turned predator';
                   }
                   applyParticleEnergyGain(creature, 4, { px: p.x, py: p.y, isWhite: false, baseKnock: 1.6 });
+                  tryPopSquidFromDirectHit(creature, null, { infection: true, purple: true });
                   return true;
               }
 
@@ -33250,6 +33317,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           if (w.offensive) {
                               c.energy = max(0, c.energy - 0.55 * timeScale);
                               w.hitFlash = max(w.hitFlash || 0, 10);
+                              if (tryPopSquidFromDirectHit(c, null, { wall: true })) return;
                           }
                       }
                   }
@@ -33302,7 +33370,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           let d = dist(h.x, h.y, c.x, c.y);
                           if (d < 42) {
                               c.energy = max(0, c.energy - (2.6 + random(0.2, 1.0)) * timeScale);
+                              c._killedByHazard = true;
                               c.damageFlash = max(c.damageFlash || 0, 35);
+                              if (tryPopSquidFromDirectHit(c, null, { cursorHazard: true })) continue;
                               if (d > 3) {
                                   let dx = c.x - h.x;
                                   let dy = c.y - h.y;
@@ -33363,6 +33433,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
                               if (isManualControlImmune(hazardBlast[hi])) continue;
                               hazardBlast[hi].damageFlash = max(hazardBlast[hi].damageFlash || 0, 90);
                               hazardBlast[hi].energy = max(0, hazardBlast[hi].energy - 25);
+                              hazardBlast[hi]._killedByHazard = true;
+                              tryPopSquidFromDirectHit(hazardBlast[hi], null, { cursorHazard: true });
                               const blastDist = dist(h.x, h.y, hazardBlast[hi].x, hazardBlast[hi].y);
                               if (blastDist > 3) {
                                   let dx = hazardBlast[hi].x - h.x;
@@ -34165,12 +34237,14 @@ body.is-map-fullscreen #map-fullscreen-btn {
               function createBulletExplosion(x, y) {
                   explosions.push(new Explosion(x, y));
 
-                  for (let c of creatures) {
+                  for (let ci = creatures.length - 1; ci >= 0; ci--) {
+                      const c = creatures[ci];
                       let d = dist(c.x, c.y, x, y);
                       if (d < 55) {
                           let falloff = map(d, 0, 55, 1.0, 0.3);
 
                           c.energy -= 35 * falloff;
+                          c._killedByBullet = true;
                           c.damageFlash = 65;
                           c.purpleFlash = max(c.purpleFlash || 0, 110);
                           c.vx *= (0.4 + falloff * 0.3);
@@ -34182,6 +34256,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           let knock = map(d, 0, 55, 4.5, 1.2);
                           c.vx += (dx / len) * knock;
                           c.vy += (dy / len) * knock;
+
+                          if (tryPopSquidFromDirectHit(c, null, { bullet: true, explosion: true })) continue;
 
                           if (c.energy > 5 && c.energy < 35 && !c.isPredator && random() < 0.38) {
                               c.isPredator = true;
@@ -45635,6 +45711,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                               tickCreatureScoopLatticeMeter(c, timeScale);
                           }
                           applyCreatureWallCollisions(c);
+                          if (creatures.indexOf(c) < 0) continue;
                           c.energy -= popPressure * timeScale;
                           debugCreatureUpdateCount++;
 
@@ -45712,8 +45789,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
                               const killedByBullet = !!c._killedByBullet;
                               const killedByAntimatter = !!c._killedByAntimatter;
                               const killedByHazard = !!c._killedByHazard;
-                              const directSquidHit = c._scoopActive && isJellyfishScoopCreature(c)
-                                  && (killedByBullet || killedByHazard || c._squidDirectPop);
+                              const directSquidHit = isPopableJellyfishSquid(c)
+                                  && (killedByBullet || killedByAntimatter || killedByHazard || c._squidDirectPop);
                               if (directSquidHit && popSquidFromDirectDamage(c, c._predatorKillCredit || null)) {
                                   continue;
                               }
@@ -46007,7 +46084,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
                                   c.energy -= 82;
                                   c.damageFlash = 70;
                                   c.purpleFlash = max(c.purpleFlash || 0, 95);
-                                  createBulletExplosion(b.x, b.y);
+                                  tryPopSquidFromDirectHit(c, null, { bullet: true });
+                                  if (creatures.indexOf(c) >= 0) createBulletExplosion(b.x, b.y);
                                   playBulletImpactSound();
                               }
                               bullets.splice(i, 1);
@@ -46047,12 +46125,14 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       }
 
                       // Damage creatures it passes near
-                      for (let c of creatures) {
+                      for (let ci = creatures.length - 1; ci >= 0; ci--) {
+                          const c = creatures[ci];
                           if (dist(p.x, p.y, c.x, c.y) < 11) {
                               c.energy = max(0, c.energy - p.damage * timeScale);
                               c._killedByHazard = true;
                               c.damageFlash = max(c.damageFlash || 0, 35);
                               c.purpleFlash = max(c.purpleFlash || 0, 40);
+                              tryPopSquidFromDirectHit(c, null, { vortexProjectile: true });
                           }
                       }
 
