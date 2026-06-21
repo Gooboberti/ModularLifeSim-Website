@@ -4,7 +4,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-033-squid-pop-whites-predator-touch" />
+    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-034-fix-draw-flicker" />
     <title>MiniSimmy Orbital Ship v2</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2334d399'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%230a0a0f'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -8207,7 +8207,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'local-033-squid-pop-whites-predator-touch';
+              const MINISIMMY_BUILD = 'local-034-fix-draw-flicker';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -8546,6 +8546,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
               const FS_CANVAS_MARGIN_KEEP = 0.35;
               const FS_CANVAS_MAX_PIXEL_DENSITY = 3;
               let fsCanvasPixelDensity = 1;
+              let fsCanvasPixelDensityStableTarget = 1;
+              let fsCanvasPixelDensityStableFrames = 0;
+              let fsCanvasZoomResizeTimer = null;
+              let drawViewportPushed = false;
               let centerViewCreature = null;
 
               const CREATURE_DUST_UPGRADES = {
@@ -14246,8 +14250,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   const sysDpr = window.devicePixelRatio || 1;
                   const needX = (rect.width * sysDpr) / width;
                   const needY = (rect.height * sysDpr) / height;
-                  const target = Math.ceil(Math.max(needX, needY, 1));
-                  return Math.min(FS_CANVAS_MAX_PIXEL_DENSITY, target);
+                  const target = Math.round(Math.max(needX, needY, 1));
+                  return Math.min(FS_CANVAS_MAX_PIXEL_DENSITY, Math.max(1, target));
               }
 
               function syncFullscreenCanvasPixelDensity() {
@@ -14256,8 +14260,20 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   const target = mapFullscreenActive && canvas
                       ? getFullscreenCanvasTargetPixelDensity(canvas)
                       : 1;
-                  if (target === fsCanvasPixelDensity) return;
+                  if (target === fsCanvasPixelDensity) {
+                      fsCanvasPixelDensityStableTarget = target;
+                      fsCanvasPixelDensityStableFrames = 0;
+                      return;
+                  }
+                  if (target === fsCanvasPixelDensityStableTarget) {
+                      fsCanvasPixelDensityStableFrames++;
+                  } else {
+                      fsCanvasPixelDensityStableTarget = target;
+                      fsCanvasPixelDensityStableFrames = 1;
+                  }
+                  if (fsCanvasPixelDensityStableFrames < 3) return;
                   fsCanvasPixelDensity = target;
+                  fsCanvasPixelDensityStableFrames = 0;
                   pixelDensity(target);
               }
 
@@ -14428,8 +14444,12 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   applyFullscreenSidebarOffset(Math.min(fullscreenSidebarOpenPx, max), false);
                   const inspMax = getFullscreenInspectorWidth();
                   applyFullscreenInspectorOffset(Math.min(fullscreenInspectorOpenPx, inspMax), false);
-                  syncFullscreenCanvasZoom();
-                  FullscreenPullDowns.onResize();
+                  if (fsCanvasZoomResizeTimer) clearTimeout(fsCanvasZoomResizeTimer);
+                  fsCanvasZoomResizeTimer = setTimeout(() => {
+                      fsCanvasZoomResizeTimer = null;
+                      syncFullscreenCanvasZoom();
+                      FullscreenPullDowns.onResize();
+                  }, 140);
               });
 
               function showViewFiltersModal() {
@@ -24701,8 +24721,16 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   for (let c of creatures) c.show();
               }
 
+              function restoreP5DrawingDefaults() {
+                  colorMode(RGB, 255);
+                  ellipseMode(CENTER);
+                  strokeCap(ROUND);
+                  strokeJoin(ROUND);
+              }
+
               function drawWorld() {
                   background(12, 14, 22);
+                  restoreP5DrawingDefaults();
                   syncVortexWorldCenter();
                   push();
                   Viewport.applyTransform();
@@ -44788,6 +44816,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
               }
 
               function draw() {
+                  drawViewportPushed = false;
                   if (frameCount % DeviceProfile.fpsDisplayInterval === 0) updateFPS();
                   tickToolRentals();
                   tickEvolutionLeak();
@@ -44854,6 +44883,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       drawingContext.restore();
                       pop();
                   }
+                  restoreP5DrawingDefaults();
                   // ==================== END MUSIC VISUALIZER ====================
 
                   if (paused) {
@@ -44868,6 +44898,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       return;
                   }
 
+                  try {
                   simTime += (1 / 60) * timeScale;
 
                   updateIncubatorSlotsProgress(timeScale);
@@ -45007,6 +45038,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   );
 
                   push();
+                  drawViewportPushed = true;
                   Viewport.applyTransform();
 
                   drawVortexBackdropWorld();
@@ -45369,46 +45401,49 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
                   for (let i = vortexParticles.length - 1; i >= 0; i--) {
                       let p = vortexParticles[i];
-                      if (p._scooped) continue;
-                      p.update(vortexDir, vortexStrength);
-                      if (shouldDrawVortexParticle(p)) p.show();
+                      try {
+                          if (p._scooped) continue;
+                          p.update(vortexDir, vortexStrength);
+                          if (shouldDrawVortexParticle(p)) p.show();
 
-                      if (dist(p.x, p.y, centerX, centerY) < 4) {
-                          if (isSquidBurstDriftParticle(p)) {
+                          if (dist(p.x, p.y, centerX, centerY) < 4) {
+                              if (isSquidBurstDriftParticle(p)) {
+                                  vortexParticles.splice(i, 1);
+                                  continue;
+                              }
+                              if (p.isSpecial) {
+                                  spawnVaultEchoCreature(p.x, p.y);
+                              } else if (p.isPurple) {
+                                  let predator = new Creature(p.x, p.y);
+                                  predator.isPredator = true;
+                                  creatures.push(predator);
+                              } else {
+                                  spawnCreatureFromVortexCenter(p.x, p.y, vortexDir, vortexStrength);
+                              }
                               vortexParticles.splice(i, 1);
                               continue;
                           }
-                          if (p.isSpecial) {
-                              // === SPECIAL: Spawn clone from Gene Vault ===
-                              spawnVaultEchoCreature(p.x, p.y);
-                          } else if (p.isPurple) {
-                              let predator = new Creature(p.x, p.y);
-                              predator.isPredator = true;
-                              creatures.push(predator);
-                          } else {
-                              spawnCreatureFromVortexCenter(p.x, p.y, vortexDir, vortexStrength);
+
+                          if (!isSquidBurstDriftParticle(p) && ModuleIdentitySystem.tryFeedResonanceLinkFromParticle(p)) {
+                              vortexParticles.splice(i, 1);
+                              continue;
                           }
-                          vortexParticles.splice(i, 1);
-                          continue;
-                      }
 
-                      if (!isSquidBurstDriftParticle(p) && ModuleIdentitySystem.tryFeedResonanceLinkFromParticle(p)) {
-                          vortexParticles.splice(i, 1);
-                          continue;
-                      }
-
-                      const contactReach = getParticleContactRadius(p) + 8
-                          + (manualControlCreature ? CREATURE_BODY_RADIUS * 0.9 : 0);
-                      const pickupHits = SpatialGrid.queryRadius(p.x, p.y, contactReach);
-                      const whiteContact = ModuleIdentitySystem.isWhiteVortexParticle(p)
-                          ? resolveWhiteParticleContact(p.x, p.y, p, pickupHits)
-                          : { relay: null, absorber: findCreatureAbsorbingParticle(p.x, p.y, p, pickupHits) };
-                      if (whiteContact.relay) applyWhiteParticleColonyRelay(whiteContact.relay, p);
-                      if (whiteContact.absorber && absorbVortexParticle(whiteContact.absorber, p)) {
-                          p.life = 0;
-                          vortexParticles.splice(i, 1);
-                      } else if (p._relayBoost > 0) {
-                          p._relayBoost = max(0, p._relayBoost - 0.004);
+                          const contactReach = getParticleContactRadius(p) + 8
+                              + (manualControlCreature ? CREATURE_BODY_RADIUS * 0.9 : 0);
+                          const pickupHits = SpatialGrid.queryRadius(p.x, p.y, contactReach);
+                          const whiteContact = ModuleIdentitySystem.isWhiteVortexParticle(p)
+                              ? resolveWhiteParticleContact(p.x, p.y, p, pickupHits)
+                              : { relay: null, absorber: findCreatureAbsorbingParticle(p.x, p.y, p, pickupHits) };
+                          if (whiteContact.relay) applyWhiteParticleColonyRelay(whiteContact.relay, p);
+                          if (whiteContact.absorber && absorbVortexParticle(whiteContact.absorber, p)) {
+                              p.life = 0;
+                              vortexParticles.splice(i, 1);
+                          } else if (p._relayBoost > 0) {
+                              p._relayBoost = max(0, p._relayBoost - 0.004);
+                          }
+                      } catch (vpErr) {
+                          if (frameCount % 120 === 0) console.warn('Vortex particle tick error:', vpErr);
                       }
                   }
 
@@ -45944,7 +45979,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       recordEvolutionStats();
                   }
 
-                  pop();
+                  if (drawViewportPushed) {
+                      pop();
+                      drawViewportPushed = false;
+                  }
 
                   updatePlacedHazardFields();
                   renderPlacedHazardGraphics();
@@ -46258,7 +46296,16 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       cleanupArrays();
                   }
 
-                  debugLog("Draw frame complete");
+                  } catch (drawPipelineErr) {
+                      if (frameCount % 30 === 0) {
+                          console.error('Draw pipeline error:', drawPipelineErr);
+                      }
+                  } finally {
+                      if (drawViewportPushed) {
+                          pop();
+                          drawViewportPushed = false;
+                      }
+                  }
 
               }
 
