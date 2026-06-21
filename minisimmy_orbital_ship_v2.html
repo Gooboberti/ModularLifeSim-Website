@@ -4,7 +4,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-036-fix-pop-whites-squid-lattice" />
+    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-037-restore-vortex-particles" />
     <title>MiniSimmy Orbital Ship v2</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2334d399'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%230a0a0f'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -8207,7 +8207,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'local-036-fix-pop-whites-squid-lattice';
+              const MINISIMMY_BUILD = 'local-037-restore-vortex-particles';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -13419,7 +13419,6 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
               function shouldDrawVortexParticle(p) {
                   if (!p) return false;
-                  if (p._squidBurstDrift || (p._burstAbsorbGraceUntil || 0) > Date.now()) return true;
                   if (!shouldDrawEffect('whiteParticles')) {
                       return !!(p.isSpecial && p.specialType !== 'white');
                   }
@@ -16513,46 +16512,49 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   }
 
                   update(vortexDir, vortexStrength) {
-                      if (this._squidBurstDrift) {
-                          let dx = this.x - centerX;
-                          let dy = this.y - centerY;
-                          let distToCenter = sqrt(dx * dx + dy * dy) || 1;
-                          if (distToCenter < 24) {
-                              this.vx -= (dx / distToCenter) * 0.42 * vortexStrength;
-                              this.vy -= (dy / distToCenter) * 0.42 * vortexStrength;
-                          }
-                          let tangentX = -dy, tangentY = dx;
-                          let len = sqrt(tangentX * tangentX + tangentY * tangentY) || 1;
-                          const spin = 1.05 * vortexStrength * vortexDir;
-                          this.vx += (tangentX / len) * spin * 0.09;
-                          this.vy += (tangentY / len) * spin * 0.09;
-                          const pull = 0.2 * vortexStrength;
-                          this.vx += (centerX - this.x) * pull / (distToCenter + 46);
-                          this.vy += (centerY - this.y) * pull / (distToCenter + 46);
-                          this.x += this.vx;
-                          this.y += this.vy;
-                          this.vx *= 0.984;
-                          this.vy *= 0.984;
-                          if (this.isSpecial) this.pulse = (this.pulse || 0) + 0.08;
-                          if ((this._burstAbsorbGraceUntil || 0) < Date.now() && distToCenter > 18) {
-                              this._squidBurstDrift = false;
-                          }
-                          return;
-                      }
-
                       let dx = this.x - centerX;
                       let dy = this.y - centerY;
                       let distToCenter = sqrt(dx * dx + dy * dy) || 1;
-                      if (distToCenter < 3.5) { this.life = 0; return; }
+                      const burstGrace = !!(this._squidBurstDrift
+                          && (this._burstAbsorbGraceUntil || 0) > Date.now());
+
+                      if (this._squidBurstDrift && !burstGrace) {
+                          this._squidBurstDrift = false;
+                      }
+
+                      if (distToCenter < 3.5) {
+                          if (burstGrace) {
+                              const nx = dx / distToCenter;
+                              const ny = dy / distToCenter;
+                              this.vx = (this.vx || 0) + nx * 1.15;
+                              this.vy = (this.vy || 0) + ny * 1.15;
+                              this.x += (this.vx || 0) * 0.32;
+                              this.y += (this.vy || 0) * 0.32;
+                              this.vx = (this.vx || 0) * 0.86;
+                              this.vy = (this.vy || 0) * 0.86;
+                              if (this.isSpecial) this.pulse = (this.pulse || 0) + 0.08;
+                              return;
+                          }
+                          this.life = 0;
+                          return;
+                      }
 
                       let tangentX = -dy, tangentY = dx;
                       let len = sqrt(tangentX * tangentX + tangentY * tangentY) || 1;
-                      this.x += (tangentX / len) * 1.25 * vortexStrength * vortexDir;
-                      this.y += (tangentY / len) * 1.25 * vortexStrength * vortexDir;
+                      const spiral = 1.25 * (burstGrace ? 1.12 : 1);
+                      this.x += (tangentX / len) * spiral * vortexStrength * vortexDir;
+                      this.y += (tangentY / len) * spiral * vortexStrength * vortexDir;
 
-                      let pull = 0.82 * vortexStrength;
+                      let pull = 0.82 * vortexStrength * (burstGrace ? 0.68 : 1);
                       this.x += (centerX - this.x) * pull / (distToCenter + 0.8);
                       this.y += (centerY - this.y) * pull / (distToCenter + 0.8);
+
+                      if (this.vx || this.vy) {
+                          this.x += (this.vx || 0) * 0.2;
+                          this.y += (this.vy || 0) * 0.2;
+                          this.vx = (this.vx || 0) * 0.9;
+                          this.vy = (this.vy || 0) * 0.9;
+                      }
 
                       if (musicEnabled && musicData.bass > 0.35) {
                           let jerk = (musicData.bass - 0.35) * 2.8;
@@ -45627,7 +45629,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           if (shouldDrawVortexParticle(p)) p.show();
 
                           if (dist(p.x, p.y, centerX, centerY) < 4) {
-                              if (isSquidBurstDriftParticle(p)) {
+                              if (isSquidBurstAbsorbProtected(p)) {
                                   continue;
                               }
                               if (p.isSpecial) {
@@ -45643,7 +45645,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                               continue;
                           }
 
-                          if (!isSquidBurstDriftParticle(p) && ModuleIdentitySystem.tryFeedResonanceLinkFromParticle(p)) {
+                          if (!isSquidBurstAbsorbProtected(p) && ModuleIdentitySystem.tryFeedResonanceLinkFromParticle(p)) {
                               vortexParticles.splice(i, 1);
                               continue;
                           }
