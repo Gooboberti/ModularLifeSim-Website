@@ -4,7 +4,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-032-squid-direct-damage-pop" />
+    <meta name="minisimmy-build" content="orbital-ship-v2-2026-06-20-local-033-squid-pop-whites-predator-touch" />
     <title>MiniSimmy Orbital Ship v2</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2334d399'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%230a0a0f'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -8207,7 +8207,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                *  - PerfScale gates effect layers; INSPECTOR_UPDATE_INTERVAL throttles mobile
                *  - SpatialGrid.rebuild() once per draw before creature updates
                */
-              const MINISIMMY_BUILD = 'local-032-squid-direct-damage-pop';
+              const MINISIMMY_BUILD = 'local-033-squid-pop-whites-predator-touch';
               const MINISIMMY_GUIDE_URL = 'minisimmy_orbital_ship_v2-guide-2026.html';
 
               // ================================
@@ -25488,32 +25488,14 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       creature._scoopModuleBag.push(copy);
                   }
 
-                  const preAggression = max(
-                      creature._socialAggressionPeak || 0,
-                      creature._socialRejectionFeel || 0,
-                      (creature._overlapStress || 0) / 5,
-                      creature._wasSocialPredatorFlip ? 0.62 : 0
-                  );
-                  const feastRoll = constrain((preAggression - COLONY_SQUID_FEAST_AGGRESSION) / 0.35, 0, 1);
-                  const becomeFeastSquid = preAggression >= COLONY_SQUID_FEAST_AGGRESSION
-                      && random() < 0.1 + feastRoll * 0.22;
-
                   creature._colonySquidEmerged = true;
                   creature._socialRejectionFeel = 0;
                   creature._colonySquidEmergenceMeter = 0;
                   creature._socialAggressionPeak = 0;
-                  activateJellyfishSquid(creature, { automated: true, force: true, predatorSquid: becomeFeastSquid });
-                  if (becomeFeastSquid) {
-                      creature._manualSuperPredator = true;
-                      creature.isPredator = true;
-                      creature.socialPredator = true;
-                      creature._colonySquidFeastBorn = true;
-                      creature.currentThought = `Aggression ${Math.round(preAggression * 100)}% — feast bell hatched from the crush`;
-                  } else {
-                      creature.currentThought = 'Colony folded me into an auto squid — squeezed out as a bell';
-                  }
-                  const emergeLabel = becomeFeastSquid ? 'FEAST SQUID EMERGENCE' : 'COLONY SQUID EMERGENCE';
-                  const emergeColor = becomeFeastSquid ? '#f87171' : '#67e8f9';
+                  activateJellyfishSquid(creature, { automated: true, force: true, predatorSquid: false });
+                  creature.currentThought = 'Colony folded me into an auto squid — squeezed out as a bell';
+                  const emergeLabel = 'COLONY SQUID EMERGENCE';
+                  const emergeColor = '#67e8f9';
                   addFloatingText(creature.x, creature.y - 28, emergeLabel, emergeColor);
                   playTone(190, 'sine', 0.22, 0.52);
                   setTimeout(() => playTone(360, 'triangle', 0.14, 0.42), 90);
@@ -25537,9 +25519,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       if (ModuleIdentitySystem.computeAlignment(creature, ally) >= 0.9) {
                           ally._macroResonance = max(ally._macroResonance || 0, 42);
                           if (frameCount % 40 === (ally._symSlot || 0) % 40) {
-                              ally.currentThought = becomeFeastSquid
-                                  ? `${creature.name || 'Kin'} burst into a feast bell — the crush turned hostile`
-                                  : `${creature.name || 'Kin'} emerged as a defense squid — lace rejected them outward`;
+                              ally.currentThought = `${creature.name || 'Kin'} emerged as a defense squid — lace rejected them outward`;
                           }
                       }
                   }
@@ -26101,6 +26081,80 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       && !creature._squidPopping && creatures.indexOf(creature) >= 0);
               }
 
+              function isSquidBurstDriftParticle(p) {
+                  return !!(p && p._squidBurstDrift);
+              }
+
+              function isSquidBurstAbsorbProtected(p) {
+                  return !!(p && p._squidBurstDrift && (p._burstAbsorbGraceUntil || 0) > Date.now());
+              }
+
+              function reserveVortexParticleSlots(needed) {
+                  const capMult = DeviceProfile.particleCapMult;
+                  const maxCap = Math.max(8, Math.round(160 * capMult));
+                  while (vortexParticles.length + needed > maxCap && vortexParticles.length > 0) {
+                      let dropIdx = vortexParticles.findIndex((p) => !isSquidBurstDriftParticle(p));
+                      if (dropIdx < 0) dropIdx = 0;
+                      vortexParticles.splice(dropIdx, 1);
+                  }
+              }
+
+              function spawnSquidPopWhiteBurst(px, py, modLen = 0, bagLen = 0) {
+                  const whiteBurst = min(
+                      SQUID_POP_BURST_WHITE_MAX,
+                      18 + floor(modLen * 0.95) + floor(bagLen * 0.8)
+                  );
+                  reserveVortexParticleSlots(whiteBurst);
+                  const specialCount = max(4, floor(whiteBurst * 0.22));
+                  for (let wi = 0; wi < whiteBurst; wi++) {
+                      const specialWhite = wi < specialCount;
+                      const vp = new VortexParticle(false);
+                      vp.x = px + random(-64, 64);
+                      vp.y = py + random(-64, 64);
+                      vp.vx = random(-5.4, 5.4);
+                      vp.vy = random(-5.4, 5.4);
+                      if (specialWhite) {
+                          vp.isSpecial = true;
+                          vp.specialType = 'white';
+                          vp.size = random(3.6, 5.2);
+                          vp.pulse = random(TWO_PI);
+                      } else {
+                          vp.isSpecial = false;
+                          vp.specialType = null;
+                          vp.size = random(2.4, 3.6);
+                      }
+                      vp._squidBurstDrift = true;
+                      vp._burstAbsorbGraceUntil = Date.now() + 5400;
+                      vp._burstPopFrame = frameCount;
+                      impartVortexBurstVelocity(vp, px, py, specialWhite ? 1.55 : 1.3);
+                      vortexParticles.push(vp);
+                  }
+                  return whiteBurst;
+              }
+
+              function tryPopSquidFromPredatorGearTouch(attacker, victim) {
+                  if (!isSquidFeastMode(attacker) || !victim || victim === attacker) return false;
+                  if (!victim._scoopActive || !isJellyfishScoopCreature(victim)) return false;
+                  return tryPopSquidFromDirectHit(victim, attacker, { predatorGear: true });
+              }
+
+              function applySquidPredatorGearSquidPops(hunter, geo) {
+                  if (!isSquidFeastMode(hunter) || !geo) return;
+                  const segments = getScoopTentacleSegments(geo);
+                  if (!segments.length) return;
+                  const hitDist = CREATURE_BODY_RADIUS * 1.4;
+                  const preyScan = SpatialGrid.cells
+                      ? SpatialGrid.queryRadius(hunter.x, hunter.y, geo.stats.reach * 1.45, hunter)
+                      : creatures;
+                  for (const victim of preyScan) {
+                      if (victim === hunter || isManualControlImmune(victim)) continue;
+                      for (const seg of segments) {
+                          const d = distPointToSegment(victim.x, victim.y, seg.x1, seg.y1, seg.x2, seg.y2);
+                          if (d < hitDist && tryPopSquidFromPredatorGearTouch(hunter, victim)) break;
+                      }
+                  }
+              }
+
               function impartVortexBurstVelocity(ent, originX, originY, strength = 1) {
                   if (!ent) return;
                   const ex = ent.x ?? originX;
@@ -26164,25 +26218,32 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       p.y = py + random(-52, 52);
                       p.vx = random(-5.5, 5.5);
                       p.vy = random(-5.5, 5.5);
-                      if (burstPop) impartVortexBurstVelocity(p, px, py, 1.35);
+                      if (burstPop) {
+                          p._squidBurstDrift = true;
+                          p._burstAbsorbGraceUntil = Date.now() + 4800;
+                          impartVortexBurstVelocity(p, px, py, 1.35);
+                      }
                       if (vortexParticles.indexOf(p) < 0) vortexParticles.push(p);
                   }
                   const whiteBurst = burstPop
-                      ? min(SQUID_POP_BURST_WHITE_MAX, 14 + floor(mods.length * 0.9) + floor(bag.length * 0.75))
+                      ? spawnSquidPopWhiteBurst(px, py, mods.length, bag.length)
                       : min(22, 7 + floor(mods.length * 0.45) + floor(bag.length * 0.35));
-                  for (let wi = 0; wi < whiteBurst; wi++) {
-                      const vp = new VortexParticle(random() < 0.22);
-                      vp.x = px + random(-58, 58);
-                      vp.y = py + random(-58, 58);
-                      vp.vx = random(-4.8, 4.8);
-                      vp.vy = random(-4.8, 4.8);
-                      if (burstPop) impartVortexBurstVelocity(vp, px, py, 1.2);
-                      vortexParticles.push(vp);
+                  if (!burstPop) {
+                      for (let wi = 0; wi < whiteBurst; wi++) {
+                          const vp = new VortexParticle(false);
+                          vp.x = px + random(-58, 58);
+                          vp.y = py + random(-58, 58);
+                          vp.vx = random(-4.8, 4.8);
+                          vp.vy = random(-4.8, 4.8);
+                          vortexParticles.push(vp);
+                      }
                   }
                   explosions.push(new Explosion(px, py));
                   playExplosionSound();
                   triggerModuleFeedFrenzy(px, py);
-                  const label = opts.bumpPop ? 'RIVAL POP' : (opts.infection || opts.purple ? 'INFECT POP' : 'SQUID BURST');
+                  const label = opts.predatorGear ? 'GEAR POP'
+                      : opts.bumpPop ? 'RIVAL POP'
+                          : (opts.infection || opts.purple ? 'INFECT POP' : 'SQUID BURST');
                   addFloatingText(px, py - 34, `${label} ×${mods.length} mods +${whiteBurst} drift`, '#f87171');
                   AnnouncerSystem?.announce?.('squid_burst', { name: creature.name || 'Squid' }, {
                       dedupeKey: `squid-burst-${creature.name || px}-${py}`,
@@ -26351,33 +26412,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
               }
 
               function resolveSquidBubbleOverlapPredation() {
-                  const squids = [];
-                  for (const c of creatures) {
-                      if (!c?._scoopActive || !isJellyfishScoopCreature(c) || c.energy <= 0) continue;
-                      const geo = c._scoopGeo;
-                      if (!geo?.bubbleR) continue;
-                      squids.push(c);
-                  }
-                  for (let i = 0; i < squids.length; i++) {
-                      for (let j = i + 1; j < squids.length; j++) {
-                          const a = squids[i];
-                          const b = squids[j];
-                          if (!squidBubblesOverlap(a._scoopGeo, b._scoopGeo)) continue;
-                          const aNew = armSquidFromBubbleClash(a, b);
-                          const bNew = armSquidFromBubbleClash(b, a);
-                          if (aNew || bNew) {
-                              const mx = (a.x + b.x) * 0.5;
-                              const my = (a.y + b.y) * 0.5 - 28;
-                              addFloatingText(mx, my, 'BUBBLE CLASH — FEAST DUEL', '#f87171');
-                              playTone(78, 'sawtooth', 0.24, 0.52, 0, 0.03, 0.3);
-                              setTimeout(() => playTone(156, 'triangle', 0.16, 0.44), 70);
-                              AnnouncerSystem?.announce?.('squid_predator_duel', {}, {
-                                  dedupeKey: `squid-bubble-clash-${a.name || i}-${b.name || j}`,
-                                  dedupeMs: 45000
-                              });
-                          }
-                      }
-                  }
+                  // Predator feast mode is operator-only — bubble overlap no longer auto-arms squids.
               }
 
               const SquidSpawnModal = {
@@ -26920,6 +26955,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
               }
 
               function isScoopableWhiteParticle(p) {
+                  if (isSquidBurstAbsorbProtected(p)) return false;
                   return p && !p._scooped && !p.isPurple
                       && (!p.isSpecial || p.specialType === 'white');
               }
@@ -28073,6 +28109,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           const d = distPointToSegment(c.x, c.y, seg.x1, seg.y1, seg.x2, seg.y2);
                           if (d >= creatureHit) continue;
                           touched = true;
+                          if (isFeast && tryPopSquidFromPredatorGearTouch(creature, c)) break;
                           if (isSquidPredatorDuelTarget(creature, c)) {
                               tryStealSquidEquipmentOnContact(creature, c, geo);
                               bounceOffWallSegment(c, seg.x1, seg.y1, seg.x2, seg.y2, false);
@@ -28134,6 +28171,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   }
 
                   if (isScoopTendrilsDeployed(creature)) applyScoopTentacleContacts(creature, geo);
+                  if (isSquidFeastMode(creature)) applySquidPredatorGearSquidPops(creature, geo);
                   if (isSquidFeastMode(creature) && isScoopProbeDeployed(creature)) {
                       const probeSegs = getScoopTentacleSegments(geo).filter((s) => s.isProbe);
                       const duelScan = SpatialGrid.cells
@@ -29059,8 +29097,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   if (opts.predatorSquid === true) return true;
                   if (opts.predatorSquid === false) return false;
                   if (creature._manualSuperPredator && (creature._squidAutomated || creature._scoopActive)) return true;
-                  if (isSquidFeastMode(creature)) return true;
-                  return !!(creature.isPredator && creature._squidAutomated && isJellyfishScoopCreature(creature));
+                  return isSquidFeastMode(creature);
               }
 
               function shouldSpawnSquidWithTendrils(creature, opts = {}) {
@@ -29069,8 +29106,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   if (opts.predatorSquid === true) return true;
                   if (opts.predatorSquid === false) return false;
                   if (creature._manualSuperPredator && (creature._squidAutomated || creature._scoopActive)) return true;
-                  if (isSquidFeastMode(creature)) return true;
-                  return !!(creature.isPredator && creature._squidAutomated && isJellyfishScoopCreature(creature));
+                  return isSquidFeastMode(creature);
               }
 
               function activateJellyfishSquid(creature, opts = {}) {
@@ -31955,6 +31991,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
               }
 
               function findCreatureAbsorbingParticle(px, py, particle, candidates) {
+                  if (isSquidBurstAbsorbProtected(particle)) return null;
                   if (manualControlCreature && creatures.indexOf(manualControlCreature) >= 0
                       && !manualControlCreature._scoopActive
                       && particleTouchesCreature(manualControlCreature, px, py, particle)) {
@@ -32393,6 +32430,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
               function absorbVortexParticle(creature, p) {
                   if (!creature || !p) return false;
+                  if (isSquidBurstAbsorbProtected(p)) return false;
                   if (creature._scoopActive && creature._manualControl) return false;
                   const isWhite = !p.isSpecial || p.specialType === 'white';
                   if (isWhite && creatureShouldRelayWhiteParticle(creature, p)) return false;
@@ -45336,6 +45374,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       if (shouldDrawVortexParticle(p)) p.show();
 
                       if (dist(p.x, p.y, centerX, centerY) < 4) {
+                          if (isSquidBurstDriftParticle(p)) {
+                              vortexParticles.splice(i, 1);
+                              continue;
+                          }
                           if (p.isSpecial) {
                               // === SPECIAL: Spawn clone from Gene Vault ===
                               spawnVaultEchoCreature(p.x, p.y);
@@ -45350,7 +45392,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           continue;
                       }
 
-                      if (ModuleIdentitySystem.tryFeedResonanceLinkFromParticle(p)) {
+                      if (!isSquidBurstDriftParticle(p) && ModuleIdentitySystem.tryFeedResonanceLinkFromParticle(p)) {
                           vortexParticles.splice(i, 1);
                           continue;
                       }
