@@ -41986,6 +41986,24 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   const header = document.createElement('div');
                   header.className = 'inspect-mod-summary';
                   header.textContent = `${modules.length} mod${modules.length === 1 ? '' : 's'} · ${totalTiers} tier${totalTiers === 1 ? '' : 's'}`;
+
+                  // Create the Import Button
+                  const importBtn = document.createElement('button');
+                  importBtn.className = 'px-3 py-1 text-xs bg-indigo-600 hover:bg-indigo-500 rounded-xl text-white';
+                  importBtn.textContent = 'Import Save';
+
+                  // Hidden file input
+                  const fileInput = document.createElement('input');
+                  fileInput.type = 'file';
+                  fileInput.accept = '.json';
+                  fileInput.className = 'hidden';
+                  fileInput.onchange = (e) => handleImport(e);
+
+                  importBtn.onclick = () => fileInput.click();
+                  header.appendChild(importBtn);
+                  header.appendChild(fileInput);
+
+
                   container.appendChild(header);
 
                   const typeOrder = Object.keys(summary).sort((a, b) => summary[b].weight - summary[a].weight);
@@ -45078,6 +45096,34 @@ body.is-map-fullscreen #map-fullscreen-btn {
               // ==================== SAVE MANAGER (Inventory + Vault + Incubator Only) ====================
               // NOTE: Persists meta inventories — NOT live map creatures. Includes audioSettings + announcerConfig + aeon.
 
+              function handleImport(event) {
+                  const file = event.target.files[0];
+                  if (!file) return;
+
+                  const reader = new FileReader();
+                  reader.onload = (e) => {
+                      try {
+                          const importedData = JSON.parse(e.target.result);
+                          // Basic validation: ensure it's a valid save object
+                          if (!importedData.name || !importedData.data) {
+                              alert("Invalid save file format.");
+                              return;
+                          }
+
+                          // Add to existing list
+                          let currentSaves = JSON.parse(localStorage.getItem('minisimmy_saves') || '[]');
+                          currentSaves.unshift(importedData); // Add to the top
+                          localStorage.setItem('minisimmy_saves', JSON.stringify(currentSaves));
+
+                          // Refresh list
+                          updateManualSavesList();
+                      } catch (err) {
+                          alert("Error reading file: " + err.message);
+                      }
+                  };
+                  reader.readAsText(file);
+              }
+
               // ===============================
               // FURNACE & RESOURCE MANAGEMENT
               // ===============================
@@ -46809,10 +46855,92 @@ body.is-map-fullscreen #map-fullscreen-btn {
               makePanelDraggable('prestige-panel');
 
               function showSaveManager() {
-                  if (!document.getElementById('save-manager-modal')) {
+                  const modal = document.getElementById('save-manager-modal');
+                  if (!modal) {
                       console.warn("Save manager modal not found");
                       return;
                   }
+
+                  // Get the main content area of the modal (adjust selector if needed)
+                  const modalContent = modal.querySelector('.modal-content') || modal.querySelector('div');
+
+                  if (!modalContent) {
+                      console.warn("Could not find modal content container");
+                      return;
+                  }
+
+                  // Clear previous dynamic header if it exists (prevents duplicates)
+                  const oldHeader = modalContent.querySelector('.save-manager-header');
+                  if (oldHeader) oldHeader.remove();
+
+                  // === Gemini's structure starts here ===
+
+                  // 1. Create a flex container for the header
+                  const headerContainer = document.createElement('div');
+                  headerContainer.className = 'flex justify-between items-center mb-4 save-manager-header';
+
+                  // 2. Add the title
+                  const modalHeader = document.createElement('h2');
+                  modalHeader.className = 'text-lg font-bold';
+                  modalHeader.innerText = 'Save/Load Games';
+                  headerContainer.appendChild(modalHeader);
+
+                  // 3. Create the Import Button
+                  const importBtn = document.createElement('button');
+                  importBtn.className = 'px-3 py-1 text-xs bg-indigo-600 hover:bg-indigo-500 rounded-xl text-white';
+                  importBtn.textContent = 'Import File';
+
+                  // 4. Create hidden file input
+                  const fileInput = document.createElement('input');
+                  fileInput.type = 'file';
+                  fileInput.accept = '.json';
+                  fileInput.className = 'hidden';
+
+                  // 5. Connect the logic (inline, no extra function)
+                  importBtn.onclick = () => fileInput.click();
+
+                  fileInput.onchange = (e) => {
+                      const file = e.target.files[0];
+                      if (!file) return;
+
+                      const reader = new FileReader();
+                      reader.onload = function (event) {
+                          try {
+                              const importedSave = JSON.parse(event.target.result);
+
+                              if (!importedSave.name || typeof importedSave.timestamp === 'undefined') {
+                                  addFloatingText(width / 2, 80, 'Invalid save file', '#f87171');
+                                  return;
+                              }
+
+                              importedSave.name = importedSave.name + " (Imported)";
+                              importedSave.timestamp = Date.now();
+
+                              let saves = JSON.parse(localStorage.getItem('minisimmy_saves') || '[]');
+                              saves.unshift(importedSave);
+
+                              if (saves.length > 20) saves = saves.slice(0, 20);
+
+                              localStorage.setItem('minisimmy_saves', JSON.stringify(saves));
+
+                              addFloatingText(width / 2, 80, `Imported: ${importedSave.name}`, '#34d399');
+                              updateManualSavesList();
+
+                          } catch (err) {
+                              console.error("Import failed:", err);
+                              addFloatingText(width / 2, 80, 'Failed to read save file', '#f87171');
+                          }
+                      };
+                      reader.readAsText(file);
+                      e.target.value = ''; // reset input
+                  };
+
+                  // 6. Assemble
+                  headerContainer.appendChild(importBtn);
+                  headerContainer.appendChild(fileInput);
+                  modalContent.prepend(headerContainer);   // Use prepend so it appears at the top
+
+                  // Show the modal
                   updateManualSavesList();
                   updateAutoSavesList();
                   showModal('save-manager-modal');
@@ -46828,36 +46956,28 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   if (!saveName) {
                       saveName = `Quick Save - ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
                   }
-
                   const saveData = {
                       name: saveName,
                       timestamp: Date.now(),
                       version: MINISIMMY_BUILD,
-
                       audioSettings: typeof AudioSettingsSystem !== 'undefined'
                           ? AudioSettingsSystem.getSnapshot() : null,
                       announcerConfig: typeof AnnouncerSystem !== 'undefined'
                           ? JSON.parse(JSON.stringify(AnnouncerSystem.config)) : null,
-
                       // Currencies & Score
                       totalScore: totalScore,
                       aetheriumCrystals: aetheriumCrystals,
                       aetheriumDust: aetheriumDust,
                       highRollerPoints: highRollerPoints,
-
                       // Gene Vault
                       geneVaultSlots: JSON.parse(JSON.stringify(geneVaultSlots)),
-
                       // Egg Inventory
                       eggs: JSON.parse(JSON.stringify(eggs)),
-
                       // Incubation Chamber (old system)
                       incubatingEggs: JSON.parse(JSON.stringify(incubatingEggs || [])),
                       nextIncubationId: nextIncubationId || 1,
-
                       // Incubator Slot Bonuses (the 10 slots with multipliers)
                       incubatorSlots: JSON.parse(JSON.stringify(incubatorSlots || [])),
-
                       toolRentals: JSON.parse(JSON.stringify(toolRentals || {})),
                       permanentBoostBonuses: JSON.parse(JSON.stringify(permanentBoostBonuses || {})),
                       permanentBoostCounts: JSON.parse(JSON.stringify(permanentBoostCounts || {})),
@@ -46889,7 +47009,6 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       selectedEggAmmoSlot: selectedEggAmmoSlot || 0,
                       activeAmmoSilo: activeAmmoSilo ?? -1,
                       economyLedger: JSON.parse(JSON.stringify(economyLedger || createEmptyEconomyLedger())),
-
                       currentAeonNumber,
                       currentAeonName,
                       currentDayNumber,
@@ -46899,12 +47018,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       shadowWeaves: typeof SculptShadowSystem !== 'undefined'
                           ? SculptShadowSystem.getSnapshot() : null
                   };
-
                   let saves = JSON.parse(localStorage.getItem('minisimmy_saves') || '[]');
                   saves.unshift(saveData);
                   if (saves.length > 20) saves = saves.slice(0, 20);
                   localStorage.setItem('minisimmy_saves', JSON.stringify(saves));
-
                   addFloatingText(width / 2, 80, `Saved: ${saveName}`, '#34d399');
                   if (nameInput) nameInput.value = '';
                   updateManualSavesList();
@@ -46913,6 +47030,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
               function updateManualSavesList() {
                   const container = document.getElementById('manual-saves-list');
                   if (!container) return;
+
                   container.innerHTML = '';
 
                   let saves = JSON.parse(localStorage.getItem('minisimmy_saves') || '[]');
@@ -46923,36 +47041,51 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   }
 
                   saves.forEach((save, index) => {
-                      const div = document.createElement('div');
-                      div.className = 'flex justify-between items-center bg-white/5 hover:bg-white/10 rounded-2xl px-4 py-2 text-sm';
+                      // === Main Row Container ===
+                      const saveEntry = document.createElement('div');
+                      saveEntry.className = 'flex flex-row items-center justify-between p-3 border-b border-white/10 gap-3';
 
-                      const date = new Date(save.timestamp).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+                      // 1. Text Info (Name + Date)
+                      const infoContainer = document.createElement('div');
+                      infoContainer.className = 'flex flex-col min-w-0 flex-1';
 
-                      const info = document.createElement('div');
-                      info.className = 'flex-1 min-w-0 pr-3';
-                      const nameEl = document.createElement('div');
-                      nameEl.className = 'font-medium text-emerald-400 truncate';
-                      nameEl.textContent = save.name;
-                      const dateEl = document.createElement('div');
-                      dateEl.className = 'text-xs text-white/50';
-                      dateEl.textContent = date;
-                      info.appendChild(nameEl);
-                      info.appendChild(dateEl);
+                      const date = new Date(save.timestamp).toLocaleString([], {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                      });
 
+                      infoContainer.innerHTML = `
+            <span class="font-bold text-emerald-400 truncate">${save.name}</span>
+            <span class="text-[10px] text-white/50">${date}</span>
+        `;
+
+                      // 2. Action Buttons Container
                       const actions = document.createElement('div');
-                      actions.className = 'flex gap-2 flex-shrink-0';
-                      const loadBtn = document.createElement('button');
-                      loadBtn.className = 'px-3 py-1 text-xs rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white';
-                      loadBtn.textContent = 'Load';
-                      const deleteBtn = document.createElement('button');
-                      deleteBtn.className = 'px-3 py-1 text-xs rounded-xl bg-red-500/80 hover:bg-red-500 text-white';
-                      deleteBtn.textContent = 'Delete';
-                      actions.appendChild(loadBtn);
-                      actions.appendChild(deleteBtn);
-                      div.appendChild(info);
-                      div.appendChild(actions);
+                      actions.className = 'flex flex-wrap justify-end gap-1.5 flex-shrink-0';
 
+                      // --- Buttons ---
+                      const loadBtn = document.createElement('button');
+                      loadBtn.className = 'px-2.5 py-1 text-[10px] sm:text-xs rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition-colors';
+                      loadBtn.textContent = 'Load';
+
+                      const exportBtn = document.createElement('button');
+                      exportBtn.className = 'px-2.5 py-1 text-[10px] sm:text-xs rounded-xl bg-sky-600 hover:bg-sky-500 text-white transition-colors';
+                      exportBtn.textContent = 'Export';
+
+                      const saveOverBtn = document.createElement('button');
+                      saveOverBtn.className = 'px-2.5 py-1 text-[10px] sm:text-xs rounded-xl bg-amber-600 hover:bg-amber-500 text-white transition-colors';
+                      saveOverBtn.textContent = 'Save Over';
+
+                      const deleteBtn = document.createElement('button');
+                      deleteBtn.className = 'px-2.5 py-1 text-[10px] sm:text-xs rounded-xl bg-red-500/80 hover:bg-red-500 text-white transition-colors';
+                      deleteBtn.textContent = 'Delete';
+
+                      // Attach click handlers
                       loadBtn.onclick = () => loadSave(index);
+                      exportBtn.onclick = () => exportSave(index);
+                      saveOverBtn.onclick = () => saveOverExistingSave(index);
                       deleteBtn.onclick = () => {
                           showGameConfirm(`Delete save "${save.name}"?`, () => {
                               let currentSaves = JSON.parse(localStorage.getItem('minisimmy_saves') || '[]');
@@ -46962,8 +47095,97 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           });
                       };
 
-                      container.appendChild(div);
+                      // Add buttons to actions container
+                      actions.appendChild(loadBtn);
+                      actions.appendChild(exportBtn);
+                      actions.appendChild(saveOverBtn);
+                      actions.appendChild(deleteBtn);
+
+                      // Assemble the row
+                      saveEntry.appendChild(infoContainer);
+                      saveEntry.appendChild(actions);
+                      container.appendChild(saveEntry);
                   });
+              }
+
+              // ==================== NEW EXPORT & OVERWRITE LOGIC ====================
+              function saveOverExistingSave(index) {
+                  if (typeof playUIClick === 'function') playUIClick();
+                  let saves = JSON.parse(localStorage.getItem('minisimmy_saves') || '[]');
+                  let existingSave = saves[index];
+                  if (!existingSave) return;
+                  showGameConfirm(`Overwrite save "${existingSave.name}" with your current progress?`, () => {
+                      // Fetch latest saves in case they changed while the modal was open
+                      saves = JSON.parse(localStorage.getItem('minisimmy_saves') || '[]');
+                      // Temporarily hijack the quickSave input field
+                      const nameInput = document.getElementById('new-save-name');
+                      let tempVal = "";
+                      if (nameInput) {
+                          tempVal = nameInput.value;
+                          nameInput.value = existingSave.name;
+                      }
+                      // Call the existing quickSave (this adds the new save to the top at index 0)
+                      quickSave();
+                      // Now, we re-order the array to put the new save back in its original index
+                      let newSaves = JSON.parse(localStorage.getItem('minisimmy_saves') || '[]');
+                      // Because quickSave unshifted, our old target shifted to index + 1. Remove it.
+                      if (index + 1 < newSaves.length) {
+                          newSaves.splice(index + 1, 1);
+                      }
+                      // Move the newly created save (at index 0) back to the target index
+                      if (index > 0 && index < newSaves.length) {
+                          const updatedSave = newSaves.shift();
+                          newSaves.splice(index, 0, updatedSave);
+                      }
+                      // Save the re-ordered array
+                      localStorage.setItem('minisimmy_saves', JSON.stringify(newSaves));
+                      // Restore original input value
+                      if (nameInput) nameInput.value = tempVal;
+                      // Refresh the UI
+                      updateManualSavesList();
+                  });
+              }
+
+              function exportSave(index) {
+                  if (typeof playUIClick === 'function') playUIClick();
+                  let saves = JSON.parse(localStorage.getItem('minisimmy_saves') || '[]');
+                  let save = saves[index];
+                  if (!save) return;
+                  const dataStr = JSON.stringify(save, null, 2);
+                  const safeName = save.name.replace(/[^a-z0-9]/gi, '_');
+                  const dateStr = new Date().toISOString().split('T')[0];
+                  const fileName = `minisimmy_save_${safeName}_${dateStr}.json`;
+                  const blob = new Blob([dataStr], { type: "application/json" });
+                  // iOS/Android Share Sheet Fallback
+                  if (navigator.canShare && /Mobi|Android/i.test(navigator.userAgent)) {
+                      try {
+                          const file = new File([blob], fileName, { type: "application/json" });
+                          if (navigator.canShare({ files: [file] })) {
+                              navigator.share({
+                                  title: 'MiniSimmy Save',
+                                  files: [file]
+                              }).catch((err) => {
+                                  console.log("Share sheet cancelled or failed, falling back to download", err);
+                                  triggerDownloadFallback(blob, fileName);
+                              });
+                              return;
+                          }
+                      } catch (e) {
+                          console.log("File sharing not supported, falling back to download", e);
+                      }
+                  }
+                  triggerDownloadFallback(blob, fileName);
+              }
+
+              function triggerDownloadFallback(blob, fileName) {
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = fileName;
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                  URL.revokeObjectURL(url);
               }
 
               function updateAutoSavesList() {
@@ -46976,7 +47198,6 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   let saves = JSON.parse(localStorage.getItem('minisimmy_saves') || '[]');
                   const save = saves[index];
                   if (!save) return;
-
                   showGameConfirm(
                       `Load "${save.name}"?\nThis will replace inventories, vault, incubator, currencies, aeon data, and audio/narrator settings.\nCreatures on the map will NOT be affected.`,
                       () => applyLoadedSave(save)
@@ -46988,19 +47209,15 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   ScoreEngine.setBalance(save.totalScore ?? save.highRollerPoints ?? 0);
                   aetheriumCrystals = save.aetheriumCrystals || 0;
                   aetheriumDust = save.aetheriumDust || 0;
-
                   // === Restore Gene Vault ===
                   if (save.geneVaultSlots) geneVaultSlots = save.geneVaultSlots;
                   normalizeGeneVaultSlots();
-
                   // === Restore Egg Inventory ===
                   if (save.eggs) eggs = save.eggs;
                   normalizeAllEggData();
-
                   // === Restore Old Incubation System ===
                   if (save.incubatingEggs) incubatingEggs = save.incubatingEggs;
                   if (save.nextIncubationId) nextIncubationId = save.nextIncubationId;
-
                   // === Restore Incubator Slot Bonuses ===
                   if (save.incubatorSlots && save.incubatorSlots.length > 0) {
                       incubatorSlots = save.incubatorSlots;
@@ -47009,7 +47226,6 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       initializeIncubatorSlots();
                   }
                   normalizeAllEggData();
-
                   if (save.toolRentals) {
                       toolRentals = save.toolRentals;
                       normalizeToolRentals();
@@ -47017,7 +47233,6 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       deactivateToolRental('wall');
                       deactivateToolRental('ship');
                   }
-
                   if (save.permanentBoostBonuses) {
                       permanentBoostBonuses = save.permanentBoostBonuses;
                       if (!permanentBoostBonuses.tiers) {
@@ -47127,10 +47342,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   normalizeModuleAmmoBalls();
                   rebuildModuleAmmoBallsFromStorage();
                   updateSorterPrestigeUI();
-
                   addFloatingText(width / 2, 80, `Loaded: ${save.name}`, '#34d399');
                   hideSaveManager();
-
                   // Refresh all relevant UI
                   updateMainStats();
                   updateAetheriumUI();
@@ -47144,7 +47357,6 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   updateTopFurnaceUI?.();
                   updateShipFleetUI();
                   updateSpeedButtonStyles();
-
                   // Refresh Incubator modal if it's currently open
                   const incModal = document.getElementById('incubator-modal');
                   if (incModal && incModal.classList.contains('flex')) {
@@ -47152,7 +47364,6 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           renderIncubatorSlots();
                       }, 60);
                   }
-
                   // Refresh Gene Vault if it's open
                   const vaultModal = document.getElementById('gene-vault-modal');
                   if (vaultModal && vaultModal.classList.contains('flex')) {
@@ -47173,7 +47384,6 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   }
                   extractCreatureToEgg(selectedCreature, { fromInspector: true });
               }
-
               // ============================
               // INPUT HANDLING & EVENT LISTENERS
               // ============================
