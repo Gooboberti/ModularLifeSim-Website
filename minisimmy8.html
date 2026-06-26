@@ -8495,15 +8495,39 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       </h3>
                       <button type="button" onclick="playUIClick(); hideInventory()" class="text-2xl leading-none text-white/60 hover:text-white">&times;</button>
                   </div>
-                  <p class="inv-modal-subtitle">Spend <strong class="text-emerald-400/90">score</strong> for dust without prestiging — or prestige for <strong class="text-fuchsia-300/90">2.5×</strong> more dust plus a full reset. <strong class="text-amber-300/90">1e9 mg dust = 1 crystal.</strong> Each prestige doubles permanent upgrade costs.</p>
+                  <p class="inv-modal-subtitle">Spend <strong class="text-emerald-400/90">score</strong> for dust without prestiging — or prestige for <strong class="text-fuchsia-300/90">2.5×</strong> more dust plus a full reset. <strong class="text-amber-300/90">1e9 mg dust = 1 crystal &middot; 1T crystals = 1 voidheart &middot; 1T voidhearts = 1 sovereign.</strong> Score auto-converts to dust when near the cap to prevent overflow.</p>
 
                   <div class="inventory-modal-scroll space-y-2 pr-0.5">
+                      <!-- Balance row -->
                       <div class="inv-balance-grid inv-balance-grid--compact">
                           <div class="inv-balance-chip inv-balance-chip--score"><span><i class="fa-solid fa-coins text-emerald-400 text-[9px]"></i> Score</span><span id="inv-score" class="inv-bal-val text-emerald-400">0</span></div>
                           <div class="inv-balance-chip"><span><i class="fa-solid fa-flask text-orange-400 text-[9px]"></i> Dust</span><span id="inv-dust" class="inv-bal-val text-orange-400">0</span></div>
                           <div class="inv-balance-chip"><span><i class="fa-solid fa-gem crystal-pink text-[9px]"></i> Crystals</span><span id="inv-crystals" class="inv-bal-val text-pink-400">0</span></div>
                           <div class="inv-balance-chip"><span><i class="fa-solid fa-gem crystal-voidheart text-[9px]"></i> Voidheart</span><span id="inv-voidheart" class="inv-bal-val text-violet-300">0</span></div>
                           <div class="inv-balance-chip"><span><i class="fa-solid fa-crown crystal-sovereign text-[9px]"></i> Sovereign</span><span id="inv-sovereign" class="inv-bal-val text-amber-300">0</span></div>
+                      </div>
+                      <!-- Quick-convert strip: Crystals → Voidheart / Voidheart → Sovereign -->
+                      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:2px">
+                          <button type="button" onclick="playUIClick(); forgeVoidheartShard(true)"
+                                  style="padding:7px 8px;border-radius:10px;font-size:10px;font-weight:700;cursor:pointer;
+                                         border:1px solid rgba(139,92,246,0.4);background:rgba(139,92,246,0.15);color:#c4b5fd;
+                                         text-align:center;transition:all 0.15s;line-height:1.35"
+                                  onmouseover="this.style.background='rgba(139,92,246,0.3)'"
+                                  onmouseout="this.style.background='rgba(139,92,246,0.15)'"
+                                  title="Convert all available crystals to Voidheart shards (1 trillion crystals = 1 shard)">
+                              <i class="fa-solid fa-gem text-[9px]" style="margin-right:3px"></i>All Crystals<br>
+                              <span style="font-size:9px;opacity:0.75">&rarr; Voidheart</span>
+                          </button>
+                          <button type="button" onclick="playUIClick(); forgeAetherSovereign(true)"
+                                  style="padding:7px 8px;border-radius:10px;font-size:10px;font-weight:700;cursor:pointer;
+                                         border:1px solid rgba(251,191,36,0.4);background:rgba(251,191,36,0.12);color:#fde68a;
+                                         text-align:center;transition:all 0.15s;line-height:1.35"
+                                  onmouseover="this.style.background='rgba(251,191,36,0.25)'"
+                                  onmouseout="this.style.background='rgba(251,191,36,0.12)'"
+                                  title="Convert all available Voidheart shards to Sovereigns (1 trillion shards = 1 sovereign)">
+                              <i class="fa-solid fa-crown text-[9px]" style="margin-right:3px"></i>All Voidheart<br>
+                              <span style="font-size:9px;opacity:0.75">&rarr; Sovereign</span>
+                          </button>
                       </div>
 
                       <div id="resource-cycling-panel" class="inv-convert-block inv-convert-block--emerald hidden">
@@ -24649,6 +24673,18 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       const gross = Math.floor(amount);
                       const net = options.skipTax ? gross : grantScoreIncome(gross, options);
                       totalScore += net;
+                      // Hard cap: drain excess above MAX_SAFE_INTEGER to dust
+                      // This prevents floating-point precision loss that zeros the display.
+                      const SCORE_HARD_CAP = Number.MAX_SAFE_INTEGER * 0.8; // ~7.2e15
+                      if (totalScore > SCORE_HARD_CAP) {
+                          const excess = totalScore - SCORE_HARD_CAP;
+                          totalScore = SCORE_HARD_CAP;
+                          // Convert excess to dust (same rate as direct conversion, no tax)
+                          if (typeof DIRECT_SCORE_PER_MG_DUST !== 'undefined' && excess > 0) {
+                              const bonusDust = excess / DIRECT_SCORE_PER_MG_DUST;
+                              grantDustIncome(bonusDust, { skipTax: true });
+                          }
+                      }
                       this.syncCurrency();
                       if (net > 0) {
                           recordEconomyEntry('income', options.ledgerCategory || 'other_in', net, options.ledgerLabel || options.ledgerCategory || 'Score income');
@@ -25631,6 +25667,13 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       }
                   }
                   aetheriumDust += kept;
+                  // Cap dust at 1e18 mg to avoid precision loss; drain excess to crystals
+                  const DUST_CAP = 1e18;
+                  if (aetheriumDust > DUST_CAP) {
+                      const dustExcess = aetheriumDust - DUST_CAP;
+                      aetheriumDust = DUST_CAP;
+                      grantCrystalIncome(dustExcess / DUST_MG_PER_CRYSTAL, { skipTax: true });
+                  }
                   return kept;
               }
 
