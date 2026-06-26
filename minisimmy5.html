@@ -4547,6 +4547,14 @@ body.is-map-fullscreen #fs-modal-portal > .dynamic-modal {
     padding: 0 22px 118px 22px !important;
     background: rgba(0, 0, 0, 0.22) !important;
 }
+/* Weave modals stay centered even in fullscreen */
+body.is-map-fullscreen #fs-modal-portal > #weave-inv-modal,
+body.is-map-fullscreen #fs-modal-portal > #weave-library-modal {
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 16px !important;
+    background: rgba(0, 0, 0, 0.8) !important;
+}
 body.is-map-fullscreen #fs-modal-portal > .game-dialog-overlay,
 #fs-modal-portal > .game-dialog-overlay {
     align-items: center !important;
@@ -9087,9 +9095,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       </div>
                   </div>
 
-                  <div class="meta-modal-footer" style="border-top:1px solid rgba(6,182,212,0.12);background:rgba(0,0,0,0.3)">
-                      <span style="color:rgba(6,182,212,0.7)">Dismantle via <b style="color:#67e8f9">Bottom 10</b> (<span id="reclamation-forge-cost-footer" style="color:#fbbf24">from 40K</span>, bottom 2 free) → crack eggs → sort vats → forge AM bullets</span>
-                      <span class="meta-modal-stat-pill" style="background:rgba(6,182,212,0.08);border-color:rgba(6,182,212,0.2);color:#67e8f9"><i class="fa-solid fa-egg text-[8px]" style="color:#fbbf24"></i> <span id="ammo-footer-holding-count">0/50</span> eggs &middot; <i class="fa-solid fa-atom text-[8px]" style="color:#e879f9"></i> <span id="ammo-footer-shell-count">0</span> AM bullets</span>
+                  <div class="meta-modal-footer" style="border-top:1px solid rgba(6,182,212,0.12);background:rgba(0,0,0,0.3);flex-wrap:wrap;gap:6px">
+                      <span style="color:rgba(6,182,212,0.7);font-size:10px;white-space:nowrap">Bottom 10 &rarr; crack eggs &rarr; sort vats &rarr; AM bullets &nbsp;<span id="reclamation-forge-cost-footer" style="color:#fbbf24;font-size:9px"></span></span>
+                      <span class="meta-modal-stat-pill" style="background:rgba(6,182,212,0.08);border-color:rgba(6,182,212,0.2);color:#67e8f9;white-space:nowrap"><i class="fa-solid fa-egg text-[8px]" style="color:#fbbf24"></i> <span id="ammo-footer-holding-count">0/50</span> &middot; <i class="fa-solid fa-atom text-[8px]" style="color:#e879f9"></i> <span id="ammo-footer-shell-count">0</span> AM</span>
                   </div>
               </div>
           </div>
@@ -16669,6 +16677,12 @@ body.is-map-fullscreen #map-fullscreen-btn {
               }
 
               function keyPressed() {
+                  // Cancel weave placement on Escape
+                  if ((key === 'Escape' || keyCode === 27) &&
+                      typeof WeaveInventorySystem !== 'undefined' && WeaveInventorySystem._pendingPlaceId) {
+                      WeaveInventorySystem.cancelPlace();
+                      return;
+                  }
                   if (mapFullscreenActive && key >= '1' && key <= '7') {
                       return false;
                   }
@@ -47404,6 +47418,12 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   const { x: px, y: py } = gamePointer();
                   const hitR = getCreaturePickRadius();
 
+                  // Weave placement mode — next click deposits the weave
+                  if (typeof WeaveInventorySystem !== 'undefined' && WeaveInventorySystem._pendingPlaceId) {
+                      WeaveInventorySystem.confirmPlace(px, py);
+                      return;
+                  }
+
                   if (energyWallMode) return; // wall draw mode active -- let mousePressed handle it
 
                   if (tryStartHazardNodeDrag(px, py)) return;
@@ -49852,7 +49872,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           return;
                       }
                       // Check score
-                      const hasPts = typeof ScoreEngine !== 'undefined' && ScoreEngine.balance >= order.ptsNeeded;
+                      const hasPts = typeof ScoreEngine !== 'undefined' && ScoreEngine.getBalance() >= order.ptsNeeded;
                       if (!hasPts) {
                           if (typeof addFloatingText === 'function') addFloatingText(width / 2, 80, 'Need ' + this.fmt(order.ptsNeeded) + ' pts — keep scoring', '#f87171');
                           return;
@@ -49964,7 +49984,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           const modHave  = typeof moduleAmmoStorage !== 'undefined'
                               ? Object.values(moduleAmmoStorage).reduce((a, b) => a + Math.floor(b || 0), 0) : 0;
                           const dustHave  = typeof aetheriumDust !== 'undefined' ? aetheriumDust : 0;
-                          const ptsHave   = typeof ScoreEngine !== 'undefined' ? ScoreEngine.balance : 0;
+                          const ptsHave   = typeof ScoreEngine !== 'undefined' ? ScoreEngine.getBalance() : 0;
 
                           const mkRow = (label, need, have, color, tip) => {
                               const met = have >= need;
@@ -50442,7 +50462,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           '15 vat modules each</span></div>',
                       '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:5px" id="forge-powerup-btns"></div>',
                       '<div style="font-size:9px;color:rgba(255,255,255,0.35);margin-top:5px;text-align:center">',
-                        'Creatures collect pickups on the map for typed effects</div>',
+                        '',
                   ].join('');
                   armory.appendChild(section);
 
@@ -50647,6 +50667,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
                   var modal = document.createElement('div');
                   modal.id = 'weave-library-modal';
+                  modal.className = 'dynamic-modal';
                   modal.style.cssText = [
                       'position:fixed;inset:0;z-index:900',
                       'display:flex;align-items:center;justify-content:center',
@@ -50877,7 +50898,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       var needPts  = this.ptsNeeded(nc);
                       var haveMods = this.totalModulesInVats();
                       var haveDust = typeof aetheriumDust !== 'undefined' ? aetheriumDust : 0;
-                      var havePts  = typeof ScoreEngine !== 'undefined' ? ScoreEngine.balance : 0;
+                      var havePts  = typeof ScoreEngine !== 'undefined' ? ScoreEngine.getBalance() : 0;
 
                       if (haveMods < needMods) {
                           if (typeof addFloatingText === 'function')
@@ -51012,7 +51033,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       var NAMES   = typeof MODULE_PARTICLE_NAMES !== 'undefined' ? MODULE_PARTICLE_NAMES : {};
                       var haveMods = this.totalModulesInVats();
                       var haveDust = typeof aetheriumDust !== 'undefined' ? Math.floor(aetheriumDust) : 0;
-                      var havePts  = typeof ScoreEngine !== 'undefined' ? Math.floor(ScoreEngine.balance) : 0;
+                      var havePts  = typeof ScoreEngine !== 'undefined' ? Math.floor(ScoreEngine.getBalance()) : 0;
 
                       // ── Library cards (left/top) ──
                       var libHTML;
@@ -51206,7 +51227,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
               // Deploying spawns the creatures at the chosen position.
               // ════════════════════════════════════════════════════════════
               var WeaveInventorySystem = {
-                  _ready: [],  // array of library entries (full objects with brainSnap)
+                  _ready: [],          // array of library entries (full objects with brainSnap)
+                  _pendingPlaceId: null, // set while waiting for map click to place a weave
 
                   addReady: function(entry) {
                       if (!entry || !entry.slots) return;
@@ -51224,6 +51246,49 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   removeReady: function(inventoryId) {
                       this._ready = this._ready.filter(function(p) { return p._inventoryId !== inventoryId; });
                       this._refreshToolButton();
+                  },
+
+                  // Called by Deploy button — closes modal, enters placement mode
+                  beginPlaceWeave: function(inventoryId) {
+                      var pkg = null;
+                      for (var i = 0; i < this._ready.length; i++) {
+                          if (this._ready[i]._inventoryId === inventoryId) { pkg = this._ready[i]; break; }
+                      }
+                      if (!pkg) return;
+                      this._pendingPlaceId = inventoryId;
+                      // Close modal so the map is fully visible
+                      hideWeaveInventory();
+                      // Crosshair cursor on canvas
+                      var cnv = document.querySelector('#canvas-container canvas');
+                      if (cnv) cnv.style.cursor = 'crosshair';
+                      // Floating instruction
+                      if (typeof addFloatingText === 'function')
+                          addFloatingText(
+                              typeof width  !== 'undefined' ? width  / 2 : 400,
+                              typeof height !== 'undefined' ? height / 2 - 40 : 260,
+                              'Click on the map to place “' + pkg.name + '”  —  Esc to cancel',
+                              '#22d3ee');
+                  },
+
+                  // Called from handleMousePress when _pendingPlaceId is set
+                  confirmPlace: function(worldX, worldY) {
+                      var id = this._pendingPlaceId;
+                      this._pendingPlaceId = null;
+                      var cnv = document.querySelector('#canvas-container canvas');
+                      if (cnv) cnv.style.cursor = '';
+                      if (id) this.deployWeave(id, worldX, worldY);
+                  },
+
+                  // Cancel placement (Escape key)
+                  cancelPlace: function() {
+                      if (!this._pendingPlaceId) return;
+                      this._pendingPlaceId = null;
+                      var cnv = document.querySelector('#canvas-container canvas');
+                      if (cnv) cnv.style.cursor = '';
+                      if (typeof addFloatingText === 'function')
+                          addFloatingText(
+                              typeof width !== 'undefined' ? width / 2 : 400, 80,
+                              'Weave placement cancelled', '#a78bfa');
                   },
 
                   _refreshToolButton: function() {
@@ -51337,6 +51402,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
                   var modal = document.createElement('div');
                   modal.id = 'weave-inv-modal';
+                  modal.className = 'dynamic-modal';
                   modal.style.cssText = [
                       'position:fixed;inset:0;z-index:900',
                       'display:flex;align-items:center;justify-content:center',
@@ -51466,7 +51532,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                                   'style="width:100%;padding:9px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;',
                                   'background:linear-gradient(90deg,rgba(34,211,238,0.4),rgba(34,211,238,0.2));',
                                   'color:#e0f7fa;border:1px solid rgba(34,211,238,0.5)">',
-                                '<i class="fa-solid fa-spider" style="margin-right:6px"></i>Deploy to Map',
+                                '<i class="fa-solid fa-crosshairs" style="margin-right:6px"></i>Place on Map…',
                               '</button>',
                             '</div>',
                           '</div>',
@@ -51478,14 +51544,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   // Wire buttons
                   body.querySelectorAll('[data-deploy]').forEach(function(btn) {
                       btn.addEventListener('click', function() {
-                          var id = btn.dataset.deploy;
-                          // Deploy to current viewport centre
-                          var cx = typeof width  !== 'undefined' ? width  / 2 : 400;
-                          var cy = typeof height !== 'undefined' ? height / 2 : 300;
-                          // Offset by current pan
-                          if (typeof panX !== 'undefined') cx -= panX;
-                          if (typeof panY !== 'undefined') cy -= panY;
-                          WeaveInventorySystem.deployWeave(id, cx, cy);
+                          WeaveInventorySystem.beginPlaceWeave(btn.dataset.deploy);
                       });
                       btn.addEventListener('mouseover', function() { btn.style.filter = 'brightness(1.2)'; });
                       btn.addEventListener('mouseout',  function() { btn.style.filter = ''; });
