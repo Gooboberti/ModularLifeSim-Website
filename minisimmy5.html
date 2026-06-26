@@ -22136,11 +22136,18 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       if (!this.sculptActive || typeof push !== 'function') return;
                       const fc = typeof frameCount !== 'undefined' ? frameCount : 0;
                       const zl = typeof zoomLevel !== 'undefined' ? zoomLevel : 1;
+                      // sc: keep strokes thin regardless of zoom (world-space drawing)
                       const sc = 1 / Math.max(0.4, zl);
+
+                      // All drawing must be in world space — apply the same viewport
+                      // transform used by drawWorld() so coordinates line up with creatures.
+                      push();
+                      if (typeof Viewport !== 'undefined' && typeof Viewport.applyTransform === 'function') {
+                          Viewport.applyTransform();
+                      }
 
                       // Pulse rings around weave-selected creatures
                       if (this._weaveSelectMode && this._weaveSelection.length > 0) {
-                          push();
                           for (const c of this._weaveSelection) {
                               if (!c) continue;
                               const pulse = 0.85 + Math.sin(fc * 0.12) * 0.15;
@@ -22151,12 +22158,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
                               fill(232, 121, 249, 45); noStroke();
                               circle(c.x, c.y, 14 * sc * pulse);
                           }
-                          pop();
                       }
 
                       // Capture mode: highlight selected lattice + draw inter-creature lines
                       if (this._captureMode && this._captureSelection.size > 0) {
-                          push();
                           const sel = this._captureSelection;
                           // Lines between connected pairs in the selection
                           if (typeof ModuleIdentitySystem !== 'undefined') {
@@ -22181,8 +22186,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
                               fill(34, 211, 238, 40); noStroke();
                               circle(c.x, c.y, 16 * sc * pulse);
                           }
-                          pop();
                       }
+
+                      pop(); // restore transform
 
                       // Blueprint slot ghost markers removed — weave system uses capture mode only
                   },
