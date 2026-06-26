@@ -8111,6 +8111,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           <button type="button" id="egg-inventory-auto-slot-all-btn" onclick="playUIClick(); autoSlotAllEggs()" class="meta-modal-chip meta-modal-chip--extract" title="Auto-slot all eggs into first available incubator or vault slots">
                               <i class="fa-solid fa-bolt text-[9px]"></i><span>Auto-Slot All</span>
                           </button>
+                          <button type="button" id="egg-inventory-dismantle-all-btn" onclick="playUIClick(); dismantleAllEggsToHolding()" class="meta-modal-chip" style="background:rgba(236,72,153,0.15);border-color:rgba(236,72,153,0.35);color:#f9a8d4" title="Send all eggs from inventory to the Holding Bay for cracking">
+                              <i class="fa-solid fa-hammer text-[9px]"></i><span>Dismantle All</span>
+                          </button>
                           <button type="button" id="egg-inventory-reclamation-forge-btn" onclick="playUIClick(); hideEggInventory(); showEggAmmoBay()" class="meta-modal-chip meta-modal-chip--ammo" title="Open Reclamation Forge">
                               <i class="fa-solid fa-industry text-[9px]"></i><span>Reclamation Forge</span>
                           </button>
@@ -8494,7 +8497,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       </h3>
                       <button type="button" onclick="playUIClick(); hideInventory()" class="text-2xl leading-none text-white/60 hover:text-white">&times;</button>
                   </div>
-                  <p class="inv-modal-subtitle">Spend <strong class="text-emerald-400/90">score</strong> for dust without prestiging — or prestige for <strong class="text-fuchsia-300/90">2.5×</strong> more dust plus a full reset. <strong class="text-amber-300/90">1e9 mg dust = 1 crystal &middot; 1T crystals = 1 voidheart &middot; 1T voidhearts = 1 sovereign.</strong> Score auto-converts to dust when near the cap to prevent overflow.</p>
+                  <p class="inv-modal-subtitle">Spend <strong class="text-emerald-400/90">score</strong> for dust without prestiging &mdash; or prestige for <strong class="text-fuchsia-300/90">2.5&times;</strong> more dust plus a full reset. <strong class="text-amber-300/90">1e9 mg dust = 1 crystal &middot; 1T crystals = 1 voidheart &middot; 1T voidhearts = 1 sovereign.</strong> Score auto-converts to dust when near the cap to prevent overflow. <strong class="text-slate-400/90">Each conversion type can only be used once per prestige.</strong></p>
 
                   <div class="inventory-modal-scroll space-y-2 pr-0.5">
                       <!-- Balance row -->
@@ -9053,6 +9056,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                                   <div class="ammo-sort-eggs-toolbar">
                                       <div class="text-[10px] font-semibold uppercase tracking-wide" style="color:rgba(251,146,60,0.9);letter-spacing:0.07em"><i class="fa-solid fa-egg" style="margin-right:4px;opacity:0.8"></i>Holding Bay <span id="ammo-egg-holding-count" style="color:#fbbf24">0/50</span></div>
                                       <button type="button" id="ammo-break-egg-btn" onclick="playUIClick(); breakdownSelectedEggHolding()" class="rounded-lg px-2 py-1 text-[10px] font-semibold text-white" style="background:linear-gradient(135deg,rgba(236,72,153,0.7),rgba(168,85,247,0.6));border:1px solid rgba(236,72,153,0.3)" disabled>Crack Egg</button>
+                                      <button type="button" id="ammo-crack-all-btn" onclick="playUIClick(); crackAllEggsInHolding()" class="rounded-lg px-2 py-1 text-[10px] font-semibold text-white" style="background:linear-gradient(135deg,rgba(168,85,247,0.7),rgba(236,72,153,0.6));border:1px solid rgba(168,85,247,0.3)" title="Crack every egg in the holding bay immediately">Crack All</button>
                                       <button type="button" id="ammo-auto-crack-btn" onclick="playUIClick(); toggleAmmoAutoCrackChain()" class="ammo-auto-crack-toggle is-on" title="After each sort finishes, automatically crack the next egg">Auto-chain</button>
                                   </div>
                                   <p class="mb-1 text-white/30 leading-snug" style="font-size:8px">Click to select &middot; double-click to crack</p>
@@ -9198,6 +9202,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
               const CRUCIBLE_UPGRADE_COST_EXP = 12;
               const SLOT_UPGRADE_COST_EXP = 7;
               let prestigeCycleCount = 0;
+              let conversionUsedThisCycle = { scoreToDust: false, dustToCrystal: false, crystalToVoid: false, voidToSov: false };
+              let crucibleTopOffUsed = false;
               let crucibleUsedThisCycle = false;
 
               function getPrestigeCostMultiplier() {
@@ -9221,7 +9227,12 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   if (node?.placeholder) return 1;
                   if (node?.oneTime || node?.isLegendary) return 1;
                   if (node?.treeId) return node.maxLevel || 1;
-                  return MAX_PERMANENT_UPGRADE_LEVEL;
+                  const prestigeCap = Math.max(5, (prestigeCycleCount || 0) * 5 + 5);
+                  return Math.min(MAX_PERMANENT_UPGRADE_LEVEL, prestigeCap);
+              }
+
+              function getPrestigeUpgradeCap() {
+                  return Math.max(5, (prestigeCycleCount || 0) * 5 + 5);
               }
 
               function isPermanentUpgradeMaxed(level, node = null) {
@@ -16145,11 +16156,26 @@ body.is-map-fullscreen #map-fullscreen-btn {
               ];
 
               const TECH_TREE_TIERS = [
-                  { id: 1, name: 'Foundation', spendGate: 42, unlockCost: 32 },
-                  { id: 2, name: 'Expansion', spendGate: 98, unlockCost: 58 },
-                  { id: 3, name: 'Transformation', spendGate: 185, unlockCost: 88 },
-                  { id: 4, name: 'God Tier', spendGate: 310, unlockCost: 125 }
+                  { id: 1, name: 'Foundation', spendGate: 42, unlockCost: 32, prestigeRequired: 0 },
+                  { id: 2, name: 'Expansion', spendGate: 98, unlockCost: 58, prestigeRequired: 0 },
+                  { id: 3, name: 'Transformation', spendGate: 185, unlockCost: 88, prestigeRequired: 5 },
+                  { id: 4, name: 'God Tier', spendGate: 310, unlockCost: 125, prestigeRequired: 10 }
               ];
+
+              function getTechTierPrestigeRequired(tierId) {
+                  const t = TECH_TREE_TIERS.find(t => t.id === tierId);
+                  return (t && t.prestigeRequired) || 0;
+              }
+
+              function isTechTierPrestigeLocked(tierId) {
+                  return (prestigeCycleCount || 0) < getTechTierPrestigeRequired(tierId);
+              }
+
+              function getTechTierPrestigeLockMessage(tierId) {
+                  const req = getTechTierPrestigeRequired(tierId);
+                  if (req <= 0 || !isTechTierPrestigeLocked(tierId)) return null;
+                  return 'Requires Prestige ' + req + ' (you have ' + (prestigeCycleCount || 0) + ')';
+              }
 
               const TECH_TREE_NODES = [
                   { id: 'crystal-resonance', tier: 1, name: 'Crystal Resonance', desc: 'Bonus crystals alongside dust when you prestige (+4% per level).', note: 'Foundation perk. Each level adds crystals to every prestige conversion — pairs with Gene Vault slot investment.', parent: null, cost: 7, costScale: 1.48, maxLevel: 5, effect: 'crystalResonance' },
@@ -24597,7 +24623,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       totalScore += net;
                       // Hard cap: drain excess above MAX_SAFE_INTEGER to dust
                       // This prevents floating-point precision loss that zeros the display.
-                      const SCORE_HARD_CAP = Number.MAX_SAFE_INTEGER * 0.8; // ~7.2e15
+                      const SCORE_HARD_CAP = Number.MAX_SAFE_INTEGER - 1; // 9_007_199_254_740_990 — highest exact safe integer
                       if (totalScore > SCORE_HARD_CAP) {
                           const excess = totalScore - SCORE_HARD_CAP;
                           totalScore = SCORE_HARD_CAP;
@@ -25304,6 +25330,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   normalizeTechTreeState();
                   if (tierId <= techTreeState.tierUnlocked) return false;
                   if (tierId !== techTreeState.tierUnlocked + 1) return false;
+                  if (isTechTierPrestigeLocked(tierId)) return false;
                   const prev = TECH_TREE_TIERS.find((t) => t.id === tierId - 1);
                   return prev && (techTreeState.tierSpend[tierId - 1] || 0) >= prev.spendGate;
               }
@@ -37059,6 +37086,53 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   return breakdownEggFromHolding(selectedEggHoldingIndex);
               }
 
+              function crackAllEggsInHolding() {
+                  let cracked = 0;
+                  for (let i = 0; i < ammoEggHolding.length; i++) {
+                      if (ammoEggHolding[i]) {
+                          breakdownEggFromHolding(i, { chain: true });
+                          cracked++;
+                      }
+                  }
+                  if (cracked === 0) {
+                      addFloatingText(width / 2, 80, 'Holding Bay is empty', '#fbbf24');
+                  } else {
+                      addFloatingText(width / 2, 80, 'Cracked ' + cracked + ' egg' + (cracked !== 1 ? 's' : '') + '!', '#c4b5fd');
+                  }
+              }
+
+              function dismantleAllEggsToHolding() {
+                  if (!eggs || eggs.length === 0) {
+                      addFloatingText(width / 2, 80, 'No eggs in inventory', '#fbbf24');
+                      return;
+                  }
+                  let moved = 0;
+                  for (let i = 0; i < ammoEggHolding.length && eggs.length > 0; i++) {
+                      if (!ammoEggHolding[i]) {
+                          const egg = eggs.shift();
+                          ammoEggHolding[i] = {
+                              kind: 'egg-holding',
+                              modules: egg.modules || [],
+                              name: egg.name || 'Egg',
+                              generation: egg.generation || 1,
+                          };
+                          moved++;
+                      }
+                  }
+                  updateEggCountBadge();
+                  renderAmmoEggHolding();
+                  updateEggAmmoFooterCounts();
+                  if (typeof renderEggInventory === 'function') renderEggInventory();
+                  if (moved > 0) {
+                      addFloatingText(width / 2, 80,
+                          'Moved ' + moved + ' egg' + (moved !== 1 ? 's' : '') + ' to Holding Bay', '#c4b5fd');
+                  }
+                  if (eggs.length > 0) {
+                      addFloatingText(width / 2, 96,
+                          eggs.length + ' remaining (Holding Bay full) — open Forge to crack', '#fbbf24');
+                  }
+              }
+
               function renderAmmoEggHolding() {
                   normalizeAmmoEggHolding();
                   const grid = document.getElementById('ammo-egg-holding-grid');
@@ -41096,12 +41170,17 @@ body.is-map-fullscreen #map-fullscreen-btn {
                                                                                                 </button>`
                           : '';
                       const tierNote = tierDef.id === 1 ? 'Entry tier — lowest base costs.' : tierDef.id === 4 ? 'God Tier — highest costs and capstones.' : `Tier ${tierDef.id} — costs scale ${tierDef.id}x from Foundation.`;
-                      return `<div class="tech-tree-tier ${isLocked ? 'is-locked' : ''} ${isActive ? 'is-active' : ''}">
+                      const presLockMsg = getTechTierPrestigeLockMessage(tierDef.id);
+                      const presLockBanner = presLockMsg
+                          ? `<div style="margin:4px 0 6px;padding:5px 9px;background:rgba(148,163,184,0.1);border:1px solid rgba(148,163,184,0.25);border-radius:8px;font-size:9px;color:rgba(148,163,184,0.8);text-align:center">${presLockMsg} — prestige to unlock this tier</div>`
+                          : '';
+                      return `<div class="tech-tree-tier ${(isLocked || isTechTierPrestigeLocked(tierDef.id)) ? 'is-locked' : ''} ${isActive ? 'is-active' : ''}">
                                                                                                 <div class="flex items-center justify-between gap-2">
                                                                                                     <div class="text-sm font-semibold text-emerald-300 voice-label-wrap" data-voice-key="tech-tier-${tierDef.id}">Tier ${tierDef.id} — ${tierDef.name}</div>
                                                                                                     <div class="font-mono text-[9px] text-white/45">${spent}/${tierDef.spendGate} spent</div>
                                                                                                 </div>
                                                                                                 <div class="mb-1 text-[8px] italic text-sky-200/40">${tierNote}</div>
+                                                                                                ${presLockBanner}
                                                                                                 ${nodesHtml}
                                                                                                 ${gateBtn}
                                                                                             </div>`;
@@ -41413,12 +41492,17 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   const modFactor = Math.pow(INCUBATOR_OP_MOD_EXP, moduleCount);
                   const synergy = 1 + moduleCount * 0.06 * Math.max(0, generation - 1);
                   const tierFactor = Math.pow(1.25, eggTier - 1);
-                  return Math.max(INCUBATOR_OP_BASE_SCORE, Math.floor(INCUBATOR_OP_BASE_SCORE * slotFactor * genFactor * modFactor * synergy * tierFactor));
+                  const raw = INCUBATOR_OP_BASE_SCORE * slotFactor * genFactor * modFactor * synergy * tierFactor;
+                  // Cap cost so it never exceeds 5% of MAX_SAFE_INTEGER (~4.5e14).
+                  // This ensures the player can always afford cycles once score is near the hard cap.
+                  const MAX_OP_COST = Number.MAX_SAFE_INTEGER * 0.10; // up to ~9e14 per cycle
+                  return Math.max(INCUBATOR_OP_BASE_SCORE, Math.min(MAX_OP_COST, Math.floor(raw)));
               }
 
               function getIncubatorAutoUpkeepPerSec(slot, eggData) {
                   const cycleCost = getIncubatorCycleOperationCost(slot, eggData);
-                  return Math.max(1, Math.floor(cycleCost / 48));
+                  // Upkeep also capped so automation never drains faster than possible
+                  return Math.max(1, Math.min(Math.floor(Number.MAX_SAFE_INTEGER * 0.001), Math.floor(cycleCost / 48)));
               }
 
               function tryChargeIncubatorOperation(slot, eggData, label, options = {}) {
@@ -44341,6 +44425,49 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   return crucibleEndTime > Date.now();
               }
 
+              function isConversionUsed(key) {
+                  return !!(conversionUsedThisCycle && conversionUsedThisCycle[key]);
+              }
+
+              function markConversionUsed(key) {
+                  if (conversionUsedThisCycle) conversionUsedThisCycle[key] = true;
+                  updateConversionLockedUI();
+              }
+
+              function updateConversionLockedUI() {
+                  var LOCK_MSG = "Locked until next prestige";
+                  var pairs = [
+                      { key: "scoreToDust",   blockSel: ".inv-convert-block--score",  btnId: "inv-s2d-btn" },
+                      { key: "dustToCrystal", blockSel: ".inv-convert-block--pink",   btnId: "inv-d2c-btn" },
+                      { key: "crystalToVoid", blockSel: ".inv-convert-block--violet", btnId: "inv-c2v-btn" },
+                      { key: "voidToSov",     blockSel: ".inv-convert-block--amber",  btnId: "inv-c2s-btn" },
+                  ];
+                  pairs.forEach(function(p) {
+                      var used = isConversionUsed(p.key);
+                      var block = document.querySelector(p.blockSel);
+                      if (block) {
+                          var lockEl = block.querySelector(".conv-prestige-lock");
+                          if (used) {
+                              if (!lockEl) {
+                                  lockEl = document.createElement("div");
+                                  lockEl.className = "conv-prestige-lock";
+                                  lockEl.style.cssText = "margin-top:6px;padding:5px 9px;background:rgba(148,163,184,0.1);border:1px solid rgba(148,163,184,0.22);border-radius:8px;font-size:9px;color:rgba(148,163,184,0.8);text-align:center;line-height:1.4";
+                                  lockEl.textContent = LOCK_MSG;
+                                  block.appendChild(lockEl);
+                              }
+                              block.querySelectorAll("button").forEach(function(b) { b.disabled = true; b.style.opacity = "0.35"; b.style.cursor = "not-allowed"; });
+                          } else if (lockEl) {
+                              lockEl.remove();
+                              block.querySelectorAll("button").forEach(function(b) { b.disabled = false; b.style.opacity = ""; b.style.cursor = ""; });
+                          }
+                      }
+                  });
+                  var qc2v = document.querySelector("[onclick*='forgeVoidheartShard(true)']");
+                  var qv2s = document.querySelector("[onclick*='forgeAetherSovereign(true)']");
+                  if (qc2v) { var u1 = isConversionUsed("crystalToVoid"); qc2v.disabled = u1; qc2v.style.opacity = u1 ? "0.35" : ""; }
+                  if (qv2s) { var u2 = isConversionUsed("voidToSov");    qv2s.disabled = u2; qv2s.style.opacity = u2 ? "0.35" : ""; }
+}
+
               function isCrucibleOnCooldown() {
                   return crucibleIgnitionCount > 0 && !isCrucibleActive();
               }
@@ -44402,6 +44529,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   if (isCrucibleActive()) {
                       addFloatingText(width / 2, 90, 'Crucible is already burning', '#fbbf24');
                       return false;
+                  }
+                  if (crucibleIgnitionCount >= 1) {
+                      addFloatingText(width / 2, 90, 'Crucible already used this prestige — prestige to re-ignite', '#94a3b8');
+                      updateCrucibleUI(); return false;
                   }
                   const crystalCost = getCrucibleReigniteCrystalCost();
                   if (crystalCost > 0) {
@@ -44595,6 +44726,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       addFloatingText(width / 2, 100, 'Ignite the crucible first', '#f87171');
                       return;
                   }
+                  if (burningCrystals > 0 && crucibleTopOffUsed) {
+                      addFloatingText(width / 2, 100, 'Top-off already used this prestige — prestige to add more', '#94a3b8');
+                      updateCrucibleUI(); return;
+                  }
+                  if (burningCrystals > 0) crucibleTopOffUsed = true;
                   const overheadMult = getCrucibleDustOperateMult();
                   const dustRequired = Math.ceil(amount * overheadMult);
                   if (aetheriumDust < dustRequired) {
@@ -44754,6 +44890,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
               }
 
               function convertScoreToDustAmount(scoreAmount) {
+                  if (isConversionUsed("scoreToDust")) {
+                      addFloatingText(width / 2, 80, "Score to Dust already used this prestige", "#94a3b8");
+                      updateConversionLockedUI(); return;
+                  }
+                  markConversionUsed("scoreToDust");
                   const score = Math.floor(scoreAmount || 0);
                   if (score < DIRECT_SCORE_CONVERT_MIN) {
                       addFloatingText(width / 2, 100, `Need at least ${formatScore(DIRECT_SCORE_CONVERT_MIN)} score`, '#f87171');
@@ -44812,6 +44953,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
               }
 
               function convertDustToCrystalsAmount(crystals) {
+                  if (isConversionUsed("dustToCrystal")) {
+                      addFloatingText(width / 2, 80, "Dust to Crystal already used this prestige", "#94a3b8");
+                      updateConversionLockedUI(); return;
+                  }
+                  markConversionUsed("dustToCrystal");
                   const kg = Math.floor(crystals);
                   if (kg < 1) {
                       addFloatingText(width / 2, 100, `Need at least ${formatDust(DUST_MG_PER_CRYSTAL)} dust!`, '#f87171');
@@ -45536,6 +45682,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
               }
 
               function forgeVoidheartShardsAmount(shardCount) {
+                  if (isConversionUsed("crystalToVoid")) {
+                      addFloatingText(width / 2, 80, "Crystals to Voidheart already used this prestige", "#94a3b8");
+                      updateConversionLockedUI(); return;
+                  }
+                  markConversionUsed("crystalToVoid");
                   const count = Math.floor(shardCount);
                   if (count <= 0) {
                       addFloatingText(width / 2, 72, 'Select shards to forge', '#f87171');
@@ -45566,6 +45717,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
               }
 
               function forgeAetherSovereignsAmount(sovereignCount) {
+                  if (isConversionUsed("voidToSov")) {
+                      addFloatingText(width / 2, 80, "Voidheart to Sovereign already used this prestige", "#94a3b8");
+                      updateConversionLockedUI(); return;
+                  }
+                  markConversionUsed("voidToSov");
                   const count = Math.floor(sovereignCount);
                   if (count <= 0) {
                       addFloatingText(width / 2, 72, 'Select sovereigns to forge', '#f87171');
@@ -45983,6 +46139,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   }
                   crucibleUsedThisCycle = false;
                   crucibleIgnitionCount = 0;
+                  crucibleTopOffUsed = false;
+                  conversionUsedThisCycle = { scoreToDust: false, dustToCrystal: false, crystalToVoid: false, voidToSov: false };
 
                   // Minimum score requirement
                   if (totalScore < 1000) {
