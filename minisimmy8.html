@@ -18206,8 +18206,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       whiteRelayPull: 1.08, whiteRelayLink: 0.34, whiteRelayHoney: true
                   },
                   sensor: {
-                      color: '#38bdf8', pro: 'awareness', con: 'speed',
-                      hazardDetect: 0.13, speedPenalty: 0.045, hazardAvoid: 0.12, vortexEscape: 0.04,
+                      color: '#38bdf8', pro: 'awareness', con: 'hazardDetect',
+                      hazardDetect: 0.13, hazardAvoid: 0.12, vortexEscape: 0.04,
                       dayFoodMult: 0.01, nightFoodMult: 0.048, nightHazard: 0.07, dayPull: -0.07, nightPull: 0.13, nightSocial: 0.05,
                       whiteRelayPull: 0.96, whiteRelayLink: 0.48, whiteRelayPing: true
                   },
@@ -18215,11 +18215,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       color: '#a78bfa', pro: 'speed', con: 'moveDrain',
                       speedBonus: 0.065, moveDrain: 0.009, exploration: 0.05, foodDrive: -0.04,
                       nightSpeed: 0.038, dayExplore: 0.045, nightPull: 0.05, dayPull: -0.02,
-                      whiteRelayPull: 1.22, whiteRelayLink: 0.28, whiteRelaySlip: true
+                      whiteRelayPull: 1.22, whiteRelayLink: 0.28
                   },
                   resistant: {
                       color: '#f472b6', pro: 'tank', con: 'slow',
-                      damageReduce: 0.14, speedPenalty: 0.055, lifespanBonus: 0.28, hazardAvoid: 0.05, exploration: -0.05,
+                      damageReduce: 0.14, speedPenalty: 0.055, lifespanBonus: 0.28, exploration: -0.05,
                       dayTank: 0.04, nightRegen: 0.022, dayPull: 0.03, nightPull: 0.03,
                       whiteRelayPull: 0.88, whiteRelayLink: 0.38, whiteRelayBulwark: true
                   },
@@ -18333,7 +18333,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       { effect: 'Harvest crown yield', note: 'Paragon band multiplies day-phase intake before the legendary capstone.' }
                   ],
                   sensor: [
-                      { effect: 'Hazard detect range', note: 'Initiate band extends red-zone warning before damage ticks.' },
+                      { effect: 'Hazard detect range', note: 'Initiate band extends red-zone warning before damage ticks. No speed penalty.' },
                       { effect: 'Paralysis resistance', note: 'Adept band softens predator-link freeze on Sensor-heavy prey.' },
                       { effect: 'Night blue yield', note: 'Veteran band improves blue-zone intake for night feeders.' },
                       { effect: 'Oracle ping relays', note: 'Expert band broadcasts hazard intel two hops through Communicators.' },
@@ -19411,11 +19411,14 @@ body.is-map-fullscreen #map-fullscreen-btn {
                               const repulse = overlap * overlap * 0.3 * urgency * timeScale;
                               vx -= nx * repulse;
                               vy -= ny * repulse;
-                              const baseDrain = overlap * (similar ? 0.00022 : 0.00075) * timeScale;
+                              // Explorer has an increased clustering penalty
+                              const explorerTiers = creature.getTieredModuleCount ? creature.getTieredModuleCount('explorer') : 0;
+                              const explorerClusterMult = 1 + explorerTiers * 0.55;
+                              const baseDrain = overlap * (similar ? 0.00022 : 0.00075) * timeScale * explorerClusterMult;
                               let stuckDrain = 0;
                               if (stress > 2.4) {
                                   const stuckT = (stress - 2.4) / 2.4;
-                                  stuckDrain = overlap * stuckT * (similar ? 0.0025 : 0.01) * timeScale;
+                                  stuckDrain = overlap * stuckT * (similar ? 0.0025 : 0.01) * timeScale * explorerClusterMult;
                               }
                               overlapDrain += baseDrain + stuckDrain;
                               if (!similar) creature._overlapDissimilar = true;
@@ -23983,6 +23986,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
                               let groupSize = localGroup.length;
                               let myRatio = myCount / groupSize;
                               let pressureChance = (0.0042 + (groupSize * 0.00085)) * timeScale;
+                              // Explorer modules increase pressure in tight clusters
+                              const _explorerTiers = this.getTieredModuleCount ? this.getTieredModuleCount('explorer') : 0;
+                              if (_explorerTiers > 0 && localGroup.length >= minCluster) {
+                                  pressureChance *= 1 + _explorerTiers * 0.45;
+                              }
                               if (envMods && envMods.socialHostilityMult) pressureChance *= envMods.socialHostilityMult;
                               if (rarity > 0.65) pressureChance *= (1.7 + (rarity - 0.65) * 2.3);
                               else if (rarity > 0.45) pressureChance *= 1.28;
@@ -23993,7 +24001,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
                                   pressureChance *= 1.42 + (COLONY_FLOWER_MISALIGN_THRESHOLD - flowerComfort) * 2.6;
                               }
                               if (crowdStress > 0.35) pressureChance *= 1.28 + crowdStress * 0.55;
-                              if ((this._personalSpaceComfort || 0) < 0.22) pressureChance *= 1.45;
+                              const _spaceThreshold = tieredExpl > 0 ? 0.22 + tieredExpl * 0.12 : 0.22;
+                              const _spaceMultiplier = tieredExpl > 0 ? 1.45 + tieredExpl * 0.35 : 1.45;
+                              if ((this._personalSpaceComfort || 0) < _spaceThreshold) pressureChance *= _spaceMultiplier;
                               if (this._overlapDissimilar) pressureChance *= 1.22;
                               if (random() < pressureChance) {
                                   if (!this.isPredator && this.energy > 15) {
@@ -24073,10 +24083,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           }
                       }
 
-                      // Resistant + sensor speed penalties
-                      // REPLACE WITH THIS:
-                      const resistantPenalty = this.getResistantSpeedPenalty()
-                          + this.getTieredModuleCount('sensor') * (MODULE_IDENTITY.sensor.speedPenalty || 0);
+                      // Resistant speed penalty (sensor penalty removed)
+                      const resistantPenalty = this.getResistantSpeedPenalty();
                       let finalMoveSpeed = finalSpeed * Math.max(0.15, 1 - resistantPenalty);
                       const moverT = this.getTieredModuleCount('mover');
                       if (!isDay && moverT >= 2) {
@@ -34336,10 +34344,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       profile.spreadUrge = 0.28 + tiers.sensor * 0.04;
                       profile.sensorPing = true;
                   } else if (core === 'mover') {
-                      profile.thought = 'Slipstream pass — surging into the colony core';
+                      profile.thought = 'Colony surge — pushing energy into the lace core';
                       profile.colonyPull += tiers.mover * 0.07;
                       profile.particleRedirect = 0.88 + tiers.mover * 0.05;
-                      profile.slipstream = true;
                   } else if (core === 'resistant') {
                       profile.thought = 'Bulwark channel — anchoring deeper in the lace';
                       profile.colonyPull += 0.06 + tiers.resistant * 0.03;
