@@ -285,20 +285,32 @@
   </div>
 
   <div id="hero">
-    <h1>MINISIMMY<br><span>COLONY</span></h1>
+    <h1>MINISIMMY<br><span>Neural Evolution Sim</span></h1>
   </div>
 
   <div style="display:flex;flex-direction:column;align-items:center;gap:16px;">
     <div id="actions">
-      <button class="btn-primary" onclick="window.location.href='minisimmy8.html'">Start Game</button>
+      <button class="btn-primary" onclick="window.location.href='minisimmy8.html'"
+              style="font-size: 22px; padding: 18px 52px; letter-spacing: 0.14em;">
+        Start Game
+      </button>
       <button class="btn-secondary" onclick="window.location.href='minisimmy2-guide.html'">Guide</button>
     </div>
 
-    <!-- Big glowing button for Neural Archive -->
-    <button class="btn-primary" onclick="window.location.href='module_neural_archive.html'"
-            style="font-size: 21px; padding: 18px 56px; letter-spacing: 0.16em; margin-top: 4px; box-shadow: 0 0 32px rgba(0,255,180,0.5), 0 10px 30px -10px rgba(0,0,0,0.4);">
-      OPEN NEURAL ARCHIVE
-    </button>
+    <!-- Bottom row: Neural Architecture + Neural Archive -->
+    <div style="display:flex; gap:12px; align-items:center; margin-top: 4px;">
+      <!-- New Neural Architecture button -->
+      <button class="btn-primary" onclick="window.location.href='NeuralArch.html'"
+              style="font-size: 15px; padding: 13px 28px; letter-spacing: 0.08em; box-shadow: 0 0 20px rgba(0,255,180,0.35);">
+        NEURAL ARCHITECTURE
+      </button>
+
+      <!-- Neural Archive button -->
+      <button class="btn-primary" onclick="window.location.href='module_neural_archive.html'"
+              style="font-size: 15px; padding: 13px 28px; letter-spacing: 0.08em; box-shadow: 0 0 32px rgba(0,255,180,0.5), 0 10px 30px -10px rgba(0,0,0,0.4);">
+        OPEN NEURAL ARCHIVE
+      </button>
+    </div>
   </div>
 </div>
 
@@ -391,7 +403,6 @@ class Creature {
     this.r  = opts.r  ?? (Math.random() * 28 + 18);
     this.isPredator = opts.isPredator ?? false;
 
-    // gentle drift
     const angle = Math.random() * Math.PI * 2;
     const spd   = Math.random() * 0.18 + 0.04;
     this.vx = Math.cos(angle) * spd;
@@ -401,9 +412,8 @@ class Creature {
     this.rotAngle  = Math.random() * Math.PI * 2;
     this.rotSpd    = (Math.random() * 0.006 + 0.002) * (Math.random()<0.5?1:-1);
     this.pulse = 0;
-    this.energy = 0; // 0‑1, set by connection logic
+    this.energy = 0;
 
-    // modules
     const modCount = opts.isPredator ? 0
                    : (opts.modules ?? [1,1,1,2,2,2,3,3][Math.floor(Math.random()*8)]);
     this.modules = [];
@@ -424,14 +434,12 @@ class Creature {
       this.x += this.vx + Math.sin(this.wobble * 0.7) * 0.06;
       this.y += this.vy + Math.cos(this.wobble * 1.1) * 0.04;
 
-      // soft bounce
       const pad = this.r + 40;
       if (this.x < pad)       { this.vx += 0.04; }
       if (this.x > W - pad)   { this.vx -= 0.04; }
       if (this.y < pad)       { this.vy += 0.04; }
       if (this.y > H - pad)   { this.vy -= 0.04; }
 
-      // speed cap
       const spd = Math.hypot(this.vx, this.vy);
       const maxSpd = this.isPredator ? 0.55 : 0.28;
       if (spd > maxSpd) { this.vx *= maxSpd/spd; this.vy *= maxSpd/spd; }
@@ -450,20 +458,17 @@ class Creature {
     const glowR   = this.r * (1.8 + gEnergy * 1.2 + this.pulse * 0.15);
 
     if (this.isPredator) {
-      // predator angular form
       this._drawPredator(t, glowR);
     } else {
       this._drawOrganic(t, glowR, gEnergy);
     }
 
-    // modules
     for (const m of this.modules) {
       m.angle += 0.003;
       const mx = Math.cos(m.angle) * m.dist;
       const my = Math.sin(m.angle) * m.dist;
       const mr = this.r * 0.22 + this.energy * 2;
 
-      // glow
       const mg = ctx.createRadialGradient(mx,my,0, mx,my,mr*2.5);
       mg.addColorStop(0, m.type.glow + '0.6)');
       mg.addColorStop(1, m.type.glow + '0)');
@@ -472,7 +477,6 @@ class Creature {
       ctx.fillStyle = mg;
       ctx.fill();
 
-      // diamond shape
       ctx.save();
       ctx.translate(mx, my);
       ctx.rotate(t * 0.001 + m.angle);
@@ -492,8 +496,6 @@ class Creature {
   }
 
   _drawOrganic(t, glowR, gEnergy) {
-    const baseColor = this.isPredator ? '#ff4444' : '#1a3a5c';
-    // outer glow
     const g = ctx.createRadialGradient(0,0,this.r*0.3, 0,0,glowR);
     const gc = gEnergy > 0.3 ? `rgba(0,255,178,` : `rgba(40,120,200,`;
     g.addColorStop(0, gc + (0.12 + gEnergy * 0.15) + ')');
@@ -501,7 +503,6 @@ class Creature {
     ctx.beginPath(); ctx.arc(0,0,glowR,0,Math.PI*2);
     ctx.fillStyle = g; ctx.fill();
 
-    // body — blob shape
     const segs = 7;
     ctx.beginPath();
     for (let i = 0; i <= segs; i++) {
@@ -521,7 +522,6 @@ class Creature {
     ctx.fillStyle = bodyG;
     ctx.fill();
 
-    // rim
     ctx.strokeStyle = gEnergy > 0.4
       ? `rgba(0,255,178,${0.3 + gEnergy * 0.5})`
       : `rgba(100,200,255,0.2)`;
@@ -530,7 +530,6 @@ class Creature {
   }
 
   _drawPredator(t, glowR) {
-    // angular / hexagonal predator
     const g = ctx.createRadialGradient(0,0,this.r*0.2, 0,0,glowR);
     g.addColorStop(0, 'rgba(255,80,80,0.15)');
     g.addColorStop(1, 'rgba(255,80,80,0)');
@@ -552,7 +551,6 @@ class Creature {
     ctx.strokeStyle = `rgba(255,90,90,${0.4 + this.pulse*0.2})`;
     ctx.lineWidth = 1.5; ctx.stroke();
 
-    // inner cross
     ctx.strokeStyle = 'rgba(255,120,120,0.3)';
     ctx.lineWidth = 0.8;
     ctx.beginPath();
@@ -587,7 +585,6 @@ class LaceConnection {
     const mx = (a.x + b.x) / 2 + Math.sin(t * 0.0008 + a.x * 0.01) * 30;
     const my = (a.y + b.y) / 2 + Math.cos(t * 0.0006 + b.y * 0.01) * 25;
 
-    // curved line base
     ctx.beginPath();
     ctx.moveTo(a.x, a.y);
     ctx.quadraticCurveTo(mx, my, b.x, b.y);
@@ -597,7 +594,6 @@ class LaceConnection {
     ctx.lineWidth   = this.strength * 1.5;
     ctx.stroke();
 
-    // bright core line
     ctx.beginPath();
     ctx.moveTo(a.x, a.y);
     ctx.quadraticCurveTo(mx, my, b.x, b.y);
@@ -605,7 +601,6 @@ class LaceConnection {
     ctx.lineWidth   = this.strength * 0.5;
     ctx.stroke();
 
-    // flowing energy dot
     if (this.strength > 0.25) {
       for (let p = 0; p < 2; p++) {
         const fp = (this.flowOffset + p * 0.5) % 1;
@@ -673,7 +668,6 @@ canvas.addEventListener('mousedown', e => {
       return;
     }
   }
-  // click empty space → spawn predator
   spawnPredatorAt(x, y);
 });
 
@@ -716,7 +710,6 @@ function spawnPredatorAt(x, y) {
   if (creatures.filter(c=>c.isPredator).length >= 3) return;
   const p = new Creature({ x, y, r: 28+Math.random()*14, isPredator:true });
   creatures.push(p);
-  // flash
   for (let i = 0; i < 12; i++) particles.push(new Particle(x,y,'#ff6060'));
 }
 
@@ -744,17 +737,14 @@ let hintShown = true;
 function frame(t) {
   requestAnimationFrame(frame);
 
-  // background
   ctx.fillStyle = '#050810';
   ctx.fillRect(0,0,W,H);
 
-  // nebula vignette
   const vg = ctx.createRadialGradient(W*.5,H*.5,H*.1, W*.5,H*.5,H*.85);
   vg.addColorStop(0,'rgba(0,8,20,0)');
   vg.addColorStop(1,'rgba(0,4,12,0.55)');
   ctx.fillStyle = vg; ctx.fillRect(0,0,W,H);
 
-  // stars
   for (const s of STARS) {
     const tw = Math.sin(t * s.speed + s.twinkle);
     ctx.beginPath();
@@ -763,16 +753,13 @@ function frame(t) {
     ctx.fill();
   }
 
-  // connections
   for (const c of connections) { c.update(); c.draw(t); }
 
-  // energy calculation
   const activeConns = connections.filter(c=>c.strength > 0.3);
   const totalEnergy = Math.min(1, activeConns.length / 8);
   energyFill.style.width = (totalEnergy * 100) + '%';
   if (totalEnergy > 0.05) energyBar.classList.add('visible');
 
-  // update creature energy
   for (const c of creatures) c.energy = 0;
   for (const c of connections) {
     if (c.strength > 0.15) {
@@ -781,7 +768,6 @@ function frame(t) {
     }
   }
 
-  // spawn ambient particles near active connections
   if (t - lastPart > 120 && activeConns.length > 0) {
     const rc = activeConns[Math.floor(Math.random()*activeConns.length)];
     const px = (rc.a.x + rc.b.x) / 2 + (Math.random()-0.5)*40;
@@ -790,16 +776,13 @@ function frame(t) {
     lastPart = t;
   }
 
-  // creatures
   for (const c of creatures) { c.update(t); c.draw(t); }
 
-  // particles
   for (let i = particles.length-1; i >= 0; i--) {
     particles[i].update(); particles[i].draw();
     if (particles[i].dead) particles.splice(i,1);
   }
 
-  // hint fade
   if (hintShown && t > 5000) {
     hint.style.opacity = '0';
     hintShown = false;
