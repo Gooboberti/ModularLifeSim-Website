@@ -4729,7 +4729,8 @@ body.is-map-fullscreen .env-cycle-meter.is-docked #env-cycle-music-slot {
 #fs-modal-portal > .dynamic-modal,
 #fs-modal-portal > .fixed,
 #fs-modal-portal > .tutorial-corner-popup,
-#fs-modal-portal > .game-dialog-overlay {
+#fs-modal-portal > .game-dialog-overlay,
+#fs-modal-portal > .weaves-modal {
     pointer-events: auto;
 }
 body.is-map-fullscreen #fs-modal-portal > .dynamic-modal {
@@ -6551,11 +6552,77 @@ body.is-map-fullscreen #map-fullscreen-btn {
         }
 
         /* ============================================================
+           LATTICE IDENTITY badge — shown in creature inspector
+           ============================================================ */
+        .inspect-lattice-identity {
+            margin-top: 6px;
+            padding: 7px 9px;
+            border-radius: 8px;
+            border: 1px solid var(--lattice-accent, rgba(148, 163, 184, 0.4));
+            background: linear-gradient(135deg, rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.15));
+            position: relative;
+            overflow: hidden;
+        }
+        .inspect-lattice-identity::before {
+            content: '';
+            position: absolute;
+            left: 0; top: 0; bottom: 0;
+            width: 2px;
+            background: var(--lattice-accent, #94a3b8);
+            box-shadow: 0 0 6px var(--lattice-accent, #94a3b8);
+        }
+        .inspect-lattice-identity__head {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 8px;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.5);
+            margin-bottom: 3px;
+        }
+        .inspect-lattice-identity__archetype {
+            color: var(--lattice-accent, #94a3b8);
+            font-weight: 700;
+            text-shadow: 0 0 6px var(--lattice-accent, #94a3b8);
+        }
+        .inspect-lattice-identity__name {
+            font-size: 10px;
+            font-weight: 700;
+            color: #e2e8f0;
+            line-height: 1.25;
+            margin-bottom: 3px;
+            letter-spacing: 0.02em;
+        }
+        .inspect-lattice-identity__desc {
+            font-size: 8.5px;
+            color: rgba(255, 255, 255, 0.55);
+            line-height: 1.35;
+            font-style: italic;
+        }
+        .inspect-lattice-identity__stats {
+            display: flex;
+            gap: 6px;
+            margin-top: 4px;
+            font-size: 8px;
+            color: rgba(255, 255, 255, 0.45);
+            letter-spacing: 0.06em;
+        }
+        .inspect-lattice-identity__stat {
+            display: inline-flex;
+            gap: 3px;
+        }
+        .inspect-lattice-identity__stat b {
+            color: #e2e8f0;
+            font-weight: 700;
+        }
+
+        /* ============================================================
            WEAVES PANEL — dark sci-fi modal listing live weaves on map
            ============================================================ */
         .weaves-modal {
             position: fixed;
-            z-index: 525;
+            z-index: 950;
             width: min(420px, 96vw);
             max-height: 80vh;
             border-radius: 14px;
@@ -7931,6 +7998,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
                                   </div>
                                   <div id="inspect-dust-upgrade-hint" class="mt-1 text-center text-[9px] leading-snug text-violet-300/45"></div>
                               </div>
+                              <!-- Lattice Identity badge -->
+                              <div id="inspect-lattice-identity" class="inspect-lattice-identity" style="display:none"></div>
                               <!-- Lace / Alignment -->
                               <div id="inspect-lace-panel" class="inspect-lace-panel border-t border-white/10 pt-2">
                                   <div class="inspect-lace-title voice-label-wrap" data-voice-key="lace-panel">Lace &amp; Alignment</div>
@@ -20809,6 +20878,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           // Drive-By Lattice Feeding: Explorer/Mover dump energy into linked lattices
                           if (typeof MomentumRelaySystem !== 'undefined') {
                               MomentumRelaySystem.tick(timeScale);
+                          }
+                          // Lattice identity: throttled refresh of archetype + names
+                          if (typeof LatticeIdentitySystem !== 'undefined') {
+                              LatticeIdentitySystem.refresh();
                           }
                       }
                       for (const c of creatures) {
@@ -41936,6 +42009,33 @@ body.is-map-fullscreen #map-fullscreen-btn {
               function updateInspectorLacePanel(creature) {
                   const stats = ModuleIdentitySystem.getInspectorLaceStats(creature);
                   if (!stats) return;
+
+                  // ─── Lattice Identity badge ──────────────────────────────
+                  const identityEl = document.getElementById('inspect-lattice-identity');
+                  if (identityEl && typeof LatticeIdentitySystem !== 'undefined') {
+                      const id = LatticeIdentitySystem.getForCreature(creature);
+                      if (id) {
+                          const m = id.metrics;
+                          const archLabel = id.archetypeName ? id.archetypeName : 'Nascent Weave';
+                          identityEl.style.setProperty('--lattice-accent', id.accent);
+                          identityEl.innerHTML = ''
+                              + '<div class="inspect-lattice-identity__head">'
+                              +   '<span>◈ Lattice</span>'
+                              +   '<span class="inspect-lattice-identity__archetype">' + archLabel + '</span>'
+                              + '</div>'
+                              + '<div class="inspect-lattice-identity__name">' + id.name + '</div>'
+                              + '<div class="inspect-lattice-identity__desc">' + id.description + '</div>'
+                              + '<div class="inspect-lattice-identity__stats">'
+                              +   '<span class="inspect-lattice-identity__stat"><b>' + m.size + '</b> nodes</span>'
+                              +   '<span class="inspect-lattice-identity__stat"><b>' + m.linkCount + '</b> links</span>'
+                              +   '<span class="inspect-lattice-identity__stat"><b>' + Math.round(m.efficiency * 100) + '%</b> eff</span>'
+                              + '</div>';
+                          identityEl.style.display = 'block';
+                      } else {
+                          identityEl.style.display = 'none';
+                      }
+                  }
+
                   const symEl = document.getElementById('inspect-lace-symbiosis');
                   if (symEl) {
                       const lv = stats.symbiosisLevel;
@@ -52000,14 +52100,21 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           };
                       });
 
+                      // Capture lattice identity snapshot (archetype + metrics at capture time)
+                      var identitySnap = null;
+                      if (typeof LatticeIdentitySystem !== 'undefined' && LatticeIdentitySystem.buildIdentitySnapshot) {
+                          try { identitySnap = LatticeIdentitySystem.buildIdentitySnapshot(valid); } catch(e) {}
+                      }
+
                       var entry = {
                           id: 'wc_' + Date.now(),
-                          name: name || ('Weave ' + (this._library.length + 1)),
+                          name: name || (identitySnap && identitySnap.name) || ('Weave ' + (this._library.length + 1)),
                           capturedAt: Date.now(),
                           nodeCount: valid.length,
                           centerX: cx, centerY: cy,
                           slots: slots,
                           pairs: pairs,    // [[slotIdx_a, slotIdx_b], ...]
+                          identity: identitySnap,  // archetype + name + metrics at capture moment
                       };
 
                       this._library.unshift(entry);
@@ -52266,6 +52373,15 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
                   function _renderRow(weave, idx) {
                       var accent = CORE_HEX[weave.domCore] || '#22d3ee';
+                      var identity = null;
+                      if (typeof LatticeIdentitySystem !== 'undefined' && weave.members && weave.members.length) {
+                          identity = LatticeIdentitySystem.getForCreature(weave.members[0]);
+                      }
+                      if (identity && identity.accent) accent = identity.accent;
+                      var displayName = identity ? identity.name : ('Weave ' + (idx + 1) + ' · ' + _coreShort(weave.domCore) + ' ' + weave.domCount + '/' + weave.size);
+                      var archetypeTag = identity && identity.archetypeName
+                          ? '<span style="font-size:8px;letter-spacing:0.10em;color:' + accent + ';text-shadow:0 0 5px ' + accent + '88;margin-left:6px;text-transform:uppercase;font-weight:700">' + identity.archetypeName + '</span>'
+                          : '';
                       var effPct = Math.round(weave.efficiency * 100);
                       var densPct = Math.round(weave.density * 100);
                       var fullPct = Math.round(weave.fullness * 100);
@@ -52286,7 +52402,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           +   '<div class="weaves-row-head">'
                           +     '<div class="weaves-row-name">'
                           +       '<span style="color:' + accent + ';text-shadow:0 0 6px ' + accent + '88">◈</span>'
-                          +       '<span>Weave ' + (idx + 1) + ' · ' + _coreShort(weave.domCore) + ' ' + weave.domCount + '/' + weave.size + '</span>'
+                          +       '<span>' + displayName + '</span>'
+                          +       archetypeTag
                           +       dormantTag
                           +     '</div>'
                           +     '<div class="weaves-row-size">' + weave.size + ' NODES · ' + weave.linkCount + ' LINKS</div>'
@@ -52315,8 +52432,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       var wrap = document.createElement('div');
                       wrap.id = _modalId;
                       wrap.className = 'weaves-modal';
-                      wrap.style.top   = '110px';
-                      wrap.style.right = '380px';
+                      wrap.style.top  = '90px';
+                      wrap.style.left = '24px';
                       wrap.innerHTML = ''
                           + '<div class="weaves-header" id="weaves-drag-handle">'
                           +   '<div class="weaves-header__icon"><i class="fa-solid fa-spider"></i></div>'
@@ -52331,7 +52448,16 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           +   '<button class="weaves-sort-btn" data-sort="links">LINKS</button>'
                           + '</div>'
                           + '<div class="weaves-list" id="weaves-list"></div>';
-                      document.body.appendChild(wrap);
+
+                      // In fullscreen mode, modals need to live inside fs-modal-portal
+                      // to stay visible above the canvas. Body-level positioning hides
+                      // them behind the fullscreen overlay.
+                      var host = document.body;
+                      if (typeof mapFullscreenActive !== 'undefined' && mapFullscreenActive) {
+                          var portal = document.getElementById('fs-modal-portal');
+                          if (portal) host = portal;
+                      }
+                      host.appendChild(wrap);
 
                       // Header close button
                       var closeBtn = document.getElementById('weaves-close-btn');
@@ -52372,15 +52498,15 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       if (!header || header._dragInstalled) return;
                       header._dragInstalled = true;
 
-                      var dragging = false, startX, startY, startRight, startTop;
+                      var dragging = false, startX, startY, startLeft, startTop;
 
                       header.addEventListener('pointerdown', function(e) {
                           if (e.target.closest('.weaves-close')) return;
                           dragging = true;
                           startX = e.clientX; startY = e.clientY;
                           var rect = wrap.getBoundingClientRect();
-                          startRight = window.innerWidth - rect.right;
-                          startTop   = rect.top;
+                          startLeft = rect.left;
+                          startTop  = rect.top;
                           header.setPointerCapture(e.pointerId);
                           e.preventDefault();
                       });
@@ -52388,10 +52514,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           if (!dragging) return;
                           var dx = e.clientX - startX;
                           var dy = e.clientY - startY;
-                          var newRight = Math.max(0, Math.min(window.innerWidth - 80, startRight - dx));
-                          var newTop   = Math.max(0, Math.min(window.innerHeight - 60, startTop + dy));
-                          wrap.style.right = newRight + 'px';
-                          wrap.style.top   = newTop + 'px';
+                          var newLeft = Math.max(0, Math.min(window.innerWidth - 80, startLeft + dx));
+                          var newTop  = Math.max(0, Math.min(window.innerHeight - 60, startTop + dy));
+                          wrap.style.left = newLeft + 'px';
+                          wrap.style.top  = newTop + 'px';
                           e.preventDefault();
                       });
                       header.addEventListener('pointerup',     function() { dragging = false; });
@@ -52459,11 +52585,18 @@ body.is-map-fullscreen #map-fullscreen-btn {
                               addFloatingText(width / 2, 80, 'Capture system unavailable', '#f87171');
                           return;
                       }
-                      var name = 'Weave ' + weave.size + 'n · ' + _coreShort(weave.domCore)
-                          + ' · ' + Math.round(weave.efficiency * 100) + '% eff';
+                      // Prefer the lattice identity name
+                      var name = null;
+                      if (typeof LatticeIdentitySystem !== 'undefined') {
+                          var id = LatticeIdentitySystem.getForCreature(weave.members[0]);
+                          if (id && id.name) name = id.name;
+                      }
+                      if (!name) {
+                          name = 'Weave ' + weave.size + 'n · ' + _coreShort(weave.domCore)
+                              + ' · ' + Math.round(weave.efficiency * 100) + '% eff';
+                      }
                       var saved = WeaveCaptureSystem.saveCapture(weave.members, name);
                       if (saved) {
-                          // Brief flash + refresh
                           _refresh();
                       }
                   }
@@ -54199,6 +54332,511 @@ body.is-map-fullscreen #map-fullscreen-btn {
               window.NightIsolationSystem = NightIsolationSystem;
 
 
+              // ════════════════════════════════════════════════════════════════
+              // LatticeIdentitySystem — Lattice Identity & Archetype System v1
+              //
+              // Detects connected components of 2+ creatures via flood-fill on
+              // the resonance link cache, computes metrics, scores 8 archetypes,
+              // and generates poetic names + descriptions. Cached and throttled
+              // (refreshes every ~2.5s, on demand for inspector/weave panels).
+              //
+              // Singletons receive NO identity. Notable threshold (size ≥ 4 OR
+              // diversity ≥ 2 cores OR avg alignment ≥ 1.4) earns full poetic
+              // name; transient pairs/triads get a short utility tag.
+              // ════════════════════════════════════════════════════════════════
+              const LatticeIdentitySystem = (function() {
+                  // ─── State ───────────────────────────────────────────────
+                  var _identityByCreature = new WeakMap();   // creature → identity ref
+                  var _identityById       = new Map();        // stable id → identity
+                  var _lastRefresh        = 0;
+                  var _refreshIntervalMs  = 2500;
+                  var _identityCounter    = 0;
+
+                  // Stable hash from sorted member identities (uses age + idx if no id)
+                  function _hashMembers(members) {
+                      var ids = members.map(function(c) {
+                          return (c._creatureUid || (c._creatureUid = ++_identityCounter));
+                      }).sort(function(a, b) { return a - b; });
+                      return ids.join('|');
+                  }
+
+                  // ─── Flood-fill: find all connected components ≥ 2 ──────
+                  function _findLattices() {
+                      if (typeof creatures === 'undefined' || !creatures.length) return [];
+                      if (typeof ModuleIdentitySystem === 'undefined') return [];
+
+                      var links = ModuleIdentitySystem.refreshResonanceLinkCache
+                          ? ModuleIdentitySystem.refreshResonanceLinkCache()
+                          : (ModuleIdentitySystem._linkCache || []);
+                      if (!links || links.length === 0) return [];
+
+                      var adj = new Map();
+                      for (var i = 0; i < links.length; i++) {
+                          var lnk = links[i];
+                          if (!lnk || !lnk.a || !lnk.b) continue;
+                          if (!adj.has(lnk.a)) adj.set(lnk.a, []);
+                          if (!adj.has(lnk.b)) adj.set(lnk.b, []);
+                          adj.get(lnk.a).push({ other: lnk.b, link: lnk });
+                          adj.get(lnk.b).push({ other: lnk.a, link: lnk });
+                      }
+
+                      var visited = new Set();
+                      var lattices = [];
+                      adj.forEach(function(_, startC) {
+                          if (visited.has(startC)) return;
+                          var members = [];
+                          var linkSet = new Set();
+                          var queue = [startC];
+                          visited.add(startC);
+                          while (queue.length) {
+                              var cur = queue.shift();
+                              members.push(cur);
+                              var nbrs = adj.get(cur) || [];
+                              for (var n = 0; n < nbrs.length; n++) {
+                                  linkSet.add(nbrs[n].link);
+                                  if (!visited.has(nbrs[n].other)) {
+                                      visited.add(nbrs[n].other);
+                                      queue.push(nbrs[n].other);
+                                  }
+                              }
+                          }
+                          if (members.length >= 2) {
+                              lattices.push({ members: members, links: Array.from(linkSet) });
+                          }
+                      });
+                      return lattices;
+                  }
+
+                  // ─── Metrics ─────────────────────────────────────────────
+                  function _computeMetrics(lattice) {
+                      var m = lattice.members;
+                      var n = m.length;
+
+                      // Tier-weighted core distribution
+                      var coreCounts = {};       // raw counts
+                      var coreTierWeight = {};   // tier-weighted
+                      var hasNightDormant = 0;
+                      var energySum = 0, maxESum = 0, ageSum = 0;
+                      var cx = 0, cy = 0;
+                      var moverActivity = 0, explorerActivity = 0, harvesterFlow = 0;
+
+                      for (var i = 0; i < n; i++) {
+                          var c = m[i];
+                          var core = (typeof getCreatureCoreType === 'function') ? getCreatureCoreType(c) : 'balanced';
+                          coreCounts[core] = (coreCounts[core] || 0) + 1;
+
+                          // Tier weight: sum of tiers of modules matching core, or 1 if untiered
+                          var tw = 0;
+                          if (c.modules) {
+                              for (var j = 0; j < c.modules.length; j++) {
+                                  var mod = c.modules[j];
+                                  var mt = (typeof normalizeModuleTypeKey === 'function')
+                                      ? normalizeModuleTypeKey(mod.type) : mod.type;
+                                  if (mt === core) tw += (mod.tier || 1);
+                              }
+                          }
+                          coreTierWeight[core] = (coreTierWeight[core] || 0) + Math.max(1, tw);
+
+                          energySum += c.energy || 0;
+                          var maxE = (typeof ModuleIdentitySystem !== 'undefined' && ModuleIdentitySystem.getMaxEnergy)
+                              ? ModuleIdentitySystem.getMaxEnergy(c) : 100;
+                          maxESum += maxE;
+                          ageSum += (c.age || 0);
+                          cx += c.x; cy += c.y;
+                          if (c._nightDormant) hasNightDormant++;
+
+                          // Activity signatures
+                          if ((c._momentumRelayGlow || 0) > 4) {
+                              if (core === 'mover') moverActivity += 1;
+                              if (core === 'explorer') explorerActivity += 1;
+                          }
+                          if (core === 'harvester' && (c.energy || 0) > maxE * 0.6) harvesterFlow += 1;
+                      }
+                      cx /= n; cy /= n;
+
+                      // Spread, density, alignment
+                      var spread = 0;
+                      for (var k = 0; k < n; k++) spread += Math.hypot(m[k].x - cx, m[k].y - cy);
+                      spread /= n;
+
+                      var maxLinks = n * (n - 1) / 2;
+                      var density = maxLinks > 0 ? lattice.links.length / maxLinks : 0;
+
+                      var alignSum = 0;
+                      for (var li = 0; li < lattice.links.length; li++) alignSum += (lattice.links[li].align || 0);
+                      var avgAlign = lattice.links.length > 0 ? alignSum / lattice.links.length : 0;
+
+                      // Diversity: shannon-ish index normalized
+                      var distinctCores = Object.keys(coreCounts).length;
+                      var diversity = 0;
+                      for (var ck in coreCounts) {
+                          var p = coreCounts[ck] / n;
+                          if (p > 0) diversity -= p * Math.log(p);
+                      }
+                      var diversityNorm = Math.min(1, diversity / Math.log(6)); // 6 = total core types
+
+                      // Dominant core(s)
+                      var sortedCores = Object.keys(coreTierWeight).sort(function(a, b) {
+                          return coreTierWeight[b] - coreTierWeight[a];
+                      });
+                      var domCore = sortedCores[0] || null;
+                      var domTierWeight = coreTierWeight[domCore] || 0;
+                      var totalTierWeight = 0;
+                      for (var tk in coreTierWeight) totalTierWeight += coreTierWeight[tk];
+                      var domShare = totalTierWeight > 0 ? domTierWeight / totalTierWeight : 0;
+
+                      // Fullness / efficiency rough metric
+                      var fullness = maxESum > 0 ? energySum / maxESum : 0;
+                      var alignNorm = Math.min(1, avgAlign / 2.5);
+                      var efficiency = (fullness * 0.45) + (density * 0.30) + (alignNorm * 0.25);
+
+                      // Stability: well-fed + few dormant
+                      var dormantFrac = hasNightDormant / n;
+                      var stability = Math.max(0, fullness * 0.6 + (1 - dormantFrac) * 0.4);
+
+                      return {
+                          size: n,
+                          linkCount: lattice.links.length,
+                          coreCounts: coreCounts,
+                          coreTierWeight: coreTierWeight,
+                          distinctCores: distinctCores,
+                          diversityNorm: diversityNorm,
+                          domCore: domCore,
+                          domShare: domShare,
+                          sortedCores: sortedCores,
+                          spread: spread,
+                          density: density,
+                          avgAlign: avgAlign,
+                          fullness: fullness,
+                          efficiency: efficiency,
+                          stability: stability,
+                          avgAge: ageSum / n,
+                          cx: cx, cy: cy,
+                          moverActivity: moverActivity,
+                          explorerActivity: explorerActivity,
+                          harvesterFlow: harvesterFlow,
+                          nightDormant: hasNightDormant
+                      };
+                  }
+
+                  // ─── Archetype scoring ───────────────────────────────────
+                  // Each archetype's score is 0–1.
+                  // The lattice's archetype = highest score above ARCHETYPE_THRESHOLD.
+                  var ARCHETYPE_THRESHOLD = 0.42;
+
+                  var ARCHETYPES = {
+                      solar_forge: {
+                          name: 'Solar Forge',
+                          accent: '#34d399',
+                          themes: ['Verdant Choir', 'Eternal Bloom Weave', 'Photosynthetic Lattice', 'Solar Forge', 'Hymn of Light'],
+                          desc: 'A self-sustaining photosynthetic network with strong honey distribution and drought resistance.',
+                          score: function(c) {
+                              var harv = (c.coreCounts.harvester || 0) / c.size;
+                              var comm = (c.coreCounts.communicator || 0) / c.size;
+                              var res  = (c.coreCounts.resistant || 0) / c.size;
+                              var s = harv * 0.55 + comm * 0.30 + res * 0.10;
+                              return Math.min(1, s + c.avgAlign * 0.05);
+                          },
+                      },
+                      night_choir: {
+                          name: 'Night Choir',
+                          accent: '#c4f3c5',
+                          themes: ['Night Conductor', 'Moonlit Relay Weave', 'Dusk Lattice', 'Gloam Choir', 'Tide of Stars'],
+                          desc: 'A nocturnal energy distribution network: Movers route current through Communicator nodes when the sun is down.',
+                          score: function(c) {
+                              var move = (c.coreCounts.mover || 0) / c.size;
+                              var comm = (c.coreCounts.communicator || 0) / c.size;
+                              var s = move * 0.50 + comm * 0.35;
+                              // Bonus when night relay activity is observed
+                              if (typeof lastIsDay !== 'undefined' && !lastIsDay) s += 0.08;
+                              s += Math.min(0.15, c.moverActivity * 0.04);
+                              return Math.min(1, s);
+                          },
+                      },
+                      oracle_frontier: {
+                          name: 'Oracle Frontier',
+                          accent: '#38bdf8',
+                          themes: ['Oracle Web', 'Horizon Signal Lattice', 'Foresight Choir', 'Witness Frontier', 'Pale Augur Weave'],
+                          desc: 'A long-range scouting and foresight web — sensors and explorers amplified by communicator chatter.',
+                          score: function(c) {
+                              var sens = (c.coreCounts.sensor || 0) / c.size;
+                              var expl = (c.coreCounts.explorer || 0) / c.size;
+                              var comm = (c.coreCounts.communicator || 0) / c.size;
+                              var s = sens * 0.40 + expl * 0.35 + comm * 0.18;
+                              return Math.min(1, s + Math.min(0.10, c.spread / 200));
+                          },
+                      },
+                      iron_vanguard: {
+                          name: 'Iron Vanguard',
+                          accent: '#f472b6',
+                          themes: ['Iron Courier Vanguard', 'Slipstream Bulwark', 'Frontier Shield', 'Adamant Pioneer', 'Lance of the March'],
+                          desc: 'An armored fast-expansion force — protected Movers carry Resistant nodes across the frontier.',
+                          score: function(c) {
+                              var move = (c.coreCounts.mover || 0) / c.size;
+                              var res  = (c.coreCounts.resistant || 0) / c.size;
+                              var expl = (c.coreCounts.explorer || 0) / c.size;
+                              var s = move * 0.40 + res * 0.35 + expl * 0.18;
+                              s += Math.min(0.12, c.moverActivity * 0.04);
+                              return Math.min(1, s);
+                          },
+                      },
+                      verdant_web: {
+                          name: 'Verdant Web',
+                          accent: '#84cc16',
+                          themes: ['Bloomseeder Web', 'Green Frontier Lattice', 'Spore Choir', 'Verdant Voyager Weave', 'Rooted Wanderers'],
+                          desc: 'A bloom-seeding exploration network — Explorers carry Harvester roots into new fertile zones.',
+                          score: function(c) {
+                              var harv = (c.coreCounts.harvester || 0) / c.size;
+                              var expl = (c.coreCounts.explorer || 0) / c.size;
+                              var sens = (c.coreCounts.sensor || 0) / c.size;
+                              var s = harv * 0.40 + expl * 0.40 + sens * 0.12;
+                              s += Math.min(0.10, c.explorerActivity * 0.04);
+                              return Math.min(1, s);
+                          },
+                      },
+                      symbiotic_lattice: {
+                          name: 'Symbiotic Lattice',
+                          accent: '#c084fc',
+                          themes: ['Hive Sovereign Weave', 'Resonance Throne', 'Lace Conductor', 'Symbiotic Apex', 'The Many-Voiced Loom'],
+                          desc: 'The ultimate network amplifier — high-tier Communicators woven through a diverse, high-alignment lattice.',
+                          score: function(c) {
+                              var comm = (c.coreCounts.communicator || 0) / c.size;
+                              // Bonus for high-tier communicators
+                              var commTierAvg = comm > 0 ? (c.coreTierWeight.communicator || 0) / Math.max(1, c.coreCounts.communicator) : 0;
+                              var diversityBonus = c.diversityNorm;
+                              var s = comm * 0.30 + Math.min(0.35, commTierAvg * 0.10) + diversityBonus * 0.30;
+                              s += Math.min(0.10, c.density * 0.18);
+                              return Math.min(1, s);
+                          },
+                      },
+                      iron_choir: {
+                          name: 'Iron Choir',
+                          accent: '#a78bfa',
+                          themes: ['Adamant Choir', 'Bulwark Weave', 'Unbreakable Lattice', 'Iron Choir', 'Hymn of Stone'],
+                          desc: 'A tanky, stable defensive network — Resistant cores hardened by Communicator broadcast.',
+                          score: function(c) {
+                              var res  = (c.coreCounts.resistant || 0) / c.size;
+                              var comm = (c.coreCounts.communicator || 0) / c.size;
+                              var s = res * 0.50 + comm * 0.30;
+                              s += Math.min(0.15, c.density * 0.20);
+                              return Math.min(1, s);
+                          },
+                      },
+                      vanguard_bloom: {
+                          name: 'Vanguard Bloom',
+                          accent: '#fbbf24',
+                          themes: ['Rolling Bloom', 'Mobile Verdure', 'Drifting Harvest Lattice', 'Caravan Garden', 'Wandering Orchard'],
+                          desc: 'A mobile food production network — Harvesters that stay productive while the colony relocates.',
+                          score: function(c) {
+                              var harv = (c.coreCounts.harvester || 0) / c.size;
+                              var move = (c.coreCounts.mover || 0) / c.size;
+                              var s = harv * 0.45 + move * 0.40;
+                              s += Math.min(0.12, c.harvesterFlow * 0.04);
+                              return Math.min(1, s);
+                          },
+                      },
+                  };
+
+                  function _scoreArchetypes(metrics) {
+                      var best = null, bestScore = 0;
+                      var scores = {};
+                      for (var key in ARCHETYPES) {
+                          var s = ARCHETYPES[key].score(metrics);
+                          scores[key] = s;
+                          if (s > bestScore) { bestScore = s; best = key; }
+                      }
+                      return {
+                          primary: bestScore >= ARCHETYPE_THRESHOLD ? best : null,
+                          primaryScore: bestScore,
+                          allScores: scores,
+                      };
+                  }
+
+                  // ─── Naming ──────────────────────────────────────────────
+                  var POETIC_PREFIXES = [
+                      'The', 'An', 'A', 'The Hidden', 'The Whispering',
+                      'The Long-Wandering', 'The First', 'The Quiet',
+                  ];
+                  var CONDITION_CLAUSES = [
+                      'That Endured the Long Drought',
+                      'of the Aeon\'s Edge',
+                      'That Sang Through the Night',
+                      'Beneath the Vortex',
+                      'of the Western Expanse',
+                      'That Held the Long Watch',
+                      'Born of the Drift',
+                      'That Outpaced the Hunger',
+                      'of the Stitched Horizon',
+                      'That Refused the Dark',
+                  ];
+
+                  function _hashSeed(str) {
+                      var h = 2166136261;
+                      for (var i = 0; i < str.length; i++) {
+                          h ^= str.charCodeAt(i);
+                          h = (h * 16777619) >>> 0;
+                      }
+                      return h;
+                  }
+
+                  function _pickFromArr(arr, seed) {
+                      if (!arr || !arr.length) return '';
+                      return arr[seed % arr.length];
+                  }
+
+                  function _generateName(metrics, archetypeKey, seedKey) {
+                      var seed = _hashSeed(seedKey);
+                      if (!archetypeKey) {
+                          // Transient — utility label
+                          var coreLabel = (metrics.domCore || 'mixed').toUpperCase();
+                          return 'Nascent ' + coreLabel.slice(0, 1) + coreLabel.slice(1).toLowerCase() + ' Weave';
+                      }
+                      var arch = ARCHETYPES[archetypeKey];
+                      var title = _pickFromArr(arch.themes, seed);
+                      var notable = (metrics.size >= 6) || (metrics.avgAlign >= 1.6) || (metrics.efficiency >= 0.65);
+                      if (notable) {
+                          var clause = _pickFromArr(CONDITION_CLAUSES, (seed >> 5));
+                          var prefix = _pickFromArr(POETIC_PREFIXES, (seed >> 11));
+                          return prefix + ' ' + title + ' ' + clause;
+                      }
+                      return title;
+                  }
+
+                  function _generateDescription(metrics, archetypeKey) {
+                      if (!archetypeKey) {
+                          return 'A small ' + (metrics.size) + '-node weave still finding its voice.';
+                      }
+                      var arch = ARCHETYPES[archetypeKey];
+                      var notes = [];
+                      notes.push(arch.desc);
+                      if (metrics.efficiency >= 0.7) notes.push('Operating at peak efficiency.');
+                      else if (metrics.efficiency >= 0.5) notes.push('Maintaining steady flow.');
+                      if (metrics.nightDormant > 0) notes.push(metrics.nightDormant + ' node(s) drifting dormant.');
+                      if (metrics.density >= 0.75) notes.push('Densely interwoven.');
+                      if (metrics.spread > 180) notes.push('Spread across a wide territory.');
+                      return notes.join(' ');
+                  }
+
+                  // ─── Main refresh ────────────────────────────────────────
+                  function _isNotable(metrics) {
+                      return metrics.size >= 4 || metrics.distinctCores >= 2 || metrics.avgAlign >= 1.4;
+                  }
+
+                  function _refresh(force) {
+                      var now = (typeof millis === 'function') ? millis() : Date.now();
+                      if (!force && (now - _lastRefresh) < _refreshIntervalMs) return;
+                      _lastRefresh = now;
+
+                      var lattices = _findLattices();
+                      var newIdentityByCreature = new WeakMap();
+                      var newIdentityById = new Map();
+
+                      for (var i = 0; i < lattices.length; i++) {
+                          var lat = lattices[i];
+                          var metrics = _computeMetrics(lat);
+                          var seedKey = _hashMembers(lat.members);
+                          var archResult = _scoreArchetypes(metrics);
+                          var notable = _isNotable(metrics);
+
+                          // Look up prior identity by same seed key (stable across refreshes)
+                          var prior = _identityById.get(seedKey);
+                          var archetypeKey = notable ? archResult.primary : null;
+                          var name = (prior && prior.archetype === archetypeKey)
+                              ? prior.name
+                              : _generateName(metrics, archetypeKey, seedKey);
+                          var desc = _generateDescription(metrics, archetypeKey);
+
+                          var identity = {
+                              id: seedKey,
+                              name: name,
+                              archetype: archetypeKey,
+                              archetypeName: archetypeKey ? ARCHETYPES[archetypeKey].name : null,
+                              accent: archetypeKey ? ARCHETYPES[archetypeKey].accent : '#94a3b8',
+                              description: desc,
+                              notable: notable,
+                              metrics: metrics,
+                              archetypeScores: archResult.allScores,
+                              members: lat.members,
+                              links: lat.links,
+                              bornAt: prior ? prior.bornAt : now,
+                              archetypeChangedAt: (prior && prior.archetype === archetypeKey) ? prior.archetypeChangedAt : now,
+                          };
+
+                          // Announce new notable identity or archetype evolution
+                          if (notable && (!prior || prior.archetype !== archetypeKey)) {
+                              if (typeof addFloatingText === 'function') {
+                                  var label = prior ? 'evolved: ' : 'identity: ';
+                                  addFloatingText(metrics.cx, metrics.cy - 26, label + name, identity.accent);
+                              }
+                          }
+
+                          newIdentityById.set(seedKey, identity);
+                          for (var mi = 0; mi < lat.members.length; mi++) {
+                              newIdentityByCreature.set(lat.members[mi], identity);
+                          }
+                      }
+
+                      _identityByCreature = newIdentityByCreature;
+                      _identityById       = newIdentityById;
+                  }
+
+                  // ─── Public API ──────────────────────────────────────────
+                  return {
+                      ARCHETYPES: ARCHETYPES,
+                      refresh: _refresh,
+                      getForCreature: function(creature) {
+                          if (!creature) return null;
+                          return _identityByCreature.get(creature) || null;
+                      },
+                      getAll: function() {
+                          return Array.from(_identityById.values());
+                      },
+                      getNotable: function() {
+                          return Array.from(_identityById.values()).filter(function(id) { return id.notable; });
+                      },
+                      getLatticesContainingCore: function(coreType) {
+                          if (!coreType) return [];
+                          return Array.from(_identityById.values()).filter(function(id) {
+                              return (id.metrics.coreCounts[coreType] || 0) > 0;
+                          });
+                      },
+                      // Build an identity snapshot for the supplied members (for weave capture).
+                      // This bypasses caching and returns a fresh, serializable object.
+                      buildIdentitySnapshot: function(members) {
+                          if (!members || members.length < 2) return null;
+                          var lat = { members: members.slice(), links: [] };
+                          if (typeof ModuleIdentitySystem !== 'undefined') {
+                              var links = ModuleIdentitySystem._linkCache || [];
+                              var memSet = new Set(members);
+                              for (var i = 0; i < links.length; i++) {
+                                  if (memSet.has(links[i].a) && memSet.has(links[i].b)) lat.links.push(links[i]);
+                              }
+                          }
+                          var metrics = _computeMetrics(lat);
+                          var seedKey = _hashMembers(members);
+                          var archResult = _scoreArchetypes(metrics);
+                          var notable = _isNotable(metrics);
+                          var archetypeKey = notable ? archResult.primary : null;
+                          return {
+                              name: _generateName(metrics, archetypeKey, seedKey),
+                              archetype: archetypeKey,
+                              archetypeName: archetypeKey ? ARCHETYPES[archetypeKey].name : null,
+                              accent: archetypeKey ? ARCHETYPES[archetypeKey].accent : '#94a3b8',
+                              description: _generateDescription(metrics, archetypeKey),
+                              notable: notable,
+                              size: metrics.size,
+                              linkCount: metrics.linkCount,
+                              coreCounts: metrics.coreCounts,
+                              domCore: metrics.domCore,
+                              efficiency: metrics.efficiency,
+                              capturedAt: Date.now(),
+                          };
+                      },
+                  };
+              })();
+              window.LatticeIdentitySystem = LatticeIdentitySystem;
+
+
           </script>
           <div id="game-bottom-dock">
               <button type="button" id="tutorial-toggle-btn" class="tutorial-toggle-btn" onclick="TutorialSystem.toggleEnabled()" title="Show or hide tutorials and tooltips">
@@ -54499,6 +55137,34 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   });
 
                   if (count) count.textContent = typed.length + ' creature' + (typed.length===1?'':'s');
+
+                  // ─── Notable lattices containing this core ───
+                  if (typeof LatticeIdentitySystem !== 'undefined') {
+                      var lattices = LatticeIdentitySystem.getLatticesContainingCore(coreKey)
+                          .filter(function(id) { return id.notable; })
+                          .sort(function(a, b) { return b.metrics.size - a.metrics.size; });
+                      if (lattices.length > 0) {
+                          var section = document.createElement('div');
+                          section.className = 'ctm-lattices-section';
+                          section.style.cssText = 'margin-bottom:10px;padding:8px;border-radius:8px;border:1px solid rgba(34,211,238,0.18);background:linear-gradient(135deg,rgba(34,211,238,0.06),rgba(0,0,0,0.25))';
+                          var heading = '<div style="font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:#67e8f9;font-weight:700;margin-bottom:6px;text-shadow:0 0 4px rgba(34,211,238,0.4)">◈ Notable Lattices · ' + lattices.length + '</div>';
+                          var rows = lattices.slice(0, 6).map(function(id) {
+                              var coreCount = id.metrics.coreCounts[coreKey] || 0;
+                              return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 7px;border-radius:6px;border:1px solid ' + id.accent + '44;background:rgba(0,0,0,0.25);margin-bottom:4px;font-size:10px">'
+                                  + '<div style="flex:1;min-width:0;overflow:hidden">'
+                                  +   '<div style="color:#e2e8f0;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + id.name + '</div>'
+                                  +   '<div style="font-size:8px;color:' + id.accent + ';font-weight:700;letter-spacing:0.08em;text-transform:uppercase;margin-top:1px">' + (id.archetypeName || 'Nascent') + '</div>'
+                                  + '</div>'
+                                  + '<div style="text-align:right;font-family:ui-monospace,monospace;color:' + id.accent + ';font-size:9px;line-height:1.3">'
+                                  +   '<div><b>' + coreCount + '/' + id.metrics.size + '</b> nodes</div>'
+                                  +   '<div style="opacity:0.7">' + Math.round(id.metrics.efficiency * 100) + '% eff</div>'
+                                  + '</div>'
+                                  + '</div>';
+                          }).join('');
+                          section.innerHTML = heading + rows;
+                          list.appendChild(section);
+                      }
+                  }
 
                   if (!typed.length) {
                       var empty = document.createElement('div');
