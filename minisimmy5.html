@@ -36089,7 +36089,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           const filledSlots = getGeneVaultFilledEggs();
                           if (filledSlots.length > 0) {
                               const vaultData = random(filledSlots);
-                              if (vaultData.modules) creature.modules = [...vaultData.modules];
+                              if (vaultData.modules) creature.modules = vaultData.modules.map(function(m){return Object.assign({},m);});
                               if (vaultData.generation) creature.generation = vaultData.generation;
                               creature.updateSpecialization();
                               creature.currentThought = 'Echo Infected';
@@ -36180,7 +36180,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                               let filledSlots = getGeneVaultFilledEggs();
                               if (filledSlots.length > 0) {
                                   let vaultData = random(filledSlots);
-                                  if (vaultData.modules) creature.modules = [...vaultData.modules];
+                                  if (vaultData.modules) creature.modules = vaultData.modules.map(function(m){return Object.assign({},m);});
                                   if (vaultData.generation) creature.generation = vaultData.generation;
                                   creature.currentThought = "Echo Infected";
                                   creature.energy = max(creature.energy, 70);
@@ -45398,6 +45398,37 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   }
                   while (geneVaultSlots.length < 10) geneVaultSlots.push(null);
                   if (geneVaultSlots.length > 10) geneVaultSlots.length = 10;
+                  // Recovery: an earlier version of auto-buy wrote JSON strings here.
+                  // Detect string entries and parse them back into plain objects so the
+                  // egg + upgradeLevel survive.
+                  for (let n = 0; n < 10; n++) {
+                      const raw = geneVaultSlots[n];
+                      if (typeof raw === 'string') {
+                          try {
+                              const obj = JSON.parse(raw);
+                              if (obj && typeof obj === 'object') {
+                                  // The stringified shape was the parsed-slot object {state, upgradeLevel, egg}
+                                  // Convert it back into the storage shape.
+                                  if (obj.state === 'occupied' && obj.egg) {
+                                      geneVaultSlots[n] = { unlocked: true, upgradeLevel: obj.upgradeLevel || 0, egg: obj.egg };
+                                  } else if (obj.state === 'empty') {
+                                      geneVaultSlots[n] = { unlocked: true, upgradeLevel: obj.upgradeLevel || 0 };
+                                  } else if (obj.state === 'locked') {
+                                      geneVaultSlots[n] = null;
+                                  } else if (obj.unlocked === true) {
+                                      // Already in storage shape (re-stringified accidentally)
+                                      geneVaultSlots[n] = obj;
+                                  } else {
+                                      geneVaultSlots[n] = null;
+                                  }
+                              } else {
+                                  geneVaultSlots[n] = null;
+                              }
+                          } catch (e) {
+                              geneVaultSlots[n] = null;
+                          }
+                      }
+                  }
                   for (let n = 1; n <= 10; n++) migrateGeneVaultSlotEntry(n);
                   if (geneVaultSlots[0] === null || geneVaultSlots[0] === undefined) {
                       writeGeneVaultSlot(1, 'empty', 0);
@@ -55678,9 +55709,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
                               var cost = getGeneVaultSlotUpgradeCost(lvl);
                               if (aetheriumCrystals < cost) return false;
                               aetheriumCrystals -= cost;
-                              p.upgradeLevel = lvl + 1;
-                              // write back
-                              geneVaultSlots[slotNumber - 1] = JSON.stringify(p);
+                              // Write back via the proper writer to preserve egg + state
+                              writeGeneVaultSlot(slotNumber, p.state, lvl + 1, p.egg);
                               return true;
                           }
                       };
