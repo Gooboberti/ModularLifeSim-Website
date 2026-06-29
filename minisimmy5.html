@@ -6681,6 +6681,65 @@ body.is-map-fullscreen #map-fullscreen-btn {
         /* ============================================================
            LATTICE IDENTITY badge — shown in creature inspector
            ============================================================ */
+        .inspect-squid-anchor {
+            margin-top: 6px;
+            padding: 8px 10px;
+            border-radius: 8px;
+            border: 1px solid rgba(56, 189, 248, 0.45);
+            background: linear-gradient(135deg, rgba(8, 47, 73, 0.5), rgba(8, 30, 50, 0.25));
+            position: relative;
+            overflow: hidden;
+        }
+        .inspect-squid-anchor__head {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 10px;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: #7dd3fc;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+        .inspect-squid-anchor__head .dot {
+            width: 7px; height: 7px; border-radius: 50%;
+            background: #38bdf8;
+            box-shadow: 0 0 6px #38bdf8;
+            animation: anchor-dot-pulse 1.6s ease-in-out infinite;
+        }
+        @keyframes anchor-dot-pulse {
+            0%,100% { opacity: 0.5; transform: scale(0.85); }
+            50% { opacity: 1; transform: scale(1.15); }
+        }
+        .inspect-squid-anchor__bar {
+            height: 5px;
+            border-radius: 3px;
+            background: rgba(56, 189, 248, 0.12);
+            overflow: hidden;
+            margin: 5px 0 6px;
+        }
+        .inspect-squid-anchor__bar > div {
+            height: 100%;
+            background: linear-gradient(90deg, #0ea5e9, #7dd3fc);
+            border-radius: 3px;
+            transition: width 0.2s ease;
+        }
+        .inspect-squid-anchor__stats {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px 10px;
+            font-size: 10px;
+            color: rgba(186, 230, 253, 0.75);
+        }
+        .inspect-squid-anchor__stats b { color: #e0f2fe; }
+        .inspect-squid-anchor__note {
+            font-size: 9px;
+            color: rgba(148, 197, 230, 0.7);
+            font-style: italic;
+            margin-top: 5px;
+            line-height: 1.35;
+        }
+
         .inspect-lattice-identity {
             margin-top: 6px;
             padding: 7px 9px;
@@ -8043,6 +8102,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
                                       </div><!-- /inspect-extract-wrap -->
                                   </div><!-- /right flex column -->
                               </div><!-- /two-column flex row -->
+                              <!-- Squid Lattice Anchor status -->
+                              <div id="inspect-squid-anchor" class="inspect-squid-anchor" style="display:none"></div>
                               <!-- Lattice Identity badge -->
                               <div id="inspect-lattice-identity" class="inspect-lattice-identity" style="display:none"></div>
                               <!-- Module Graft -->
@@ -31797,8 +31858,6 @@ body.is-map-fullscreen #map-fullscreen-btn {
                               p._scooped = true;
                               vortexParticles.splice(i, 1);
                               filtered++;
-                              if (filtered <= 2 && random() < 0.4)
-                                  addFloatingText(best.x, best.y - 12, '+filter', '#86efac');
                           }
                       }
                   }
@@ -33661,15 +33720,6 @@ body.is-map-fullscreen #map-fullscreen-btn {
                               stroke(125, 211, 252, 50 + sin(frameCount * 0.12) * 30);
                               strokeWeight(0.9);
                               circle(hx, hy, (CREATURE_BODY_RADIUS * 3) + sin(frameCount * 0.1) * 6);
-                          }
-                          // "Fissuring" / "Anchored" label
-                          if (frameCount % 4 === 0 || thread < 1) {
-                              noStroke();
-                              fill(180, 235, 255, 200);
-                              textSize(8);
-                              textAlign(CENTER, CENTER);
-                              text(thread < 1 ? `FISSURING ${Math.round(thread * 100)}%` : 'ANCHORED',
-                                  (pr.tipX + hx) / 2, (pr.tipY + hy) / 2 - 8);
                           }
                       }
                   }
@@ -42739,7 +42789,66 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   }
               }
 
+              function updateInspectorSquidAnchor(creature) {
+                  const el = document.getElementById('inspect-squid-anchor');
+                  if (!el) return;
+                  if (!creature) { el.style.display = 'none'; return; }
+
+                  // Case A: the inspected creature is a squid that is anchored.
+                  let anchor = creature._latticeAnchor || null;
+                  let asHeart = false;
+                  let asMember = false;
+                  let squid = null;
+
+                  if (anchor) {
+                      squid = creature;
+                  } else if (creature._squidAnchoredBy && creature._squidAnchoredBy._latticeAnchor) {
+                      // Case B: the inspected creature is a colony member of an anchored squid.
+                      squid = creature._squidAnchoredBy;
+                      anchor = squid._latticeAnchor;
+                      asMember = true;
+                      asHeart = !!creature._isSquidAnchorHeart;
+                  }
+
+                  if (!anchor) { el.style.display = 'none'; return; }
+
+                  const thread = Math.round((anchor.threadProgress || 0) * 100);
+                  const memberN = anchor.members ? anchor.members.length : 0;
+                  // Count rings
+                  let maxRing = 0;
+                  if (anchor.ringAssignments) {
+                      anchor.ringAssignments.forEach(function(info) {
+                          if (info.ring < 90 && info.ring > maxRing) maxRing = info.ring;
+                      });
+                  }
+                  const heartName = anchor.anchorNode ? (anchor.anchorNode.name || 'heart') : 'heart';
+                  const fissuring = (anchor.threadProgress || 0) < 1;
+                  const roleLine = asMember
+                      ? (asHeart
+                          ? 'This creature is the <b>colony heart</b> — the densest node the probe is threaded into.'
+                          : 'This creature is part of a colony anchored by a squid.')
+                      : 'This squid is threaded into a colony, enhancing it as a macro-organism.';
+
+                  el.innerHTML = ''
+                      + '<div class="inspect-squid-anchor__head"><span class="dot"></span>'
+                      +   '<span>' + (fissuring ? 'Lattice Fissure' : 'Lattice Anchor') + '</span></div>'
+                      + '<div class="inspect-squid-anchor__bar"><div style="width:' + thread + '%"></div></div>'
+                      + '<div class="inspect-squid-anchor__stats">'
+                      +   '<span>' + (fissuring ? 'Threading <b>' + thread + '%</b>' : '<b>Anchored</b>') + '</span>'
+                      +   '<span>Colony <b>' + memberN + '</b> nodes</span>'
+                      +   '<span><b>' + (maxRing + 1) + '</b> rings</span>'
+                      +   (asMember ? '<span>Ring <b>' + (creature._squidAnchorRing != null ? creature._squidAnchorRing : '—') + '</b></span>' : '')
+                      + '</div>'
+                      + '<div class="inspect-squid-anchor__note">' + roleLine
+                      + (squid && !asMember ? ' Module firing is disabled while anchored — retract the probe [2] to detach.' : '')
+                      + '</div>';
+                  el.style.display = 'block';
+              }
+
               function updateInspectorLacePanel(creature) {
+                  // ─── Squid Lattice Anchor status ─────────────────────────
+                  updateInspectorSquidAnchor(creature);
+
                   const stats = ModuleIdentitySystem.getInspectorLaceStats(creature);
                   if (!stats) return;
 
@@ -56171,8 +56280,6 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       };
                       for (const m of colony.members) m._squidAnchoredBy = squid;
                       anchorNode._isSquidAnchorHeart = true;
-                      if (typeof addFloatingText === 'function')
-                          addFloatingText(anchorNode.x, anchorNode.y - 30, '⟿ LATTICE FISSURE', '#7dd3fc');
                       if (typeof playTone === 'function') {
                           playTone(180, 'sine', 0.18, 0.4);
                           setTimeout(function() { playTone(360, 'triangle', 0.14, 0.36); }, 90);
@@ -56194,8 +56301,6 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       }
                       if (anchor.anchorNode) anchor.anchorNode._isSquidAnchorHeart = false;
                       squid._latticeAnchor = null;
-                      if (reason !== 'silent' && typeof addFloatingText === 'function')
-                          addFloatingText(squid.x, squid.y - 28, 'LATTICE RELEASED', '#94a3b8');
                   }
 
                   function isAnchored(squid) { return !!(squid && squid._latticeAnchor); }
@@ -56225,7 +56330,23 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       anchor.age += timeScale;
                       anchor.anchorX = anchor.anchorNode.x;
                       anchor.anchorY = anchor.anchorNode.y;
-                      anchor.threadProgress = Math.min(1, anchor.threadProgress + timeScale / ANCHOR_THREAD_FRAMES);
+
+                      // ── Swim-together phase ───────────────────────────────────
+                      // After connecting, the squid and the colony heart actively swim
+                      // toward each other until they rendezvous. Thread progress only
+                      // advances once they're close — so the fissure "completes" as they
+                      // physically join, not while strung across the map.
+                      const joinDist = _swimTogether(squid, anchor, geo, timeScale);
+                      const JOIN_RANGE = (geo?.bubbleR || CREATURE_BODY_RADIUS * 3) * 1.6 + 60;
+                      const joined = joinDist <= JOIN_RANGE;
+                      if (joined) {
+                          anchor.threadProgress = Math.min(1, anchor.threadProgress + timeScale / ANCHOR_THREAD_FRAMES);
+                          anchor._joined = true;
+                      } else {
+                          // Still approaching — hold thread progress near the start so the
+                          // colony doesn't lock its geometry until they've met.
+                          anchor.threadProgress = Math.min(anchor.threadProgress, 0.12);
+                      }
 
                       if (frameCount - anchor.lastDensity > ANCHOR_DENSITY_REFRESH) {
                           anchor.lastDensity = frameCount;
@@ -56260,6 +56381,45 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       return anchor;
                   }
 
+                  // Swims the squid and the colony toward each other after connecting.
+                  // Returns the current distance between the squid and the colony heart.
+                  function _swimTogether(squid, anchor, geo, timeScale) {
+                      const heart = anchor.anchorNode;
+                      if (!heart) return Infinity;
+                      const sx = squid.x, sy = squid.y;
+                      const hx = heart.x, hy = heart.y;
+                      const dx = hx - sx, dy = hy - sy;
+                      const d = Math.sqrt(dx * dx + dy * dy) || 1;
+                      const nx = dx / d, ny = dy / d;
+
+                      // Meeting point — biased toward the colony so the squid does most of
+                      // the travelling (it's the active hunter), but the colony drifts in too.
+                      const fullyJoined = anchor._joined;
+                      // Squid swims toward the colony heart (unless the player is steering it).
+                      if (!isManualControlImmune(squid) && d > 30) {
+                          const squidPull = (fullyJoined ? 0.06 : 0.14) * timeScale;
+                          squid.vx += nx * squidPull * d * 0.06;
+                          squid.vy += ny * squidPull * d * 0.06;
+                          capCreatureVelocity(squid, getCreatureMaxSpeed(squid, timeScale) * 2.2);
+                      }
+                      // Even a player-piloted squid gets a gentle assist so the join feels
+                      // cooperative (the colony reels toward the probe).
+                      // The colony heart + members swim toward the squid.
+                      if (d > 30) {
+                          const colonyPull = (fullyJoined ? 0.05 : 0.11) * timeScale;
+                          for (const m of anchor.members) {
+                              if (!m || creatures.indexOf(m) < 0 || isManualControlImmune(m)) continue;
+                              const mdx = sx - m.x, mdy = sy - m.y;
+                              const md = Math.sqrt(mdx * mdx + mdy * mdy) || 1;
+                              // Members pull toward the squid, scaled so the heart leads.
+                              const lead = (m === heart) ? 1.0 : 0.62;
+                              m.vx += (mdx / md) * colonyPull * lead;
+                              m.vy += (mdy / md) * colonyPull * lead;
+                          }
+                      }
+                      return d;
+                  }
+
                   // EXCLUSIVE squid-link bonuses: energy infusion + reproduction boost.
                   function _applyColonyBonuses(squid, anchor, timeScale) {
                       const thread = anchor.threadProgress;
@@ -56285,7 +56445,18 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   function _lockColonyGeometry(squid, anchor, timeScale) {
                       const thread = anchor.threadProgress;
                       if (thread < 0.2) return;
-                      const hx = anchor.anchorX, hy = anchor.anchorY;
+                      // Center the geometry on the probe tip when available (so the colony
+                      // organizes "based on the end of the probe", per design), blended
+                      // toward the live heart position. As thread completes, the center
+                      // settles on the probe tip / heart rendezvous.
+                      let cx = anchor.anchorX, cy = anchor.anchorY;
+                      const pr = squid._scoopGeo?.probe;
+                      if (pr && pr.tipX != null) {
+                          const blend = 0.5 + thread * 0.2;
+                          cx = anchor.anchorX * (1 - blend) + pr.tipX * blend;
+                          cy = anchor.anchorY * (1 - blend) + pr.tipY * blend;
+                      }
+                      const hx = cx, hy = cy;
                       const baseRing = (typeof CREATURE_MIN_SEP !== 'undefined' ? CREATURE_MIN_SEP : 26) * 1.35;
                       const lockStrength = thread * 0.045;
                       const rot = frameCount * 0.004;
