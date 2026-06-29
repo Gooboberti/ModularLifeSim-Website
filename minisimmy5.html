@@ -8007,7 +8007,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                                                   <span class="opacity-60">[0]</span>
                                               </button>
                                               <button type="button" id="inspect-probe-btn" class="inspect-powerup-btn is-probe"
-                                                      onclick="playUIClick(); toggleScoopProbe()" title="Toggle prune probe [2] — scan, tag &amp; herd weak prey into bubble">
+                                                      onclick="playUIClick(); toggleScoopProbe()" title="Toggle probe [2] — herd weak prey, or thread into a colony to anchor &amp; enhance it (firing disabled while anchored; retract to detach)">
                                                   <i class="fa-solid fa-bullseye text-[9px]"></i>
                                                   <span>Probe</span>
                                                   <span class="opacity-60">[2]</span>
@@ -22111,6 +22111,32 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       } else if (creature._resonanceFed > 0) {
                           creature._resonanceFed--;
                       }
+                      // Squid-anchored colony member glow — cyan rings layered by ring depth.
+                      if (creature._squidAnchorGlow > 0) {
+                          const ag = creature._squidAnchorGlow;
+                          const heart = creature._isSquidAnchorHeart;
+                          const pulse = 0.5 + sin(frameCount * 0.14 + (creature._symSlot || 0)) * 0.5;
+                          noFill();
+                          if (heart) {
+                              // The anchor heart — bright pulsing multi-ring core
+                              stroke(125, 211, 252, 120 + pulse * 90);
+                              strokeWeight(1.6);
+                              circle(creature.x, creature.y, CREATURE_BODY_RADIUS * (2.4 + pulse * 0.5));
+                              stroke(56, 189, 248, 70 + pulse * 60);
+                              strokeWeight(0.9);
+                              circle(creature.x, creature.y, CREATURE_BODY_RADIUS * 3.1);
+                              stroke(180, 240, 255, 50 + pulse * 40);
+                              strokeWeight(0.6);
+                              circle(creature.x, creature.y, CREATURE_BODY_RADIUS * 3.8);
+                          } else {
+                              const ringDepth = creature._squidAnchorRing || 1;
+                              const alpha = Math.max(30, 95 - ringDepth * 14) + pulse * 30;
+                              stroke(110, 211, 240, alpha);
+                              strokeWeight(0.85);
+                              circle(creature.x, creature.y, CREATURE_BODY_RADIUS * (1.6 + ringDepth * 0.12));
+                          }
+                          creature._squidAnchorGlow -= timeScale;
+                      }
                       if (shouldDrawEffect('overlapCrowded') && creature._crowdedFlash > 0) {
                           noFill();
                           stroke(248, 113, 113, creature._crowdedFlash * 5);
@@ -30034,21 +30060,15 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           st.soulAbsorbGlow = max(st.soulAbsorbGlow || 0, 8);
                       }
                       if (!other.isPredator && !isManualControlImmune(other)) {
+                          // Passive lattice-stealing still drains a little. The NET-POSITIVE
+                          // colony bonus (energy + reproduction) is no longer granted here —
+                          // it now comes EXCLUSIVELY from threading the probe into a colony
+                          // (see SquidLatticeAnchorSystem). This makes anchoring the only
+                          // path to the squid-link bonus.
                           const drain = 0.9 + (creature._scoopLatticeTier || 1) * 0.35 + laceMemory * 0.01;
-                          // Net-positive symbiosis: the squid drains a little but gives back
-                          // MORE — energy compensation plus a reproduction-boost window that
-                          // ramps with how actively the squid is shedding/processing modules.
-                          const shedStacks = creature._squidShedStacks || 0;
-                          const giveBack = drain * (1.35 + Math.min(2.2, shedStacks * 0.12));
-                          other.energy = Math.max(0, other.energy - drain + giveBack);
-                          other._networkBurden = Math.max(0, (other._networkBurden || 0) - 0.04);
-                          other._colonyLinkPulse = max(other._colonyLinkPulse || 0, 14);
-                          // Reproduction-boost window, refreshed while linked. Stacks grow
-                          // with the squid's shed rate so a busy processing-station squid
-                          // makes its colony breed faster and faster.
-                          other._squidLinkReproUntil = frameCount + 150;
-                          other._squidLinkReproStacks = Math.min(8,
-                              (other._squidLinkReproStacks || 0) * 0.9 + 1 + shedStacks * 0.15);
+                          other.energy = max(0, other.energy - drain);
+                          other._networkBurden = (other._networkBurden || 0) + 0.1;
+                          other._colonyLinkPulse = max(other._colonyLinkPulse || 0, 10);
                       }
                       stolen.push({
                           key: link.key,
@@ -30892,6 +30912,14 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       addFloatingText(creature.x, creature.y - 18, 'Extend probe [2] to fire modules', '#fb923c');
                       return false;
                   }
+                  // While anchored into a colony the probe is occupied threading the
+                  // lattice — firing is disabled until the player retracts to detach.
+                  if (typeof SquidLatticeAnchorSystem !== 'undefined'
+                      && SquidLatticeAnchorSystem.isAnchored(creature)) {
+                      addFloatingText(creature.x, creature.y - 18,
+                          'Anchored — retract probe [2] to detach & fire', '#7dd3fc');
+                      return false;
+                  }
                   const now = Date.now();
                   if (now - lastScoopModuleFireTime < SCOOP_MODULE_FIRE_GAP) return false;
 
@@ -31724,6 +31752,59 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   return getScoopProbeWeakestCandidate(hunter, geo);
               }
 
+              // When the squid is anchored into a colony, its tendrils sweep the
+              // colony's outer rim for white drift particles and reel them inward to
+              // the perimeter members — the colony becomes a tendril "filter mouth".
+              function applyAnchoredColonyTendrilFilter(hunter, geo) {
+                  const anchor = hunter._latticeAnchor;
+                  if (!anchor || !anchor.members?.length) return;
+                  const hx = anchor.anchorX, hy = anchor.anchorY;
+                  // Estimate the colony radius from ring assignments / member spread.
+                  let maxR = 40;
+                  for (const m of anchor.members) {
+                      if (!m || creatures.indexOf(m) < 0) continue;
+                      const d = dist(m.x, m.y, hx, hy);
+                      if (d > maxR) maxR = d;
+                  }
+                  const rimR = maxR + 70;     // sweep just outside the colony rim
+                  const eatR = maxR + 24;     // where particles get consumed
+                  let filtered = 0;
+                  for (let i = vortexParticles.length - 1; i >= 0; i--) {
+                      const p = vortexParticles[i];
+                      if (!isScoopableWhiteParticle(p)) continue;
+                      const d = dist(p.x, p.y, hx, hy);
+                      if (d > rimR) continue;
+                      // Pull the particle toward the colony center (filter intake)
+                      const dx = hx - p.x, dy = hy - p.y;
+                      const dd = Math.sqrt(dx * dx + dy * dy) || 1;
+                      const pull = 0.9 + anchor.threadProgress * 1.4;
+                      p.vx += (dx / dd) * pull * 0.18 * timeScale;
+                      p.vy += (dy / dd) * pull * 0.18 * timeScale;
+                      // Consumed near the rim → feed energy to the nearest member
+                      if (d <= eatR) {
+                          let best = null, bestD = Infinity;
+                          for (const m of anchor.members) {
+                              if (!m || creatures.indexOf(m) < 0 || m.isPredator) continue;
+                              const md = dist(m.x, m.y, p.x, p.y);
+                              if (md < bestD) { bestD = md; best = m; }
+                          }
+                          if (best) {
+                              const maxE = (typeof ModuleIdentitySystem !== 'undefined')
+                                  ? ModuleIdentitySystem.getMaxEnergy(best) : 100;
+                              best.energy = Math.min(maxE, best.energy + 4.5);
+                              best._eatFlash = Math.max(best._eatFlash || 0, 12);
+                              best._resonanceFed = Math.max(best._resonanceFed || 0, 18);
+                              p._scooped = true;
+                              vortexParticles.splice(i, 1);
+                              filtered++;
+                              if (filtered <= 2 && random() < 0.4)
+                                  addFloatingText(best.x, best.y - 12, '+filter', '#86efac');
+                          }
+                      }
+                  }
+                  if (filtered > 0) hunter._squidFilterFlash = 14;
+              }
+
               function applyScoopProbeColonyTug(hunter, geo) {
                   if (!geo.probe || geo.probe.grabbingCreature) return;
                   const isFeast = isSquidFeastMode(hunter);
@@ -31880,21 +31961,45 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   const probeOn = isScoopProbeDeployed(creature);
                   let pullTarget = null;
                   if (probeOn) {
-                      pullTarget = selectScoopProbeWeakestTarget(creature, geo);
-                      creature._scoopProbePullTarget = pullTarget;
-                      updateScoopProbeWeakestHighlight(creature, geo);
-                      if (pullTarget && geo.probe) {
-                          geo.probe.targetX = pullTarget.x;
-                          geo.probe.targetY = pullTarget.y;
-                          geo.probe.grabbingCreature = true;
-                          pullCreatureAlongTentacle(creature, pullTarget, geo.probe, geo, SCOOP_PROBE_PULL_SCALE);
-                      } else {
-                          const isFeast = isSquidFeastMode(creature);
-                          if (isFeast) applyScoopProbePushback(creature, geo);
-                          else applyScoopProbeColonyTug(creature, geo);
+                      // ── Lattice anchoring ──────────────────────────────────────
+                      // While the probe is out, try to fissure into a colony. Once
+                      // anchored, the squid threads to the colony heart and the probe
+                      // is dedicated to the anchor (no weak-prey hunting / module fire).
+                      if (typeof SquidLatticeAnchorSystem !== 'undefined') {
+                          if (!SquidLatticeAnchorSystem.isAnchored(creature)) {
+                              SquidLatticeAnchorSystem.tryEstablish(creature, geo);
+                          }
+                          if (SquidLatticeAnchorSystem.isAnchored(creature)) {
+                              SquidLatticeAnchorSystem.tick(creature, geo, timeScale);
+                              creature._scoopProbePullTarget = null;
+                              // Tendrils now hunt white particles around the colony rim
+                              // (the colony becomes a filter mouth).
+                              applyAnchoredColonyTendrilFilter(creature, geo);
+                          }
+                      }
+
+                      if (!SquidLatticeAnchorSystem || !SquidLatticeAnchorSystem.isAnchored(creature)) {
+                          pullTarget = selectScoopProbeWeakestTarget(creature, geo);
+                          creature._scoopProbePullTarget = pullTarget;
+                          updateScoopProbeWeakestHighlight(creature, geo);
+                          if (pullTarget && geo.probe) {
+                              geo.probe.targetX = pullTarget.x;
+                              geo.probe.targetY = pullTarget.y;
+                              geo.probe.grabbingCreature = true;
+                              pullCreatureAlongTentacle(creature, pullTarget, geo.probe, geo, SCOOP_PROBE_PULL_SCALE);
+                          } else {
+                              const isFeast = isSquidFeastMode(creature);
+                              if (isFeast) applyScoopProbePushback(creature, geo);
+                              else applyScoopProbeColonyTug(creature, geo);
+                          }
                       }
                   } else {
                       creature._scoopProbePullTarget = null;
+                      // Probe retracted → release any lattice anchor.
+                      if (typeof SquidLatticeAnchorSystem !== 'undefined'
+                          && SquidLatticeAnchorSystem.isAnchored(creature)) {
+                          SquidLatticeAnchorSystem.release(creature);
+                      }
                   }
 
                   if (isScoopTendrilsDeployed(creature)) applyScoopTentacleContacts(creature, geo);
@@ -32917,6 +33022,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
               function clearScoopProbeState(creature) {
                   if (!creature) return;
+                  // Detach from any anchored colony when the probe is cleared/retracted.
+                  if (typeof SquidLatticeAnchorSystem !== 'undefined'
+                      && SquidLatticeAnchorSystem.isAnchored(creature)) {
+                      SquidLatticeAnchorSystem.release(creature);
+                  }
                   creature._scoopProbePullTarget = null;
                   creature._scoopProbeWeakestTarget = null;
                   for (const c of creatures) {
@@ -33002,6 +33112,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
               function releaseManualScoop(creature, opts = {}) {
                   if (!creature) return;
+                  // Detach from any anchored colony.
+                  if (typeof SquidLatticeAnchorSystem !== 'undefined'
+                      && SquidLatticeAnchorSystem.isAnchored(creature)) {
+                      SquidLatticeAnchorSystem.release(creature, 'silent');
+                  }
                   const jellyScoop = isJellyfishScoopCreature(creature);
                   const keepBelly = !!opts.keepJellyBelly;
                   if (!opts.skipHatch && !opts.jellyfishPop && !jellyScoop
@@ -33518,6 +33633,44 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           strokeWeight(1.2);
                           noFill();
                           circle(pr.tipX, pr.tipY, 12 + (14 - flash) * 0.8);
+                      }
+                      // ── Lattice-anchor threading visual ──────────────────────
+                      // A bright energy thread runs from the probe tip into the colony
+                      // heart, with a travelling pulse showing the fissure in progress.
+                      const anchor = creature._latticeAnchor;
+                      if (anchor && anchor.anchorNode) {
+                          const hx = anchor.anchorX, hy = anchor.anchorY;
+                          const thread = anchor.threadProgress || 0;
+                          // Thread line from tip to heart
+                          stroke(125, 211, 252, 60 + thread * 120);
+                          strokeWeight(1.2 + thread * 1.4);
+                          line(pr.tipX, pr.tipY, hx, hy);
+                          stroke(200, 245, 255, 40 + thread * 90);
+                          strokeWeight(0.6);
+                          line(pr.tipX, pr.tipY, hx, hy);
+                          // Travelling pulse along the thread
+                          const t = (frameCount * 0.03) % 1;
+                          const px = lerp(pr.tipX, hx, t);
+                          const py = lerp(pr.tipY, hy, t);
+                          fill(220, 250, 255, 180);
+                          noStroke();
+                          circle(px, py, 3 + thread * 2);
+                          // Heart fissure burst ring
+                          if (thread > 0.1) {
+                              noFill();
+                              stroke(125, 211, 252, 50 + sin(frameCount * 0.12) * 30);
+                              strokeWeight(0.9);
+                              circle(hx, hy, (CREATURE_BODY_RADIUS * 3) + sin(frameCount * 0.1) * 6);
+                          }
+                          // "Fissuring" / "Anchored" label
+                          if (frameCount % 4 === 0 || thread < 1) {
+                              noStroke();
+                              fill(180, 235, 255, 200);
+                              textSize(8);
+                              textAlign(CENTER, CENTER);
+                              text(thread < 1 ? `FISSURING ${Math.round(thread * 100)}%` : 'ANCHORED',
+                                  (pr.tipX + hx) / 2, (pr.tipY + hy) / 2 - 8);
+                          }
                       }
                   }
 
@@ -55866,6 +56019,309 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   };
               })();
               window.LatticeRingSystem = LatticeRingSystem;
+
+
+              // ════════════════════════════════════════════════════════════════
+              // SquidLatticeAnchorSystem
+              //
+              // When a squid threads its probe into a colony, it can ANCHOR to that
+              // single lattice — fissuring through it and taking it over. While
+              // anchored:
+              //   • The probe threads to the colony's densest node (most connections)
+              //   • Module firing is DISABLED (the probe is occupied threading)
+              //   • The colony gets strong, EXCLUSIVE bonuses (energy + reproduction):
+              //     this is the only way to gain the squid-link bonus.
+              //   • The colony locks into a tight flower-of-life geometry with nested
+              //     energy rings centered on the anchor node.
+              //   • Tendrils hunt white particles around the colony perimeter
+              //     (the colony becomes a tendril "filter mouth").
+              //   • Player detaches by retracting the probe [2].
+              //
+              // It's a visible, deliberate macro-organism mechanic — squid + colony
+              // fuse into a larger processing organism.
+              // ════════════════════════════════════════════════════════════════
+              const SquidLatticeAnchorSystem = (function() {
+                  const ANCHOR_THREAD_FRAMES = 90;       // time for probe to fully thread in
+                  const ANCHOR_DENSITY_REFRESH = 30;     // re-pick densest node every N frames
+                  const RING_REFRESH_FRAMES = 45;        // recompute ring geometry cadence
+
+                  // Build adjacency for the colony containing `seedCreature`.
+                  function _findColonyOf(seedCreature) {
+                      if (typeof ModuleIdentitySystem === 'undefined') return null;
+                      const links = ModuleIdentitySystem._linkCache?.length
+                          ? ModuleIdentitySystem._linkCache
+                          : (ModuleIdentitySystem.refreshResonanceLinkCache
+                              ? ModuleIdentitySystem.refreshResonanceLinkCache() : []);
+                      if (!links || !links.length) return null;
+
+                      const adj = new Map();
+                      for (const lnk of links) {
+                          if (!lnk || !lnk.a || !lnk.b) continue;
+                          if (!adj.has(lnk.a)) adj.set(lnk.a, new Set());
+                          if (!adj.has(lnk.b)) adj.set(lnk.b, new Set());
+                          adj.get(lnk.a).add(lnk.b);
+                          adj.get(lnk.b).add(lnk.a);
+                      }
+                      if (!adj.has(seedCreature)) return null;
+
+                      const members = [];
+                      const queue = [seedCreature];
+                      const seen = new Set([seedCreature]);
+                      while (queue.length) {
+                          const cur = queue.shift();
+                          members.push(cur);
+                          const nbrs = adj.get(cur);
+                          if (!nbrs) continue;
+                          nbrs.forEach(function(n) {
+                              if (!seen.has(n)) { seen.add(n); queue.push(n); }
+                          });
+                      }
+                      if (members.length < 2) return null;
+                      const degree = new Map();
+                      for (const m of members) degree.set(m, (adj.get(m)?.size) || 0);
+                      return { members, adj, degree };
+                  }
+
+                  // Pick the densest node — most connections, tie-broken toward the tip.
+                  function _pickAnchorNode(colony, tipX, tipY) {
+                      let best = null, bestScore = -Infinity;
+                      for (const m of colony.members) {
+                          if (!m || creatures.indexOf(m) < 0) continue;
+                          const deg = colony.degree.get(m) || 0;
+                          const dTip = (tipX != null) ? dist(m.x, m.y, tipX, tipY) : 0;
+                          const score = deg * 100 - dTip;
+                          if (score > bestScore) { bestScore = score; best = m; }
+                      }
+                      return best;
+                  }
+
+                  // Find the colony member the probe tip is near.
+                  function _creatureNearTip(tipX, tipY, radius, squid) {
+                      if (tipX == null) return null;
+                      const list = (typeof SpatialGrid !== 'undefined' && SpatialGrid.cells)
+                          ? SpatialGrid.queryRadius(tipX, tipY, radius)
+                          : creatures;
+                      let best = null, bestD = Infinity;
+                      for (const c of list) {
+                          if (!c || c === squid || isManualControlImmune(c)) continue;
+                          if (c.isPredator) continue;
+                          if ((c._networkSize || 1) < 2) continue;
+                          const d = dist(c.x, c.y, tipX, tipY);
+                          if (d <= radius && d < bestD) { bestD = d; best = c; }
+                      }
+                      return best;
+                  }
+
+                  // Assign nested flower-of-life rings by hop distance from the heart.
+                  function _computeRings(colony, anchorNode) {
+                      const hop = new Map();
+                      hop.set(anchorNode, 0);
+                      const queue = [anchorNode];
+                      while (queue.length) {
+                          const cur = queue.shift();
+                          const h = hop.get(cur);
+                          const nbrs = colony.adj.get(cur);
+                          if (!nbrs) continue;
+                          nbrs.forEach(function(n) {
+                              if (!hop.has(n)) { hop.set(n, h + 1); queue.push(n); }
+                          });
+                      }
+                      const ringGroups = new Map();
+                      for (const m of colony.members) {
+                          const h = hop.has(m) ? hop.get(m) : 99;
+                          if (!ringGroups.has(h)) ringGroups.set(h, []);
+                          ringGroups.get(h).push(m);
+                      }
+                      const assignments = new Map();
+                      ringGroups.forEach(function(group, ring) {
+                          const count = group.length;
+                          for (let i = 0; i < count; i++) {
+                              assignments.set(group[i], { ring, slot: i, ringCount: count });
+                          }
+                      });
+                      return assignments;
+                  }
+
+                  // Establish a fresh anchor onto the colony the probe touches.
+                  function tryEstablish(squid, geo) {
+                      if (!squid || !geo || !geo.probe) return false;
+                      if (squid._latticeAnchor) return true;
+                      const pr = geo.probe;
+                      if (pr.tipX == null) return false;
+                      const touchR = (pr.len || 60) * 0.5 + 28;
+                      const touched = _creatureNearTip(pr.tipX, pr.tipY, touchR, squid);
+                      if (!touched) return false;
+                      const colony = _findColonyOf(touched);
+                      if (!colony || colony.members.length < 2) return false;
+                      const anchorNode = _pickAnchorNode(colony, pr.tipX, pr.tipY);
+                      if (!anchorNode) return false;
+
+                      squid._latticeAnchor = {
+                          members: colony.members.slice(),
+                          adj: colony.adj,
+                          degree: colony.degree,
+                          anchorNode,
+                          anchorX: anchorNode.x,
+                          anchorY: anchorNode.y,
+                          threadProgress: 0,
+                          age: 0,
+                          lastDensity: frameCount,
+                          lastRing: 0,
+                          ringAssignments: _computeRings(colony, anchorNode),
+                      };
+                      for (const m of colony.members) m._squidAnchoredBy = squid;
+                      anchorNode._isSquidAnchorHeart = true;
+                      if (typeof addFloatingText === 'function')
+                          addFloatingText(anchorNode.x, anchorNode.y - 30, '⟿ LATTICE FISSURE', '#7dd3fc');
+                      if (typeof playTone === 'function') {
+                          playTone(180, 'sine', 0.18, 0.4);
+                          setTimeout(function() { playTone(360, 'triangle', 0.14, 0.36); }, 90);
+                          setTimeout(function() { playTone(540, 'sine', 0.2, 0.3); }, 180);
+                      }
+                      squid.currentThought = 'Threading probe into the colony heart — fissuring the lattice';
+                      return true;
+                  }
+
+                  // Release the anchor.
+                  function release(squid, reason) {
+                      const anchor = squid && squid._latticeAnchor;
+                      if (!anchor) return;
+                      for (const m of anchor.members) {
+                          if (!m) continue;
+                          if (m._squidAnchoredBy === squid) m._squidAnchoredBy = null;
+                          m._isSquidAnchorHeart = false;
+                          m._squidAnchorRing = null;
+                      }
+                      if (anchor.anchorNode) anchor.anchorNode._isSquidAnchorHeart = false;
+                      squid._latticeAnchor = null;
+                      if (reason !== 'silent' && typeof addFloatingText === 'function')
+                          addFloatingText(squid.x, squid.y - 28, 'LATTICE RELEASED', '#94a3b8');
+                  }
+
+                  function isAnchored(squid) { return !!(squid && squid._latticeAnchor); }
+                  function isFullyThreaded(squid) {
+                      const a = squid && squid._latticeAnchor;
+                      return !!(a && a.threadProgress >= 1);
+                  }
+
+                  // Main per-frame tick for an anchored squid.
+                  function tick(squid, geo, timeScale) {
+                      const anchor = squid && squid._latticeAnchor;
+                      if (!anchor) return null;
+
+                      if (!anchor.anchorNode || creatures.indexOf(anchor.anchorNode) < 0) {
+                          const survivor = anchor.members.find(function(m) { return m && creatures.indexOf(m) >= 0; });
+                          if (!survivor) { release(squid, 'silent'); return null; }
+                          const colony = _findColonyOf(survivor);
+                          if (!colony) { release(squid, 'silent'); return null; }
+                          anchor.members = colony.members.slice();
+                          anchor.adj = colony.adj;
+                          anchor.degree = colony.degree;
+                          anchor.anchorNode = _pickAnchorNode(colony, geo?.probe?.tipX, geo?.probe?.tipY);
+                          if (!anchor.anchorNode) { release(squid, 'silent'); return null; }
+                          anchor.ringAssignments = _computeRings(colony, anchor.anchorNode);
+                      }
+
+                      anchor.age += timeScale;
+                      anchor.anchorX = anchor.anchorNode.x;
+                      anchor.anchorY = anchor.anchorNode.y;
+                      anchor.threadProgress = Math.min(1, anchor.threadProgress + timeScale / ANCHOR_THREAD_FRAMES);
+
+                      if (frameCount - anchor.lastDensity > ANCHOR_DENSITY_REFRESH) {
+                          anchor.lastDensity = frameCount;
+                          const colony = _findColonyOf(anchor.anchorNode);
+                          if (colony && colony.members.length >= 2) {
+                              anchor.members = colony.members.slice();
+                              anchor.adj = colony.adj;
+                              anchor.degree = colony.degree;
+                              const newHeart = _pickAnchorNode(colony, geo?.probe?.tipX, geo?.probe?.tipY);
+                              if (newHeart && newHeart !== anchor.anchorNode) {
+                                  anchor.anchorNode._isSquidAnchorHeart = false;
+                                  anchor.anchorNode = newHeart;
+                                  newHeart._isSquidAnchorHeart = true;
+                              }
+                          }
+                      }
+
+                      if (frameCount - anchor.lastRing > RING_REFRESH_FRAMES) {
+                          anchor.lastRing = frameCount;
+                          anchor.ringAssignments = _computeRings(anchor, anchor.anchorNode);
+                      }
+
+                      if (geo.probe) {
+                          geo.probe.targetX = anchor.anchorX;
+                          geo.probe.targetY = anchor.anchorY;
+                          geo.probe.grabbingCreature = false;
+                          geo.probe._anchorThread = anchor.threadProgress;
+                      }
+
+                      _applyColonyBonuses(squid, anchor, timeScale);
+                      _lockColonyGeometry(squid, anchor, timeScale);
+                      return anchor;
+                  }
+
+                  // EXCLUSIVE squid-link bonuses: energy infusion + reproduction boost.
+                  function _applyColonyBonuses(squid, anchor, timeScale) {
+                      const thread = anchor.threadProgress;
+                      if (thread < 0.15) return;
+                      const shedStacks = squid._squidShedStacks || 0;
+                      const power = thread * (1 + Math.min(2.0, shedStacks * 0.1));
+                      for (const m of anchor.members) {
+                          if (!m || creatures.indexOf(m) < 0 || m.isPredator) continue;
+                          const maxE = (typeof ModuleIdentitySystem !== 'undefined')
+                              ? ModuleIdentitySystem.getMaxEnergy(m) : 100;
+                          const infuse = (0.06 + power * 0.05) * timeScale;
+                          m.energy = Math.min(maxE, m.energy + infuse);
+                          m._squidLinkReproUntil = frameCount + 20;
+                          m._squidLinkReproStacks = Math.min(8, 2 + power * 2.4);
+                          if (m._networkBurden > 0) m._networkBurden = Math.max(0, m._networkBurden - 0.03 * timeScale);
+                          m._colonyLinkPulse = Math.max(m._colonyLinkPulse || 0, 12);
+                          m._squidAnchorGlow = Math.max(m._squidAnchorGlow || 0, 10);
+                      }
+                      squid._squidAnchorActive = 12;
+                  }
+
+                  // Lock the colony into a nested flower-of-life centered on the heart.
+                  function _lockColonyGeometry(squid, anchor, timeScale) {
+                      const thread = anchor.threadProgress;
+                      if (thread < 0.2) return;
+                      const hx = anchor.anchorX, hy = anchor.anchorY;
+                      const baseRing = (typeof CREATURE_MIN_SEP !== 'undefined' ? CREATURE_MIN_SEP : 26) * 1.35;
+                      const lockStrength = thread * 0.045;
+                      const rot = frameCount * 0.004;
+
+                      anchor.ringAssignments.forEach(function(info, m) {
+                          if (!m || creatures.indexOf(m) < 0 || m === anchor.anchorNode) return;
+                          if (isManualControlImmune(m)) return;
+                          m._squidAnchorRing = info.ring;
+                          const ringR = baseRing * info.ring * 1.04;
+                          const ang = (info.slot / Math.max(1, info.ringCount)) * TWO_PI
+                              + info.ring * 0.4 + rot;
+                          const targetX = hx + Math.cos(ang) * ringR;
+                          const targetY = hy + Math.sin(ang) * ringR;
+                          const dx = targetX - m.x, dy = targetY - m.y;
+                          m.vx += dx * lockStrength * timeScale;
+                          m.vy += dy * lockStrength * timeScale;
+                          m.vx *= (1 - 0.02 * thread * timeScale);
+                          m.vy *= (1 - 0.02 * thread * timeScale);
+                      });
+                      const heart = anchor.anchorNode;
+                      if (heart && !isManualControlImmune(heart)) {
+                          heart._squidAnchorRing = 0;
+                          heart._squidAnchorGlow = Math.max(heart._squidAnchorGlow || 0, 18);
+                      }
+                  }
+
+                  return {
+                      tryEstablish: tryEstablish,
+                      tick: tick,
+                      release: release,
+                      isAnchored: isAnchored,
+                      isFullyThreaded: isFullyThreaded,
+                      ANCHOR_THREAD_FRAMES: ANCHOR_THREAD_FRAMES,
+                  };
+              })();
+              window.SquidLatticeAnchorSystem = SquidLatticeAnchorSystem;
 
 
               // ════════════════════════════════════════════════════════════════
