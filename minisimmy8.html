@@ -7927,7 +7927,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                                   <span class="inspect-hotkey-legend__key">7</span><span>Cycle all creatures — strongest first</span>
                                   <span class="inspect-hotkey-legend__key">0</span><span>Toggle scoop — belly bubble absorbs drift &amp; prey</span>
                                   <span class="inspect-hotkey-legend__key">F</span><span>Sprint — jellyfish bell pulse while scoop is on</span>
-                                  <span class="inspect-hotkey-legend__key">Space</span><span>Garden spray — machine-gun belly drift &amp; modules at colonies (manual squid); feast [1] fires modules</span>
+                                  <span class="inspect-hotkey-legend__key">Space</span><span>Fire belly modules from the probe tip as fast bullets — probe [2] must be extended</span>
                                   <span class="inspect-hotkey-legend__key">V</span><span>Inner voice — announcer narrates this creature's perspective</span>
                               </div>
                               <div class="inspect-hotkey-legend__note">Keys 1–5 and V need a selected creature. Key 7 walks the full roster by rank.</div>
@@ -8001,7 +8001,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                                           <div id="inspect-manual-hint" class="text-center text-[10px] leading-snug text-sky-300/55">Drag on the creature to grab, or click elsewhere to pull it like a string.</div>
                                           <div id="inspect-powerup-bar" class="inspect-powerup-bar is-hidden">
                                               <button type="button" id="inspect-scoop-btn" class="inspect-powerup-btn is-scoop"
-                                                      onclick="playUIClick(); toggleManualScoop()" title="Toggle scoop bubble [0] · [F] sprint · [Space] fire drift from probe (or modules in feast [1])">
+                                                      onclick="playUIClick(); toggleManualScoop()" title="Toggle scoop bubble [0] · [F] sprint · [Space] fire belly modules from extended probe tip">
                                                   <i class="fa-solid fa-otter text-[9px]"></i>
                                                   <span>Scoop</span>
                                                   <span class="opacity-60">[0]</span>
@@ -10142,10 +10142,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
               const SCOOP_LATTICE_TIER3 = 100;
               const SCOOP_LATTICE_TIER2_GAIN = 0.52;
               const SCOOP_LATTICE_TIER3_GAIN = 0.28;
-              const SCOOP_DASH_DURATION = 24;
-              const SCOOP_DASH_COOLDOWN = 20;
+              const SCOOP_DASH_DURATION = 38;
+              const SCOOP_DASH_COOLDOWN = 18;
               const SCOOP_CREATURE_SCAN_BUDGET = 14;
-              const SCOOP_MODULE_FIRE_GAP = 110;
+              const SCOOP_MODULE_FIRE_GAP = 85;
               const SQUID_GARDEN_SPRAY_GAP = 130;
               const SQUID_GARDEN_SPRAY_SPEED = 14;
               const SQUID_GARDEN_SPRAY_SPREAD = 0.22;
@@ -10195,8 +10195,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
               const SQUID_DUEL_STEAL_COOLDOWN = 42;
               const SQUID_BUBBLE_CLASH_OVERLAP = 0.96;
               const SQUID_POP_BURST_WHITE_MAX = 58;
-              const SQUID_POP_MODULE_CAP = 220;
-              const SCOOP_JELLYFISH_PRESSURE_POP = 1400;
+              const SQUID_POP_MODULE_CAP = 440;
+              const SCOOP_JELLYFISH_PRESSURE_POP = 2800;
               const SCOOP_JELLYFISH_AUTO_SILVER_CHANCE = 0.14;
               const SCOOP_JELLYFISH_AUTO_GOLD_CHANCE = 0.05;
               const SCOOP_JELLYFISH_MANUAL_SILVER_CHANCE = 0.04;
@@ -17523,12 +17523,17 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       return false;
                   }
 
-                  if (key === ' ' && isManualGardenSquid(manualControlCreature)) {
-                      fireSquidGardenSprayShot(manualControlCreature);
-                      return false;
-                  }
-
                   if (key === ' ' && manualControlCreature?._scoopActive) {
+                      // Modules only fire from the extended probe tip. If the probe
+                      // is retracted, prompt the player to deploy it instead.
+                      if (!isScoopProbeDeployed(manualControlCreature)) {
+                          if (Date.now() - lastSquidGardenSprayTime > 420) {
+                              addFloatingText(manualControlCreature.x, manualControlCreature.y - 20,
+                                  'Extend probe [2] to fire modules', '#fb923c');
+                              lastSquidGardenSprayTime = Date.now();
+                          }
+                          return false;
+                      }
                       fireScoopBellyShot(manualControlCreature);
                       return false;
                   }
@@ -26770,11 +26775,22 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       const btn = `<button type="button"${titleAttr(btnTip)} onclick="playUIClick(); purchaseSkillNode('${node.id}')"
                                                                                                 class="rounded-lg px-2 py-0.5 text-[9px] font-semibold ${canBuy ? 'bg-emerald-600 text-white hover:bg-emerald-500' : 'bg-white/10 text-white/40'}"
                                                                                                 ${canBuy ? '' : 'disabled'}>${maxed ? 'Owned' : crystalCostInline(cost)}</button>`;
-                      return `<div class="skill-tree-node-row" data-node-id="${node.id}" data-voice-hover="${escapeHtmlAttr(`${node.name}. ${node.desc}${node.note ? '. ' + node.note : ''}`)}">
+                      const skillAutoKey = `perk-skill-${node.id}`;
+                      const skillAutoOn = typeof AutoBuyUpgradeSystem !== 'undefined' && !maxed && AutoBuyUpgradeSystem.isEnabled(skillAutoKey);
+                      const skillAutoGlowCls = skillAutoOn ? ' is-auto-buy' : '';
+                      const skillAutoToggle = !maxed
+                          ? `<button type="button" class="auto-buy-toggle${skillAutoOn ? ' is-on' : ''}"
+                                                                                              data-auto-buy-key="${skillAutoKey}"
+                                                                                              style="position:absolute;top:3px;right:3px"
+                                                                                              onclick="event.stopPropagation(); playUIClick(); AutoBuyUpgradeSystem.toggle('${skillAutoKey}'); renderTechTreeModal();"
+                                                                                              title="Auto-buy this perk when affordable"><i class="fa-solid fa-bolt"></i></button>`
+                          : '';
+                      return `<div class="skill-tree-node-row${skillAutoGlowCls}" style="position:relative" data-node-id="${node.id}" data-voice-hover="${escapeHtmlAttr(`${node.name}. ${node.desc}${node.note ? '. ' + node.note : ''}`)}">
+                                                                                                ${skillAutoToggle}
                                                                                                 <div class="skill-tree-node-index">${node.isLegendary ? '★' : node.index}</div>
                                                                                                 <div class="${cls}">
                                                                                                     ${node.isLegendary ? '<div class="skill-tree-legendary-tag">Legendary Ability</div>' : ''}
-                                                                                                    <div class="flex items-start justify-between gap-2">
+                                                                                                    <div class="flex items-start justify-between gap-2 ${skillAutoToggle ? 'pr-5' : ''}">
                                                                                                         <div class="min-w-0">
                                                                                                             <div class="text-[11px] font-semibold text-white/90 voice-label-wrap" data-voice-key="perk-${node.id}">${node.name}</div>
                                                                                                             <div class="text-[9px] leading-snug text-white/50">${node.desc}</div>
@@ -30019,9 +30035,20 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       }
                       if (!other.isPredator && !isManualControlImmune(other)) {
                           const drain = 0.9 + (creature._scoopLatticeTier || 1) * 0.35 + laceMemory * 0.01;
-                          other.energy = max(0, other.energy - drain);
-                          other._networkBurden = (other._networkBurden || 0) + 0.1;
-                          other._colonyLinkPulse = max(other._colonyLinkPulse || 0, 10);
+                          // Net-positive symbiosis: the squid drains a little but gives back
+                          // MORE — energy compensation plus a reproduction-boost window that
+                          // ramps with how actively the squid is shedding/processing modules.
+                          const shedStacks = creature._squidShedStacks || 0;
+                          const giveBack = drain * (1.35 + Math.min(2.2, shedStacks * 0.12));
+                          other.energy = Math.max(0, other.energy - drain + giveBack);
+                          other._networkBurden = Math.max(0, (other._networkBurden || 0) - 0.04);
+                          other._colonyLinkPulse = max(other._colonyLinkPulse || 0, 14);
+                          // Reproduction-boost window, refreshed while linked. Stacks grow
+                          // with the squid's shed rate so a busy processing-station squid
+                          // makes its colony breed faster and faster.
+                          other._squidLinkReproUntil = frameCount + 150;
+                          other._squidLinkReproStacks = Math.min(8,
+                              (other._squidLinkReproStacks || 0) * 0.9 + 1 + shedStacks * 0.15);
                       }
                       stolen.push({
                           key: link.key,
@@ -30160,13 +30187,13 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       dx /= d;
                       dy /= d;
                   }
-                  const impulse = stats.dashPower * 3.15;
+                  const impulse = stats.dashPower * 4.3;
                   creature.vx += dx * impulse;
                   creature.vy += dy * impulse;
-                  capCreatureVelocity(creature, getCreatureMaxSpeed(creature, timeScale) * 4.0);
-                  creature._scoopDashRipple = 26;
-                  creature._scoopDashBoost = 44;
-                  creature._scoopSpeedSurge = 40;
+                  capCreatureVelocity(creature, getCreatureMaxSpeed(creature, timeScale) * 5.4);
+                  creature._scoopDashRipple = 30;
+                  creature._scoopDashBoost = 64;
+                  creature._scoopSpeedSurge = 58;
                   playTone(140 + stats.tier * 18, 'sine', 0.14, 0.52);
                   maybeSpeakScoopInnerVoice(creature, 'scoop_sprint');
                   setTimeout(() => playTone(320 + stats.tier * 24, 'triangle', 0.08, 0.38), 40);
@@ -30180,7 +30207,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       const spring = getScoopDashSpring(creature);
                       const geo = creature._scoopGeo;
                       if (geo && spring.propel > 0.08) {
-                          const push = spring.propel * 0.21 * timeScale;
+                          const push = spring.propel * 0.31 * timeScale;
                           creature.vx += cos(geo.facing) * push;
                           creature.vy += sin(geo.facing) * push;
                       }
@@ -30609,6 +30636,47 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   };
               }
 
+              // Returns the ordered list of core component types that make up a
+              // squid's identity. For a single-core creature this is just [coreType].
+              // For a hybrid (a creature whose module composition is dominated by 2+
+              // families at meaningful tier-weight), it returns each contributing type
+              // so fired modules can alternate between them.
+              function getSquidCoreComponents(creature) {
+                  const primary = normalizeModuleTypeKey(getCreatureCoreType(creature) || 'communicator');
+                  if (!creature || !creature.modules || !creature.modules.length) return [primary];
+                  // Tier-weighted family counts (excluding the literal core module so a
+                  // mostly-explorer body with a communicator core still reads as hybrid).
+                  const weights = {};
+                  for (const m of creature.modules) {
+                      const t = normalizeModuleTypeKey(m.type);
+                      if (!t || t === 'balanced') continue;
+                      weights[t] = (weights[t] || 0) + (m.tier || 1);
+                  }
+                  // Always include the primary core
+                  weights[primary] = (weights[primary] || 0) + 2;
+                  const entries = Object.entries(weights).sort((a, b) => b[1] - a[1]);
+                  if (!entries.length) return [primary];
+                  const topWeight = entries[0][1];
+                  // A type qualifies as a hybrid component if it carries at least ~45%
+                  // of the dominant family's tier-weight. This keeps incidental single
+                  // modules out while catching genuine dual/tri builds.
+                  const components = entries
+                      .filter(([, w]) => w >= topWeight * 0.45)
+                      .map(([t]) => t);
+                  // Ensure the primary core is first in the rotation
+                  const ordered = [primary, ...components.filter((t) => t !== primary)];
+                  return ordered.length ? ordered : [primary];
+              }
+
+              // Picks the next core-component type for a squid's fired module,
+              // cycling through hybrid components on successive shots.
+              function nextSquidFireType(creature) {
+                  const comps = getSquidCoreComponents(creature);
+                  if (comps.length <= 1) return comps[0];
+                  creature._squidFireCycle = ((creature._squidFireCycle || 0) + 1) % comps.length;
+                  return comps[creature._squidFireCycle];
+              }
+
               function getSquidGardenSprayAim(creature) {
                   const mx = manualControlState.x - creature.x;
                   const my = manualControlState.y - creature.y;
@@ -30749,12 +30817,13 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
               function tickSquidGardenSprayHeld() {
                   const c = manualControlCreature;
-                  if (!isManualGardenSquid(c)) return;
+                  if (!c || !c._scoopActive) return;
                   if (typeof keyIsDown !== 'function' || !keyIsDown(32)) return;
                   if (spaceshipActive) return;
-                  const now = Date.now();
-                  if (now - lastSquidGardenSprayTime < SQUID_GARDEN_SPRAY_GAP) return;
-                  fireSquidGardenSprayShot(c);
+                  // Modules only fire while the probe is extended
+                  if (!isScoopProbeDeployed(c)) return;
+                  // fireScoopBellyModule has its own internal SCOOP_MODULE_FIRE_GAP gate
+                  fireScoopBellyShot(c);
               }
 
               function fireScoopBellyParticle(creature) {
@@ -30818,19 +30887,38 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           '#fb923c');
                       return false;
                   }
+                  // Modules ONLY fire from the extended probe tip.
+                  if (!isScoopProbeDeployed(creature)) {
+                      addFloatingText(creature.x, creature.y - 18, 'Extend probe [2] to fire modules', '#fb923c');
+                      return false;
+                  }
                   const now = Date.now();
                   if (now - lastScoopModuleFireTime < SCOOP_MODULE_FIRE_GAP) return false;
-                  lastScoopModuleFireTime = now;
-                  const mod = bag.shift();
-                  const col = mod.color || MODULE_AMMO_COLORS[mod.type] || '#a78bfa';
 
                   // Use the LIVE geometry that was built this frame during tickManualScoop.
                   // This has the correct facing, probe baseX/Y, and already-lerped _scoopFacing.
-                  // Rebuilding fresh would use a different facing and land at the wrong position.
-                  const geo = creature._scoopGeo;
-                  let muzzleX, muzzleY, aim;
+                  const geo = creature._scoopGeo || buildManualScoopGeometry(creature);
+                  if (!geo || !geo.probe) {
+                      // No probe geometry — do NOT consume a module (avoids silent loss).
+                      addFloatingText(creature.x, creature.y - 18, 'Probe not ready', '#fb923c');
+                      return false;
+                  }
 
-                  if (geo && geo.probe) {
+                  // Commit the shot — now safe to consume from the bag.
+                  lastScoopModuleFireTime = now;
+                  const consumed = bag.shift();
+
+                  // Fired modules take on the squid's CORE type, not the absorbed type.
+                  // A hybrid-core squid alternates between its component types on each shot.
+                  // (When a squid is popped by damage it spills the ORIGINAL absorbed
+                  //  modules instead — see collectSquidPopModules.)
+                  const fireTypeKey = normalizeModuleTypeKey(nextSquidFireType(creature));
+                  const fireTier = consumed.tier || 1;
+                  const col = MODULE_AMMO_COLORS[fireTypeKey] || consumed.color || '#a78bfa';
+                  const mod = { type: fireTypeKey, tier: fireTier, color: col };
+
+                  let muzzleX, muzzleY, aim;
+                  {
                       const pr = geo.probe;
                       // Compute probe tip using the exact same formula as updateProbeTips.
                       // We recompute rather than trust tipX/tipY because fire can happen between frames.
@@ -30844,25 +30932,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       pr.tipX = muzzleX;
                       pr.tipY = muzzleY;
                       creature._scoopMuzzleFlash = max(creature._scoopMuzzleFlash || 0, 18);
-                  } else if (geo) {
-                      // Probe not in geo (not deployed) — fire from bubble front edge
-                      const mx = manualControlState.x - creature.x;
-                      const my = manualControlState.y - creature.y;
-                      aim = (sqrt(mx * mx + my * my) > 12) ? atan2(my, mx) : (geo.facing || 0);
-                      const bx = geo.bubbleX ?? creature.x;
-                      const by = geo.bubbleY ?? creature.y;
-                      const br = geo.bubbleR || CREATURE_BODY_RADIUS * 2;
-                      muzzleX = bx + cos(aim) * br * 0.88;
-                      muzzleY = by + sin(aim) * br * 0.88;
-                  } else {
-                      // No geo at all (shouldn't happen, but safe fallback)
-                      aim = creature._scoopFacing ?? atan2(creature.vy || 0.01, creature.vx || 1);
-                      muzzleX = creature.x + cos(aim) * CREATURE_BODY_RADIUS * 2.5;
-                      muzzleY = creature.y + sin(aim) * CREATURE_BODY_RADIUS * 2.5;
                   }
 
-                  // Fast projectile — kind 'probe-module-shot' is self-contained,
-                  // no orbit system, no decay timer, no vortex attraction.
+                  // Fast projectile — kind 'probe-module-shot'. Travels fast like a ship
+                  // bullet but responds to the vortex (see updateProbeShotBullets).
                   const speed = 26 + (mod.tier || 1) * 2.2;
                   bullets.push({
                       x: muzzleX,
@@ -30880,28 +30953,112 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   playTone(520 + MODULE_TYPE_KEYS.indexOf(mod.type) * 32, 'sawtooth', 0.12, 0.15);
                   setTimeout(() => playTone(240, 'sine', 0.07, 0.22), 30);
                   addFloatingText(muzzleX, muzzleY - 10, '▶ ' + (MODULE_TYPE_LABELS[mod.type] || mod.type), col);
+
+                  // Co-eject a captured drift particle from the same probe tip so the
+                  // faded drift swarm (_scoopBag) drains alongside the module swarm.
+                  // Without this the small white drift dots accumulate forever.
+                  ejectScoopDriftFromProbe(creature, muzzleX, muzzleY, aim);
                   return true;
+              }
+
+              // Ejects captured drift particles (from _scoopBag) out of the probe
+              // tip as fast vortex particles, mirroring the module shot. Keeps the
+              // belly's drift visual honest — fire a shot, the drift count drops too.
+              // Drains more per shot when the drift swarm is large so it can't grow
+              // without bound while the player is firing modules.
+              function ejectScoopDriftFromProbe(creature, muzzleX, muzzleY, aim) {
+                  const bag = creature._scoopBag || [];
+                  if (!bag.length) return;
+                  // Eject 1 normally, but scale up for a big backlog (every ~16 over)
+                  let ejectCount = 1 + Math.floor(bag.length / 16);
+                  ejectCount = Math.min(ejectCount, bag.length, 6);
+                  for (let k = 0; k < ejectCount; k++) {
+                      const p = bag.pop();
+                      if (!p) break;
+                      p._scooped = false;
+                      p._scoopOwner = null;
+                      p._scoopSnared = null;
+                      p._scoopSnareSeg = null;
+                      p.x = muzzleX;
+                      p.y = muzzleY;
+                      const spread = random(-0.18, 0.18);
+                      const ang = (aim != null ? aim : 0) + spread;
+                      const speed = 9 + random(0, 3);
+                      p.vx = cos(ang) * speed;
+                      p.vy = sin(ang) * speed;
+                      if (typeof vortexParticles !== 'undefined' && vortexParticles.indexOf(p) < 0) {
+                          vortexParticles.push(p);
+                      }
+                  }
               }
 
               // ── probe-module-shot update ───────────────────────────────────────
               // Completely self-contained — no ModuleParticle, no orbit grace,
               // no decay timer. Bullets travel fast and graft on contact.
-              function updateProbeShotBullets() {
+              function updateProbeShotBullets(vortexDir = 1, vortexStrength = 1) {
                   for (let i = bullets.length - 1; i >= 0; i--) {
                       const b = bullets[i];
                       if (b.kind !== 'probe-module-shot') continue;
+
+                      // ── Vortex response ─────────────────────────────────────────
+                      // The module bullet is fast but not immune to the spiral. As it
+                      // travels it gets pulled toward the center and curved tangentially,
+                      // so it arcs through the field instead of flying off the map.
+                      const dx = centerX - b.x;
+                      const dy = centerY - b.y;
+                      const distToCenter = Math.sqrt(dx * dx + dy * dy) || 1;
+                      if (distToCenter > 6) {
+                          // Inward pull (gentle so the bullet still has reach, but firm
+                          // enough that it always curves back into play)
+                          const pull = 0.55 * vortexStrength;
+                          b.vx += dx * pull / (distToCenter + 40);
+                          b.vy += dy * pull / (distToCenter + 40);
+                          // Tangential swirl
+                          const tangentX = -dy, tangentY = dx;
+                          const tlen = Math.sqrt(tangentX * tangentX + tangentY * tangentY) || 1;
+                          const rot = 0.42 * vortexStrength * vortexDir;
+                          b.vx += (tangentX / tlen) * rot;
+                          b.vy += (tangentY / tlen) * rot;
+                      }
+                      // Mild drag so accumulated vortex forces don't make it accelerate forever
+                      b.vx *= 0.992;
+                      b.vy *= 0.992;
+
                       b.x += b.vx * timeScale;
                       b.y += b.vy * timeScale;
-                      // Hard boundary — gone forever, no recycling
-                      if (b.x < -8 || b.x > width + 8 || b.y < -8 || b.y > height + 8) {
+
+                      // Soft containment: if the bullet drifts past the play field, nudge it
+                      // back rather than deleting it (keeps modules on-map, vortex-bound).
+                      const margin = 30;
+                      if (b.x < -margin || b.x > width + margin || b.y < -margin || b.y > height + margin) {
+                          // Redirect velocity back toward center and clamp inside
+                          b.x = Math.max(-margin, Math.min(width + margin, b.x));
+                          b.y = Math.max(-margin, Math.min(height + margin, b.y));
+                          const rl = Math.sqrt(dx * dx + dy * dy) || 1;
+                          const inSpeed = Math.sqrt(b.vx * b.vx + b.vy * b.vy) || 1;
+                          b.vx = (dx / rl) * inSpeed * 0.85;
+                          b.vy = (dy / rl) * inSpeed * 0.85;
+                      }
+
+                      // Consumed when it spirals into the very center
+                      if (distToCenter < 7) {
+                          // Convert to a floating module particle so it can be re-collected
+                          if (typeof gardenSprayBulletToModule === 'function') gardenSprayBulletToModule(b);
                           bullets.splice(i, 1);
                           continue;
                       }
+                      // Lifespan cap — after a long flight, drop it as a collectible module
+                      b._life = (b._life || 0) + timeScale;
+                      if (b._life > 360) {
+                          if (typeof gardenSprayBulletToModule === 'function') gardenSprayBulletToModule(b);
+                          bullets.splice(i, 1);
+                          continue;
+                      }
+
                       // Hit test
                       const hits = SpatialGrid.cells
                           ? SpatialGrid.queryRadius(b.x, b.y, CREATURE_BODY_RADIUS + 8)
                           : creatures;
-                      let hit = false;
                       for (let h = 0; h < hits.length; h++) {
                           const c = hits[h];
                           if (!c || c === b._firedBy || isManualControlImmune(c)) continue;
@@ -30923,7 +31080,6 @@ body.is-map-fullscreen #map-fullscreen-btn {
                               grafted ? `+${typeLabel} ⚡` : `${typeLabel} (full)`,
                               b.color || '#a78bfa');
                           bullets.splice(i, 1);
-                          hit = true;
                           break;
                       }
                   }
@@ -31698,6 +31854,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
               function updateManualScoop(creature) {
                   if (!creature || !creature._scoopActive) return;
                   if ((creature._scoopCreatureCooldown || 0) > 0) creature._scoopCreatureCooldown -= timeScale;
+                  // Decay shed-activity stacks so lattice compensation tapers off when idle.
+                  if (creature._squidShedStacks > 0) {
+                      creature._squidShedStacks = Math.max(0, creature._squidShedStacks - 0.02 * timeScale);
+                  }
                   tickScoopDashAnimation(creature);
                   tickScoopProbeStuns(creature);
 
@@ -31874,7 +32034,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       if (pCount >= MANUAL_SCOOP_MAX_PARTICLES && modN > 0) {
                           creature.currentThought = creature._manualSuperPredator
                               ? `Bubble full — [Space] fire modules`
-                              : `Bubble full — [Space] fire drift from probe muzzle`;
+                              : `Belly loaded — [Space] fire modules from probe tip`;
                       } else if (pCount >= MANUAL_SCOOP_MAX_PARTICLES) {
                           creature.currentThought = creature._manualSuperPredator
                               ? `Drift full (${pCount}) — [Space] fire particles · probe for prey`
@@ -32188,21 +32348,43 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
               function tickScoopModuleEssenceInBubble(creature, geo) {
                   const modN = getScoopModuleCount(creature);
-                  if (modN < 1) return;
                   if (!creature._scoopEssenceParticles) creature._scoopEssenceParticles = [];
+                  const parts = creature._scoopEssenceParticles;
+
+                  // The decorative essence swarm must track the REAL module count so the
+                  // belly reads honestly. Cap it at ~1.5 particles per actual module so
+                  // firing modules visibly shrinks the colored swarm. When modules are
+                  // gone, the cap is 0 and the swarm is culled immediately below.
+                  const essenceCap = Math.max(0, Math.ceil(modN * 1.5));
+                  if (parts.length > essenceCap) {
+                      parts.splice(0, parts.length - essenceCap);
+                  }
+                  if (modN < 1) {
+                      // No modules — clear any lingering essence right away.
+                      if (parts.length) parts.length = 0;
+                      return;
+                  }
+
                   creature._scoopEssenceTimer = (creature._scoopEssenceTimer || 0) + timeScale;
                   const perk = getScoopIncubatorPerk(creature);
                   const interval = max(3, (SCOOP_MODULE_ESSENCE_INTERVAL - modN * 0.28) / (perk.leakMult || 1));
                   if (creature._scoopEssenceTimer < interval) return;
                   creature._scoopEssenceTimer = 0;
+
+                  // Don't spawn past the cap.
+                  if (parts.length >= essenceCap) return;
+
                   const mods = creature._scoopModuleBag || [];
-                  const burst = modN >= 12 ? 5 : modN >= 8 ? 4 : modN >= 4 ? 3 : 2;
+                  if (!mods.length) return;
+                  const room = essenceCap - parts.length;
+                  const burst = Math.min(room, modN >= 12 ? 4 : modN >= 8 ? 3 : modN >= 4 ? 2 : 1);
                   for (let b = 0; b < burst; b++) {
                       const m = mods[floor(random(mods.length))];
+                      if (!m) continue;
                       const col = m.color || MODULE_AMMO_COLORS[m.type] || '#a78bfa';
                       const ang = random(TWO_PI);
                       const orbitR = geo.bubbleR * random(0.12, 0.58);
-                      creature._scoopEssenceParticles.push({
+                      parts.push({
                           x: geo.bubbleX + cos(ang) * orbitR,
                           y: geo.bubbleY + sin(ang) * orbitR * 0.86,
                           swirl: ang,
@@ -32214,14 +32396,17 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           sheen: m._scoopSpecialSheen || null
                       });
                   }
-                  if (creature._scoopEssenceParticles.length > 140) {
-                      creature._scoopEssenceParticles.splice(0, creature._scoopEssenceParticles.length - 120);
-                  }
               }
 
               function tickScoopEssenceParticles(creature, geo) {
                   const parts = creature._scoopEssenceParticles || [];
                   const modN = getScoopModuleCount(creature);
+                  // Keep the swarm size pinned to the module count every frame so it
+                  // shrinks the instant a module is fired, not after a decay delay.
+                  const essenceCap = Math.max(0, Math.ceil(modN * 1.5));
+                  if (parts.length > essenceCap) {
+                      parts.splice(0, parts.length - essenceCap);
+                  }
                   for (let i = parts.length - 1; i >= 0; i--) {
                       const p = parts[i];
                       p.life -= timeScale;
@@ -32243,31 +32428,138 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   if (modN < leakFloor) return;
                   const perk = getScoopIncubatorPerk(creature);
                   creature._scoopLeakTimer = (creature._scoopLeakTimer || 0) + timeScale;
+
+                  // ── Crowding-driven shed rate ─────────────────────────────────
+                  // The more creatures crowding the bubble, the faster the squid sheds
+                  // modules — so a heavily-besieged squid processes its belly faster and
+                  // survives longer. heldN = creatures actually pinned in the bubble,
+                  // nearbyN = colony members within feeding range.
+                  const heldN = getScoopHeldCreatureCount(creature);
+                  const nearbyN = countCreaturesNearSquid(creature, geo);
+                  const crowd = heldN * 1.6 + nearbyN * 0.5;
+                  // Crowd multiplier ramps the shed cadence (1× alone → up to ~3.4× swarmed)
+                  const crowdMult = 1 + Math.min(2.4, crowd * 0.16);
+
                   let jellyMult = jelly ? SCOOP_JELLYFISH_LEAK_MULT : 1;
                   if (jelly && modN >= SCOOP_JELLYFISH_LEAK_START) {
                       jellyMult *= 1 + (modN - SCOOP_JELLYFISH_LEAK_START + 1) * 0.11;
                   }
-                  const interval = max(7, (SCOOP_MODULE_LEAK_BASE_INTERVAL - modN * 0.52) / ((perk.leakMult || 1) * jellyMult));
+                  // Faster cadence with crowding (shorter interval) and higher fill.
+                  const interval = max(4, (SCOOP_MODULE_LEAK_BASE_INTERVAL - modN * 0.52)
+                      / ((perk.leakMult || 1) * jellyMult * crowdMult));
                   let burst = modN >= 16 ? 4 : modN >= 12 ? 3 : modN >= 8 ? 3 : modN >= 4 ? 2 : jelly ? 1 : 1;
                   if (jelly && modN >= SCOOP_JELLYFISH_LEAK_START) {
                       burst = ceil(burst * jellyMult * 0.42);
                   }
+                  // Crowding adds extra modules per shed cycle (processing station behavior)
+                  burst = Math.max(1, burst + Math.floor(crowd * 0.22));
+
                   if (creature._scoopLeakTimer >= interval) {
                       creature._scoopLeakTimer = 0;
                       for (let b = 0; b < burst; b++) emitScoopModuleLeakParticle(creature, geo);
+
+                      // ── Shedding RELIEVES pop pressure ───────────────────────
+                      // Each shed module consumes a real module from the bag and bleeds
+                      // off pop pressure. A crowded squid sheds enough to stay alive.
+                      const shedConsume = Math.min(modN, burst);
+                      const bag = creature._scoopModuleBag;
+                      for (let s = 0; s < shedConsume && bag && bag.length; s++) {
+                          // Hand the shed module straight to a nearby colony member if
+                          // one is in range — the squid becomes a module feeder.
+                          const shedMod = bag.shift();
+                          feedShedModuleToColony(creature, geo, shedMod);
+                      }
+                      // Pressure relief scales with how much was shed
+                      const relief = shedConsume * (4 + crowd * 0.9);
+                      creature._jellyfishLeakPressure = Math.max(0,
+                          (creature._jellyfishLeakPressure || 0) - relief);
+
+                      // Track shed activity so lattice compensation ramps with processing.
+                      creature._squidShedStacks = Math.min(20,
+                          (creature._squidShedStacks || 0) + shedConsume * 0.5);
+
                       if (burst >= 2 && frameCount % 90 === 0) {
                           maybeSpeakScoopInnerVoice(creature, frameCount % 180 === 0 ? 'scoop_dandruff' : 'scoop_leak');
                       }
                       if (jelly && burst >= 5 && frameCount % 160 === 0) {
                           triggerModuleFeedFrenzy(creature.x, creature.y);
                       }
-                      if (jelly && modN >= SCOOP_JELLYFISH_LEAK_START) {
-                          ensureJellyfishTierState(creature);
-                          const pressureGain = burst * (modN - SCOOP_JELLYFISH_LEAK_START + 1) * 0.72;
-                          creature._jellyfishLeakPressure = (creature._jellyfishLeakPressure || 0) + pressureGain;
-                      }
+                  }
+
+                  // ── Pop pressure only grows from BELLY-FILL, not shedding ─────
+                  // Pressure accrues each frame proportional to how full the belly is.
+                  // If the squid keeps shedding/firing fast enough, pressure never reaches
+                  // the pop threshold. Only a squid that fills up without processing pops.
+                  if (jelly && modN >= SCOOP_JELLYFISH_LEAK_START) {
+                      ensureJellyfishTierState(creature);
+                      const fillGain = (modN - SCOOP_JELLYFISH_LEAK_START + 1) * 0.085 * timeScale;
+                      creature._jellyfishLeakPressure = (creature._jellyfishLeakPressure || 0) + fillGain;
                   }
                   maybeJellyfishPressurePop(creature);
+              }
+
+              // Counts colony/nearby creatures within feeding range of the squid bubble.
+              function countCreaturesNearSquid(creature, geo) {
+                  if (typeof creatures === 'undefined') return 0;
+                  const bx = geo?.bubbleX ?? creature.x;
+                  const by = geo?.bubbleY ?? creature.y;
+                  const r = (geo?.bubbleR ?? CREATURE_BODY_RADIUS * 2.8) * 2.4;
+                  let n = 0;
+                  const list = SpatialGrid.cells ? SpatialGrid.queryRadius(bx, by, r) : creatures;
+                  for (let i = 0; i < list.length; i++) {
+                      const c = list[i];
+                      if (!c || c === creature || c.isPredator || isManualControlImmune(c)) continue;
+                      if (dist(c.x, c.y, bx, by) <= r) n++;
+                  }
+                  return n;
+              }
+
+              // When the squid sheds a module, hand it to the nearest eligible colony
+              // member if one is in range; otherwise emit it as a hovering lure that
+              // gets sucked into creatures over time (handled by the lure system).
+              function feedShedModuleToColony(creature, geo, shedMod) {
+                  if (!shedMod) return;
+                  const bx = geo?.bubbleX ?? creature.x;
+                  const by = geo?.bubbleY ?? creature.y;
+                  const r = (geo?.bubbleR ?? CREATURE_BODY_RADIUS * 2.8) * 2.6;
+                  // Find nearest grafting-eligible creature
+                  let best = null, bestD = Infinity;
+                  const list = SpatialGrid.cells ? SpatialGrid.queryRadius(bx, by, r) : creatures;
+                  for (let i = 0; i < list.length; i++) {
+                      const c = list[i];
+                      if (!c || c === creature || c.isPredator || isManualControlImmune(c)) continue;
+                      if ((c.modules?.length || 0) >= 14) continue;
+                      const d = dist(c.x, c.y, bx, by);
+                      if (d <= r && d < bestD) { bestD = d; best = c; }
+                  }
+                  if (best) {
+                      // Direct graft of the shed module's CORE-flavored type and a small
+                      // energy + reproduction bonus (the squid feeds the colony).
+                      const modType = normalizeModuleTypeKey(shedMod.type);
+                      const newMod = {
+                          type: modType,
+                          tier: shedMod.tier || 1,
+                          color: MODULE_AMMO_COLORS[modType] || '#a78bfa',
+                          offsetX: random(-6, 6),
+                          offsetY: random(-6, 6)
+                      };
+                      best.modules.push(newMod);
+                      if (typeof ModuleIdentitySystem !== 'undefined') {
+                          ModuleIdentitySystem.assignModulePosition(best, newMod);
+                          if (typeof best.updateSpecialization === 'function') best.updateSpecialization();
+                      }
+                      const maxE = (typeof ModuleIdentitySystem !== 'undefined')
+                          ? ModuleIdentitySystem.getMaxEnergy(best) : 100;
+                      best.energy = Math.min(maxE, best.energy + 6 + (shedMod.tier || 1) * 1.6);
+                      best._squidFedReproUntil = frameCount + 240; // reproduction boost window
+                      best._eatFlash = Math.max(best._eatFlash || 0, 14);
+                      best._colonyLinkPulse = Math.max(best._colonyLinkPulse || 0, 14);
+                      if (random() < 0.25) addFloatingText(best.x, best.y - 14, '+mod', '#86efac');
+                  } else {
+                      // No taker in range — emit a hovering lure flake that drifts and
+                      // gets sucked into creatures later (handled by tickScoopLureParticles).
+                      emitSquidLeakFloatingModule(creature, geo, shedMod);
+                  }
               }
 
               function tryConsumeScoopLureParticle(creature, lure) {
@@ -32288,6 +32580,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   creature.energy = min(maxE, creature.energy + 3.8 + (lure.tier || 1) * 1.3);
                   creature._eatFlash = max(creature._eatFlash || 0, 14);
                   creature.honey = min(26, creature.honey + 0.35 * (lure.tier || 1));
+                  // Squid-fed reproduction boost — leaked modules help the colony grow.
+                  creature._squidFedReproUntil = frameCount + 240;
                   creature.currentThought = 'Gobbling leaked module essence!';
                   playTone(880 + (lure.tier || 1) * 42, 'sine', 0.14, 0.5);
                   addFloatingText(creature.x, creature.y - 18, `+${modType} T${lure.tier || 1}`, '#fde047');
@@ -42764,8 +43058,19 @@ body.is-map-fullscreen #map-fullscreen-btn {
                                                                                                         ${canBuy ? '' : 'disabled'}>
                                                                                                         ${maxed ? 'Maxed' : crystalCostInline(cost)}
                                                                                                     </button>`;
-                          return `<div class="${cls}" data-node-id="${node.id}" data-voice-hover="${escapeHtmlAttr(`${node.name}. ${node.desc}${node.note ? '. ' + node.note : ''}`)}">
-                                                                                                    <div class="flex items-start justify-between gap-2">
+                          const autoBuyKey = `perk-tech-${node.id}`;
+                          const autoOn = typeof AutoBuyUpgradeSystem !== 'undefined' && !maxed && !node.placeholder && AutoBuyUpgradeSystem.isEnabled(autoBuyKey);
+                          const autoGlowCls = autoOn ? ' is-auto-buy' : '';
+                          const autoToggle = (!node.placeholder && !maxed && !(node.oneTime && level >= 1))
+                              ? `<button type="button" class="auto-buy-toggle${autoOn ? ' is-on' : ''}"
+                                                                                                      data-auto-buy-key="${autoBuyKey}"
+                                                                                                      style="position:absolute;top:4px;right:4px"
+                                                                                                      onclick="event.stopPropagation(); playUIClick(); AutoBuyUpgradeSystem.toggle('${autoBuyKey}'); renderTechTreeModal();"
+                                                                                                      title="Auto-buy this perk when affordable"><i class="fa-solid fa-bolt"></i></button>`
+                              : '';
+                          return `<div class="${cls}${autoGlowCls}" style="position:relative" data-node-id="${node.id}" data-voice-hover="${escapeHtmlAttr(`${node.name}. ${node.desc}${node.note ? '. ' + node.note : ''}`)}">
+                                                                                                    ${autoToggle}
+                                                                                                    <div class="flex items-start justify-between gap-2 ${autoToggle ? 'pr-6' : ''}">
                                                                                                         <div class="min-w-0">
                                                                                                             <div class="text-[11px] font-semibold text-white/90 voice-label-wrap" data-voice-key="perk-${node.id}">${node.name}${level > 0 ? ` <span class="text-emerald-400">Lv.${level}</span>` : ''}</div>
                                                                                                             <div class="text-[9px] leading-snug text-white/50">${node.desc}</div>
@@ -49611,6 +49916,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   }, 120);
                   // Initialize auto-buy UI state — master button + toggles + glow
                   setTimeout(function() {
+                      // Remove any stale localStorage state from the old persistence system
+                      try { localStorage.removeItem('minisimmy_auto_buy_v1'); } catch(e) {}
                       if (typeof AutoBuyUpgradeSystem !== 'undefined') {
                           var mb = document.getElementById('auto-buy-master-btn');
                           if (mb) mb.classList.toggle('is-on', AutoBuyUpgradeSystem.isMasterOn());
@@ -50618,7 +50925,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       }
                       resolveSquidBubbleOverlapPredation();
                       updateScoopModuleBullets();
-                      updateProbeShotBullets();
+                      updateProbeShotBullets(vortexDir, vortexStrength);
                       updateGardenSprayBullets();
                       ResonanceCycleSystem.tick(timeScale);
                       if (scoopSeedParticles.length) tickScoopSeedParticles();
@@ -50673,6 +50980,16 @@ body.is-map-fullscreen #map-fullscreen-btn {
                               let avoidanceBonus = 1 + (c.hazardsAvoided || 0) * 0.0035;
                               if ((c.hazardDamageTaken || 0) > 48) avoidanceBonus *= 0.68;
                               chance *= avoidanceBonus;
+
+                              // Squid feeding boost — colony members recently fed shed modules
+                              // (or linked to a squid via lattice) reproduce much faster, so the
+                              // colony grows to compensate for the squid eating its members.
+                              if (frameCount < (c._squidFedReproUntil || 0)) {
+                                  chance *= 2.6;
+                              }
+                              if (frameCount < (c._squidLinkReproUntil || 0)) {
+                                  chance *= 1 + Math.min(1.8, (c._squidLinkReproStacks || 0) * 0.22);
+                              }
 
                               if (c.energy > 78) {
                                   chance *= 4.2;
@@ -55573,27 +55890,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   var _masterOn = false;            // master "Auto-Buy ON" switch
                   var _frameCounter = 0;
                   var _tickInterval = 24;           // run a tick every 24 frames (~0.4s @ 60fps)
-                  var STORAGE_KEY = 'minisimmy_auto_buy_v1';
-
-                  // ─── Load / save ─────────────────────────────────────────
-                  function _load() {
-                      try {
-                          var raw = localStorage.getItem(STORAGE_KEY);
-                          if (!raw) return;
-                          var d = JSON.parse(raw);
-                          if (d && Array.isArray(d.enabled)) _enabled = new Set(d.enabled);
-                          if (d && typeof d.master === 'boolean') _masterOn = d.master;
-                      } catch (e) {}
-                  }
-                  function _save() {
-                      try {
-                          localStorage.setItem(STORAGE_KEY, JSON.stringify({
-                              enabled: Array.from(_enabled),
-                              master:  _masterOn,
-                          }));
-                      } catch (e) {}
-                  }
-                  _load();
+                  // NOTE: intentionally NOT persisted to localStorage — auto-buy
+                  // state is session-only. Persisting it caused the is-auto-buy
+                  // green glow to appear on fresh/hard-reset page loads.
 
                   // ─── Per-key purchase abstraction ────────────────────────
                   // Each entry knows how to query its current level, cost, max, prestige
@@ -55618,6 +55917,16 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       if (key.indexOf('vault-') === 0) {
                           var vx = parseInt(key.slice(6), 10);
                           if (vx >= 1 && vx <= 10) return _makeVaultHandler(vx);
+                      }
+                      // tech-tree perk nodes (perks tab): 'perk-tech-<nodeId>'
+                      if (key.indexOf('perk-tech-') === 0) {
+                          var techId = key.slice(10);
+                          return _makeTechNodeHandler(techId);
+                      }
+                      // skill-tree nodes (modules/cores tabs): 'perk-skill-<nodeId>'
+                      if (key.indexOf('perk-skill-') === 0) {
+                          var skillId = key.slice(11);
+                          return _makeSkillNodeHandler(skillId);
                       }
                       return null;
                   }
@@ -55716,12 +56025,77 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       };
                   }
 
+                  // ─── Tech-tree perk node handler ─────────────────────────
+                  function _makeTechNodeHandler(nodeId) {
+                      return {
+                          getLevel: function() {
+                              if (typeof getTechNodeLevel !== 'function') return 0;
+                              return getTechNodeLevel(nodeId);
+                          },
+                          getCost: function() {
+                              var node = typeof TECH_TREE_NODES !== 'undefined'
+                                  ? TECH_TREE_NODES.find(function(n) { return n.id === nodeId; }) : null;
+                              if (!node) return Infinity;
+                              return getTechNodeCost(node);
+                          },
+                          isMaxed: function() {
+                              var node = typeof TECH_TREE_NODES !== 'undefined'
+                                  ? TECH_TREE_NODES.find(function(n) { return n.id === nodeId; }) : null;
+                              if (!node) return true;
+                              return getTechNodeLevel(nodeId) >= getPermanentUpgradeMaxLevel(node);
+                          },
+                          isCapped: function() { return false; }, // tech perks use their own gate system
+                          buyOne: function() {
+                              if (typeof purchaseTechNode !== 'function') return false;
+                              return purchaseTechNode(nodeId) === true || purchaseTechNode(nodeId);
+                          },
+                      };
+                  }
+
+                  // ─── Skill-tree node handler ──────────────────────────────
+                  function _makeSkillNodeHandler(nodeId) {
+                      return {
+                          getLevel: function() {
+                              if (typeof ALL_SKILL_TREE_NODES === 'undefined') return 0;
+                              var node = ALL_SKILL_TREE_NODES.find(function(n) { return n.id === nodeId; });
+                              if (!node) return 0;
+                              return typeof getSkillNodeLevel === 'function'
+                                  ? getSkillNodeLevel(node.treeId, nodeId) : 0;
+                          },
+                          getCost: function() {
+                              if (typeof ALL_SKILL_TREE_NODES === 'undefined') return Infinity;
+                              var node = ALL_SKILL_TREE_NODES.find(function(n) { return n.id === nodeId; });
+                              if (!node || typeof getSkillNodeCost !== 'function') return Infinity;
+                              return getSkillNodeCost(node, this.getLevel());
+                          },
+                          isMaxed: function() {
+                              if (typeof ALL_SKILL_TREE_NODES === 'undefined') return true;
+                              var node = ALL_SKILL_TREE_NODES.find(function(n) { return n.id === nodeId; });
+                              if (!node || typeof getPermanentUpgradeMaxLevel !== 'function') return true;
+                              return this.getLevel() >= getPermanentUpgradeMaxLevel(node);
+                          },
+                          isCapped: function() { return false; },
+                          buyOne: function() {
+                              if (typeof purchaseSkillNode !== 'function') return false;
+                              return purchaseSkillNode(nodeId) === true || purchaseSkillNode(nodeId);
+                          },
+                      };
+                  }
+
                   // ─── All known keys (for iteration) ──────────────────────
                   function _allKeys() {
                       var keys = ['pop', 'pred', 'avgmod'];
                       for (var t = 1; t <= 10; t++) keys.push('tier-' + t);
                       for (var i = 0; i < MAX_INCUBATOR_SLOTS; i++) keys.push('incub-' + i);
                       for (var v = 1; v <= 10; v++) keys.push('vault-' + v);
+                      // Tech-tree perks
+                      if (typeof TECH_TREE_NODES !== 'undefined') {
+                          TECH_TREE_NODES.forEach(function(n) { if (!n.placeholder) keys.push('perk-tech-' + n.id); });
+                      }
+                      // Skill-tree nodes
+                      if (typeof ALL_SKILL_TREE_NODES !== 'undefined') {
+                          ALL_SKILL_TREE_NODES.forEach(function(n) { keys.push('perk-skill-' + n.id); });
+                      }
                       return keys;
                   }
 
@@ -55790,12 +56164,12 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   function _toggleKey(key) {
                       if (_enabled.has(key)) _enabled.delete(key);
                       else _enabled.add(key);
-                      _save();
+
                       if (typeof updateAutoBuyVisuals === 'function') updateAutoBuyVisuals();
                   }
                   function _toggleMaster() {
                       _masterOn = !_masterOn;
-                      _save();
+
                       var btn = document.getElementById('auto-buy-master-btn');
                       if (btn) btn.classList.toggle('is-on', _masterOn);
                       if (typeof addFloatingText === 'function')
