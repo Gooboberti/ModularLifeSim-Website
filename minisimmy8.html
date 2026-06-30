@@ -10231,7 +10231,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
               const SCOOP_LEAK_DANDRUFF_MAX_SPEED = 0.42;
               const SCOOP_LEAK_MODULE_SPAWN_CHANCE = 0.11;
               const SCOOP_PROBE_PULL_SCALE = 5.8;
-              const SCOOP_FACING_LERP = 0.065;
+              const SCOOP_FACING_LERP = 0.032;
               const SCOOP_PROBE_COLONY_TUG_RANGE = 96;
               const SCOOP_JELLYFISH_DEFAULT_TIER = 2;
               const SCOOP_JELLYFISH_TIER_GEOM = [0.72, 0.84, 1.0, 1.12];
@@ -22261,6 +22261,22 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           creature._resonanceFed--;
                       }
                       // Squid-anchored colony member glow — cyan rings layered by ring depth.
+                      // Validate that this creature is STILL part of a live squid anchor or
+                      // organism before glowing. If its squid is gone or it's been evicted,
+                      // clear the glow immediately so strays stop glowing.
+                      if (creature._squidAnchorGlow > 0) {
+                          const byA = creature._squidAnchoredBy;
+                          const byO = creature._inSquidOrganism;
+                          const validAnchor = byA && creatures.indexOf(byA) >= 0 && byA._latticeAnchor
+                              && byA._latticeAnchor.members && byA._latticeAnchor.members.indexOf(creature) >= 0;
+                          const validOrg = byO && creatures.indexOf(byO) >= 0 && byO._latticeAnchor
+                              && byO._latticeAnchor.members && byO._latticeAnchor.members.indexOf(creature) >= 0;
+                          if (!validAnchor && !validOrg) {
+                              creature._squidAnchorGlow = 0;
+                              creature._squidAnchorRing = null;
+                              creature._isSquidAnchorHeart = false;
+                          }
+                      }
                       if (creature._squidAnchorGlow > 0) {
                           const ag = creature._squidAnchorGlow;
                           const heart = creature._isSquidAnchorHeart;
@@ -22308,6 +22324,34 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           strokeWeight(0.7);
                           circle(creature.x, creature.y, CREATURE_BODY_RADIUS * 1.5);
                           creature._squidMassageFlash -= timeScale;
+                      }
+                      // Energy-flow pip — a soft cyan mote showing energy funneling toward
+                      // the squid head through the organism network.
+                      if (creature._squidEnergyFlow > 0 && creature._inSquidOrganism) {
+                          const sq = creature._inSquidOrganism;
+                          if (sq && creatures.indexOf(sq) >= 0) {
+                              const t = (frameCount * 0.05 + (creature._symSlot || 0)) % 1;
+                              const fx = lerp(creature.x, sq.x, t);
+                              const fy = lerp(creature.y, sq.y, t);
+                              noStroke();
+                              fill(125, 211, 252, 140 * (1 - t) + 40);
+                              circle(fx, fy, 2.2);
+                          }
+                          creature._squidEnergyFlow -= timeScale;
+                      }
+                      // Dormant shimmer during metamorphosis realignment.
+                      if (creature._squidDormant > 0) {
+                          const dp = 0.5 + sin(frameCount * 0.1 + (creature._symSlot || 0)) * 0.5;
+                          const rg = creature._squidRealignGlow || 0.5;
+                          // Filled soft core glow + pulsing ring — the metamorphosis shimmer.
+                          noStroke();
+                          fill(150, 215, 255, (30 + dp * 35) * rg);
+                          circle(creature.x, creature.y, CREATURE_BODY_RADIUS * (1.5 + dp * 0.5));
+                          noFill();
+                          stroke(180, 230, 255, (60 + dp * 60) * rg);
+                          strokeWeight(1.0);
+                          circle(creature.x, creature.y, CREATURE_BODY_RADIUS * (1.9 + dp * 0.4));
+                          creature._squidDormant -= timeScale;
                       }
                       if (shouldDrawEffect('overlapCrowded') && creature._crowdedFlash > 0) {
                           noFill();
@@ -25294,11 +25338,17 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           finalMoveSpeed *= 1 + this.getTieredModuleCount('explorer') * (MODULE_IDENTITY.explorer.dayExplore || 0) * 0.35;
                       }
                       if (this._scoopActive && isJellyfishScoopCreature(this)) {
-                          // While anchored to a colony, the squid commits fully to swimming
-                          // to its heart — don't let nearby-food chasing fight the approach.
-                          const anchoredNow = (typeof SquidLatticeAnchorSystem !== 'undefined')
-                              && SquidLatticeAnchorSystem.isAnchored(this);
-                          if (!anchoredNow) {
+                          // The squid forages for white particles when it's free (not yet
+                          // anchored) AND once it has FORMED its macro-organism — at that
+                          // point it roams as the organism head, hunting whites with the
+                          // colony attached (the colony is fed through the lattice).
+                          const sys = (typeof SquidLatticeAnchorSystem !== 'undefined') ? SquidLatticeAnchorSystem : null;
+                          const anchoredNow = sys && sys.isAnchored(this);
+                          const mergedNow = sys && sys.isMerged(this);
+                          // Don't seek during the in-between approach/fissure phase, and not
+                          // during the dormant realignment — only when free or fully formed.
+                          const realigning = this._latticeAnchor && this._latticeAnchor._realigning;
+                          if ((!anchoredNow || mergedNow) && !realigning) {
                               applySquidWhiteDriftSeek(this, timeScale);
                           }
                       }
@@ -25338,6 +25388,20 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           this.vy = 0;
                           if (frameCount % 30 === (this._symSlot || 0) % 30) {
                               this.currentThought = 'Re-orienting after sculpt';
+                          }
+                      }
+                      // ── Macro-organism members lose independent motivation ───────
+                      // Once a creature is part of a formed squid macro-organism, it stops
+                      // pursuing its own AI drives (wander, social, fleeing, etc). The
+                      // accumulated AI velocity is heavily suppressed here; the organism's
+                      // formation logic (run later in updateManualScoop) then positions it
+                      // purely for spreading out, good ordering, and avoiding overlap.
+                      if (this._inSquidOrganism && typeof SquidLatticeAnchorSystem !== 'undefined') {
+                          const sq = this._inSquidOrganism;
+                          if (sq && creatures.indexOf(sq) >= 0 && SquidLatticeAnchorSystem.isMerged(sq)) {
+                              this.vx *= 0.12;
+                              this.vy *= 0.12;
+                              this._organismSuppressed = frameCount;
                           }
                       }
                       this.x += this.vx;
@@ -31575,26 +31639,45 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   let lootProbe = null;
                   let huntProbeL = null, huntProbeR = null;
                   if (isScoopProbeDeployed(creature) && creatureHasNativeProbe(creature)) {
-                      const probeLen = reach * (1.14 + sin(frameCount * 0.05 + (creature._symSlot || 0)) * 0.08);
-                      const probeAng = facing + sin(frameCount * 0.04 + (creature._symSlot || 0) * 0.25) * 0.07;
-                      const probeBaseR = bellyR * 0.38;
-                      probe = {
-                          baseX: bellyX + cos(facing) * probeBaseR,
-                          baseY: bellyY + sin(facing) * probeBaseR,
-                          ang: probeAng,
-                          len: probeLen,
-                          phase: frameCount * 0.08 + (creature._symSlot || 0),
-                          isProbe: true,
-                          targetX: null,
-                          targetY: null,
-                          grabbingCreature: false
-                      };
+                      // ── Blue fissure probe — only appears once a DECENT colony has
+                      //    gathered around the squid (or it's already anchored). Until
+                      //    then the squid just clusters creatures with its orange arms.
+                      const anchoredNow = (typeof SquidLatticeAnchorSystem !== 'undefined')
+                          && SquidLatticeAnchorSystem.isAnchored(creature);
+                      // NOTE: bubbleR is computed later in this function, so estimate the
+                      // bubble radius here for the cluster check (avoids a TDZ error).
+                      const bubbleREstimate = CREATURE_BODY_RADIUS * geomScale
+                          * (SCOOP_BUBBLE_RADIUS_BASE + 0.1);
+                      const clusterReady = anchoredNow
+                          || (typeof SquidLatticeAnchorSystem !== 'undefined'
+                              && SquidLatticeAnchorSystem.hasDecentCluster
+                              && SquidLatticeAnchorSystem.hasDecentCluster(creature, {
+                                  bubbleX: creature.x, bubbleY: creature.y, bubbleR: bubbleREstimate
+                              }));
+                      if (clusterReady) {
+                          const probeLen = reach * (1.14 + sin(frameCount * 0.05 + (creature._symSlot || 0)) * 0.08);
+                          const probeAng = facing + sin(frameCount * 0.04 + (creature._symSlot || 0) * 0.25) * 0.07;
+                          const probeBaseR = bellyR * 0.38;
+                          probe = {
+                              baseX: bellyX + cos(facing) * probeBaseR,
+                              baseY: bellyY + sin(facing) * probeBaseR,
+                              ang: probeAng,
+                              len: probeLen,
+                              phase: frameCount * 0.08 + (creature._symSlot || 0),
+                              isProbe: true,
+                              targetX: null,
+                              targetY: null,
+                              grabbingCreature: false
+                          };
+                      }
                       // ── Two flanking HUNT probes ─────────────────────────────
                       // These behave exactly like the old probe did — constantly
                       // probing the immediate area and dragging weak creatures inward.
                       // They border the main probe at a spread angle. The main probe
-                      // is now dedicated to anchoring/fissuring only.
-                      const huntLen = probeLen * 0.7;
+                      // is now dedicated to anchoring/fissuring only. Hunt probes are
+                      // ALWAYS present (they're how the squid clusters creatures).
+                      const huntBaseLen = reach * (1.14 + sin(frameCount * 0.05 + (creature._symSlot || 0)) * 0.08);
+                      const huntLen = huntBaseLen * 0.7;
                       const spreadBase = 0.5;  // radians off the main facing
                       const wiggle = sin(frameCount * 0.06 + (creature._symSlot || 0)) * 0.08;
                       const huntBaseR = bellyR * 0.42;
@@ -31922,10 +32005,18 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
               function applyScoopTailEjection(creature, geo) {
                   const spring = geo.spring;
-                  const eject = 5.5 + spring.propel * 9 + spring.recoil * 6 + spring.wave * 4;
+                  // Base push is low so an idle or slowly-turning squid doesn't constantly
+                  // fling nearby creatures. Most push now comes from active propel/recoil
+                  // (sprinting / dashing).
+                  const eject = 2.0 + spring.propel * 9 + spring.recoil * 6 + spring.wave * 4;
                   const facing = geo.facing;
                   const rearX = -cos(facing);
                   const rearY = -sin(facing);
+
+                  // Build the set of creatures the squid is LATTICED with — its anchor
+                  // members and resonance-linked neighbours. The tendrils must never push
+                  // these away (they're part of, or joining, the organism).
+                  const latticed = _getSquidLatticedSet(creature);
 
                   for (const tent of geo.tentacles) {
                       if (tent.tipX == null) continue;
@@ -31939,6 +32030,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       for (const seg of segs) {
                           for (const c of creatures) {
                               if (c === creature || isManualControlImmune(c)) continue;
+                              if (latticed.has(c)) continue; // don't push our own colony
                               pushEntityOffSegment(c, seg.x1, seg.y1, seg.x2, seg.y2, eject, facing + PI);
                           }
                           for (const p of vortexParticles) {
@@ -31970,6 +32062,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           : creatures;
                       for (const c of preyScan) {
                           if (c === creature || isManualControlImmune(c)) continue;
+                          if (latticed.has(c)) continue; // don't blast our own colony
                           const dx = c.x - bx;
                           const dy = c.y - by;
                           const d = sqrt(dx * dx + dy * dy) || 1;
@@ -31979,6 +32072,33 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           c.vy += (dy / d) * blast;
                       }
                   }
+              }
+
+              // Returns a Set of creatures the squid is latticed/networked with — its
+              // anchor members plus any resonance-linked neighbours — so the tendril push
+              // can skip them. Cached briefly per squid for cheapness.
+              function _getSquidLatticedSet(squid) {
+                  if (!squid) return new Set();
+                  if (squid._latticedSetFrame === frameCount && squid._latticedSet) {
+                      return squid._latticedSet;
+                  }
+                  const set = new Set();
+                  // Anchor members (the colony it's forming/merged with).
+                  const anchor = squid._latticeAnchor;
+                  if (anchor && anchor.members) {
+                      for (const m of anchor.members) if (m) set.add(m);
+                  }
+                  // Resonance-linked neighbours from the live link cache.
+                  if (typeof ModuleIdentitySystem !== 'undefined' && ModuleIdentitySystem._linkCache) {
+                      for (const lnk of ModuleIdentitySystem._linkCache) {
+                          if (!lnk) continue;
+                          if (lnk.a === squid && lnk.b) set.add(lnk.b);
+                          else if (lnk.b === squid && lnk.a) set.add(lnk.a);
+                      }
+                  }
+                  squid._latticedSet = set;
+                  squid._latticedSetFrame = frameCount;
+                  return set;
               }
 
               function getScoopProbeActiveTags(hunter) {
@@ -32111,11 +32231,9 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       _massageColonyShape(creature, geo, anchor);
                   }
 
-                  if (!canScoopMoreCreatures(creature)) {
-                      if (geo.huntProbeL) { geo.huntProbeL.targetX = geo.huntProbeL.targetY = null; geo.huntProbeL.grabbingCreature = false; }
-                      if (geo.huntProbeR) { geo.huntProbeR.targetX = geo.huntProbeR.targetY = null; geo.huntProbeR.grabbingCreature = false; }
-                      return;
-                  }
+                  // The physical arm sweep always runs (the arms always nudge creatures);
+                  // only the consume-pull respects the scoop cooldown.
+                  const canPull = canScoopMoreCreatures(creature);
                   const probes = [geo.huntProbeL, geo.huntProbeR];
                   let pulledAny = null;
                   for (const hp of probes) {
@@ -32129,20 +32247,41 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       for (const prey of list) {
                           if (!prey || prey === creature || isManualControlImmune(prey)) continue;
                           if (prey.isPredator && !prey._manualSuperPredator) continue;
-                          // Anchored: only pull colony members that are BAD-EGGS (otherwise
+
+                          // ── Physical sweep ───────────────────────────────────────
+                          // The probe arm physically nudges EVERY creature it touches —
+                          // it has real collision, sweeping creatures toward the squid as
+                          // it sways (this is the "scooping" feel). Distance to the arm:
+                          const touchR = CREATURE_BODY_RADIUS + 6;
+                          const segD = Math.min(
+                              distPointToSegment(prey.x, prey.y, hp.baseX, hp.baseY, hp.midX, hp.midY),
+                              distPointToSegment(prey.x, prey.y, hp.midX, hp.midY, hp.tipX, hp.tipY)
+                          );
+                          if (segD < touchR) {
+                              // Push the creature inward toward the squid bubble (scoop)
+                              // and slightly off the arm so the arm doesn't pass through it.
+                              const bx = geo.bubbleX ?? creature.x;
+                              const by = geo.bubbleY ?? creature.y;
+                              const idx = bx - prey.x, idy = by - prey.y;
+                              const idd = Math.sqrt(idx * idx + idy * idy) || 1;
+                              const sweep = (touchR - segD) / touchR * 1.6 * timeScale;
+                              prey.x += (idx / idd) * sweep;
+                              prey.y += (idy / idd) * sweep;
+                              prey.vx += (idx / idd) * sweep * 0.5;
+                              prey.vy += (idy / idd) * sweep * 0.5;
+                              prey._scoopProbeTugFlash = Math.max(prey._scoopProbeTugFlash || 0, 6);
+                          }
+
+                          // Anchored: only PULL colony members that are BAD-EGGS (otherwise
                           // leave the colony alone). Non-members are fair game as food.
                           if (anchorMembers && anchorMembers.has(prey)) {
                               if (!_isColonyBadEgg(prey, creature)) continue;
                           }
-                          const dSeg = Math.min(
-                              distPointToSegment(prey.x, prey.y, hp.baseX, hp.baseY, hp.midX, hp.midY),
-                              distPointToSegment(prey.x, prey.y, hp.midX, hp.midY, hp.tipX, hp.tipY)
-                          );
-                          if (dSeg > reach && dist(prey.x, prey.y, hp.tipX, hp.tipY) > reach) continue;
+                          if (segD > reach && dist(prey.x, prey.y, hp.tipX, hp.tipY) > reach) continue;
                           const score = isFeast ? prey.energy : scoreScoopPruneWeakness(prey, geo);
                           if (score < weakest) { weakest = score; best = prey; }
                       }
-                      if (best) {
+                      if (best && canPull) {
                           hp.targetX = best.x;
                           hp.targetY = best.y;
                           hp.grabbingCreature = true;
@@ -32151,8 +32290,14 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           // If we're reeling in a bad-egg colony member, drop it from the colony.
                           if (anchorMembers && anchorMembers.has(best)) {
                               _ejectBadEggFromColony(anchor, best);
+                              // Bad-eggs get fully consumed (pulled into the center).
+                              pullCreatureAlongTentacle(creature, best, hp, geo, SCOOP_PROBE_PULL_SCALE);
+                          } else {
+                              // RECRUIT: pull the creature into a holding ring around the
+                              // squid so it CLUSTERS (forms the colony) rather than being
+                              // consumed. Only once a colony forms does the squid fissure.
+                              _recruitCreatureToCluster(creature, best, hp, geo);
                           }
-                          pullCreatureAlongTentacle(creature, best, hp, geo, SCOOP_PROBE_PULL_SCALE);
                           pulledAny = best;
                       } else {
                           hp.targetX = hp.targetY = null;
@@ -32160,6 +32305,41 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       }
                   }
                   creature._scoopProbePullTarget = pulledAny;
+              }
+
+              // Drags a creature toward a holding RING just outside the squid's consuming
+              // bubble, so it clusters around the squid (building the colony) instead of
+              // being eaten. This is the "physical manipulation" — creatures get visibly
+              // tugged into a gathering shell around the squid.
+              function _recruitCreatureToCluster(hunter, prey, probe, geo) {
+                  if (!hunter || !prey) return;
+                  const bx = geo.bubbleX ?? hunter.x;
+                  const by = geo.bubbleY ?? hunter.y;
+                  const br = geo.bubbleR ?? CREATURE_BODY_RADIUS * 2.8;
+                  // Target ring sits just outside the consuming radius.
+                  const ringR = br * 1.35;
+                  const dx = prey.x - bx, dy = prey.y - by;
+                  const d = Math.sqrt(dx * dx + dy * dy) || 1;
+                  if (d > ringR) {
+                      // Pull inward toward the ring (firm, visible tug).
+                      const nx = dx / d, ny = dy / d;
+                      const target = ringR;
+                      const overshoot = d - target;
+                      const pull = Math.min(6.5, overshoot * 0.18 + 1.4) * timeScale;
+                      prey.x -= nx * pull;
+                      prey.y -= ny * pull;
+                      // Damp its outward velocity so it stays gathered.
+                      prey.vx *= (1 - 0.10 * timeScale);
+                      prey.vy *= (1 - 0.10 * timeScale);
+                      prey._scoopBeingDragged = hunter;
+                      prey._scoopProbeStun = Math.max(prey._scoopProbeStun || 0, 12);
+                      prey._scoopProbeTugFlash = Math.max(prey._scoopProbeTugFlash || 0, 10);
+                  } else {
+                      // Within the ring — gently hold it in the cluster (light inward bias
+                      // if it drifts too far out, but no consumption).
+                      prey._squidClusterHold = 10;
+                      prey._scoopProbeTugFlash = Math.max(prey._scoopProbeTugFlash || 0, 6);
+                  }
               }
 
               // A colony member is a "bad-egg" if it's a predator, badly misaligned with
@@ -33772,6 +33952,48 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   if (!creature || !creature._scoopActive) return;
                   const geo = creature._scoopGeo || buildManualScoopGeometry(creature);
                   updateScoopTentacleTips(creature, geo);
+
+                  // ── Realignment glow (metamorphosis) ─────────────────────────
+                  // While the merged organism realigns, the members themselves glow
+                  // softly (a subtle per-creature shimmer) rather than a big screen shell.
+                  // The actual glow is drawn per-member in Creature.show via _squidDormant;
+                  // here we only tag intensity and draw a faint contained haze right around
+                  // the squid head — nothing that spans the whole organism.
+                  const anchorForCocoon = creature._latticeAnchor;
+                  if (anchorForCocoon && anchorForCocoon._realigning) {
+                      const coc = anchorForCocoon._cocoon || 0;
+                      const breathe = 0.5 + sin(frameCount * 0.08) * 0.5;
+                      const hr = (geo.bubbleR || CREATURE_BODY_RADIUS * 3);
+                      push();
+                      noStroke();
+                      // Small contained glow on the head only.
+                      fill(120, 200, 250, 18 * coc + breathe * 10 * coc);
+                      circle(creature.x, creature.y, hr * 1.4 + breathe * 6);
+                      noFill();
+                      stroke(150, 215, 255, 50 * coc + breathe * 30 * coc);
+                      strokeWeight(1.2);
+                      circle(creature.x, creature.y, hr * 1.5 + breathe * 5);
+                      pop();
+                      // Tag every member so it shimmers individually (drawn in show()).
+                      for (const m of anchorForCocoon.members) {
+                          if (!m || creatures.indexOf(m) < 0) continue;
+                          m._squidDormant = 4;
+                          m._squidRealignGlow = coc;
+                      }
+                  }
+                  // Hatch burst when realignment completes — kept small.
+                  if ((creature._latticeAnchor?._hatchFlash || 0) > 0) {
+                      const hf = creature._latticeAnchor._hatchFlash;
+                      const grow = (40 - hf) / 40;
+                      push();
+                      noFill();
+                      stroke(180, 240, 255, hf * 5);
+                      strokeWeight(1.8);
+                      circle(creature.x, creature.y, (geo.bubbleR || 40) * (1.2 + grow * 1.6));
+                      pop();
+                      creature._latticeAnchor._hatchFlash -= timeScale;
+                  }
+
                   const profile = geo.profile;
                   const dashStyle = 'bell-pulse';
                   const spring = geo.spring;
@@ -34408,7 +34630,14 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   const ts = constrain(timeScale || 1, 0.1, 4);
                   let base = 3.15 + moverT * 0.28;
                   if (creature._manualControl) base += 0.35;
-                  return min(creature._manualControl ? 4.6 : 4.9, base * (0.84 + ts * 0.1));
+                  let cap = min(creature._manualControl ? 4.6 : 4.9, base * (0.84 + ts * 0.1));
+                  // Active jellyfish squids are sluggish, drifting movers — they cruise
+                  // slowly. (The F-sprint applies its own impulse and is NOT clamped here.)
+                  if (creature._scoopActive && isJellyfishScoopCreature(creature)
+                      && !((creature._scoopDashPhase || 0) > 0)) {
+                      cap *= 0.5;
+                  }
+                  return cap;
               }
 
               function capCreatureVelocity(creature, maxSpd) {
@@ -35005,6 +35234,27 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
                   creature.vx += nx * pullMag;
                   creature.vy += ny * pullMag;
+
+                  // Slower turning for jellyfish squids — limit how fast the velocity
+                  // heading can rotate so the squid arcs around instead of snapping.
+                  if (creature._scoopActive && isJellyfishScoopCreature(creature)
+                      && (creature._scoopDashPhase || 0) <= 0) {
+                      const spd = sqrt(creature.vx * creature.vx + creature.vy * creature.vy);
+                      if (spd > 0.05) {
+                          const curAng = atan2(creature.vy, creature.vx);
+                          const wantAng = atan2(ny, nx);
+                          let dA = wantAng - curAng;
+                          while (dA > PI) dA -= TWO_PI;
+                          while (dA < -PI) dA += TWO_PI;
+                          // Cap heading change per frame (radians) — sluggish turn rate.
+                          const maxTurn = 0.045 * timeScale;
+                          if (dA > maxTurn) dA = maxTurn;
+                          else if (dA < -maxTurn) dA = -maxTurn;
+                          const newAng = curAng + dA;
+                          creature.vx = cos(newAng) * spd;
+                          creature.vy = sin(newAng) * spd;
+                      }
+                  }
 
                   const perpX = -ny;
                   const perpY = nx;
@@ -53464,6 +53714,57 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           try { identitySnap = LatticeIdentitySystem.buildIdentitySnapshot(valid); } catch(e) {}
                       }
 
+                      // ── Detect an attached jellyfish/squid organism ─────────────
+                      // If any captured member belongs to a squid macro-organism, capture
+                      // the squid too so the blueprint rebuilds the whole organism.
+                      var jellyfishSnap = null;
+                      var squidHead = null;
+                      for (var vi = 0; vi < valid.length; vi++) {
+                          var vm = valid[vi];
+                          if (vm && vm._inSquidOrganism && cl.indexOf(vm._inSquidOrganism) >= 0) {
+                              squidHead = vm._inSquidOrganism;
+                              break;
+                          }
+                      }
+                      // Also catch the case where the squid head itself was selected.
+                      if (!squidHead) {
+                          for (var vj = 0; vj < valid.length; vj++) {
+                              if (valid[vj] && valid[vj]._isOrganismHead) { squidHead = valid[vj]; break; }
+                          }
+                      }
+                      if (squidHead) {
+                          var sBrain = null;
+                          if (squidHead.brain) {
+                              try {
+                                  sBrain = {
+                                      weightsIH: JSON.parse(JSON.stringify(squidHead.brain.weightsIH || [])),
+                                      weightsHO: JSON.parse(JSON.stringify(squidHead.brain.weightsHO || [])),
+                                      biasH: (squidHead.brain.biasH || []).slice(),
+                                      biasO: (squidHead.brain.biasO || []).slice(),
+                                      connectionStrengthIH: JSON.parse(JSON.stringify(squidHead.brain.connectionStrengthIH || [])),
+                                      connectionStrengthHO: JSON.parse(JSON.stringify(squidHead.brain.connectionStrengthHO || [])),
+                                  };
+                              } catch(e) {}
+                          }
+                          var sMods = null;
+                          try { sMods = squidHead.modules ? JSON.parse(JSON.stringify(squidHead.modules)) : []; } catch(e) {}
+                          var sCore = 'balanced';
+                          if (typeof getCreatureCoreType === 'function') {
+                              var sct = getCreatureCoreType(squidHead);
+                              if (typeof normalizeModuleTypeKey === 'function') sct = normalizeModuleTypeKey(sct);
+                              if (sct) sCore = sct;
+                          }
+                          jellyfishSnap = {
+                              rx: squidHead.x - cx,
+                              ry: squidHead.y - cy,
+                              preferredCore: sCore,
+                              brainSnap: sBrain,
+                              modules: sMods,
+                              generation: squidHead.generation || 1,
+                              isJellyfish: true,
+                          };
+                      }
+
                       var entry = {
                           id: 'wc_' + Date.now(),
                           name: name || (identitySnap && identitySnap.name) || ('Weave ' + (this._library.length + 1)),
@@ -53473,6 +53774,8 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           slots: slots,
                           pairs: pairs,    // [[slotIdx_a, slotIdx_b], ...]
                           identity: identitySnap,  // archetype + name + metrics at capture moment
+                          jellyfish: jellyfishSnap, // attached squid organism, if any
+                          hasJellyfish: !!jellyfishSnap,
                       };
 
                       this._library.unshift(entry);
@@ -54083,13 +54386,23 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   var html = lib.map(function(entry) {
                       var date = new Date(entry.capturedAt).toLocaleDateString();
                       var pairCount = entry.pairs ? entry.pairs.length : 0;
-                      return '<div style="background:rgba(34,211,238,0.05);border:1px solid rgba(34,211,238,0.18);' +
+                      var jellyBadge = entry.hasJellyfish
+                          ? '<span style="display:inline-block;margin-left:7px;padding:1px 7px;border-radius:8px;' +
+                            'background:linear-gradient(135deg,rgba(56,189,248,0.35),rgba(125,211,252,0.18));' +
+                            'border:1px solid rgba(125,211,252,0.7);color:#bae6fd;font-size:9px;font-weight:700;' +
+                            'letter-spacing:0.06em;vertical-align:middle;box-shadow:0 0 8px rgba(56,189,248,0.4)">🦑 JELLYFISH</span>'
+                          : '';
+                      var jellyBorder = entry.hasJellyfish
+                          ? 'background:rgba(56,189,248,0.07);border:1px solid rgba(125,211,252,0.4);box-shadow:0 0 14px rgba(56,189,248,0.12) inset;'
+                          : 'background:rgba(34,211,238,0.05);border:1px solid rgba(34,211,238,0.18);';
+                      return '<div style="' + jellyBorder +
                           'border-radius:14px;padding:13px;margin-bottom:10px">' +
                           '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">' +
                             '<div>' +
-                              '<div style="font-weight:700;color:#e0f7fa;font-size:13px;margin-bottom:2px">' + entry.name + '</div>' +
+                              '<div style="font-weight:700;color:#e0f7fa;font-size:13px;margin-bottom:2px">' + entry.name + jellyBadge + '</div>' +
                               '<div style="font-size:10px;color:rgba(103,232,249,0.55)">' +
                                 entry.nodeCount + ' nodes &bull; ' + pairCount + ' lattice links &bull; captured ' + date +
+                                (entry.hasJellyfish ? ' &bull; <span style="color:#7dd3fc">+ jellyfish head</span>' : '') +
                               '</div>' +
                             '</div>' +
                             '<button data-delete="' + entry.id + '" style="color:rgba(239,68,68,0.55);font-size:16px;' +
@@ -54705,9 +55018,42 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       this.removeReady(inventoryId);
                       hideWeaveInventory();
 
+                      // ── Rebuild the attached jellyfish/squid head ───────────────
+                      if (pkg.jellyfish) {
+                          var jf = pkg.jellyfish;
+                          var jx = cx + (jf.rx || 0), jy = cy + (jf.ry || 0);
+                          if (typeof width  !== 'undefined') jx = Math.max(30, Math.min(width  - 30, jx));
+                          if (typeof height !== 'undefined') jy = Math.max(30, Math.min(height - 30, jy));
+                          var jmods = jf.modules ? JSON.parse(JSON.stringify(jf.modules)) : null;
+                          var jsquid = new Creature(jx, jy, jmods, jf.generation || 1);
+                          var jsnap = jf.brainSnap;
+                          if (jsnap && jsquid.brain) {
+                              if (jsnap.weightsIH)            jsquid.brain.weightsIH            = JSON.parse(JSON.stringify(jsnap.weightsIH));
+                              if (jsnap.weightsHO)            jsquid.brain.weightsHO            = JSON.parse(JSON.stringify(jsnap.weightsHO));
+                              if (jsnap.biasH)                jsquid.brain.biasH                = jsnap.biasH.slice();
+                              if (jsnap.biasO)                jsquid.brain.biasO                = jsnap.biasO.slice();
+                              if (jsnap.connectionStrengthIH) jsquid.brain.connectionStrengthIH = JSON.parse(JSON.stringify(jsnap.connectionStrengthIH));
+                              if (jsnap.connectionStrengthHO) jsquid.brain.connectionStrengthHO = JSON.parse(JSON.stringify(jsnap.connectionStrengthHO));
+                          }
+                          if (typeof ModuleIdentitySystem !== 'undefined') {
+                              ModuleIdentitySystem.normalizeLayout(jsquid);
+                              ModuleIdentitySystem.updateCore(jsquid);
+                          }
+                          if (typeof jsquid.updateSpecialization === 'function') jsquid.updateSpecialization();
+                          if (typeof ensureCreatureWeaveUid === 'function') ensureCreatureWeaveUid(jsquid);
+                          jsquid.energy = 90;
+                          jsquid.currentThought = 'Reconstructed jellyfish head';
+                          creatures.push(jsquid);
+                          // Activate it as a squid with gear deployed so it re-anchors.
+                          if (typeof activateJellyfishSquid === 'function') {
+                              activateJellyfishSquid(jsquid, { automated: true, force: true });
+                          }
+                      }
+
                       var n = spawned.length;
                       if (typeof addFloatingText === 'function')
-                          addFloatingText(cx, cy - 30, pkg.name + ' deployed (' + n + ' creatures)', '#22d3ee');
+                          addFloatingText(cx, cy - 30, pkg.name + ' deployed (' + n + ' creatures'
+                              + (pkg.jellyfish ? ' + jellyfish' : '') + ')', '#22d3ee');
                       if (typeof playTone === 'function') {
                           playTone(440, 'sine', 0.12, 0.3);
                           setTimeout(function() { playTone(660, 'sine', 0.1, 0.3); }, 120);
@@ -56562,7 +56908,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
               // fuse into a larger processing organism.
               // ════════════════════════════════════════════════════════════════
               const SquidLatticeAnchorSystem = (function() {
-                  const ANCHOR_THREAD_FRAMES = 90;       // time for probe to fully thread in
+                  const ANCHOR_THREAD_FRAMES = 45;       // time for probe to fully thread in
                   const ANCHOR_DENSITY_REFRESH = 30;     // re-pick densest node every N frames
                   const RING_REFRESH_FRAMES = 45;        // recompute ring geometry cadence
                   // Squids will only anchor into a genuine COLONY, never a lone creature
@@ -56570,10 +56916,16 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   const MIN_ANCHOR_COLONY_SIZE = 3;
                   // How many lattice-mates must be pressing into the bubble footprint
                   // before the fissuring probe deploys to take that colony over.
-                  const MIN_BUBBLE_PRESS_COUNT = 3;
+                  const MIN_BUBBLE_PRESS_COUNT = 2;
+                  // The squid TARGETS a colony as soon as part of it touches the bubble.
+                  // The colony just needs to be a real colony (>= this many members).
+                  const MIN_CLUSTER_SIZE = 3;
+                  // Loose (unlinked) creatures crowding the bubble can also be taken over
+                  // once at least this many are pressing in.
+                  const MIN_LOOSE_BUBBLE_COUNT = 4;
                   // If the squid hasn't closed the distance and joined within this many
                   // frames it gives up and looks for a closer colony instead.
-                  const APPROACH_TIMEOUT = 220;
+                  const APPROACH_TIMEOUT = 120;
 
                   // Build adjacency for the colony containing `seedCreature`.
                   function _findColonyOf(seedCreature) {
@@ -56612,14 +56964,18 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       return { members, adj, degree };
                   }
 
-                  // Pick the densest node — most connections, tie-broken toward the tip.
-                  function _pickAnchorNode(colony, tipX, tipY) {
+                  // Pick the heart node: the densest node AMONG those near the pressing
+                  // mass. Proximity to the pressing centroid is weighted heavily so the
+                  // squid never anchors to a high-degree node clear across the lattice.
+                  function _pickAnchorNode(colony, cx, cy) {
                       let best = null, bestScore = -Infinity;
                       for (const m of colony.members) {
                           if (!m || creatures.indexOf(m) < 0) continue;
                           const deg = colony.degree.get(m) || 0;
-                          const dTip = (tipX != null) ? dist(m.x, m.y, tipX, tipY) : 0;
-                          const score = deg * 100 - dTip;
+                          const dCen = (cx != null) ? dist(m.x, m.y, cx, cy) : 0;
+                          // Degree still matters, but distance to the pressing mass is a
+                          // strong penalty so the heart is local to where the squid is.
+                          const score = deg * 30 - dCen * 1.6;
                           if (score > bestScore) { bestScore = score; best = m; }
                       }
                       return best;
@@ -56644,31 +57000,37 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
                   // Assign nested flower-of-life rings by hop distance from the heart.
                   function _computeRings(colony, anchorNode) {
-                      const hop = new Map();
-                      hop.set(anchorNode, 0);
-                      const queue = [anchorNode];
-                      while (queue.length) {
-                          const cur = queue.shift();
-                          const h = hop.get(cur);
-                          const nbrs = colony.adj.get(cur);
-                          if (!nbrs) continue;
-                          nbrs.forEach(function(n) {
-                              if (!hop.has(n)) { hop.set(n, h + 1); queue.push(n); }
-                          });
-                      }
-                      const ringGroups = new Map();
-                      for (const m of colony.members) {
-                          const h = hop.has(m) ? hop.get(m) : 99;
-                          if (!ringGroups.has(h)) ringGroups.set(h, []);
-                          ringGroups.get(h).push(m);
-                      }
-                      const assignments = new Map();
-                      ringGroups.forEach(function(group, ring) {
-                          const count = group.length;
-                          for (let i = 0; i < count; i++) {
-                              assignments.set(group[i], { ring, slot: i, ringCount: count });
-                          }
+                      // Build TRUE flower-of-life concentric rings: ring 0 holds 1 (center),
+                      // ring 1 holds 6, ring 2 holds 12, ... ring k holds 6k. Members are
+                      // sorted by current distance from the heart so those already near the
+                      // center fill the inner rings — minimal shuffling, optimal packing.
+                      const members = colony.members.filter(function(m) {
+                          return m && creatures.indexOf(m) >= 0;
                       });
+                      const hx = anchorNode ? anchorNode.x : (members[0] ? members[0].x : 0);
+                      const hy = anchorNode ? anchorNode.y : (members[0] ? members[0].y : 0);
+                      members.sort(function(a, b) {
+                          if (a === anchorNode) return -1;
+                          if (b === anchorNode) return 1;
+                          const da = (a.x - hx) * (a.x - hx) + (a.y - hy) * (a.y - hy);
+                          const db = (b.x - hx) * (b.x - hx) + (b.y - hy) * (b.y - hy);
+                          return da - db;
+                      });
+                      const assignments = new Map();
+                      let idx = 0, ring = 0;
+                      while (idx < members.length) {
+                          const cap = ring === 0 ? 1 : 6 * ring; // flower-of-life capacity
+                          const count = Math.min(cap, members.length - idx);
+                          for (let s = 0; s < count; s++) {
+                              assignments.set(members[idx + s], {
+                                  ring: ring,
+                                  slot: s,
+                                  ringCount: count
+                              });
+                          }
+                          idx += count;
+                          ring++;
+                      }
                       return assignments;
                   }
 
@@ -56676,57 +57038,105 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   // The squid only fissures into the mass of creatures crowding its mouth —
                   // it never beams its probe across the map. Returns the colony if enough
                   // of its members are inside the bubble footprint and share a lattice.
-                  function _detectColonyInBubble(squid, geo) {
+                  // Detects the local CLUSTER of creatures gathered around the squid's
+                  // bubble. The squid first builds its own colony by pulling creatures in;
+                  // only once a decent cluster (>= MIN_CLUSTER_SIZE) has gathered does the
+                  // blue fissure probe deploy — and it always anchors into THIS local
+                  // cluster, never a distant creature. Type-agnostic: any creature counts.
+                  function _detectLocalCluster(squid, geo) {
                       if (!geo) return null;
                       const bx = geo.bubbleX ?? squid.x;
                       const by = geo.bubbleY ?? squid.y;
-                      // Footprint = the bubble plus a small margin where creatures press in.
-                      const footprint = (geo.bubbleR ?? CREATURE_BODY_RADIUS * 3) * 1.25;
+                      const bubbleR = geo.bubbleR ?? CREATURE_BODY_RADIUS * 3;
+                      // Creatures whose body is inside (or just touching) the bubble.
+                      const touchR = bubbleR * 1.15;
                       const list = (typeof SpatialGrid !== 'undefined' && SpatialGrid.cells)
-                          ? SpatialGrid.queryRadius(bx, by, footprint, squid)
+                          ? SpatialGrid.queryRadius(bx, by, touchR, squid)
                           : creatures;
-                      // Tally how many members of each colony are inside the footprint.
-                      const colonyHits = new Map(); // seedCreature -> count (via shared adjacency)
-                      const inFootprint = [];
+                      const inBubble = [];
                       for (const c of list) {
                           if (!c || c === squid || isManualControlImmune(c) || c.isPredator) continue;
-                          if ((c._networkSize || 1) < 2) continue; // must be in a lattice
-                          if (dist(c.x, c.y, bx, by) <= footprint) inFootprint.push(c);
+                          if (dist(c.x, c.y, bx, by) <= touchR) inBubble.push(c);
                       }
-                      if (inFootprint.length < MIN_BUBBLE_PRESS_COUNT) return null;
-                      // Group the in-footprint creatures by their colony; pick the colony
-                      // with the most members pressing into the bubble.
-                      const scored = new Map(); // colonyKey -> { colony, pressCount }
+                      if (!inBubble.length) return null;
+
+                      // ── Colony targeting ─────────────────────────────────────────
+                      // For each creature touching the bubble that belongs to a colony,
+                      // grab its WHOLE colony. The squid targets the colony with the most
+                      // members already touching the bubble (the one pressing in hardest),
+                      // and will pull the rest of it in. Even ONE member inside is enough
+                      // to target a colony — the squid then reels the rest closer.
+                      let bestColony = null, bestTouch = 0;
                       const seenSeed = new Set();
-                      for (const c of inFootprint) {
+                      for (const c of inBubble) {
                           if (seenSeed.has(c)) continue;
                           const colony = _findColonyOf(c);
                           if (!colony || colony.members.length < MIN_ANCHOR_COLONY_SIZE) continue;
                           const memberSet = new Set(colony.members);
                           for (const m of colony.members) seenSeed.add(m);
-                          // Count how many of THIS colony's members are in the footprint.
-                          let pressCount = 0, cxSum = 0, cySum = 0;
-                          for (const ic of inFootprint) {
-                              if (memberSet.has(ic)) { pressCount++; cxSum += ic.x; cySum += ic.y; }
+                          let touchCount = 0;
+                          for (const ic of inBubble) if (memberSet.has(ic)) touchCount++;
+                          if (touchCount > bestTouch) { bestTouch = touchCount; bestColony = colony; }
+                      }
+                      if (bestColony) {
+                          let cxSum = 0, cySum = 0, n = 0;
+                          for (const m of bestColony.members) {
+                              if (!m || creatures.indexOf(m) < 0) continue;
+                              cxSum += m.x; cySum += m.y; n++;
                           }
-                          if (pressCount >= MIN_BUBBLE_PRESS_COUNT) {
-                              scored.set(colony.members[0], {
-                                  colony,
-                                  pressCount,
-                                  cx: cxSum / pressCount,
-                                  cy: cySum / pressCount
-                              });
+                          return {
+                              colony: bestColony,
+                              cx: n ? cxSum / n : bx,
+                              cy: n ? cySum / n : by,
+                              size: bestColony.members.length
+                          };
+                      }
+
+                      // ── Fallback: loose (unlinked) creatures pressing in ─────────
+                      // If enough loose creatures are crowding the bubble with no formal
+                      // colony, treat them as an ad-hoc cluster the squid can take over.
+                      if (inBubble.length >= MIN_LOOSE_BUBBLE_COUNT) {
+                          // Gather a slightly wider proximity cluster for the body.
+                          const clusterR = bubbleR * 2.0;
+                          const widerList = (typeof SpatialGrid !== 'undefined' && SpatialGrid.cells)
+                              ? SpatialGrid.queryRadius(bx, by, clusterR, squid)
+                              : creatures;
+                          const cluster = [];
+                          let cxSum = 0, cySum = 0;
+                          for (const c of widerList) {
+                              if (!c || c === squid || isManualControlImmune(c) || c.isPredator) continue;
+                              if (dist(c.x, c.y, bx, by) <= clusterR) {
+                                  cluster.push(c); cxSum += c.x; cySum += c.y;
+                              }
+                          }
+                          if (cluster.length >= MIN_LOOSE_BUBBLE_COUNT) {
+                              const memberSet = new Set(cluster);
+                              const degree = new Map(), adj = new Map();
+                              if (typeof ModuleIdentitySystem !== 'undefined') {
+                                  const links = ModuleIdentitySystem._linkCache || [];
+                                  for (const lnk of links) {
+                                      if (!lnk || !lnk.a || !lnk.b) continue;
+                                      if (memberSet.has(lnk.a) && memberSet.has(lnk.b)) {
+                                          if (!adj.has(lnk.a)) adj.set(lnk.a, new Set());
+                                          if (!adj.has(lnk.b)) adj.set(lnk.b, new Set());
+                                          adj.get(lnk.a).add(lnk.b);
+                                          adj.get(lnk.b).add(lnk.a);
+                                      }
+                                  }
+                              }
+                              for (const m of cluster) degree.set(m, (adj.get(m)?.size) || 0);
+                              return {
+                                  colony: { members: cluster.slice(), adj, degree },
+                                  cx: cxSum / cluster.length, cy: cySum / cluster.length,
+                                  size: cluster.length
+                              };
                           }
                       }
-                      // Choose the colony pressing in hardest (most members in footprint).
-                      let best = null, bestCount = -1;
-                      scored.forEach(function(entry) {
-                          if (entry.pressCount > bestCount) { bestCount = entry.pressCount; best = entry; }
-                      });
-                      return best;
+                      return null;
                   }
 
-                  // Establish a fresh anchor onto the colony pressing into the bubble.
+                  // Establish a fresh anchor into the squid's own local cluster, once a
+                  // decent colony has gathered around it.
                   function tryEstablish(squid, geo) {
                       if (!squid || !geo || !geo.probe) return false;
                       if (squid._latticeAnchor) return true;
@@ -56735,11 +57145,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           squid._anchorCooldown -= 1;
                           return false;
                       }
-                      const pick = _detectColonyInBubble(squid, geo);
+                      const pick = _detectLocalCluster(squid, geo);
                       if (!pick) return false;
                       const colony = pick.colony;
-                      if (!colony || colony.members.length < MIN_ANCHOR_COLONY_SIZE) return false;
-                      // Anchor to the densest node nearest the pressing mass.
+                      if (!colony || colony.members.length < MIN_CLUSTER_SIZE) return false;
+                      // Anchor to the densest node nearest the cluster center (always local).
                       const anchorNode = _pickAnchorNode(colony, pick.cx, pick.cy);
                       if (!anchorNode) return false;
 
@@ -56795,6 +57205,22 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   }
 
                   function isAnchored(squid) { return !!(squid && squid._latticeAnchor); }
+
+                  // Public: does the squid have a decent cluster gathered around it yet?
+                  // Throttled so it doesn't rescan every single frame for every squid.
+                  function hasDecentCluster(squid, geo) {
+                      if (!squid) return false;
+                      if (squid._latticeAnchor) return true;
+                      // Cache the result for a short window (cheap gate for probe visibility).
+                      if (squid._clusterCheckFrame != null
+                          && frameCount - squid._clusterCheckFrame < 12) {
+                          return !!squid._clusterReadyCached;
+                      }
+                      squid._clusterCheckFrame = frameCount;
+                      const pick = _detectLocalCluster(squid, geo);
+                      squid._clusterReadyCached = !!(pick && pick.size >= MIN_CLUSTER_SIZE);
+                      return squid._clusterReadyCached;
+                  }
                   function isFullyThreaded(squid) {
                       const a = squid && squid._latticeAnchor;
                       return !!(a && a.threadProgress >= 1);
@@ -56806,16 +57232,15 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       if (!anchor) return null;
 
                       if (!anchor.anchorNode || creatures.indexOf(anchor.anchorNode) < 0) {
-                          const survivor = anchor.members.find(function(m) { return m && creatures.indexOf(m) >= 0; });
-                          if (!survivor) { release(squid, 'silent'); return null; }
-                          const colony = _findColonyOf(survivor);
-                          if (!colony) { release(squid, 'silent'); return null; }
-                          anchor.members = colony.members.slice();
-                          anchor.adj = colony.adj;
-                          anchor.degree = colony.degree;
-                          anchor.anchorNode = _pickAnchorNode(colony, geo?.probe?.tipX, geo?.probe?.tipY);
+                          // Heart gone — re-detect the local cluster around the squid.
+                          const pick = _detectLocalCluster(squid, geo);
+                          if (!pick || pick.colony.members.length < 2) { release(squid, 'silent'); return null; }
+                          anchor.members = pick.colony.members.slice();
+                          anchor.adj = pick.colony.adj;
+                          anchor.degree = pick.colony.degree;
+                          anchor.anchorNode = _pickAnchorNode(pick.colony, pick.cx, pick.cy);
                           if (!anchor.anchorNode) { release(squid, 'silent'); return null; }
-                          anchor.ringAssignments = _computeRings(colony, anchor.anchorNode);
+                          anchor.ringAssignments = _computeRings(pick.colony, anchor.anchorNode);
                       }
 
                       anchor.age += timeScale;
@@ -56838,11 +57263,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           anchor.threadProgress = Math.min(1, anchor.threadProgress + timeScale / ANCHOR_THREAD_FRAMES);
                           if (frameCount - anchor.lastDensity > ANCHOR_DENSITY_REFRESH) {
                               anchor.lastDensity = frameCount;
-                              const colony = _findColonyOf(anchor.anchorNode);
-                              if (colony && colony.members.length >= 2) {
-                                  anchor.members = colony.members.slice();
-                                  anchor.adj = colony.adj;
-                                  anchor.degree = colony.degree;
+                              const pick = _detectLocalCluster(squid, geo);
+                              if (pick && pick.colony.members.length >= 2) {
+                                  anchor.members = pick.colony.members.slice();
+                                  anchor.adj = pick.colony.adj;
+                                  anchor.degree = pick.colony.degree;
                               }
                           }
                           if (frameCount - anchor.lastRing > RING_REFRESH_FRAMES) {
@@ -56864,10 +57289,16 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       const joined = joinDist <= JOIN_RANGE;
                       // MERGE: once the colony body overlaps the squid bubble, lock them
                       // into a single organism (the squid becomes the head).
-                      const MERGE_RANGE = (geo?.bubbleR || CREATURE_BODY_RADIUS * 3) * 1.1 + 24;
-                      if (joined && joinDist <= MERGE_RANGE && anchor.threadProgress > 0.5) {
+                      const MERGE_RANGE = (geo?.bubbleR || CREATURE_BODY_RADIUS * 3) * 1.5 + 40;
+                      if (joined && joinDist <= MERGE_RANGE && anchor.threadProgress > 0.25) {
                           anchor._merged = true;
                           anchor._mergeFrame = frameCount;
+                          // Enter the dormant METAMORPHOSIS phase — the whole organism
+                          // slows, goes dormant, and realigns inside an energy cocoon
+                          // before it can move freely as one body.
+                          anchor._realigning = true;
+                          anchor._realignFrames = 0;
+                          anchor._cocoon = 0;
                           // Tag the squid as PART OF the lattice.
                           squid._isOrganismHead = true;
                           squid._organismAnchor = anchor;
@@ -56900,8 +57331,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           }
                           // Bail if: overall time exceeded, OR no progress for a while
                           // (stuck fixed on a distant target), OR target is absurdly far.
-                          const tooFar = joinDist > 720;
-                          const stuck = (anchor._stuckFrames || 0) > 70;
+                          // Clusters are local, so the heart should be very close. If the
+                          // join distance is ever large, something's wrong — drop it fast.
+                          const tooFar = joinDist > 360;
+                          const stuck = (anchor._stuckFrames || 0) > 50;
                           if (anchor._approachFrames > APPROACH_TIMEOUT || stuck || tooFar) {
                               squid._anchorCooldown = 24; // brief scout window before re-latching
                               release(squid, 'silent');
@@ -56911,13 +57344,17 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
                       if (frameCount - anchor.lastDensity > ANCHOR_DENSITY_REFRESH) {
                           anchor.lastDensity = frameCount;
-                          const colony = _findColonyOf(anchor.anchorNode);
-                          if (colony && colony.members.length >= 2) {
-                              anchor.members = colony.members.slice();
-                              anchor.adj = colony.adj;
-                              anchor.degree = colony.degree;
-                              const newHeart = _pickAnchorNode(colony, geo?.probe?.tipX, geo?.probe?.tipY);
-                              if (newHeart && newHeart !== anchor.anchorNode) {
+                          // Re-detect the LOCAL cluster around the squid so the anchor stays
+                          // local and tracks the gathered creatures (never re-targets far away).
+                          const pick = _detectLocalCluster(squid, geo);
+                          if (pick && pick.colony.members.length >= 2) {
+                              anchor.members = pick.colony.members.slice();
+                              anchor.adj = pick.colony.adj;
+                              anchor.degree = pick.colony.degree;
+                              const newHeart = _pickAnchorNode(pick.colony, pick.cx, pick.cy);
+                              if (newHeart && newHeart !== anchor.anchorNode
+                                  && pick.colony.members.indexOf(anchor.anchorNode) < 0) {
+                                  // Only swap heart if the old one left the cluster.
                                   anchor.anchorNode._isSquidAnchorHeart = false;
                                   anchor.anchorNode = newHeart;
                                   newHeart._isSquidAnchorHeart = true;
@@ -57020,16 +57457,16 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       // heart leads; members follow. Pull no longer tapers harshly with
                       // distance — a connected colony genuinely wants to reach the squid.
                       if (d > 26) {
-                          const distFactor = Math.max(0.45, Math.min(1.0, 360 / d));
-                          const colonyPull = (fullyJoined ? 0.14 : 0.26) * distFactor * timeScale;
+                          const distFactor = Math.max(0.6, Math.min(1.2, 420 / d));
+                          const colonyPull = (fullyJoined ? 0.18 : 0.40) * distFactor * timeScale;
                           for (const m of anchor.members) {
                               if (!m || creatures.indexOf(m) < 0 || isManualControlImmune(m)) continue;
                               const mdx = sx - m.x, mdy = sy - m.y;
                               const md = Math.sqrt(mdx * mdx + mdy * mdy) || 1;
-                              const lead = (m === heart) ? 1.4 : 0.8;
+                              const lead = (m === heart) ? 1.5 : 1.0;
                               m.vx += (mdx / md) * colonyPull * lead;
                               m.vy += (mdy / md) * colonyPull * lead;
-                              // Give members a little extra speed headroom while merging.
+                              // Strong merge urge so they get speed headroom to come in.
                               m._squidMergeUrge = 16;
                           }
                       }
@@ -57087,71 +57524,248 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   // organism drifts as one body (or follows the pilot), and members
                   // spread to avoid self-overlap. Tendrils stop pushing and only feed.
                   function _tickMergedOrganism(squid, anchor, geo, timeScale) {
-                      // Center on the squid itself — it's the head now.
                       const hx = squid.x, hy = squid.y;
                       anchor.anchorX = hx;
                       anchor.anchorY = hy;
-
                       const piloted = isManualControlImmune(squid);
-                      // Organism heading: pilot drives, else gentle coherent wander.
-                      let driftVx = 0, driftVy = 0;
-                      if (!piloted) {
-                          // Slow coherent drift so the whole organism roams together.
-                          anchor._driftAng = (anchor._driftAng || Math.random() * TWO_PI)
-                              + (Math.random() - 0.5) * 0.04 * timeScale;
-                          const driftSpeed = getCreatureMaxSpeed(squid, timeScale) * 0.45;
-                          driftVx = Math.cos(anchor._driftAng) * driftSpeed;
-                          driftVy = Math.sin(anchor._driftAng) * driftSpeed;
-                          // Apply drift to the squid head (members follow via formation).
-                          squid.vx += (driftVx - squid.vx) * 0.04 * timeScale;
-                          squid.vy += (driftVy - squid.vy) * 0.04 * timeScale;
+
+                      // ── Metamorphosis: dormant realignment phase ─────────────────
+                      // On merge the organism gathers, stops, and SLOWLY realigns inside
+                      // an energy cocoon while every member crawls into its optimal place.
+                      // Long and deliberate — a true metamorphosis, not a snap.
+                      const REALIGN_DURATION = 320; // ~5.3s of slow dormant realignment
+                      anchor._realignDuration = REALIGN_DURATION;
+                      if (anchor._realigning) {
+                          anchor._realignFrames = (anchor._realignFrames || 0) + timeScale;
+                          // Cocoon ramps up quickly and holds bright.
+                          anchor._cocoon = Math.min(1, (anchor._cocoon || 0) + timeScale / 28);
+                          // Bring the squid head to a near-complete STOP (dormant).
+                          if (!piloted) {
+                              squid.vx *= (1 - 0.22 * timeScale);
+                              squid.vy *= (1 - 0.22 * timeScale);
+                          }
+                          squid._squidDormant = 4;
+                          anchor._memberDormant = true;
+                          if (anchor._realignFrames >= REALIGN_DURATION) {
+                              anchor._realigning = false;
+                              anchor._memberDormant = false;
+                              anchor._hatchFlash = 40; // burst when it "hatches" into motion
+                              if (typeof playTone === 'function') {
+                                  playTone(420, 'sine', 0.4, 0.34);
+                                  setTimeout(function() { playTone(630, 'sine', 0.5, 0.26); }, 160);
+                              }
+                          }
                       }
+                      const dormant = !!anchor._realigning;
+                      // Realignment progress 0→1 (used to ease the pattern crawl in slowly).
+                      const realignT = dormant
+                          ? Math.min(1, (anchor._realignFrames || 0) / REALIGN_DURATION)
+                          : 1;
 
-                      const baseRing = (typeof CREATURE_MIN_SEP !== 'undefined' ? CREATURE_MIN_SEP : 26) * 1.5;
-                      const rot = frameCount * 0.003;
-                      const formStrength = 0.085;   // firm formation-keeping
+                      // ── Organism heading ─────────────────────────────────────────
+                      // The squid is the head; the body tapers behind it (amoeba/oval).
+                      // Heading = pilot's movement, or the squid's own drift direction.
+                      if (!dormant && !piloted) {
+                          // If the organism is homing on a white particle (set by the
+                          // white-drift seek), steer the whole organism toward it. Otherwise
+                          // gently wander. Either way the colony stays attached and fed.
+                          const seekTarget = squid._squidDriftTarget;
+                          const seeking = seekTarget && vortexParticles
+                              && vortexParticles.indexOf(seekTarget) >= 0
+                              && !seekTarget._scooped;
+                          if (seeking) {
+                              const sdx = seekTarget.x - squid.x, sdy = seekTarget.y - squid.y;
+                              const sd = Math.sqrt(sdx * sdx + sdy * sdy) || 1;
+                              const seekSpeed = getCreatureMaxSpeed(squid, timeScale) * 0.6;
+                              squid.vx += ((sdx / sd) * seekSpeed - squid.vx) * 0.06 * timeScale;
+                              squid.vy += ((sdy / sd) * seekSpeed - squid.vy) * 0.06 * timeScale;
+                              anchor._driftAng = Math.atan2(sdy, sdx);
+                          } else {
+                              anchor._driftAng = (anchor._driftAng || Math.random() * TWO_PI)
+                                  + (Math.random() - 0.5) * 0.04 * timeScale;
+                              const driftSpeed = getCreatureMaxSpeed(squid, timeScale) * 0.42;
+                              squid.vx += (Math.cos(anchor._driftAng) * driftSpeed - squid.vx) * 0.04 * timeScale;
+                              squid.vy += (Math.sin(anchor._driftAng) * driftSpeed - squid.vy) * 0.04 * timeScale;
+                          }
+                      }
+                      // Body axis points OPPOSITE the heading (body trails behind the head).
+                      const spd = Math.sqrt(squid.vx * squid.vx + squid.vy * squid.vy);
+                      // Cap the head's speed so the trailing body can always keep up — the
+                      // squid must never leave its colony behind.
+                      const organismCap = getCreatureMaxSpeed(squid, timeScale) * (dormant ? 0.25 : 1.05);
+                      if (spd > organismCap && spd > 0.001) {
+                          const k = organismCap / spd;
+                          squid.vx *= k; squid.vy *= k;
+                      }
+                      let headAng;
+                      if (spd > 0.05) {
+                          headAng = Math.atan2(squid.vy, squid.vx);
+                          anchor._bodyAng = headAng; // remember last good heading
+                      } else {
+                          headAng = anchor._bodyAng != null ? anchor._bodyAng : 0;
+                      }
+                      const tailAng = headAng + Math.PI; // body extends behind the head
 
-                      // Position each member in its flower-of-life slot relative to the
-                      // SQUID HEAD, and carry the head's velocity so they move as one.
+                      // Ring spacing based on the ideal lattice distance so adjacent ring
+                      // members sit at the natural flower-of-life / energy-distribution gap.
+                      const baseRing = (typeof CREATURE_IDEAL_DIST !== 'undefined' ? CREATURE_IDEAL_DIST : 23) * 1.32;
+                      const rot = frameCount * 0.0025;
+                      // During realignment the pull into the pattern is VERY gentle and
+                      // eases in with progress — members crawl slowly into their slots.
+                      const formStrength = dormant ? (0.012 + realignT * 0.03) : 0.08;
+
+                      // ── Amoeba / oval taper formation ────────────────────────────
+                      // Each ring is an ellipse centered slightly BEHIND the head along the
+                      // body axis, so the organism forms a tapering teardrop/oval with the
+                      // squid at the front — not a symmetric pile on top of it.
+                      //
+                      // During realignment, members first GATHER toward the center (clump),
+                      // then SLOWLY spread out into their final flower-of-life slots as
+                      // realignT eases from 0→1. This makes the metamorphosis read as
+                      // "group together, stop, then slowly unfold into shape".
+                      const spreadEase = dormant
+                          ? (realignT < 0.25 ? 0 : Math.pow((realignT - 0.25) / 0.75, 1.5))
+                          : 1;
+                      // Maximum distance a member can be from the head before it's evicted
+                      // from the organism (the colony has broken apart for that member).
+                      const evictDist = baseRing * 6 + (geo?.bubbleR || CREATURE_BODY_RADIUS * 3) * 2;
+                      const strayed = [];
                       anchor.ringAssignments.forEach(function(info, m) {
-                          if (!m || creatures.indexOf(m) < 0 || isManualControlImmune(m)) return;
+                          if (!m || creatures.indexOf(m) < 0 || isManualControlImmune(m)) {
+                              strayed.push(m); return;
+                          }
+                          // Evict members that have drifted too far from the head.
+                          if (dist(m.x, m.y, hx, hy) > evictDist) {
+                              strayed.push(m);
+                              return;
+                          }
                           m._squidAnchorRing = info.ring;
                           m._squidAnchorGlow = Math.max(m._squidAnchorGlow || 0, 12);
-                          // Ring 0 sits just behind the head; outer rings fan out.
-                          const ringR = baseRing * (info.ring + 0.6) * 1.06;
+
+                          // Ring radius grows outward; the body center shifts back along the
+                          // tail axis as rings get further out (the taper). Scaled by
+                          // spreadEase so the pattern unfolds slowly from a tight clump.
+                          const ringR = baseRing * (info.ring + 0.55) * (0.25 + 0.75 * spreadEase);
+                          const bodyShift = baseRing * (info.ring + 0.55) * 0.62 * spreadEase;
+                          const cxR = hx + Math.cos(tailAng) * bodyShift;
+                          const cyR = hy + Math.sin(tailAng) * bodyShift;
                           const ang = (info.slot / Math.max(1, info.ringCount)) * TWO_PI
                               + info.ring * 0.4 + rot;
-                          const targetX = hx + Math.cos(ang) * ringR;
-                          const targetY = hy + Math.sin(ang) * ringR;
+                          const along = Math.cos(ang) * ringR * 0.82;
+                          const across = Math.sin(ang) * ringR * 1.12;
+                          const targetX = cxR + Math.cos(tailAng) * along - Math.sin(tailAng) * across;
+                          const targetY = cyR + Math.sin(tailAng) * along + Math.cos(tailAng) * across;
+
                           const dx = targetX - m.x, dy = targetY - m.y;
-                          // Formation-keeping pull + inherit the head's velocity so the
-                          // organism translates as a rigid-ish whole.
-                          m.vx += dx * formStrength * timeScale + (squid.vx - m.vx) * 0.05 * timeScale;
-                          m.vy += dy * formStrength * timeScale + (squid.vy - m.vy) * 0.05 * timeScale;
-                          // Mild damping settles the shape.
-                          m.vx *= (1 - 0.04 * timeScale);
-                          m.vy *= (1 - 0.04 * timeScale);
-                          // Mark as feed-recipient, no longer a push target.
+                          m.vx += dx * formStrength * timeScale + (squid.vx - m.vx) * 0.06 * timeScale;
+                          m.vy += dy * formStrength * timeScale + (squid.vy - m.vy) * 0.06 * timeScale;
+                          // Damping — very heavy while dormant so members nearly freeze and
+                          // settle into the pattern (metamorphosis), light once active.
+                          const damp = dormant ? 0.34 : 0.05;
+                          m.vx *= (1 - damp * timeScale);
+                          m.vy *= (1 - damp * timeScale);
+                          if (dormant) m._squidDormant = 4;
                           m._squidOrganismMember = frameCount;
                       });
+                      // Drop strayed/dead members from the organism and clear their tags so
+                      // they immediately stop glowing once they've left the colony.
+                      if (strayed.length) {
+                          for (const sm of strayed) {
+                              if (!sm) continue;
+                              if (sm._squidAnchoredBy === squid) sm._squidAnchoredBy = null;
+                              if (sm._inSquidOrganism === squid) sm._inSquidOrganism = null;
+                              sm._squidAnchorRing = null;
+                              sm._squidAnchorGlow = 0;
+                              sm._squidDormant = 0;
+                              sm._squidOrganismMember = null;
+                              const idx = anchor.members.indexOf(sm);
+                              if (idx >= 0) anchor.members.splice(idx, 1);
+                              if (anchor.ringAssignments && anchor.ringAssignments.delete) {
+                                  anchor.ringAssignments.delete(sm);
+                              }
+                          }
+                          // If the organism has lost too many members, dissolve it entirely.
+                          if (anchor.members.length < 2) {
+                              release(squid, 'dissolved');
+                              return;
+                          }
+                      }
 
-                      // Light self-spreading so members of the same ring don't pile up.
+                      // Keep spacing — members never pile up.
                       _spreadOrganismMembers(anchor, timeScale);
+
+                      // ── Energy funneling toward the squid head ───────────────────
+                      // Signals/energy gathered across the network funnel toward the squid,
+                      // then push back out through the anchored probe at the colony heart.
+                      _funnelOrganismEnergy(squid, anchor, timeScale);
 
                       const heart = anchor.anchorNode;
                       if (heart && creatures.indexOf(heart) >= 0) {
                           heart._squidAnchorRing = 0;
                           heart._squidAnchorGlow = Math.max(heart._squidAnchorGlow || 0, 18);
                       }
-                      // Flag for soft-blue feed-only tendrils + organism rendering.
                       squid._squidOrganismActive = 4;
+                  }
+
+                  // Funnels a fraction of each member's energy toward the squid head, which
+                  // then redistributes it back out via the heart (the anchored probe).
+                  // Net flow: periphery → squid → heart → back out. The squid's brain takes
+                  // priority — it skims a small surplus to stay the dominant node.
+                  function _funnelOrganismEnergy(squid, anchor, timeScale) {
+                      const heart = anchor.anchorNode;
+                      let gathered = 0;
+                      for (const m of anchor.members) {
+                          if (!m || creatures.indexOf(m) < 0 || m === heart) continue;
+                          // Skim a tiny amount of surplus energy from members above a floor.
+                          if (m.energy > 30) {
+                              const skim = Math.min(m.energy - 30, 0.05 * timeScale);
+                              m.energy -= skim;
+                              gathered += skim;
+                          }
+                          m._squidEnergyFlow = 6; // visual: flowing inward
+                      }
+                      if (gathered > 0) {
+                          // Squid brain takes priority — keeps a small cut.
+                          const squidCut = gathered * 0.3;
+                          const maxE = (typeof ModuleIdentitySystem !== 'undefined')
+                              ? ModuleIdentitySystem.getMaxEnergy(squid) : 100;
+                          squid.energy = Math.min(maxE, (squid.energy || 0) + squidCut);
+                          // The rest is pushed back out through the heart and redistributed.
+                          const redistribute = gathered - squidCut;
+                          if (heart && creatures.indexOf(heart) >= 0) {
+                              const hMax = (typeof ModuleIdentitySystem !== 'undefined')
+                                  ? ModuleIdentitySystem.getMaxEnergy(heart) : 100;
+                              heart.energy = Math.min(hMax, heart.energy + redistribute * 0.4);
+                              heart._squidEnergyFlow = 10;
+                              // Spread the remainder to the most depleted members.
+                              const share = redistribute * 0.6;
+                              let neediest = null, lowest = Infinity;
+                              for (const m of anchor.members) {
+                                  if (!m || creatures.indexOf(m) < 0) continue;
+                                  if (m.energy < lowest) { lowest = m.energy; neediest = m; }
+                              }
+                              if (neediest) {
+                                  const nMax = (typeof ModuleIdentitySystem !== 'undefined')
+                                      ? ModuleIdentitySystem.getMaxEnergy(neediest) : 100;
+                                  neediest.energy = Math.min(nMax, neediest.energy + share);
+                              }
+                          }
+                      }
                   }
 
                   // Gentle pairwise spreading among organism members so the flower-of-life
                   // doesn't collapse into overlaps.
                   function _spreadOrganismMembers(anchor, timeScale) {
                       const mem = anchor.members;
-                      const minSep = (typeof CREATURE_MIN_SEP !== 'undefined' ? CREATURE_MIN_SEP : 26) * 1.05;
+                      const dormant = !!anchor._realigning;
+                      const bodyR = (typeof CREATURE_BODY_RADIUS !== 'undefined' ? CREATURE_BODY_RADIUS : 13);
+                      // HARD core-separation: two cores may never sit closer than this. Bodies
+                      // (the outer rings/halos) may overlap, but the exact centers cannot.
+                      const coreMin = bodyR * 1.18;
+                      // SOFT ideal spacing — the flower-of-life lattice distance members
+                      // continuously relax toward to maximise energy distribution.
+                      const idealDist = (typeof CREATURE_IDEAL_DIST !== 'undefined' ? CREATURE_IDEAL_DIST : 23) * 1.15;
+                      const softK = dormant ? 0.10 : 0.32;
                       for (let i = 0; i < mem.length; i++) {
                           const a = mem[i];
                           if (!a || creatures.indexOf(a) < 0 || isManualControlImmune(a)) continue;
@@ -57159,10 +57773,30 @@ body.is-map-fullscreen #map-fullscreen-btn {
                               const b = mem[j];
                               if (!b || creatures.indexOf(b) < 0 || isManualControlImmune(b)) continue;
                               const dx = b.x - a.x, dy = b.y - a.y;
-                              const d = Math.sqrt(dx * dx + dy * dy) || 1;
-                              if (d < minSep) {
-                                  const push = (minSep - d) / minSep * 0.4 * timeScale;
-                                  const nx = dx / d, ny = dy / d;
+                              let d = Math.sqrt(dx * dx + dy * dy);
+                              // Robust normal even when nearly coincident.
+                              let nx, ny;
+                              if (d < 0.001) {
+                                  const ja = (i * 2.3 + j * 1.7);
+                                  nx = Math.cos(ja); ny = Math.sin(ja); d = 0.001;
+                              } else { nx = dx / d; ny = dy / d; }
+
+                              // 1) HARD core separation — push positions apart instantly so
+                              //    cores can NEVER overlap (split the correction evenly).
+                              if (d < coreMin) {
+                                  const corr = (coreMin - d) * 0.5;
+                                  a.x -= nx * corr; a.y -= ny * corr;
+                                  b.x += nx * corr; b.y += ny * corr;
+                                  // Bleed off the closing velocity so they don't re-collide.
+                                  a.vx -= nx * corr * 0.3; a.vy -= ny * corr * 0.3;
+                                  b.vx += nx * corr * 0.3; b.vy += ny * corr * 0.3;
+                              }
+
+                              // 2) SOFT relax toward ideal flower-of-life spacing (only for
+                              //    nearby pairs, so it shapes local lattice cells).
+                              if (d < idealDist * 1.6) {
+                                  const diff = (idealDist - d);
+                                  const push = diff / idealDist * softK * timeScale;
                                   a.vx -= nx * push; a.vy -= ny * push;
                                   b.vx += nx * push; b.vy += ny * push;
                               }
@@ -57218,6 +57852,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       isAnchored: isAnchored,
                       isFullyThreaded: isFullyThreaded,
                       isMerged: isMerged,
+                      hasDecentCluster: hasDecentCluster,
                       ANCHOR_THREAD_FRAMES: ANCHOR_THREAD_FRAMES,
                   };
               })();
