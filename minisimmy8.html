@@ -957,6 +957,8 @@
         .env-combat-btn:active { transform: scale(0.96); }
         .env-combat-btn--cursor { border-color: rgba(251, 146, 60, 0.45); color: #fb923c; box-shadow: 0 0 12px rgba(251, 146, 60, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.14); }
         .env-combat-btn--dismantle { border-color: rgba(251, 146, 60, 0.45); color: #fdba74; box-shadow: 0 0 12px rgba(251, 146, 60, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.14); }
+        .env-combat-btn--feed { border-color: rgba(94, 234, 212, 0.5); color: #5eead4; box-shadow: 0 0 12px rgba(94, 234, 212, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.14); }
+        .env-combat-btn--feed:active { transform: scale(0.9); }
         .env-combat-btn--dismantle.is-open { border-color: rgba(251, 146, 60, 0.75); color: #fb923c; background: rgba(251, 146, 60, 0.18); }
         .env-combat-btn--wall { border-color: rgba(167, 139, 250, 0.45); color: #a78bfa; box-shadow: 0 0 12px rgba(167, 139, 250, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.14); }
         .env-combat-btn--ship { border-color: rgba(52, 211, 153, 0.45); color: #34d399; box-shadow: 0 0 12px rgba(52, 211, 153, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.14); }
@@ -10128,6 +10130,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
               let redBeams = [];
               let purpleInfectParticles = [];
               let moduleParticles = [];
+              // Lightweight decorative sparks emitted when two creatures collide (the
+              // "bump" effect). Pure visuals — no harvest/collision logic — so they're
+              // cheap. Each is {x,y,vx,vy,life,maxLife,size,r,g,b}. Capped for perf.
+              let bumpSparks = [];
+              const BUMP_SPARK_CAP = 140;
               let yellowGlowingParticles = [];
 
               let explosions = [];
@@ -15371,6 +15378,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
               const EnvCombatLaunchers = {
                   tools: [
+                      { id: 'feed-tank', icon: 'fa-fish', cls: 'env-combat-btn--feed', label: 'Feed the Tank', action: () => { playUIClick?.(); feedTheTank(); } },
                       { id: 'mass-dismantle', icon: 'fa-industry', cls: 'env-combat-btn--dismantle', label: 'Mass Dismantle', action: () => { playUIClick?.(); MassDismantle.togglePanel(); } },
                       { id: 'cursor', icon: 'fa-hand-pointer', cls: 'env-combat-btn--cursor', label: 'Cursor Hazard', action: () => showCursorHazardMenu() },
                       { id: 'wall', icon: 'fa-shield-alt', cls: 'env-combat-btn--wall', label: 'Energy Wall', action: () => { playUIClick(); showEnergyWallPlacementMenu(); } },
@@ -17224,6 +17232,40 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       playTone(920, 'square', 0.03, 0.1, 0, 0.001, 0.014);
                       setTimeout(() => playTone(620, 'triangle', 0.04, 0.075, 0, 0.002, 0.02), 34);
                   }
+              }
+
+              // ── Sculpt-mode soft audio feedback ───────────────────────────────
+              // Soft, satisfying cues that play ONLY while sculpting: picking up a
+              // creature, dragging it, and lattice lines snapping into place.
+              let _lastSculptLinkChime = 0;
+              let _lastSculptMoveTick = 0;
+              function playSculptLinkChime(count) {
+                  if (!canPlaySound('core')) return;
+                  // Throttle so a burst of new links doesn't machine-gun the chime.
+                  const now = (typeof performance !== 'undefined') ? performance.now() : Date.now();
+                  if (now - _lastSculptLinkChime < 70) return;
+                  _lastSculptLinkChime = now;
+                  const ctx = getAudioContext();
+                  if (ctx.state === 'suspended') ctx.resume();
+                  // A soft crystalline "ting" that rises slightly with how many formed.
+                  const base = 720 + Math.min(4, count) * 55;
+                  playTone(base, 'sine', 0.09, 0.06, 0, 0.002, 0.05);
+                  setTimeout(() => playTone(base * 1.5, 'sine', 0.07, 0.04, 0, 0.002, 0.04), 30);
+              }
+              function playSculptPickupSound() {
+                  if (!canPlaySound('core')) return;
+                  const ctx = getAudioContext();
+                  if (ctx.state === 'suspended') ctx.resume();
+                  // Gentle "pluck" on pickup.
+                  playTone(440, 'sine', 0.06, 0.07, 0, 0.002, 0.03);
+                  setTimeout(() => playTone(660, 'triangle', 0.05, 0.045, 0, 0.001, 0.03), 24);
+              }
+              function playSculptMoveTick() {
+                  if (!canPlaySound('core')) return;
+                  const now = (typeof performance !== 'undefined') ? performance.now() : Date.now();
+                  if (now - _lastSculptMoveTick < 55) return; // sparse, soft
+                  _lastSculptMoveTick = now;
+                  playTone(300 + Math.random() * 60, 'sine', 0.03, 0.022, 0, 0.001, 0.02);
               }
 
               function getOrCreateSource(audioEl) {
@@ -19434,6 +19476,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
               const CREATURE_MIN_SEP = 18;
               const CREATURE_IDEAL_DIST = 23;
               const CREATURE_SOCIAL_MAX = 52;
+              // Lattice stickiness: once a link is established it holds across this
+              // multiple of the normal range, and down to this much lower alignment,
+              // before it finally snaps — making a formed lattice hard to break.
+              const STICKY_HOLD_MULT = 1.85;
+              const STICKY_ALIGN_FLOOR = 0.55;
 
               // Returns the effective visual radius of a creature, accounting for
               // body size, module tier, and total module count. Used to scale
@@ -20205,7 +20252,15 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           && creature._latticeAnchor && !creature._latticeAnchor._joined) {
                           _anchorApproachScale = 0.25;
                       }
-                      const neighbors = creature.getLocalGroup(CREATURE_SOCIAL_MAX + 12);
+                      // Scan out to the sticky-hold range so linked creatures that have
+                      // stretched beyond normal social range still get reeled back in.
+                      // Only networked creatures pay the wider-scan cost.
+                      const isNetworked = (creature._networkSize || 1) >= 2
+                          || (creature._symbiosisLevel || 0) >= 1;
+                      const scanRange = isNetworked
+                          ? CREATURE_SOCIAL_MAX * STICKY_HOLD_MULT + 12
+                          : CREATURE_SOCIAL_MAX + 12;
+                      const neighbors = creature.getLocalGroup(scanRange);
                       let vx = 0, vy = 0, overlapDrain = 0, spaceComfort = 0;
                       let hadOverlap = false;
                       const slot = creature._symSlot || 0;
@@ -20335,16 +20390,39 @@ body.is-map-fullscreen #map-fullscreen-btn {
                               if (alignScore >= 0.9) spaceComfort += 0.12;
                           }
 
-                          if (alignScore < 0.75) continue;
+                          if (alignScore < 0.75) {
+                              // Even poorly-aligned pairs get a sticky tug if they're an
+                              // ESTABLISHED link that's drifting apart — this is what makes a
+                              // formed lattice hard to pull apart.
+                              if (this._prevLinkedKeys && this._prevLinkedKeys.has(this.linkKey(creature, o))
+                                  && d > pairIdealDist + 6) {
+                                  const gap = d - pairIdealDist;
+                                  const stick = Math.min(0.16, gap * 0.006) * timeScale * _anchorApproachScale;
+                                  vx += nx * stick;
+                                  vy += ny * stick;
+                              }
+                              continue;
+                          }
 
                           const tangentX = -ny;
                           const tangentY = nx;
                           const slotSign = ((slot + (o._symSlot || 0)) % 2 === 0) ? 1 : -1;
                           const linkPull = this.getLinkPullBoost(creature, o);
+                          // Established links get a stickiness multiplier on their pull-back.
+                          const isSticky = this._prevLinkedKeys
+                              && this._prevLinkedKeys.has(this.linkKey(creature, o));
+                          const stickMult = isSticky ? 2.4 : 1;
 
                           if (d > pairIdealDist + 6 && d <= CREATURE_SOCIAL_MAX) {
                               const gap = d - pairIdealDist;
-                              const pull = Math.min(0.095, gap * 0.0028) * alignScore * linkPull * timeScale;
+                              const pull = Math.min(0.16, gap * 0.0028 * stickMult) * alignScore * linkPull * timeScale;
+                              vx += nx * pull;
+                              vy += ny * pull;
+                          } else if (isSticky && d > CREATURE_SOCIAL_MAX) {
+                              // Linked but stretched beyond the normal social range — reel it
+                              // back HARD so the lattice holds together instead of snapping.
+                              const gap = d - pairIdealDist;
+                              const pull = Math.min(0.22, gap * 0.007) * linkPull * timeScale;
                               vx += nx * pull;
                               vy += ny * pull;
                           } else if (d >= pairMinSep && d <= pairIdealDist + 10) {
@@ -21184,6 +21262,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           if (typeof MomentumRelaySystem !== 'undefined') {
                               MomentumRelaySystem.tick(timeScale);
                           }
+                          // Colony Mind: the lattice as a shared external brain — groups
+                          // colonies, computes shared goals + flex/induction power.
+                          if (typeof ColonyMindSystem !== 'undefined') {
+                              ColonyMindSystem.tick(timeScale);
+                          }
                           // Lattice identity: throttled refresh of archetype + names
                           if (typeof LatticeIdentitySystem !== 'undefined') {
                               LatticeIdentitySystem.refresh();
@@ -21288,30 +21371,73 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   collectResonanceLinks() {
                       const links = [];
                       const drawn = new Set();
+                      // Which pairs were linked last frame — used for hysteresis so an
+                      // established lattice is STICKY and resists breaking.
+                      const prevLinked = this._prevLinkedKeys || new Set();
+                      const nowLinked = new Set();
                       for (let i = 0; i < creatures.length; i++) {
                           const a = creatures[i];
                           if (!this.isActiveCreature(a) || (a._symbiosisLevel || 0) < 1) continue;
                           // Sensor modules extend link detection range
                           const aSensor = a.getTieredModuleCount ? a.getTieredModuleCount('sensor') : 0;
-                          const aRange = CREATURE_SOCIAL_MAX + aSensor * 6;
+                          // Scan out to the STICKY hold range so we can re-check existing
+                          // links that have drifted beyond the normal formation range.
+                          const aRange = (CREATURE_SOCIAL_MAX + aSensor * 6) * STICKY_HOLD_MULT;
                           const neighbors = a.getLocalGroup(aRange);
                           for (const b of neighbors) {
                               if (a === b || !this.isActiveCreature(b)) continue;
                               const d = dist(a.x, a.y, b.x, b.y);
-                              // Either creature's sensor count extends the acceptance range
-                              const bSensor = b.getTieredModuleCount ? b.getTieredModuleCount('sensor') : 0;
-                              const maxRange = CREATURE_SOCIAL_MAX + Math.max(aSensor, bSensor) * 6;
-                              if (d < CREATURE_MIN_SEP || d > maxRange) continue;
+                              if (d < CREATURE_MIN_SEP) continue;
                               const key = this.linkKey(a, b);
                               if (drawn.has(key)) continue;
+                              const bSensor = b.getTieredModuleCount ? b.getTieredModuleCount('sensor') : 0;
+                              const baseRange = CREATURE_SOCIAL_MAX + Math.max(aSensor, bSensor) * 6;
+                              const wasLinked = prevLinked.has(key);
+                              // Established links hold across a much wider distance and a
+                              // much lower alignment before they finally snap. New links
+                              // form a bit more readily than before (lower align threshold).
+                              const maxRange = wasLinked ? baseRange * STICKY_HOLD_MULT : baseRange * 1.12;
+                              const alignFloor = wasLinked ? STICKY_ALIGN_FLOOR : 1.0;
+                              if (d > maxRange) continue;
                               const align = this.computeAlignment(a, b);
-                              if (align < 1.2) continue;
-                              if (this.isLaceTearHole(a, b)) continue;
+                              if (align < alignFloor) continue;
+                              if (!wasLinked && this.isLaceTearHole(a, b)) continue;
                               drawn.add(key);
+                              nowLinked.add(key);
+                              if (!this._linkEndpoints) this._linkEndpoints = {};
+                              this._linkEndpoints[key] = { a, b };
                               const ctrl = this.getLinkControl(a, b, i);
-                              links.push({ a, b, key, align, ...ctrl, extended: d > CREATURE_SOCIAL_MAX });
+                              links.push({ a, b, key, align, ...ctrl, extended: d > CREATURE_SOCIAL_MAX, sticky: wasLinked });
                           }
                       }
+                      // ── Broken-link spring knockback ─────────────────────────────
+                      // Any link that existed last frame but not this frame just SNAPPED.
+                      // Like a rubber band under tension, the two creatures recoil apart,
+                      // with a kick scaled by how "charged" the link was (its feed level).
+                      if (prevLinked && prevLinked.size) {
+                          prevLinked.forEach((key) => {
+                              if (nowLinked.has(key)) return; // still linked, no snap
+                              const pair = this._linkEndpoints && this._linkEndpoints[key];
+                              if (!pair) return;
+                              const a = pair.a, b = pair.b;
+                              if (!a || !b || creatures.indexOf(a) < 0 || creatures.indexOf(b) < 0) return;
+                              if (a.energy <= 0 || b.energy <= 0) return;
+                              const dx = b.x - a.x, dy = b.y - a.y;
+                              const d = Math.sqrt(dx * dx + dy * dy) || 0.001;
+                              const nx = dx / d, ny = dy / d;
+                              // Link "level" from its feed state (charged links snap harder).
+                              const st = this._linkFeedState[key];
+                              const level = st ? (1 + (st.pullBoost || 0) * 2 + Math.min(1, (st.hits || 0) / 6)) : 1;
+                              const kick = 0.9 * level;
+                              // Recoil apart (spring release).
+                              if (!isManualControlImmune(a)) { a.vx -= nx * kick; a.vy -= ny * kick; a._linkSnapFlash = 14; }
+                              if (!isManualControlImmune(b)) { b.vx += nx * kick; b.vy += ny * kick; b._linkSnapFlash = 14; }
+                              if (typeof playTone === 'function' && level > 1.4 && Math.random() < 0.25) {
+                                  playTone(90 + Math.random() * 40, 'sawtooth', 0.05, 0.1);
+                              }
+                          });
+                      }
+                      this._prevLinkedKeys = nowLinked;
                       return links;
                   },
 
@@ -22680,7 +22806,67 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
                   drawMacroClusterHints(lod) {
                       // Macro cluster hull rings removed — were large distracting green/purple concentric circles.
-                  }
+                  },
+
+                  // Immediate lattice renderer for PAUSED / SCULPT mode. Draws clean links
+                  // for every currently-valid pair based purely on live geometry + alignment
+                  // (no dependence on accumulated feed-state glow, which only builds while
+                  // the sim runs). Returns the set of link keys present this frame so the
+                  // caller can detect NEW links for the satisfying connect sound.
+                  drawSculptLinks() {
+                      const present = new Set();
+                      if (typeof creatures === 'undefined' || creatures.length < 2) return present;
+                      const drawn = new Set();
+                      for (let i = 0; i < creatures.length; i++) {
+                          const a = creatures[i];
+                          if (!this.isActiveCreature(a)) continue;
+                          const aSensor = a.getTieredModuleCount ? a.getTieredModuleCount('sensor') : 0;
+                          const range = (CREATURE_SOCIAL_MAX + aSensor * 6) * (typeof STICKY_HOLD_MULT !== 'undefined' ? STICKY_HOLD_MULT : 1.6);
+                          const neighbors = a.getLocalGroup(range);
+                          for (const b of neighbors) {
+                              if (a === b || !this.isActiveCreature(b)) continue;
+                              const key = this.linkKey(a, b);
+                              if (drawn.has(key)) continue;
+                              const d = dist(a.x, a.y, b.x, b.y);
+                              if (d < CREATURE_MIN_SEP) continue;
+                              const bSensor = b.getTieredModuleCount ? b.getTieredModuleCount('sensor') : 0;
+                              const baseRange = CREATURE_SOCIAL_MAX + Math.max(aSensor, bSensor) * 6;
+                              const wasLinked = this._prevLinkedKeys && this._prevLinkedKeys.has(key);
+                              const maxRange = wasLinked
+                                  ? baseRange * (typeof STICKY_HOLD_MULT !== 'undefined' ? STICKY_HOLD_MULT : 1.6)
+                                  : baseRange * 1.12;
+                              if (d > maxRange) continue;
+                              const align = this.computeAlignment(a, b);
+                              const alignFloor = wasLinked
+                                  ? (typeof STICKY_ALIGN_FLOOR !== 'undefined' ? STICKY_ALIGN_FLOOR : 0.55)
+                                  : 1.0;
+                              if (align < alignFloor) continue;
+                              if (!wasLinked && this.isLaceTearHole(a, b)) continue;
+                              drawn.add(key);
+                              present.add(key);
+
+                              const ca = getCreatureCoreType(a), cb = getCreatureCoreType(b);
+                              const coreMatch = ca === cb && ca !== 'balanced';
+                              const col = MODULE_AMMO_COLORS[ca] || '#a78bfa';
+                              const cr = red(color(col)), cg = green(color(col)), cbl = blue(color(col));
+                              const strength = Math.min(1, (align - 0.4) / 1.4);
+                              const near = 1 - Math.min(1, (d - CREATURE_MIN_SEP) / (maxRange - CREATURE_MIN_SEP));
+                              const alpha = 55 + strength * 120 + near * 40;
+                              noFill();
+                              stroke(cr, cg, cbl, alpha * 0.4);
+                              strokeWeight(coreMatch ? 3.2 : 2.4);
+                              line(a.x, a.y, b.x, b.y);
+                              stroke(coreMatch ? 200 : cr, coreMatch ? 180 : cg, 255, alpha);
+                              strokeWeight(coreMatch ? 1.5 : 1.1);
+                              line(a.x, a.y, b.x, b.y);
+                              noStroke();
+                              fill(cr, cg, cbl, alpha);
+                              circle(a.x, a.y, 3);
+                              circle(b.x, b.y, 3);
+                          }
+                      }
+                      return present;
+                  },
               };
 
               const ResonanceCycleSystem = {
@@ -22979,6 +23165,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
                   exitSculptMode() {
                       this.sculptActive = false;
+                      window._sculptPrevLinkKeys = null; // re-prime chimes on next entry
                       this._editMode = false;
                       this._weaveSelectMode = false;
                       this._weaveSelection = [];
@@ -23063,9 +23250,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   // Called from beginDrag when _captureMode is active
                   _handleCaptureClick(px, py) {
                       const cl = typeof creatures !== 'undefined' ? creatures : [];
-                      const hitR = (typeof DeviceProfile !== 'undefined' ? DeviceProfile.creatureHitRadius : 18) * 2.2;
+                      const baseHit = (typeof DeviceProfile !== 'undefined' ? DeviceProfile.creatureHitRadius : 18);
                       const zl  = typeof zoomLevel !== 'undefined' ? zoomLevel : 1;
-                      let best = null, bestD = hitR / Math.max(0.3, zl);
+                      const bestD0 = Math.max(30, baseHit * 2.6 / Math.max(0.35, zl));
+                      let best = null, bestD = bestD0;
                       for (const c of cl) {
                           if (c.isPredator) continue;
                           const d = Math.hypot(c.x - px, c.y - py);
@@ -23338,15 +23526,21 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   beginDrag(px, py) {
                       if (!this.sculptActive || typeof paused === 'undefined' || !paused) return false;
 
+                      // Egg placement: if an egg from the Egg Stash is armed, clicking places it.
+                      if (typeof EggStash !== 'undefined' && EggStash.isArmed && EggStash.isArmed()) {
+                          if (EggStash.placeArmedAt(px, py)) return true;
+                      }
+
                       // Capture mode: click selects a whole connected lattice
                       if (this._captureMode) return this._handleCaptureClick(px, py);
 
                       // Weave-select: click adds/removes creature
                       if (this._weaveSelectMode) {
                           const cl = typeof creatures !== 'undefined' ? creatures : [];
-                          const hitR = (typeof DeviceProfile !== 'undefined' ? DeviceProfile.creatureHitRadius : 18) * 1.9;
+                          const baseHit = (typeof DeviceProfile !== 'undefined' ? DeviceProfile.creatureHitRadius : 18);
                           const zl = typeof zoomLevel !== 'undefined' ? zoomLevel : 1;
-                          let best = null, bestD = hitR / Math.max(0.3, zl);
+                          const hitR = Math.max(28, baseHit * 2.4 / Math.max(0.35, zl));
+                          let best = null, bestD = hitR;
                           for (const c of cl) {
                               if (c.isPredator) continue;
                               const d = Math.hypot(c.x - px, c.y - py);
@@ -23376,19 +23570,28 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           return false;
                       }
 
-                      // Move mode: pick the SINGLE closest creature (never a cluster)
+                      // Move mode: pick the closest creature and drag it. Very forgiving —
+                      // any creature you click near (or the nearest one within a wide
+                      // fallback) can be grabbed and moved, including predators.
                       const cl = typeof creatures !== 'undefined' ? creatures : [];
-                      const hitR = (typeof DeviceProfile !== 'undefined' ? DeviceProfile.creatureHitRadius : 18) * 1.9;
+                      const baseHit = (typeof DeviceProfile !== 'undefined' ? DeviceProfile.creatureHitRadius : 18);
                       const zl = typeof zoomLevel !== 'undefined' ? zoomLevel : 1;
-                      let best = null, bestD = hitR / Math.max(0.3, zl);
+                      const hitR = Math.max(48, baseHit * 3.6 / Math.max(0.3, zl));
+                      // Wide fallback radius so a slightly-off click still grabs the nearest.
+                      const fallbackR = Math.max(120, baseHit * 8 / Math.max(0.3, zl));
+                      let best = null, bestD = hitR;
+                      let fallback = null, fallbackD = fallbackR;
                       for (const c of cl) {
-                          if (c.isPredator) continue;
+                          if (!c || !Number.isFinite(c.x)) continue;
                           const d = Math.hypot(c.x - px, c.y - py);
                           if (d < bestD) { bestD = d; best = c; }
+                          if (d < fallbackD) { fallbackD = d; fallback = c; }
                       }
-                      if (!best) return false;
-                      this.drag = { active: true, creatures: [best], offsets: [{ c: best, ox: 0, oy: 0 }], pivotX: best.x, pivotY: best.y, lastX: px, lastY: py };
-                      this.markTouched(best);
+                      const pick = best || fallback;
+                      if (!pick) return false;
+                      this.drag = { active: true, creatures: [pick], offsets: [{ c: pick, ox: 0, oy: 0 }], pivotX: pick.x, pivotY: pick.y, lastX: px, lastY: py };
+                      this.markTouched(pick);
+                      if (typeof playSculptPickupSound === 'function') playSculptPickupSound();
                       return true;
                   },
 
@@ -23396,6 +23599,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       if (!this.drag.active) return;
                       const dx = px - this.drag.lastX, dy = py - this.drag.lastY;
                       this.drag.lastX = px; this.drag.lastY = py;
+                      // Soft drag tick when there's meaningful movement.
+                      if ((dx * dx + dy * dy) > 6 && typeof playSculptMoveTick === 'function') {
+                          playSculptMoveTick();
+                      }
                       const w = typeof width !== 'undefined' ? width : 800;
                       const h = typeof height !== 'undefined' ? height : 600;
                       for (const o of this.drag.offsets) {
@@ -23501,12 +23708,34 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           for (const c of sel) {
                               if (!c) continue;
                               const pulse = 0.82 + Math.sin(fc * 0.1) * 0.18;
-                              noFill();
-                              stroke(34, 211, 238, 200 + Math.sin(fc * 0.1) * 45);
-                              strokeWeight(2.2 * sc);
-                              circle(c.x, c.y, 26 * sc * pulse);
-                              fill(34, 211, 238, 40); noStroke();
-                              circle(c.x, c.y, 16 * sc * pulse);
+                              const isJelly = c._isOrganismHead
+                                  || (c._scoopActive && typeof isJellyfishScoopCreature === 'function'
+                                      && isJellyfishScoopCreature(c));
+                              if (isJelly) {
+                                  // Distinct cyan-white halo + label marking the jellyfish
+                                  // head as a captured part of this lattice.
+                                  noFill();
+                                  stroke(125, 211, 252, 230 + Math.sin(fc * 0.12) * 25);
+                                  strokeWeight(3.0 * sc);
+                                  circle(c.x, c.y, 46 * sc * pulse);
+                                  stroke(190, 245, 255, 150);
+                                  strokeWeight(1.4 * sc);
+                                  circle(c.x, c.y, 58 * sc * pulse);
+                                  fill(125, 211, 252, 55); noStroke();
+                                  circle(c.x, c.y, 30 * sc * pulse);
+                                  // Little squid glyph mark
+                                  fill(210, 245, 255, 220); noStroke();
+                                  textAlign(CENTER, CENTER);
+                                  textSize(13 * sc);
+                                  text('🦑', c.x, c.y - 40 * sc);
+                              } else {
+                                  noFill();
+                                  stroke(34, 211, 238, 200 + Math.sin(fc * 0.1) * 45);
+                                  strokeWeight(2.2 * sc);
+                                  circle(c.x, c.y, 26 * sc * pulse);
+                                  fill(34, 211, 238, 40); noStroke();
+                                  circle(c.x, c.y, 16 * sc * pulse);
+                              }
                           }
                       }
 
@@ -25118,28 +25347,50 @@ body.is-map-fullscreen #map-fullscreen-btn {
                               this.currentThought = "Depositing honey";
                           }
                       }
-                      // === VORTEX (toned down) ===
+                      // === VORTEX (creatures now clearly caught in the current) ===
                       const cdist = dist(this.x, this.y, centerX, centerY);
                       const vortexPull = vortexStrength * 0.75;
-                      if (cdist < 200) {
+                      // Extended reach — the swirl reaches most of the map now.
+                      const VORTEX_REACH = 340;
+                      if (cdist < VORTEX_REACH) {
                           let dx = this.x - centerX;
                           let dy = this.y - centerY;
                           let len = sqrt(dx * dx + dy * dy) || 1;
-                          let pushStrength = (1 - (cdist / 200)) * 1.1 * vortexPull;
-                          pushStrength *= (0.65 + brainVortexEscape * 1.0);
+                          const falloff = (1 - (cdist / VORTEX_REACH));
                           const moveBonus = this.getModuleMovementBonus();
                           const resistance = this.traits.vortexResistance || 1.0;
-                          pushStrength *= (1.0 - (moveBonus * 0.32) - (resistance - 1) * 0.22);
+                          const resistScale = (1.0 - (moveBonus * 0.32) - (resistance - 1) * 0.22);
                           const edgeDamp = min(
                               this.x < 34 ? (this.x - 8) / 26 : 1,
                               this.x > width - 34 ? (width - 8 - this.x) / 26 : 1,
                               this.y < 34 ? (this.y - 8) / 26 : 1,
                               this.y > height - 34 ? (height - 8 - this.y) / 26 : 1
                           );
-                          pushStrength *= constrain(edgeDamp, 0.02, 1);
-                          if (getCreatureEdgeFactors(this).proximity > 0.25) pushStrength *= 0.35;
-                          this.vx += (dx / len) * pushStrength * 0.024 * timeScale;
-                          this.vy += (dy / len) * pushStrength * 0.024 * timeScale;
+                          const damp = constrain(edgeDamp, 0.02, 1)
+                              * (getCreatureEdgeFactors(this).proximity > 0.25 ? 0.5 : 1);
+
+                          // Radial push (outward from the eye).
+                          let pushStrength = falloff * 1.5 * vortexPull;
+                          pushStrength *= (0.65 + brainVortexEscape * 1.0) * resistScale * damp;
+                          this.vx += (dx / len) * pushStrength * 0.14 * timeScale;
+                          this.vy += (dy / len) * pushStrength * 0.14 * timeScale;
+
+                          // Tangential SWIRL current — applied as a DIRECT positional carry
+                          // (like the food particles) plus velocity, so creatures visibly
+                          // ride the spin around the eye instead of the drift being damped
+                          // away. Scaled by the creature's resistance and edge damping.
+                          const tangX = -dy / len, tangY = dx / len;
+                          const swirlMag = falloff * vortexStrength * vortexDir * resistScale * damp;
+                          // Direct carry — the current physically sweeps them along.
+                          this.x += tangX * swirlMag * 0.9 * timeScale;
+                          this.y += tangY * swirlMag * 0.9 * timeScale;
+                          // Plus a velocity nudge so they keep some spin momentum.
+                          this.vx += tangX * swirlMag * 0.16 * timeScale;
+                          this.vy += tangY * swirlMag * 0.16 * timeScale;
+                          // Slight inward carry too, so the whole field slowly orbits inward.
+                          this.x += (centerX - this.x) * falloff * 0.006 * vortexStrength * resistScale * damp * timeScale;
+                          this.y += (centerY - this.y) * falloff * 0.006 * vortexStrength * resistScale * damp * timeScale;
+
                           if (cdist < 85 && random() < 0.035) {
                               this.currentThought = "Fighting the current";
                           }
@@ -25187,18 +25438,33 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           const chronoRival = ModuleIdentitySystem.applyChronoRivalry(this, isDay, timeScale);
                           this.vx += chronoRival.vx;
                           this.vy += chronoRival.vy;
+                          // ── Colony binding: the lattice is an external brain ─────────
+                          // Once a creature is part of a lattice, its OWN exploration/wander
+                          // drive is progressively sidelined in favour of the shared colony
+                          // motivation. Bigger networks bind harder — the individual all but
+                          // stops pursuing solo goals and moves as part of the whole.
+                          const _netSize = this._networkSize || 1;
+                          // 0 (solo) → ~0.9 (deep in a large lattice). Signal strength also
+                          // falls with how far this creature sits from the colony core.
+                          const _colonyBind = _netSize >= 2
+                              ? Math.min(0.9, 0.32 + Math.min(1, (_netSize - 2) / 8) * 0.58)
+                              : 0;
+                          this._colonyBind = _colonyBind;
+                          const _soloScale = 1 - _colonyBind; // how much personal drive remains
                           const moveBonus = this.getModuleMovementBonus();
                           const genBias = this.getGenerationMovementBias();
                           const explorerBonus = this.getTieredModuleCount('explorer') * 0.045;
                           // Micro Wriggle (reduced)
                           let wriggleForce = (0.38 + (sin(this.wrigglePhase) * 0.22)) * (1 + moveBonus * 0.55);
                           wriggleForce *= (0.88 + brainExploration * 0.55);
+                          wriggleForce *= (0.4 + 0.6 * _soloScale); // keep a little wriggle for flex
                           this.vx += cos(this.wrigglePhase * 1.25) * wriggleForce * 0.017 * timeScale;
                           this.vy += sin(this.wrigglePhase * 1.05) * wriggleForce * 0.017 * timeScale;
-                          // Exploration (reduced)
+                          // Exploration (reduced) — scaled down hard for bound colony members.
                           if (cdist < 165) {
                               let exploreForce = (0.82 + brainExploration * 1.35) + explorerBonus + genBias.exploration;
                               exploreForce *= (1 + moveBonus * 0.65) * (1 + (this._colonyExploreBoost || 0) * 0.5);
+                              exploreForce *= _soloScale; // colony members barely wander alone
                               const edgeDamp = min(
                                   this.x < 40 ? (this.x - 8) / 32 : 1,
                                   this.x > width - 40 ? (width - 8 - this.x) / 32 : 1,
@@ -25206,14 +25472,18 @@ body.is-map-fullscreen #map-fullscreen-btn {
                                   this.y > height - 40 ? (height - 8 - this.y) / 32 : 1
                               );
                               exploreForce *= constrain(edgeDamp, 0.04, 1);
-                              exploreForce = constrain(exploreForce, 0.48, 2.6);
+                              exploreForce = constrain(exploreForce, 0, 2.6);
                               this.vx += random(-1.0, 1.0) * 0.5 * exploreForce * timeScale;
                               this.vy += random(-1.0, 1.0) * exploreForce * timeScale;
                           } else if (d > 75) {
                               let exploreForce = (0.88 + brainExploration * 1.2) + explorerBonus;
-                              exploreForce *= (1 + moveBonus * 0.6);
+                              exploreForce *= (1 + moveBonus * 0.6) * _soloScale;
                               this.vx += random(-0.48, 0.48) * 0.34 * exploreForce * timeScale;
                               this.vy += random(-0.48, 0.48) * 0.34 * exploreForce * timeScale;
+                          }
+                          // Apply the shared colony motivation (the "external brain").
+                          if (_colonyBind > 0 && typeof ColonyMindSystem !== 'undefined') {
+                              ColonyMindSystem.applyColonyDrive(this, _colonyBind, timeScale);
                           }
                           // Social Conversion Pressure
                           let localGroup = this.getLocalGroup(55);
@@ -25409,6 +25679,15 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       this.vx *= 0.90;
                       this.vy *= 0.90;
                       stabilizeCreatureBounds(this, timeScale);
+                      // Collision module transfer: a fast creature bumping into another
+                      // grafts a "bruise" module of the invader's core type onto the
+                      // creature it struck, forms a link, and loses momentum.
+                      if ((this._bruiseTakeCooldown || 0) > 0) this._bruiseTakeCooldown -= timeScale;
+                      if ((this._bruiseFlash || 0) > 0) this._bruiseFlash -= timeScale;
+                      if ((this._bruiseGiveFlash || 0) > 0) this._bruiseGiveFlash -= timeScale;
+                      if (typeof applyCollisionModuleTransfer === 'function') {
+                          applyCollisionModuleTransfer(this, timeScale);
+                      }
                       // ==================== PREDATOR HUNTING BEHAVIOR ====================
                       const scoopSuspended = this._scoopActive && this._manualControl;
                       if (isSquidFeastMode(this)) {
@@ -25595,6 +25874,43 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           stroke(140, 195, 255, this._scoopProbeTugFlash * 5);
                           strokeWeight(0.9);
                           circle(0, 0, s + 6 + sin(frameCount * 0.2) * 1.2);
+                      }
+                      // Orange grip flash — the arm physically has hold of this creature.
+                      if ((this._scoopProbeGripFlash || 0) > 0) {
+                          noFill();
+                          const g = this._scoopProbeGripFlash;
+                          stroke(249, 140, 36, 120 + g * 30);
+                          strokeWeight(1.8);
+                          circle(0, 0, s + 9 + sin(frameCount * 0.4) * 2);
+                          stroke(251, 191, 90, 80);
+                          strokeWeight(0.9);
+                          circle(0, 0, s + 15);
+                      }
+
+                      // Lattice power flash — banked flex/induction power feeding a member.
+                      if ((this._latticePowerFlash || 0) > 0) {
+                          this._latticePowerFlash -= 1;
+                          noFill();
+                          stroke(56, 220, 200, this._latticePowerFlash * 22);
+                          strokeWeight(1.0);
+                          circle(0, 0, s + 7 + sin(frameCount * 0.3) * 1.5);
+                      }
+                      // Bruise flash — a creature that just got grafted a collision module.
+                      if ((this._bruiseFlash || 0) > 0) {
+                          const bf = this._bruiseFlash;
+                          noFill();
+                          stroke(255, 120, 90, bf * 14);
+                          strokeWeight(2.2);
+                          circle(0, 0, s + 5 + (16 - bf) * 0.7);
+                      }
+                      // Link-snap flash — recoil spark when a lattice line breaks.
+                      if ((this._linkSnapFlash || 0) > 0) {
+                          const lf = this._linkSnapFlash;
+                          this._linkSnapFlash -= 1;
+                          noFill();
+                          stroke(255, 210, 120, lf * 12);
+                          strokeWeight(1.4);
+                          circle(0, 0, s + 8 + (14 - lf) * 1.2);
                       }
 
                       if (this._scoopProbeWeakestMark) {
@@ -27708,29 +28024,35 @@ body.is-map-fullscreen #map-fullscreen-btn {
               function getEnvironmentalVortexDynamics(basePhase) {
                   const phaseT = Math.min(1, Math.max(0, envPhaseProgress / envCycleLength));
                   let phase = basePhase;
-                  let strengthWave = sin(phase * TWO_PI) * 0.5 + 0.5;
-                  let dir = cos(phase * TWO_PI);
+                  // Steady, strong baseline vortex that DOESN'T wax and wane with the day
+                  // cycle. Instead the direction flips between day and night while the
+                  // strength stays high and constant through all environment phases.
+                  const VORTEX_BASE = 1.15;              // strong steady strength
+                  let strengthWave = VORTEX_BASE;
+                  // Day = one spin direction, night = the opposite. isDay drives the flip;
+                  // a smooth transition band near dawn/dusk avoids a hard snap.
+                  const dayFactor = (typeof timeOfDay !== 'undefined')
+                      ? cos(timeOfDay * TWO_PI)          // +1 at noon, -1 at midnight
+                      : 1;
+                  let dir = dayFactor >= 0 ? 1 : -1;
+                  // Ease the direction near the day/night boundary so it turns rather than snaps.
+                  const band = 0.18;
+                  if (Math.abs(dayFactor) < band) {
+                      dir = dayFactor / band; // -1..1 smooth turn through the boundary
+                  }
                   let turbulence = 0;
 
                   if (environmentPhase === 1) {
+                      // Normal: keep steady strength, add a touch of end-of-phase turbulence.
                       const endRamp = constrain((phaseT - 0.46) / 0.54, 0, 1);
                       const endCurve = Math.pow(endRamp, 1.2);
-                      const spinBoost = 1 + endCurve * 4.8;
-                      phase = (phase * spinBoost + endCurve * phaseT * 0.18) % 1;
-                      strengthWave = sin(phase * TWO_PI) * 0.5 + 0.5;
-                      dir = cos(phase * TWO_PI * (1 + endCurve * 2.6));
-                      const surge = endCurve * 0.9;
-                      strengthWave = strengthWave * (1 + surge * 2.35) + surge * 0.52;
-                      turbulence = endCurve * 0.42;
+                      strengthWave = VORTEX_BASE * (1 + endCurve * 0.35);
+                      turbulence = endCurve * 0.3;
                   } else if (environmentPhase === 2) {
+                      // Drought: steady strength, more agitation/turbulence but not weaker.
                       const droughtT = Math.pow(phaseT, 0.82);
-                      const agitation = 0.58 + droughtT * 1.02;
-                      const washSpeed = (5.2 + agitation * 12.5) * max(0.35, timeScale || 1);
-                      const washPhase = frameCount * 0.108 * washSpeed;
-                      dir = sin(washPhase);
-                      const slam = abs(sin(washPhase * 1.72));
-                      strengthWave = (0.44 + slam * 0.56) * (1.22 + agitation * 2.15);
-                      turbulence = 0.5 + agitation * 0.95;
+                      strengthWave = VORTEX_BASE * (1.05 + droughtT * 0.35);
+                      turbulence = 0.4 + droughtT * 0.7;
                   }
 
                   return { strengthWave, dir, turbulence, phase };
@@ -28151,6 +28473,48 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   pop();
               }
 
+              // Movement trails shown ONLY while paused / sculpting: a fading streak behind
+              // each creature whose length and brightness scale with its speed, plus a small
+              // arrowhead pointing where it's heading. This makes the frozen state readable —
+              // you can see exactly how fast and which direction everything will move.
+              function drawPausedMovementTrails() {
+                  if (typeof creatures === 'undefined') return;
+                  for (const c of creatures) {
+                      if (!c || !Number.isFinite(c.x) || !Number.isFinite(c.y)) continue;
+                      const vx = c.vx || 0, vy = c.vy || 0;
+                      const spd = Math.sqrt(vx * vx + vy * vy);
+                      if (spd < 0.04) continue; // stationary — no trail
+                      const nx = vx / spd, ny = vy / spd;
+                      // Trail length scales with speed (clamped), drawn BEHIND the creature.
+                      const len = Math.min(46, spd * 22);
+                      const tailX = c.x - nx * len, tailY = c.y - ny * len;
+                      // Color by speed: slow = cool cyan, fast = warm amber.
+                      const t = Math.min(1, spd / 3.2);
+                      const r = 90 + t * 165, g = 210 - t * 70, b = 250 - t * 160;
+                      // Fading streak.
+                      push();
+                      strokeCap(ROUND);
+                      for (let s = 0; s < 3; s++) {
+                          const f = 1 - s / 3;
+                          stroke(r, g, b, 30 + f * 90);
+                          strokeWeight((1 + s * 1.3));
+                          line(c.x - nx * len * f, c.y - ny * len * f, c.x, c.y);
+                      }
+                      // Small arrowhead at the leading edge (direction of travel).
+                      const headX = c.x + nx * 4, headY = c.y + ny * 4;
+                      const perpX = -ny, perpY = nx;
+                      const ah = 4 + t * 3;
+                      noStroke();
+                      fill(r, g, b, 200);
+                      triangle(
+                          headX + nx * ah, headY + ny * ah,
+                          headX + perpX * ah * 0.6, headY + perpY * ah * 0.6,
+                          headX - perpX * ah * 0.6, headY - perpY * ah * 0.6
+                      );
+                      pop();
+                  }
+              }
+
               // ============================
               // CREATURE BEHAVIOR & UPDATE LOGIC
               // ============================
@@ -28237,6 +28601,271 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   const coreMod = creature.modules?.find((m) => m.isCore);
                   if (coreMod?.type) return normalizeModuleTypeKey(coreMod.type);
                   return normalizeModuleTypeKey(creature.specialization || 'balanced');
+              }
+
+              // ── Collision module transfer ("bruise" grafting) ──────────────────
+              // When a fast-moving creature bumps into another, the impact grafts a new
+              // module of the INVADER's core type onto the struck creature, at the point
+              // of impact. The invader keeps all its modules but loses momentum (its path
+              // bends to shed the "energy"), and a resonance link forms since the struck
+              // creature now shares a module type with the invader.
+              const COLLISION_TRANSFER_MIN_SPEED = 1.6;   // invader must be moving this fast
+              const COLLISION_TRANSFER_COOLDOWN = 40;     // frames between a creature giving/taking a bruise
+              const COLLISION_MODULE_COLORS = { 'harvester': '#34d399', 'sensor': '#38bdf8', 'mover': '#334155', 'resistant': '#f472b6', 'explorer': '#fbbf24', 'communicator': '#c084fc', 'balanced': '#a78bfa' };
+
+              function applyCollisionModuleTransfer(invader, timeScale) {
+                  // Cheapest guards first so the vast majority of (slow / on-cooldown)
+                  // creatures bail before any spatial query or core lookup.
+                  if (!invader || invader.energy <= 0) return;
+                  if ((invader._bruiseGiveCooldown || 0) > 0) { invader._bruiseGiveCooldown -= timeScale; return; }
+                  const spd = Math.sqrt(invader.vx * invader.vx + invader.vy * invader.vy);
+                  if (spd < COLLISION_TRANSFER_MIN_SPEED) return;   // must be moving fast
+                  if (isManualControlImmune(invader)) return;
+                  const core = getCreatureCoreType(invader);
+                  if (!core || core === 'balanced') return;         // balanced leaves no imprint
+
+                  const hitR = CREATURE_BODY_RADIUS * 1.7;
+                  const list = (typeof SpatialGrid !== 'undefined' && SpatialGrid.cells)
+                      ? SpatialGrid.queryRadius(invader.x, invader.y, hitR + CREATURE_BODY_RADIUS, invader)
+                      : creatures;
+                  for (const target of list) {
+                      if (!target || target === invader) continue;
+                      if (target.isPredator || isManualControlImmune(target)) continue;
+                      if (target.energy <= 0) continue;
+                      if ((target._bruiseTakeCooldown || 0) > 0) continue;
+                      const dx = target.x - invader.x, dy = target.y - invader.y;
+                      const d = Math.sqrt(dx * dx + dy * dy) || 0.001;
+                      if (d > hitR) continue;
+                      // Only count it as a real bump if the invader is moving TOWARD the target.
+                      const towardDot = (invader.vx * dx + invader.vy * dy) / (spd * d);
+                      if (towardDot < 0.25) continue;
+
+                      // Cap module bloat — don't graft onto already-huge creatures.
+                      if ((target.modules ? target.modules.length : 0) >= 26) continue;
+
+                      // ── Graft the bruise module at the impact point ──────────────
+                      const impactAngle = Math.atan2(dy, dx) + Math.PI; // side that got hit (facing invader)
+                      const newMod = {
+                          type: core,
+                          color: COLLISION_MODULE_COLORS[core] || '#a78bfa',
+                          tier: 1,
+                          _bruise: true
+                      };
+                      if (typeof ModuleIdentitySystem !== 'undefined') {
+                          target._latticeGrowthAngle = impactAngle; // bias placement to impact side
+                          target.modules = target.modules || [];
+                          target.modules.push(newMod);
+                          ModuleIdentitySystem.assignModulePosition(target, newMod, { outer: true });
+                          ModuleIdentitySystem.normalizeLayout(target);
+                          ModuleIdentitySystem.updateCore(target);
+                          if (typeof target.updateSpecialization === 'function') target.updateSpecialization();
+                          if (target._updateModuleCache) target._updateModuleCache();
+                      }
+
+                      // Force a fresh link to form immediately (they now share a type).
+                      if (typeof ModuleIdentitySystem !== 'undefined') {
+                          const key = ModuleIdentitySystem.linkKey(invader, target);
+                          if (!ModuleIdentitySystem._prevLinkedKeys) ModuleIdentitySystem._prevLinkedKeys = new Set();
+                          ModuleIdentitySystem._prevLinkedKeys.add(key);
+                          ModuleIdentitySystem._linkCacheFrame = -1; // force recompute next read
+                      }
+
+                      // ── Invader loses momentum + path bends ("energy loss") ──────
+                      const slow = 0.55;                       // shed ~45% speed
+                      invader.vx *= slow; invader.vy *= slow;
+                      // Deflect the path sideways (glance off).
+                      const tangent = (towardDot);            // head-on = more deflection
+                      const perpX = -dy / d, perpY = dx / d;
+                      const side = ((invader._symSlot || 0) % 2 === 0) ? 1 : -1;
+                      const deflect = spd * 0.5 * tangent * side;
+                      invader.vx += perpX * deflect;
+                      invader.vy += perpY * deflect;
+
+                      // Visual + audio feedback.
+                      target._bruiseFlash = 16;
+                      target._bruiseTakeCooldown = COLLISION_TRANSFER_COOLDOWN;
+                      invader._bruiseGiveCooldown = COLLISION_TRANSFER_COOLDOWN;
+                      invader._bruiseGiveFlash = 12;
+
+                      // Bump sparks: a subtle puff of white + both creatures' core-colored
+                      // specks at the impact point. Small chance one is a real (harvestable)
+                      // module styled as a plain colored speck.
+                      const impactX = (invader.x + target.x) * 0.5;
+                      const impactY = (invader.y + target.y) * 0.5;
+                      spawnBumpSparks(impactX, impactY, getCreatureCoreType(invader), getCreatureCoreType(target));
+
+                      if (typeof addFloatingText === 'function' && Math.random() < 0.5) {
+                          addFloatingText(target.x, target.y - CREATURE_BODY_RADIUS - 4, '+' + core.slice(0, 4), COLLISION_MODULE_COLORS[core] || '#fff');
+                      }
+                      if (typeof playTone === 'function' && Math.random() < 0.3) {
+                          playTone(180 + Math.random() * 80, 'triangle', 0.06, 0.16);
+                      }
+                      break; // one bruise per bump
+                  }
+              }
+
+              // Parse a #rrggbb hex string into an {r,g,b} triple (small helper).
+              function _hexToRgb(hex) {
+                  if (!hex || hex[0] !== '#' || hex.length < 7) return { r: 255, g: 255, b: 255 };
+                  return {
+                      r: parseInt(hex.slice(1, 3), 16),
+                      g: parseInt(hex.slice(3, 5), 16),
+                      b: parseInt(hex.slice(5, 7), 16)
+                  };
+              }
+
+              // Emit a burst of consumable sparks at a bump point. Mostly WHITE food
+              // sparks plus a few COLORED sparks tinted to the colliding creatures' cores.
+              // A colored spark only appears when it is "module-oriented" (it carries a real
+              // module type to graft on consumption); otherwise the burst is pure white food.
+              // Sparks start with a brief grace period (not yet consumable) so they're
+              // visible, then magnetize to and get absorbed by the nearest creature.
+              const BUMP_SPARK_GRACE = 26;   // frames before a spark can be consumed
+              function spawnBumpSparks(x, y, coreA, coreB) {
+                  if (typeof bumpSparks === 'undefined') return;
+                  if (bumpSparks.length >= BUMP_SPARK_CAP) return; // hard perf ceiling
+                  const colA = _hexToRgb(COLLISION_MODULE_COLORS[coreA] || '#ffffff');
+                  const colB = _hexToRgb(COLLISION_MODULE_COLORS[coreB] || '#ffffff');
+                  const coreAOk = coreA && coreA !== 'balanced';
+                  const coreBOk = coreB && coreB !== 'balanced';
+                  // Slightly bigger, more visible burst (7–11 specks).
+                  const count = 7 + ((Math.random() * 5) | 0);
+                  for (let i = 0; i < count; i++) {
+                      if (bumpSparks.length >= BUMP_SPARK_CAP) break;
+                      // Mostly white; a colored spark only if that core is module-oriented.
+                      const roll = Math.random();
+                      let r, g, b, moduleType = null;
+                      if (roll < 0.68) {
+                          r = 255; g = 255; b = 255;                 // white food spark
+                      } else if (roll < 0.84 && coreAOk) {
+                          r = colA.r; g = colA.g; b = colA.b; moduleType = coreA;
+                      } else if (coreBOk) {
+                          r = colB.r; g = colB.g; b = colB.b; moduleType = coreB;
+                      } else if (coreAOk) {
+                          r = colA.r; g = colA.g; b = colA.b; moduleType = coreA;
+                      } else {
+                          r = 255; g = 255; b = 255;                 // fall back to white
+                      }
+                      const ang = Math.random() * Math.PI * 2;
+                      const spd = 0.7 + Math.random() * 1.5;         // a bit more spread
+                      bumpSparks.push({
+                          x: x + Math.cos(ang) * 3,
+                          y: y + Math.sin(ang) * 3,
+                          vx: Math.cos(ang) * spd,
+                          vy: Math.sin(ang) * spd,
+                          life: 150 + (Math.random() * 60 | 0),      // live long enough to be caught
+                          maxLife: 210,
+                          grace: BUMP_SPARK_GRACE,                   // not yet consumable
+                          size: 1.6 + Math.random() * 1.8,           // bigger = more obvious
+                          r, g, b,
+                          moduleType,                                // null = pure white food
+                          phase: (Math.random() * 2) | 0             // parity for magnet throttle
+                      });
+                  }
+              }
+
+              // Advance, magnetize, absorb and render bump sparks each frame.
+              //  • grace period: brand-new sparks aren't consumable yet (so the burst is
+              //    visible instead of being eaten on frame one),
+              //  • after grace: each spark is pulled toward the nearest creature and, on
+              //    contact, absorbed — white sparks give food, colored (module-oriented)
+              //    sparks give food AND graft their module type,
+              //  • cheap: single spatial query per spark, skipped when the pool is empty.
+              function updateAndDrawBumpSparks() {
+                  if (typeof bumpSparks === 'undefined' || bumpSparks.length === 0) return;
+                  const canQuery = (typeof SpatialGrid !== 'undefined' && SpatialGrid.cells);
+                  push();
+                  noStroke();
+                  for (let i = bumpSparks.length - 1; i >= 0; i--) {
+                      const s = bumpSparks[i];
+
+                      if (s.grace > 0) {
+                          // Drifting/settling, not yet consumable.
+                          s.x += s.vx; s.y += s.vy;
+                          s.vx *= 0.88; s.vy *= 0.88;
+                          s.grace--;
+                      } else {
+                          // Magnetize toward the nearest creature, then absorb on contact.
+                          // The (moderately expensive) nearest-creature search runs every
+                          // other frame per spark; between searches it keeps steering at its
+                          // last target, so motion stays smooth at half the query cost.
+                          let target = null;
+                          if (((frameCount + s.phase) & 1) === 0 || !s._target || s._target.energy <= 0) {
+                              let bestD = 62 * 62;                  // magnet reach (squared)
+                              const near = canQuery ? SpatialGrid.queryRadius(s.x, s.y, 62) : creatures;
+                              for (const c of near) {
+                                  if (!c || c.energy <= 0) continue;
+                                  const dx = c.x - s.x, dy = c.y - s.y;
+                                  const dd = dx * dx + dy * dy;
+                                  if (dd < bestD) { bestD = dd; target = c; }
+                              }
+                              s._target = target;
+                          } else {
+                              target = s._target;
+                          }
+                          if (target) {
+                              const dx = target.x - s.x, dy = target.y - s.y;
+                              const d = Math.sqrt(dx * dx + dy * dy) || 0.001;
+                              // Accelerate inward (stronger as it closes) — clear magnet pull.
+                              const pull = 0.55 + Math.max(0, 1 - d / 62) * 1.4;
+                              s.vx += (dx / d) * pull;
+                              s.vy += (dy / d) * pull;
+                              s.vx *= 0.82; s.vy *= 0.82;
+                              s.x += s.vx; s.y += s.vy;
+                              // Absorbed on contact with the creature body.
+                              if (d < CREATURE_BODY_RADIUS + 2) {
+                                  _absorbBumpSpark(target, s);
+                                  bumpSparks.splice(i, 1);
+                                  continue;
+                              }
+                          } else {
+                              s.x += s.vx; s.y += s.vy;
+                              s.vx *= 0.9; s.vy *= 0.9;
+                          }
+                      }
+
+                      s.life--;
+                      if (s.life <= 0) { bumpSparks.splice(i, 1); continue; }
+
+                      // Render: soft glow + bright core. Consumable sparks pulse gently so
+                      // it's clear they're now "live" food.
+                      const a = Math.min(1, s.life / s.maxLife) * (s.grace > 0 ? 0.7 : 1);
+                      const pulse = s.grace > 0 ? 1 : (0.85 + Math.sin(frameCount * 0.3 + s.x) * 0.15);
+                      fill(s.r, s.g, s.b, 55 * a);
+                      circle(s.x, s.y, s.size * 3.0 * pulse);
+                      fill(s.r, s.g, s.b, 230 * a);
+                      circle(s.x, s.y, s.size * pulse);
+                  }
+                  pop();
+              }
+
+              // Consume a bump spark into a creature: white = food only; colored = food +
+              // one grafted module of that spark's type (subtle, tier-1).
+              function _absorbBumpSpark(creature, s) {
+                  if (!creature) return;
+                  if (typeof applyParticleEnergyGain === 'function') {
+                      applyParticleEnergyGain(creature, s.moduleType ? 4 : 3, { px: s.x, py: s.y, isWhite: !s.moduleType, skipKnockback: true });
+                  } else {
+                      creature.energy = Math.min(100, (creature.energy || 0) + 3);
+                  }
+                  creature._bruiseFlash = Math.max(creature._bruiseFlash || 0, 6);
+                  // Colored spark → graft its module (bloat-capped, non-predator only).
+                  if (s.moduleType && !creature.isPredator
+                      && creature.modules && creature.modules.length < 26
+                      && typeof ModuleIdentitySystem !== 'undefined') {
+                      const newMod = {
+                          type: s.moduleType,
+                          color: COLLISION_MODULE_COLORS[s.moduleType] || '#a78bfa',
+                          tier: 1
+                      };
+                      creature._latticeGrowthAngle = Math.atan2(s.y - creature.y, s.x - creature.x);
+                      creature.modules.push(newMod);
+                      ModuleIdentitySystem.assignModulePosition(creature, newMod, { outer: true });
+                      ModuleIdentitySystem.normalizeLayout(creature);
+                      ModuleIdentitySystem.updateCore(creature);
+                      if (typeof creature.updateSpecialization === 'function') creature.updateSpecialization();
+                      if (creature._updateModuleCache) creature._updateModuleCache();
+                  }
               }
 
               function canAffordReclamationForgeForCreature(creature, options = {}) {
@@ -31502,11 +32131,13 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
               function resolveScoopFacing(creature) {
                   let target = creature._scoopFacing;
-                  // When anchored to a colony, the probe should point at the heart so it
-                  // threads forward into the colony — unless the squid is in a
-                  // tendrils-first escape, in which case it faces AWAY (tendrils lead).
                   const anchor = creature._latticeAnchor;
-                  if (anchor && anchor.anchorNode && creatures.indexOf(anchor.anchorNode) >= 0) {
+                  const merged = !!(anchor && anchor._merged);
+                  // While APPROACHING/fissuring (anchored but not yet merged), the probe
+                  // points at the heart so it threads into the colony. Once MERGED, the
+                  // squid is the moving head of the organism — it must face where it's
+                  // GOING (tendrils forward), never back at its own internal heart.
+                  if (anchor && !merged && anchor.anchorNode && creatures.indexOf(anchor.anchorNode) >= 0) {
                       const toHeart = atan2(anchor.anchorNode.y - creature.y, anchor.anchorNode.x - creature.x);
                       const escaping = (anchor._escapeFrames || 0) > 0;
                       target = escaping ? (toHeart + PI) : toHeart;
@@ -31521,22 +32152,66 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       }
                       return creature._scoopFacing;
                   }
-                  const pull = creature._scoopProbePullTarget;
-                  const weakest = creature._scoopProbeWeakestTarget;
-                  const aim = pull || weakest;
-                  if (aim && creatures.indexOf(aim) >= 0) {
-                      target = atan2(aim.y - creature.y, aim.x - creature.x);
-                  } else if (creature._squidDriftTarget) {
-                      target = atan2(creature._squidDriftTarget.y - creature.y, creature._squidDriftTarget.x - creature.x);
-                  } else {
-                      const mx = manualControlState.x - creature.x;
-                      const my = manualControlState.y - creature.y;
-                      const md = sqrt(mx * mx + my * my);
-                      if (creature._manualControl && md > 18) {
-                          target = atan2(my, mx);
+                  // ── Merged organism head: face forward along movement ────────────
+                  if (merged) {
+                      // Face the direction of travel (toward the food it's chasing / where
+                      // the organism is heading), with a slow, stable turn so it never
+                      // flips erratically. Prefer the seek target's direction, else velocity.
+                      const seek = creature._squidDriftTarget;
+                      const seekValid = seek && typeof vortexParticles !== 'undefined'
+                          && vortexParticles.indexOf(seek) >= 0 && !seek._scooped;
+                      const spd = sqrt(creature.vx * creature.vx + creature.vy * creature.vy);
+                      if (creature._manualControl) {
+                          const mx = manualControlState.x - creature.x;
+                          const my = manualControlState.y - creature.y;
+                          if (sqrt(mx * mx + my * my) > 18) target = atan2(my, mx);
+                          else if (spd > 0.1) target = atan2(creature.vy, creature.vx);
+                      } else if (seekValid) {
+                          target = atan2(seek.y - creature.y, seek.x - creature.x);
+                      } else if (spd > 0.1) {
+                          target = atan2(creature.vy, creature.vx);
+                      }
+                      if (target == null) target = atan2(creature.vy || 0.01, creature.vx || 1);
+                      if (creature._scoopFacing == null) {
+                          creature._scoopFacing = target;
                       } else {
-                          const spd = sqrt(creature.vx * creature.vx + creature.vy * creature.vy);
-                          if (spd > 0.45) target = atan2(creature.vy, creature.vx);
+                          let delta = target - creature._scoopFacing;
+                          while (delta > PI) delta -= TWO_PI;
+                          while (delta < -PI) delta += TWO_PI;
+                          // Very slow, steady turn so the tendrils stay pointed forward and
+                          // the head doesn't whip back and forth.
+                          const maxTurn = 0.02;
+                          const step = delta * (SCOOP_FACING_LERP * 0.7);
+                          creature._scoopFacing += Math.max(-maxTurn, Math.min(maxTurn, step));
+                      }
+                      return creature._scoopFacing;
+                  }
+                  // ── Alone / hunting: face the direction of travel, NOT the prey ──
+                  // Chasing whichever creature is currently 'weakest' made the squid
+                  // whip back and forth as targets changed. Instead it faces where it's
+                  // swimming (its own heading), with a strong deadzone + slow turn so it
+                  // holds a steady heading. The orange probes sweep prey on their own,
+                  // regardless of exact facing.
+                  {
+                      const spd = sqrt(creature.vx * creature.vx + creature.vy * creature.vy);
+                      if (creature._manualControl) {
+                          const mx = manualControlState.x - creature.x;
+                          const my = manualControlState.y - creature.y;
+                          const md = sqrt(mx * mx + my * my);
+                          if (md > 18) target = atan2(my, mx);
+                          else if (spd > 0.35) target = atan2(creature.vy, creature.vx);
+                          else if (target == null) target = atan2(creature.vy || 0.01, creature.vx || 1);
+                      } else if (creature._squidDriftTarget
+                              && typeof vortexParticles !== 'undefined'
+                              && vortexParticles.indexOf(creature._squidDriftTarget) >= 0
+                              && !creature._squidDriftTarget._scooped) {
+                          // Heading toward the food it's foraging for — a stable target.
+                          target = atan2(creature._squidDriftTarget.y - creature.y,
+                                         creature._squidDriftTarget.x - creature.x);
+                      } else {
+                          // Strong deadzone: only re-aim from velocity when it's decisive,
+                          // so tiny drift wobbles don't flip the squid around.
+                          if (spd > 0.7) target = atan2(creature.vy, creature.vx);
                           else if (target == null) target = atan2(creature.vy || 0.01, creature.vx || 1);
                       }
                   }
@@ -31546,7 +32221,11 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       let delta = target - creature._scoopFacing;
                       while (delta > PI) delta -= TWO_PI;
                       while (delta < -PI) delta += TWO_PI;
-                      creature._scoopFacing += delta * SCOOP_FACING_LERP;
+                      // Rate-limited turn: the squid arcs smoothly and can never whip
+                      // back and forth. Slow cap keeps the tendrils/probes steady.
+                      const maxTurn = 0.022;
+                      const step = delta * (SCOOP_FACING_LERP * 0.85);
+                      creature._scoopFacing += Math.max(-maxTurn, Math.min(maxTurn, step));
                   }
                   return creature._scoopFacing;
               }
@@ -31556,7 +32235,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   const stats = getScoopEffectiveStats(creature);
                   const geomScale = stats.geomScale || getScoopGeometryScale(creature);
                   const spring = getScoopDashSpring(creature);
-                  const facing = creature._scoopActive && creature._manualControl
+                  // ALL active scoop creatures use the smoothed, rate-limited facing —
+                  // automated squids previously used raw velocity direction, which
+                  // jittered and flipped constantly.
+                  const facing = creature._scoopActive
                       ? resolveScoopFacing(creature)
                       : (sqrt(creature.vx * creature.vx + creature.vy * creature.vy) > 0.12
                           ? atan2(creature.vy, creature.vx)
@@ -31571,11 +32253,18 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   const n = getScoopRemainingNativeTendrils(creature);
                   const lootTendrils = creature._scoopLootTendrils || [];
                   const reach = stats.reach;
+                  // When this squid is the head of a MERGED organism, its tendrils lead in
+                  // FRONT (toward the food it's chasing) while the colony trails behind —
+                  // so we flip the normally-trailing jellyfish tendrils to point forward.
+                  const mergedHead = !!(creature._latticeAnchor && creature._latticeAnchor._merged);
                   if (isScoopTendrilsDeployed(creature)) for (let i = 0; i < n; i++) {
                       const srcIdx = i;
                       let ang;
                       const nativeN = getScoopNativeTendrilCount(creature);
-                      if (profile.tendrilStyle === 'jellyfish') {
+                      if (mergedHead) {
+                          // Fan the tendrils out in front along the facing (movement) dir.
+                          ang = facing + (srcIdx - (nativeN - 1) * 0.5) * profile.spread * 0.34;
+                      } else if (profile.tendrilStyle === 'jellyfish') {
                           ang = facing + PI + (srcIdx - (nativeN - 1) * 0.5) * profile.spread * 0.32;
                       } else if (profile.tendrilStyle === 'root-siphon') {
                           const side = srcIdx % 2 === 0 ? -1 : 1;
@@ -31671,18 +32360,18 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           };
                       }
                       // ── Two flanking HUNT probes ─────────────────────────────
-                      // These behave exactly like the old probe did — constantly
-                      // probing the immediate area and dragging weak creatures inward.
-                      // They border the main probe at a spread angle. The main probe
-                      // is now dedicated to anchoring/fissuring only. Hunt probes are
-                      // ALWAYS present (they're how the squid clusters creatures).
+                      // Always kept OPPOSITE the tendrils. When the squid is alone the
+                      // probes flank the FRONT (hunting/recruiting, tendrils trail behind).
+                      // When merged into an organism the probes flip BACK toward the
+                      // colony (tending/massaging it) while the tendrils lead in front.
                       const huntBaseLen = reach * (1.14 + sin(frameCount * 0.05 + (creature._symSlot || 0)) * 0.08);
                       const huntLen = huntBaseLen * 0.7;
-                      const spreadBase = 0.5;  // radians off the main facing
+                      const spreadBase = 0.5;  // radians off the probe axis
                       const wiggle = sin(frameCount * 0.06 + (creature._symSlot || 0)) * 0.08;
                       const huntBaseR = bellyR * 0.42;
-                      const angL = facing - spreadBase + wiggle;
-                      const angR = facing + spreadBase - wiggle;
+                      const huntAxis = mergedHead ? (facing + PI) : facing;
+                      const angL = huntAxis - spreadBase + wiggle;
+                      const angR = huntAxis + spreadBase - wiggle;
                       huntProbeL = {
                           baseX: bellyX + cos(angL) * huntBaseR,
                           baseY: bellyY + sin(angL) * huntBaseR,
@@ -31917,6 +32606,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       }
                       if ((c._scoopProbeFlash || 0) > 0) c._scoopProbeFlash--;
                       if ((c._scoopProbeTugFlash || 0) > 0) c._scoopProbeTugFlash--;
+                      if ((c._scoopProbeGripFlash || 0) > 0) c._scoopProbeGripFlash--;
                       if ((c._scoopProbeStress || 0) > 0) c._scoopProbeStress *= 0.94;
                   }
                   if (!hunter) return;
@@ -32231,73 +32921,93 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       _massageColonyShape(creature, geo, anchor);
                   }
 
-                  // The physical arm sweep always runs (the arms always nudge creatures);
-                  // only the consume-pull respects the scoop cooldown.
+                  const bx = geo.bubbleX ?? creature.x;
+                  const by = geo.bubbleY ?? creature.y;
                   const canPull = canScoopMoreCreatures(creature);
                   const probes = [geo.huntProbeL, geo.huntProbeR];
                   let pulledAny = null;
+                  const claimed = new Set();
+
                   for (const hp of probes) {
                       if (!hp || hp.tipX == null) continue;
                       const reach = hp.len * 1.5;
-                      const scanR = reach + 18;
+                      // Scan around the squid body (belly bubble) so the arms reliably find
+                      // the weakest creatures in immediate proximity, then reach for them.
+                      const bubbleR = geo.bubbleR ?? CREATURE_BODY_RADIUS * 3;
+                      const scanR = Math.max(reach + 30, bubbleR * 1.6);
                       const list = (typeof SpatialGrid !== 'undefined' && SpatialGrid.cells)
-                          ? SpatialGrid.queryRadius(hp.tipX, hp.tipY, scanR, creature)
+                          ? SpatialGrid.queryRadius(bx, by, scanR, creature)
                           : creatures;
                       let best = null, weakest = Infinity;
                       for (const prey of list) {
                           if (!prey || prey === creature || isManualControlImmune(prey)) continue;
                           if (prey.isPredator && !prey._manualSuperPredator) continue;
 
-                          // ── Physical sweep ───────────────────────────────────────
-                          // The probe arm physically nudges EVERY creature it touches —
-                          // it has real collision, sweeping creatures toward the squid as
-                          // it sways (this is the "scooping" feel). Distance to the arm:
-                          const touchR = CREATURE_BODY_RADIUS + 6;
+                          const isMember = anchorMembers && anchorMembers.has(prey);
+                          // ── Physical sweep — the arm has REAL width and GRIP ─────
+                          // Distance from the prey to the whole arm (base→mid→tip).
                           const segD = Math.min(
                               distPointToSegment(prey.x, prey.y, hp.baseX, hp.baseY, hp.midX, hp.midY),
                               distPointToSegment(prey.x, prey.y, hp.midX, hp.midY, hp.tipX, hp.tipY)
                           );
+                          const touchR = CREATURE_BODY_RADIUS * 2.4;
                           if (segD < touchR) {
-                              // Push the creature inward toward the squid bubble (scoop)
-                              // and slightly off the arm so the arm doesn't pass through it.
-                              const bx = geo.bubbleX ?? creature.x;
-                              const by = geo.bubbleY ?? creature.y;
-                              const idx = bx - prey.x, idy = by - prey.y;
-                              const idd = Math.sqrt(idx * idx + idy * idy) || 1;
-                              const sweep = (touchR - segD) / touchR * 1.6 * timeScale;
-                              prey.x += (idx / idd) * sweep;
-                              prey.y += (idy / idd) * sweep;
-                              prey.vx += (idx / idd) * sweep * 0.5;
-                              prey.vy += (idy / idd) * sweep * 0.5;
-                              prey._scoopProbeTugFlash = Math.max(prey._scoopProbeTugFlash || 0, 6);
+                              const grip = 1 - (segD / touchR); // 0..1, strongest along the arm
+                              if (isMember) {
+                                  // Herd members back toward their formation spot near the
+                                  // squid — keeps the colony together (gentle inward nudge).
+                                  const idx = bx - prey.x, idy = by - prey.y;
+                                  const idd = Math.sqrt(idx * idx + idy * idy) || 1;
+                                  const keep = grip * 2.2;
+                                  prey.x += (idx / idd) * keep;
+                                  prey.y += (idy / idd) * keep;
+                                  prey._scoopProbeTugFlash = Math.max(prey._scoopProbeTugFlash || 0, 6);
+                              } else {
+                                  // Non-member: FIRMLY drag it toward the belly bubble. This
+                                  // is a direct positional grab (not heavily timescale-scaled)
+                                  // so the manipulation is obvious even at slow speeds.
+                                  const idx = bx - prey.x, idy = by - prey.y;
+                                  const idd = Math.sqrt(idx * idx + idy * idy) || 1;
+                                  const grab = grip * 4.2;               // strong, direct
+                                  prey.x += (idx / idd) * grab;
+                                  prey.y += (idy / idd) * grab;
+                                  // Bias its velocity inward and kill outward escape.
+                                  prey.vx += (idx / idd) * grip * 0.9;
+                                  prey.vy += (idy / idd) * grip * 0.9;
+                                  prey.vx *= (1 - 0.18 * grip);
+                                  prey.vy *= (1 - 0.18 * grip);
+                                  prey._scoopBeingDragged = creature;
+                                  prey._scoopProbeGripFlash = 4;         // visible grip flash
+                                  prey._scoopProbeTugFlash = Math.max(prey._scoopProbeTugFlash || 0, 12);
+                              }
                           }
 
-                          // Anchored: only PULL colony members that are BAD-EGGS (otherwise
-                          // leave the colony alone). Non-members are fair game as food.
-                          if (anchorMembers && anchorMembers.has(prey)) {
-                              if (!_isColonyBadEgg(prey, creature)) continue;
-                          }
+                          // Choose the weakest non-member (or bad-egg member) to lock the
+                          // probe tip onto and reel all the way in for dismantling.
+                          if (isMember && !_isColonyBadEgg(prey, creature)) continue;
+                          if (claimed.has(prey)) continue; // the other arm already took it
                           if (segD > reach && dist(prey.x, prey.y, hp.tipX, hp.tipY) > reach) continue;
                           const score = isFeast ? prey.energy : scoreScoopPruneWeakness(prey, geo);
                           if (score < weakest) { weakest = score; best = prey; }
                       }
+
                       if (best && canPull) {
+                          claimed.add(best);
                           hp.targetX = best.x;
                           hp.targetY = best.y;
                           hp.grabbingCreature = true;
                           best._scoopProbeWeakestMark = true;
-                          best._scoopProbeTugFlash = Math.max(best._scoopProbeTugFlash || 0, 8);
-                          // If we're reeling in a bad-egg colony member, drop it from the colony.
+                          best._scoopProbeTugFlash = Math.max(best._scoopProbeTugFlash || 0, 14);
                           if (anchorMembers && anchorMembers.has(best)) {
                               _ejectBadEggFromColony(anchor, best);
-                              // Bad-eggs get fully consumed (pulled into the center).
-                              pullCreatureAlongTentacle(creature, best, hp, geo, SCOOP_PROBE_PULL_SCALE);
-                          } else {
-                              // RECRUIT: pull the creature into a holding ring around the
-                              // squid so it CLUSTERS (forms the colony) rather than being
-                              // consumed. Only once a colony forms does the squid fissure.
-                              _recruitCreatureToCluster(creature, best, hp, geo);
                           }
+                          // Reel the weakest creature HARD toward the belly bubble.
+                          pullCreatureAlongTentacle(creature, best, hp, geo, SCOOP_PROBE_PULL_SCALE * 1.5);
+                          // Extra direct drag toward the belly so it visibly closes in.
+                          const idx = bx - best.x, idy = by - best.y;
+                          const idd = Math.sqrt(idx * idx + idy * idy) || 1;
+                          best.x += (idx / idd) * 2.6;
+                          best.y += (idy / idd) * 2.6;
                           pulledAny = best;
                       } else {
                           hp.targetX = hp.targetY = null;
@@ -37461,6 +38171,41 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   return 0.03 + getTechNodeLevel('anomaly-spawner') * 0.012;
               }
 
+              // "Feed the Tank" — a big burst of white food particles issued from around
+              // the map edge, just like the normal periodic spawns (they respond to the
+              // vortex and include the usual special-white ratio). Free for now; a
+              // currency cost can be added later.
+              function feedTheTank() {
+                  if (typeof vortexParticles === 'undefined') return;
+                  // Issue a moderate batch relative to the device's particle capacity.
+                  const cap = (typeof DeviceProfile !== 'undefined' ? DeviceProfile.vortexMax : 150);
+                  const batch = Math.round(cap * 0.75); // halved from before (perf)
+                  // Allow the pool to swell a little past the normal cap for the feed.
+                  const hardCap = cap * 3;
+                  let spawned = 0;
+                  for (let i = 0; i < batch; i++) {
+                      if (vortexParticles.length >= hardCap) break;
+                      // fromEdge = true → spawns at the normal edge radius. Force plain
+                      // white — no special particles from the feed button.
+                      const p = new VortexParticle(true);
+                      p.isSpecial = false;
+                      p.specialType = 'white';
+                      p.size = random(1.6, 2.8);
+                      vortexParticles.push(p);
+                      spawned++;
+                  }
+                  if (typeof addFloatingText === 'function' && typeof centerX !== 'undefined') {
+                      addFloatingText(centerX, centerY - 40, '\uD83D\uDC1F Fed the tank — ' + spawned + ' food!', '#5eead4');
+                  }
+                  if (typeof playTone === 'function') {
+                      playTone(420, 'sine', 0.12, 0.22);
+                      setTimeout(function() { playTone(560, 'sine', 0.12, 0.18); }, 90);
+                      setTimeout(function() { playTone(700, 'sine', 0.14, 0.14); }, 180);
+                  }
+              }
+              window.feedTheTank = feedTheTank;
+
+
               // ==============================
               // HAZARDS, WALLS & CURSOR HAZARD
               // ==============================
@@ -39350,7 +40095,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   const modules = (creature.modules || []).map((m) => ({
                       type: normalizeModuleTypeKey(m.type),
                       tier: m.tier || 1,
-                      color: m.color
+                      color: m.color,
+                      isCore: !!m.isCore,
+                      offsetX: m.offsetX,
+                      offsetY: m.offsetY
                   }));
                   ammoEggHolding[holdIdx] = {
                       kind: 'egg-holding',
@@ -39664,7 +40412,10 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   const modules = (egg.modules || []).map((m) => ({
                       type: normalizeModuleTypeKey(m.type),
                       tier: m.tier || 1,
-                      color: m.color
+                      color: m.color,
+                      isCore: !!m.isCore,
+                      offsetX: m.offsetX,
+                      offsetY: m.offsetY
                   }));
                   ammoEggHolding[idx] = {
                       kind: 'egg-holding',
@@ -50922,8 +51673,50 @@ body.is-map-fullscreen #map-fullscreen-btn {
 
                   if (paused) {
                       try {
+                          tickFullscreenArrowPan();   // arrow keys pan the camera while paused
                           tickMapCameraFollow();
                           drawWorld();
+                          // While paused / sculpting we want MORE info, not less. Draw the
+                          // lattice lines, squid graphics, colony hints, and movement trails
+                          // on top of the world so the frozen state is fully readable.
+                          push();
+                          Viewport.applyTransform();
+                          try {
+                              // Movement trails — show each creature's recent path so you can
+                              // see how fast and which way it will move when unpaused.
+                              drawPausedMovementTrails();
+                              // Lattice / resonance links — use the IMMEDIATE sculpt
+                              // renderer so links form fluidly as creatures are dragged,
+                              // without waiting for feed-state to accumulate. Detect newly
+                              // formed links to play a soft connect chime (sculpt only).
+                              if (typeof ModuleIdentitySystem !== 'undefined') {
+                                  const present = ModuleIdentitySystem.drawSculptLinks
+                                      ? ModuleIdentitySystem.drawSculptLinks()
+                                      : null;
+                                  if (present) {
+                                      const prev = window._sculptPrevLinkKeys;
+                                      // First frame after entering: just record the baseline
+                                      // so pre-existing links don't all chime at once.
+                                      if (!prev) {
+                                          window._sculptPrevLinkKeys = present;
+                                      } else {
+                                          let newCount = 0;
+                                          present.forEach((k) => { if (!prev.has(k)) newCount++; });
+                                          if (newCount > 0 && SculptShadowSystem.sculptActive) {
+                                              playSculptLinkChime(newCount);
+                                          }
+                                          window._sculptPrevLinkKeys = present;
+                                      }
+                                  }
+                                  if (ModuleIdentitySystem.drawMacroClusterHints)
+                                      ModuleIdentitySystem.drawMacroClusterHints(PerfScale.lod);
+                              }
+                              // Squid / jellyfish graphics so you can tell who's a squid.
+                              for (const c of creatures) {
+                                  if (c && c._scoopActive) drawManualScoop(c);
+                              }
+                          } catch (inner) { console.warn('Paused overlay error:', inner); }
+                          pop();
                           SculptShadowSystem.drawOverlay();
                           updateMainStats();
                           AnalyticsInspector.drawThumb();
@@ -52043,6 +52836,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       SculptShadowSystem.drawOverlay();
                       drawScoopSeedParticles();
                       drawScoopLureParticles();
+                      updateAndDrawBumpSparks();   // decorative collision sparks
                       if (typeof OverflowVentSystem !== 'undefined') OverflowVentSystem.tick();
                       if (typeof FieldPowerupSystem !== 'undefined') FieldPowerupSystem.tick();
                       if (typeof WeaveCraftingSystem !== 'undefined' && frameCount % 60 === 0) WeaveCraftingSystem.tick();
@@ -53647,7 +54441,20 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           return null;
                       }
                       var cl = typeof creatures !== 'undefined' ? creatures : [];
-                      var valid = members.filter(function(c) { return c && cl.indexOf(c) >= 0; });
+                      // Identify a jellyfish/squid head in the selection FIRST, so we can
+                      // keep it out of the regular member slots (it's stored separately as
+                      // the organism head and rebuilt as a jellyfish).
+                      var preHead = null;
+                      for (var pi = 0; pi < members.length; pi++) {
+                          var pm = members[pi];
+                          if (pm && cl.indexOf(pm) >= 0
+                              && (pm._isOrganismHead || (pm._scoopActive && isJellyfishScoopCreature(pm)))) {
+                              preHead = pm; break;
+                          }
+                      }
+                      var valid = members.filter(function(c) {
+                          return c && cl.indexOf(c) >= 0 && c !== preHead;
+                      });
                       if (valid.length < 2) {
                           if (typeof addFloatingText === 'function')
                               addFloatingText(width / 2, 80, 'Selected creatures no longer on board', '#f87171');
@@ -53718,12 +54525,14 @@ body.is-map-fullscreen #map-fullscreen-btn {
                       // If any captured member belongs to a squid macro-organism, capture
                       // the squid too so the blueprint rebuilds the whole organism.
                       var jellyfishSnap = null;
-                      var squidHead = null;
-                      for (var vi = 0; vi < valid.length; vi++) {
-                          var vm = valid[vi];
-                          if (vm && vm._inSquidOrganism && cl.indexOf(vm._inSquidOrganism) >= 0) {
-                              squidHead = vm._inSquidOrganism;
-                              break;
+                      var squidHead = preHead || null;
+                      if (!squidHead) {
+                          for (var vi = 0; vi < valid.length; vi++) {
+                              var vm = valid[vi];
+                              if (vm && vm._inSquidOrganism && cl.indexOf(vm._inSquidOrganism) >= 0) {
+                                  squidHead = vm._inSquidOrganism;
+                                  break;
+                              }
                           }
                       }
                       // Also catch the case where the squid head itself was selected.
@@ -54427,14 +55236,18 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   });
               }
 
-              function renderWeaveSVGPreview(entry) {
+              function renderWeaveSVGPreview(entry, opts) {
                   var slots = entry.slots || [];
                   if (!slots.length) return '';
+                  opts = opts || {};
+                  var jf = entry.jellyfish;
                   var xs = slots.map(function(s) { return s.rx; });
                   var ys = slots.map(function(s) { return s.ry; });
+                  if (jf) { xs.push(jf.rx); ys.push(jf.ry); }
                   var minX = Math.min.apply(null, xs), maxX = Math.max.apply(null, xs);
                   var minY = Math.min.apply(null, ys), maxY = Math.max.apply(null, ys);
-                  var W = 200, H = 80, PAD = 12;
+                  var W = opts.width || 200, H = opts.height || 80, PAD = 12;
+                  var dotR = opts.dotR || 3.5;
                   var rngX = (maxX - minX) || 1, rngY = (maxY - minY) || 1;
                   var scX = (W - PAD*2) / rngX, scY = (H - PAD*2) / rngY;
                   var sc2 = Math.min(scX, scY);
@@ -54452,10 +55265,28 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   var dots = slots.map(function(s) {
                       var col = COLORS[s.preferredCore] || '#a78bfa';
                       return '<circle cx="' + (s.rx*sc2+ox).toFixed(1) + '" cy="' + (s.ry*sc2+oy).toFixed(1) +
-                          '" r="3.5" fill="' + col + '" opacity="0.85"/>';
+                          '" r="' + dotR + '" fill="' + col + '" opacity="0.85"/>';
                   }).join('');
+                  var jelly = '';
+                  if (jf) {
+                      var jx = (jf.rx*sc2+ox), jy = (jf.ry*sc2+oy);
+                      var jr = dotR * 1.7;
+                      var near = slots.map(function(s, i) {
+                          return { i: i, d: (s.rx-jf.rx)*(s.rx-jf.rx) + (s.ry-jf.ry)*(s.ry-jf.ry) };
+                      }).sort(function(a,b){ return a.d - b.d; }).slice(0, 3);
+                      var jlinks = near.map(function(nn) {
+                          var s = slots[nn.i];
+                          return '<line x1="' + jx.toFixed(1) + '" y1="' + jy.toFixed(1) +
+                              '" x2="' + (s.rx*sc2+ox).toFixed(1) + '" y2="' + (s.ry*sc2+oy).toFixed(1) +
+                              '" stroke="rgba(125,211,252,0.55)" stroke-width="1" stroke-dasharray="2,2"/>';
+                      }).join('');
+                      jelly = jlinks +
+                          '<circle cx="' + jx.toFixed(1) + '" cy="' + jy.toFixed(1) + '" r="' + (jr*1.6).toFixed(1) + '" fill="rgba(56,189,248,0.18)"/>' +
+                          '<circle cx="' + jx.toFixed(1) + '" cy="' + jy.toFixed(1) + '" r="' + jr.toFixed(1) + '" fill="#7dd3fc" stroke="#e0f7fa" stroke-width="1"/>' +
+                          '<circle cx="' + jx.toFixed(1) + '" cy="' + jy.toFixed(1) + '" r="' + (jr*1.8).toFixed(1) + '" fill="none" stroke="rgba(125,211,252,0.7)" stroke-width="1"/>';
+                  }
                   return '<svg width="' + W + '" height="' + H + '" style="display:block;border-radius:8px;' +
-                      'background:rgba(0,0,0,0.25);margin:4px 0">' + lines + dots + '</svg>';
+                      'background:rgba(0,0,0,0.25);margin:4px 0">' + lines + dots + jelly + '</svg>';
               }
 
               function getCoreTypeSummary(entry) {
@@ -54718,10 +55549,17 @@ body.is-map-fullscreen #map-fullscreen-btn {
                                   return '<span style="color:'+col+';font-size:9px;margin-right:5px">'+c+' x'+cores[c]+'</span>';
                               }).join('');
 
-                              return '<div style="background:rgba(139,92,246,0.06);border:1px solid rgba(139,92,246,0.2);border-radius:12px;padding:12px;margin-bottom:8px">' +
+                              var jBadge = entry.hasJellyfish
+                                  ? '<span style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:7px;background:linear-gradient(135deg,rgba(56,189,248,0.35),rgba(125,211,252,0.18));border:1px solid rgba(125,211,252,0.7);color:#bae6fd;font-size:8px;font-weight:700;letter-spacing:0.05em;vertical-align:middle;box-shadow:0 0 7px rgba(56,189,248,0.4)">\uD83E\uDD91 JELLYFISH</span>'
+                                  : '';
+                              var cardBg = entry.hasJellyfish
+                                  ? 'background:rgba(56,189,248,0.07);border:1px solid rgba(125,211,252,0.4);box-shadow:0 0 12px rgba(56,189,248,0.12) inset;'
+                                  : 'background:rgba(139,92,246,0.06);border:1px solid rgba(139,92,246,0.2);';
+                              return '<div style="' + cardBg + 'border-radius:12px;padding:12px;margin-bottom:8px">' +
                                   '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:5px">' +
-                                  '<div><div style="font-weight:700;color:#e9d5ff;font-size:12px;margin-bottom:2px">'+entry.name+'</div>' +
-                                  '<div style="font-size:10px;color:rgba(196,181,253,0.55)">'+nc+' nodes &bull; '+WeaveCraftingSystem.fmtDuration(dur)+'</div></div>' +
+                                  '<div><div style="font-weight:700;color:#e9d5ff;font-size:12px;margin-bottom:2px">'+entry.name+jBadge+'</div>' +
+                                  '<div style="font-size:10px;color:rgba(196,181,253,0.55)">'+nc+' nodes &bull; '+WeaveCraftingSystem.fmtDuration(dur)+
+                                  (entry.hasJellyfish ? ' &bull; <span style="color:#7dd3fc">+ jellyfish</span>' : '')+'</div></div>' +
                                   '<button data-craft-id="'+entry.id+'" data-slot="'+emptySlot+'"' +
                                   (emptySlot < 0 || !canAff ? ' disabled' : '') +
                                   ' style="padding:5px 12px;border-radius:8px;font-size:10px;font-weight:700;cursor:pointer;' +
@@ -54731,6 +55569,7 @@ body.is-map-fullscreen #map-fullscreen-btn {
                                   'opacity:'+(emptySlot<0?'0.5':'1')+'">' +
                                   (emptySlot < 0 ? 'Slots Full' : 'Craft') + '</button></div>' +
                                   (coreChips ? '<div style="margin-bottom:6px">'+coreChips+'</div>' : '') +
+                                  (typeof renderWeaveSVGPreview === 'function' ? renderWeaveSVGPreview(entry, { width: 210, height: 90, dotR: 3.5 }) : '') +
                                   '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;font-size:10px">' +
                                   '<div style="text-align:center;padding:4px;background:rgba(0,0,0,0.2);border-radius:7px">' +
                                   '<div style="color:'+(haveMods>=nMods?'#a78bfa':'#f87171')+';font-weight:700">'+nMods+'</div>' +
@@ -56887,6 +57726,222 @@ body.is-map-fullscreen #map-fullscreen-btn {
               })();
               window.LatticeRingSystem = LatticeRingSystem;
 
+              // ═══════════════════════════════════════════════════════════════
+              // ColonyMindSystem — the lattice as a shared "external brain".
+              // Each frame it groups linked creatures into colonies, computes ONE
+              // shared motivation per colony (a collective food/drift heading plus a
+              // continuous flex that keeps realigning the geometry), and members follow
+              // it in proportion to how deeply they're bound to the lattice. Flexing and
+              // proximity to other lattices generate power the colony banks and spends.
+              // ═══════════════════════════════════════════════════════════════
+              const ColonyMindSystem = (function() {
+                  let _colonies = [];              // [{members, cx, cy, goalX, goalY, size, ...}]
+                  let _creatureColony = new WeakMap(); // creature -> colony record
+                  let _frame = -1;
+
+                  function _linksList() {
+                      return (typeof ModuleIdentitySystem !== 'undefined')
+                          ? (ModuleIdentitySystem._linkCache && ModuleIdentitySystem._linkCache.length
+                              ? ModuleIdentitySystem._linkCache
+                              : ModuleIdentitySystem.refreshResonanceLinkCache())
+                          : [];
+                  }
+
+                  function _rebuild(timeScale) {
+                      if (_frame === frameCount) return;
+                      _frame = frameCount;
+                      _colonies = [];
+                      _creatureColony = new WeakMap();
+                      if (typeof creatures === 'undefined') return;
+
+                      // Build adjacency from the live link cache.
+                      const adj = new Map();
+                      const links = _linksList();
+                      for (const lnk of links) {
+                          if (!lnk || !lnk.a || !lnk.b) continue;
+                          if (!adj.has(lnk.a)) adj.set(lnk.a, []);
+                          if (!adj.has(lnk.b)) adj.set(lnk.b, []);
+                          adj.get(lnk.a).push(lnk.b);
+                          adj.get(lnk.b).push(lnk.a);
+                      }
+
+                      const seen = new Set();
+                      adj.forEach((_, seed) => {
+                          if (seen.has(seed)) return;
+                          // Flood the connected component.
+                          const members = [];
+                          const stack = [seed];
+                          seen.add(seed);
+                          while (stack.length) {
+                              const c = stack.pop();
+                              if (!c || creatures.indexOf(c) < 0) continue;
+                              members.push(c);
+                              for (const nb of (adj.get(c) || [])) {
+                                  if (!seen.has(nb)) { seen.add(nb); stack.push(nb); }
+                              }
+                          }
+                          if (members.length < 2) return;
+
+                          // Centroid + mean velocity (the colony's current heading).
+                          let cx = 0, cy = 0, vx = 0, vy = 0;
+                          for (const m of members) { cx += m.x; cy += m.y; vx += m.vx || 0; vy += m.vy || 0; }
+                          const n = members.length;
+                          cx /= n; cy /= n; vx /= n; vy /= n;
+
+                          const colony = {
+                              members, size: n, cx, cy, vx, vy,
+                              goalX: null, goalY: null, goalKind: 'drift',
+                              power: 0
+                          };
+                          for (const m of members) _creatureColony.set(m, colony);
+                          _colonies.push(colony);
+                      });
+
+                      // Decide each colony's shared GOAL and accumulate flex power.
+                      for (const col of _colonies) _decideGoal(col, timeScale);
+
+                      // Inter-lattice induction: two colonies moving near each other with
+                      // relative motion generate power in BOTH (like coils passing).
+                      for (let i = 0; i < _colonies.length; i++) {
+                          for (let j = i + 1; j < _colonies.length; j++) {
+                              const A = _colonies[i], B = _colonies[j];
+                              const dx = B.cx - A.cx, dy = B.cy - A.cy;
+                              const d = Math.sqrt(dx * dx + dy * dy) || 1;
+                              const induceR = 140 + (A.size + B.size) * 4;
+                              if (d > induceR) continue;
+                              // Relative speed between the two colonies.
+                              const rvx = (B.vx || 0) - (A.vx || 0), rvy = (B.vy || 0) - (A.vy || 0);
+                              const relSpd = Math.sqrt(rvx * rvx + rvy * rvy);
+                              const prox = 1 - d / induceR;
+                              const gen = relSpd * prox * 0.35 * timeScale;
+                              A._power = (A._power || 0) + gen;
+                              B._power = (B._power || 0) + gen;
+                              A._induceFlash = B._induceFlash = 8;
+                          }
+                      }
+                  }
+
+                  function _decideGoal(col, timeScale) {
+                      // 1) Collective food target: the nearest white particle to the colony
+                      //    centroid within a size-scaled sensing radius (bigger colonies see
+                      //    farther — more sensors in the network).
+                      const senseR = 120 + col.size * 14;
+                      let bestP = null, bestD = senseR * senseR;
+                      if (typeof vortexParticles !== 'undefined') {
+                          for (let i = 0; i < vortexParticles.length; i++) {
+                              const p = vortexParticles[i];
+                              if (!p || p._scooped) continue;
+                              if (typeof isScoopableWhiteParticle === 'function' && !isScoopableWhiteParticle(p)) continue;
+                              const dx = p.x - col.cx, dy = p.y - col.cy;
+                              const dd = dx * dx + dy * dy;
+                              if (dd < bestD) { bestD = dd; bestP = p; }
+                          }
+                      }
+                      if (bestP) {
+                          col.goalX = bestP.x; col.goalY = bestP.y; col.goalKind = 'food';
+                      } else {
+                          // 2) No food: coherent slow drift. Persist a wander heading so the
+                          //    whole colony roams together instead of scattering.
+                          col._driftAng = (col._driftAng != null ? col._driftAng : Math.random() * TWO_PI)
+                              + (Math.random() - 0.5) * 0.03 * timeScale;
+                          col.goalX = col.cx + Math.cos(col._driftAng) * 200;
+                          col.goalY = col.cy + Math.sin(col._driftAng) * 200;
+                          col.goalKind = 'drift';
+                      }
+
+                      // 3) Flex power: the colony continuously flexes; the amount of internal
+                      //    motion (members moving relative to the centroid) generates power.
+                      let flex = 0;
+                      for (const m of col.members) {
+                          const rvx = (m.vx || 0) - col.vx, rvy = (m.vy || 0) - col.vy;
+                          flex += Math.sqrt(rvx * rvx + rvy * rvy);
+                      }
+                      flex /= Math.max(1, col.members.length);
+                      col.flex = flex;
+                      col._power = (col._power || 0) + flex * 0.4 * timeScale;
+                  }
+
+                  return {
+                      tick(timeScale) { _rebuild(timeScale); },
+
+                      colonyOf(creature) { return _creatureColony.get(creature) || null; },
+
+                      // Steers a bound member toward the shared colony goal. bind ∈ (0,1]
+                      // scales how strongly the collective overrides personal drive.
+                      applyColonyDrive(creature, bind, timeScale) {
+                          _rebuild(timeScale);
+                          const col = _creatureColony.get(creature);
+                          if (!col) return;
+
+                          // Signal strength decays with distance from the colony core, and
+                          // is stronger for communicators (they relay). Distant members feel
+                          // the pull weaker (why the signal type matters).
+                          const dxc = col.cx - creature.x, dyc = col.cy - creature.y;
+                          const distCore = Math.sqrt(dxc * dxc + dyc * dyc) || 0.001;
+                          const commT = creature.getTieredModuleCount
+                              ? creature.getTieredModuleCount('communicator') : 0;
+                          const reach = 90 + commT * 40;
+                          const signal = Math.max(0.25, 1 - distCore / (reach + col.size * 8));
+
+                          // Shared heading toward the colony goal.
+                          if (col.goalX != null) {
+                              const gx = col.goalX - creature.x, gy = col.goalY - creature.y;
+                              const gd = Math.sqrt(gx * gx + gy * gy) || 0.001;
+                              const goalSpeed = (col.goalKind === 'food' ? 0.09 : 0.05);
+                              const drive = goalSpeed * bind * signal * timeScale;
+                              creature.vx += (gx / gd) * drive;
+                              creature.vy += (gy / gd) * drive;
+                          }
+
+                          // Cohesion: bound members share the colony's mean velocity so the
+                          // whole moves as one body (this is what "hurts to tear apart").
+                          creature.vx += (col.vx - (creature.vx || 0)) * 0.06 * bind * timeScale;
+                          creature.vy += (col.vy - (creature.vy || 0)) * 0.06 * bind * timeScale;
+
+                          // ── Geometric spacing (anti-clump) ──────────────────────────
+                          // Bound members actively hold ideal lattice spacing from their
+                          // nearest neighbours so the colony forms open flower-of-life
+                          // geometry instead of a dense blob. Too close → gently spread.
+                          const ideal = (typeof CREATURE_IDEAL_DIST !== 'undefined' ? CREATURE_IDEAL_DIST : 23) * 1.18;
+                          const near = ((frameCount + (creature._symSlot || 0)) % 2 === 0
+                              && typeof SpatialGrid !== 'undefined' && SpatialGrid.cells)
+                              ? SpatialGrid.queryRadius(creature.x, creature.y, ideal * 1.6, creature)
+                              : null;
+                          if (near) {
+                              let sx = 0, sy = 0, cnt = 0;
+                              for (const o of near) {
+                                  if (o === creature || !o) continue;
+                                  if (_creatureColony.get(o) !== col) continue; // same colony only
+                                  const ox = creature.x - o.x, oy = creature.y - o.y;
+                                  const od = Math.sqrt(ox * ox + oy * oy) || 0.001;
+                                  if (od < ideal) {
+                                      const push = (ideal - od) / ideal;
+                                      sx += (ox / od) * push; sy += (oy / od) * push; cnt++;
+                                  }
+                              }
+                              if (cnt > 0) {
+                                  creature.vx += sx * 0.09 * bind * timeScale;
+                                  creature.vy += sy * 0.09 * bind * timeScale;
+                              }
+                          }
+
+                          // Bank a share of flex power as usable energy for the member —
+                          // reward for staying in formation and flexing.
+                          if ((col._power || 0) > 1 && !creature.isPredator) {
+                              const share = Math.min(col._power, 0.02 * timeScale);
+                              col._power -= share;
+                              const maxE = (typeof ModuleIdentitySystem !== 'undefined')
+                                  ? ModuleIdentitySystem.getMaxEnergy(creature) : 100;
+                              creature.energy = Math.min(maxE, (creature.energy || 0) + share);
+                              creature._latticePowerFlash = 6;
+                          }
+                      },
+
+                      getColonies() { return _colonies; }
+                  };
+              })();
+              window.ColonyMindSystem = ColonyMindSystem;
+
 
               // ════════════════════════════════════════════════════════════════
               // SquidLatticeAnchorSystem
@@ -57598,9 +58653,15 @@ body.is-map-fullscreen #map-fullscreen-btn {
                           squid.vx *= k; squid.vy *= k;
                       }
                       let headAng;
-                      if (spd > 0.05) {
+                      // Use the SMOOTHED facing (same one the tendrils use) so the body axis
+                      // is stable and the colony always trails directly behind the head,
+                      // rather than jittering with raw velocity noise.
+                      if (squid._scoopFacing != null) {
+                          headAng = squid._scoopFacing;
+                          anchor._bodyAng = headAng;
+                      } else if (spd > 0.05) {
                           headAng = Math.atan2(squid.vy, squid.vx);
-                          anchor._bodyAng = headAng; // remember last good heading
+                          anchor._bodyAng = headAng;
                       } else {
                           headAng = anchor._bodyAng != null ? anchor._bodyAng : 0;
                       }
@@ -58320,6 +59381,13 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   <i class="fa-solid fa-industry" style="opacity:0.85"></i>
                   <span>Mass Dismantle&hellip;</span>
                 </button>
+                <button id="sculpt-egg-stash-btn" onclick="EggStash.openPanel()"
+                  style="width:100%;margin-top:5px;padding:7px 10px;border-radius:9px;font-size:10px;font-weight:700;cursor:pointer;border:1px solid rgba(52,211,153,0.35);background:rgba(52,211,153,0.1);color:#6ee7b7;text-align:left;display:flex;align-items:center;gap:6px;transition:all 0.15s"
+                  onmouseover="this.style.background='rgba(52,211,153,0.22)';this.style.borderColor='rgba(52,211,153,0.55)'"
+                  onmouseout="this.style.background='rgba(52,211,153,0.1)';this.style.borderColor='rgba(52,211,153,0.35)'">
+                  <i class="fa-solid fa-egg" style="opacity:0.85"></i>
+                  <span>Egg Stash&hellip;</span>
+                </button>
               </div>
 
             </div>
@@ -58870,6 +59938,259 @@ body.is-map-fullscreen #map-fullscreen-btn {
                   </div>
               </div>
           </div>
+
+          <!-- ═══════════════════════════════════════════════════════
+               EGG STASH — stored dismantle-queue eggs, placeable in sculpt
+          ═══════════════════════════════════════════════════════ -->
+          <style>
+          #egg-stash-overlay { position:fixed; inset:0; z-index:600; display:flex; align-items:center; justify-content:center; background:rgba(4,8,6,0.55); backdrop-filter:blur(3px); }
+          #egg-stash-overlay.is-hidden { display:none; }
+          #egg-stash-panel { width:min(680px,94vw); max-height:86vh; display:flex; flex-direction:column;
+              background:linear-gradient(160deg,rgba(10,20,15,0.98),rgba(6,14,10,0.98));
+              border:1px solid rgba(52,211,153,0.4); border-radius:18px; overflow:hidden;
+              box-shadow:0 12px 44px rgba(0,0,0,0.7),0 0 0 1px rgba(52,211,153,0.1) inset; }
+          #egg-stash-header { display:flex; align-items:center; justify-content:space-between; padding:13px 16px; border-bottom:1px solid rgba(52,211,153,0.2); background:rgba(52,211,153,0.08); }
+          #egg-stash-header .es-title { display:flex; align-items:center; gap:9px; font-size:14px; font-weight:700; color:#a7f3d0; }
+          #egg-stash-close { background:none; border:none; color:rgba(167,243,208,0.6); font-size:22px; line-height:1; cursor:pointer; padding:2px 6px; }
+          #egg-stash-close:hover { color:#d1fae5; }
+          #egg-stash-hint { padding:9px 16px; font-size:11px; color:rgba(167,243,208,0.6); border-bottom:1px solid rgba(52,211,153,0.12); }
+          #egg-stash-body { overflow-y:auto; padding:12px 16px 18px; }
+          .es-group-head { font-size:11px; font-weight:700; letter-spacing:0.04em; color:#6ee7b7; margin:12px 0 7px; display:flex; align-items:center; gap:7px; text-transform:uppercase; }
+          .es-group-head:first-child { margin-top:2px; }
+          .es-group-count { font-size:9px; font-weight:600; color:rgba(255,255,255,0.4); background:rgba(255,255,255,0.06); border-radius:8px; padding:1px 7px; }
+          .es-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(96px,1fr)); gap:9px; }
+          .es-egg-card { background:rgba(52,211,153,0.05); border:1px solid rgba(52,211,153,0.2); border-radius:12px; padding:8px; cursor:pointer; transition:all 0.14s; text-align:center; }
+          .es-egg-card:hover { background:rgba(52,211,153,0.14); border-color:rgba(52,211,153,0.5); transform:translateY(-2px); }
+          .es-egg-card.is-armed { background:rgba(52,211,153,0.22); border-color:#34d399; box-shadow:0 0 14px rgba(52,211,153,0.4); }
+          .es-egg-card canvas { width:74px; height:74px; border-radius:9px; display:block; margin:0 auto 5px; }
+          .es-egg-name { font-size:10px; font-weight:700; color:#d1fae5; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+          .es-egg-meta { font-size:8.5px; color:rgba(167,243,208,0.55); margin-top:1px; }
+          #egg-stash-empty { padding:34px 16px; text-align:center; color:rgba(255,255,255,0.35); font-size:12px; }
+          </style>
+
+          <div id="egg-stash-overlay" class="is-hidden" onclick="if(event.target===this) EggStash.closePanel()">
+              <div id="egg-stash-panel">
+                  <div id="egg-stash-header">
+                      <div class="es-title"><i class="fa-solid fa-egg"></i> Egg Stash</div>
+                      <button id="egg-stash-close" onclick="EggStash.closePanel()">&times;</button>
+                  </div>
+                  <div id="egg-stash-hint">Eggs waiting for dismantle. Click one to arm it, then click anywhere on the map to place it. Grouped by core type &amp; module count.</div>
+                  <div id="egg-stash-body">
+                      <div id="egg-stash-empty">No eggs stored. Use Mass Dismantle to send creatures here as eggs.</div>
+                  </div>
+              </div>
+          </div>
+
+          <script>
+          // ═══════════════════════════════════════════════════════
+          // EggStash — stored dismantle-queue eggs, placeable in sculpt mode
+          // ═══════════════════════════════════════════════════════
+          const EggStash = (function() {
+              var _open = false;
+              var _armedIdx = -1; // index into ammoEggHolding currently armed for placement
+
+              function _coreOf(entry) {
+                  // Derive a core type from the egg's stored modules.
+                  try {
+                      if (entry._coreType) return entry._coreType;
+                      var mods = entry.modules || [];
+                      var counts = {};
+                      for (var i = 0; i < mods.length; i++) {
+                          var t = mods[i] && (mods[i].type || mods[i].moduleType);
+                          if (typeof normalizeModuleTypeKey === 'function') t = normalizeModuleTypeKey(t);
+                          if (t) counts[t] = (counts[t] || 0) + 1;
+                      }
+                      var best = 'balanced', bestN = 0;
+                      for (var k in counts) { if (counts[k] > bestN) { bestN = counts[k]; best = k; } }
+                      return best;
+                  } catch(e) { return 'balanced'; }
+              }
+
+              function _coreColor(core) {
+                  return (typeof MODULE_AMMO_COLORS !== 'undefined' && MODULE_AMMO_COLORS[core])
+                      ? MODULE_AMMO_COLORS[core] : '#a78bfa';
+              }
+
+              function _render() {
+                  var body = document.getElementById('egg-stash-body');
+                  var empty = document.getElementById('egg-stash-empty');
+                  if (!body) return;
+                  if (typeof normalizeAmmoEggHolding === 'function') normalizeAmmoEggHolding();
+                  var holding = (typeof ammoEggHolding !== 'undefined') ? ammoEggHolding : [];
+
+                  // Collect filled slots with their real index.
+                  var eggs = [];
+                  for (var i = 0; i < holding.length; i++) {
+                      if (holding[i]) eggs.push({ idx: i, entry: holding[i] });
+                  }
+                  // Clear old content (keep empty note element).
+                  var old = body.querySelectorAll('.es-group-block');
+                  old.forEach(function(o) { o.remove(); });
+
+                  if (!eggs.length) { if (empty) empty.style.display = ''; return; }
+                  if (empty) empty.style.display = 'none';
+
+                  // Group by core type, then sort within group by module count desc.
+                  var groups = {};
+                  eggs.forEach(function(e) {
+                      var core = _coreOf(e.entry);
+                      (groups[core] = groups[core] || []).push(e);
+                  });
+                  Object.keys(groups).sort().forEach(function(core) {
+                      var list = groups[core];
+                      list.sort(function(a, b) {
+                          return (b.entry.moduleCount || (b.entry.modules||[]).length || 0)
+                               - (a.entry.moduleCount || (a.entry.modules||[]).length || 0);
+                      });
+                      var block = document.createElement('div');
+                      block.className = 'es-group-block';
+                      var col = _coreColor(core);
+                      var head = document.createElement('div');
+                      head.className = 'es-group-head';
+                      head.style.color = col;
+                      head.innerHTML = '<span style="width:9px;height:9px;border-radius:50%;background:' + col +
+                          ';box-shadow:0 0 6px ' + col + '88;display:inline-block"></span>' +
+                          core.charAt(0).toUpperCase() + core.slice(1) +
+                          '<span class="es-group-count">' + list.length + '</span>';
+                      block.appendChild(head);
+                      var grid = document.createElement('div');
+                      grid.className = 'es-grid';
+                      list.forEach(function(e) {
+                          var mc = e.entry.moduleCount || (e.entry.modules||[]).length || 0;
+                          var card = document.createElement('div');
+                          card.className = 'es-egg-card' + (_armedIdx === e.idx ? ' is-armed' : '');
+                          card.dataset.idx = e.idx;
+                          var cv = document.createElement('canvas');
+                          cv.width = 74; cv.height = 74;
+                          card.appendChild(cv);
+                          var nm = document.createElement('div');
+                          nm.className = 'es-egg-name';
+                          nm.textContent = e.entry.name || 'Egg';
+                          card.appendChild(nm);
+                          var meta = document.createElement('div');
+                          meta.className = 'es-egg-meta';
+                          meta.textContent = mc + ' modules';
+                          card.appendChild(meta);
+                          (function(slotIdx) {
+                              card.addEventListener('click', function() { EggStash.armEgg(slotIdx); });
+                          })(e.idx);
+                          grid.appendChild(card);
+                          // Draw the portrait from the egg's modules. If the stored modules
+                          // don't have real layout offsets (older eggs captured before this
+                          // was preserved), synthesize a radial pattern so the portrait still
+                          // shows the module count/tiers instead of collapsing to one dot.
+                          if (typeof drawCreaturePreview === 'function') {
+                              var previewData = {
+                                  modules: _layoutForPreview(e.entry.modules || []),
+                                  isPredator: false,
+                                  generation: e.entry.generation || 1
+                              };
+                              try { drawCreaturePreview(previewData, cv, { fit: true }); } catch(err) {}
+                          }
+                      });
+                      block.appendChild(grid);
+                      body.appendChild(block);
+                  });
+              }
+
+              // Ensures every module has offsetX/offsetY (and exactly one isCore) so the
+              // portrait renderer can lay them out as a real pattern. Modules that already
+              // carry real offsets (captured post-fix) pass through untouched; modules
+              // missing them get an even radial spread as a synthetic fallback.
+              function _layoutForPreview(modules) {
+                  if (!modules || !modules.length) return [];
+                  var hasReal = modules.some(function(m) { return m && (m.offsetX || m.offsetY); });
+                  var hasCore = modules.some(function(m) { return m && m.isCore; });
+                  if (hasReal && hasCore) return modules;
+                  var n = modules.length;
+                  // Pick the highest-tier module as the synthetic core if none is flagged.
+                  var coreIdx = 0;
+                  if (!hasCore) {
+                      var bestTier = -1;
+                      modules.forEach(function(m, i) { if ((m.tier || 1) > bestTier) { bestTier = m.tier || 1; coreIdx = i; } });
+                  }
+                  var outCount = 0;
+                  return modules.map(function(m, i) {
+                      var isCore = hasCore ? !!m.isCore : (i === coreIdx);
+                      if (isCore) return Object.assign({}, m, { isCore: true, offsetX: 0, offsetY: 0 });
+                      var ang = (outCount / Math.max(1, n - 1)) * Math.PI * 2;
+                      outCount++;
+                      var r = 7.8 + ((m.tier || 1) - 1) * 0.22;
+                      return Object.assign({}, m, {
+                          isCore: false,
+                          offsetX: Math.cos(ang) * r,
+                          offsetY: Math.sin(ang) * r
+                      });
+                  });
+              }
+
+              return {
+                  openPanel: function() {
+                      _open = true;
+                      _armedIdx = -1;
+                      var ov = document.getElementById('egg-stash-overlay');
+                      if (ov) ov.classList.remove('is-hidden');
+                      _render();
+                      if (typeof playUIClick === 'function') playUIClick();
+                  },
+                  closePanel: function() {
+                      _open = false;
+                      _armedIdx = -1;
+                      var ov = document.getElementById('egg-stash-overlay');
+                      if (ov) ov.classList.add('is-hidden');
+                      if (typeof playUIClick === 'function') playUIClick();
+                  },
+                  isArmed: function() { return _armedIdx >= 0; },
+                  armEgg: function(idx) {
+                      if (typeof ammoEggHolding === 'undefined' || !ammoEggHolding[idx]) return;
+                      _armedIdx = (_armedIdx === idx) ? -1 : idx;
+                      // Close the modal so the map is visible for placement.
+                      if (_armedIdx >= 0) {
+                          var ov = document.getElementById('egg-stash-overlay');
+                          if (ov) ov.classList.add('is-hidden');
+                          if (typeof addFloatingText === 'function' && typeof width !== 'undefined')
+                              addFloatingText(width/2, 72, 'Egg armed — click on the map to place it', '#6ee7b7');
+                      }
+                      _render();
+                      if (typeof playUIClick === 'function') playUIClick();
+                  },
+                  // Called from the sculpt-mode click handler when an egg is armed.
+                  placeArmedAt: function(wx, wy) {
+                      if (_armedIdx < 0) return false;
+                      if (typeof ammoEggHolding === 'undefined') return false;
+                      var entry = ammoEggHolding[_armedIdx];
+                      if (!entry) { _armedIdx = -1; return false; }
+                      if (typeof createCreatureFromEgg !== 'function' || typeof creatures === 'undefined') return false;
+                      var eggData = {
+                          modules: entry.modules || [],
+                          generation: entry.generation || 1,
+                          name: entry.name || 'Placed Egg'
+                      };
+                      var creature = createCreatureFromEgg(eggData);
+                      if (!creature) return false;
+                      creature.x = Math.max(12, Math.min((typeof width !== 'undefined' ? width : 800) - 12, wx));
+                      creature.y = Math.max(12, Math.min((typeof height !== 'undefined' ? height : 600) - 12, wy));
+                      creature.vx = 0; creature.vy = 0;
+                      creature.currentThought = 'Placed from Egg Stash';
+                      creatures.push(creature);
+                      if (typeof ensureCreatureWeaveUid === 'function') ensureCreatureWeaveUid(creature);
+                      if (typeof SculptShadowSystem !== 'undefined' && SculptShadowSystem.markTouched)
+                          SculptShadowSystem.markTouched(creature);
+                      // Consume the egg from storage.
+                      ammoEggHolding[_armedIdx] = null;
+                      _armedIdx = -1;
+                      if (typeof renderAmmoEggHolding === 'function') { try { renderAmmoEggHolding(); } catch(e){} }
+                      if (typeof addFloatingText === 'function')
+                          addFloatingText(creature.x, creature.y - 20, 'Placed ' + eggData.name, '#6ee7b7');
+                      if (typeof playTone === 'function') playTone(520, 'sine', 0.18, 0.3);
+                      return true;
+                  },
+                  cancelArm: function() { _armedIdx = -1; },
+                  refresh: function() { if (_open) _render(); }
+              };
+          })();
+          window.EggStash = EggStash;
+          </script>
 
           <script>
           // ═══════════════════════════════════════════════════════
